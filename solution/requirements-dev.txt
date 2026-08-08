@@ -1,0 +1,21 @@
+# LeRobot v0.6.0 の SmolVLA 推論経路を動かすための最小依存（Python 3.10 検証用）
+# lerobot 自体は入れない（requires-python >=3.12 のため）。ソースを vendoring して使う。
+torch==2.11.0
+numpy>=2.0.0,<2.3.0
+huggingface-hub>=1.0.0,<2.0.0
+safetensors>=0.4.3,<1.0.0
+einops>=0.8.0,<0.9.0
+Pillow>=10.0.0,<13.0.0
+packaging>=24.2,<26.0
+termcolor>=2.4.0,<4.0.0
+tqdm>=4.66.0,<5.0.0
+requests>=2.32.0,<3.0.0
+draccus==0.10.0
+transformers>=5.4.0,<5.6.0
+num2words>=0.5.14,<0.6.0
+accelerate>=1.7.0,<2.0.0
+
+# ポリシーサーバー本体
+fastapi
+uvicorn
+msgpack

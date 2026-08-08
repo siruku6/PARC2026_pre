@@ -4,3 +4,9 @@ results/
 venv/
 LIBERO-plus/
 assets.zip
+
+.DS_Store
+
+# 生成物置き場。重み・同梱ソース・venv・zip はすべて solution/tools/ で再生成できる。
+# 追跡したいファイルは solution/ に置くこと。
+work/

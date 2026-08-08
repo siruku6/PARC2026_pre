@@ -1,0 +1,146 @@
+# solution/ — 提出物の実装
+
+[docs/strategy/02_環境戦略.md](../docs/strategy/02_環境戦略.md) の**方式 A**（LeRobot の
+ソースを提出物へ同梱し、採点環境の Python 3.10 で動かす）を実際に組んだものである。
+
+**追跡するのはこのディレクトリだけ**である。重み・同梱ソース・venv・zip はすべて
+`work/` 以下に出力され、git 管理外になる。下の手順で丸ごと再生成できる。
+
+## 中身
+
+| パス | 内容 |
+|---|---|
+| `policy_server.py` | `MyPolicy` を実装したポリシーサーバー（変更不可領域は未改変） |
+| `requirements.txt` | 提出物の依存（確定版） |
+| `requirements-dev.txt` | ローカル検証用の依存。**提出物には使わない** |
+| `tools/vendor_lerobot.py` | LeRobot のソースを Python 3.10 で動く形へ書き換えて同梱する |
+| `tools/build_submission.py` | 提出用 zip を組み立て、sha256 を記録する |
+| `tools/digest_submission.py` | 提出物の内容ダイジェスト。環境間の同期確認に使う |
+
+`tools/` の 3 本は**どのディレクトリから実行してもよい**。入出力はスクリプト自身の
+位置から求めたリポジトリルート基準で解決する。
+
+## 生成物の置き場（`work/`、git 管理外）
+
+| パス | 内容 |
+|---|---|
+| `work/lerobot-src/` | LeRobot v0.6.0 の展開元 |
+| `work/artifacts/vendor/lerobot/` | 同梱用に書き換えた LeRobot（12MB） |
+| `work/artifacts/model_weights/` | 学習済み重み + VLM の設定/トークナイザ（878MB） |
+| `work/venv310/` | 検証用の Python 3.10.12 venv |
+| `work/submission.zip` | 提出物（918MB） |
+| `work/submission.sha256` | 上の zip のハッシュ |
+
+```mermaid
+flowchart LR
+    S["solution/<br/>policy_server.py<br/>requirements.txt"] --> Z["work/submission.zip"]
+    L["work/lerobot-src/"] -->|"tools/vendor_lerobot.py"| V["work/artifacts/vendor/"]
+    V --> Z
+    W["work/artifacts/model_weights/"] --> Z
+    Z -->|"tools/build_submission.py"| H["work/submission.sha256"]
+```
+
+**コードは `solution/` が正**である。`work/` へコピーして同期させる運用にすると
+必ずどちらかが古くなるため、`build_submission.py` は zip 化のときに両方から直接束ねる。
+
+## 再生成の手順
+
+### 1. Python 3.10 の venv を作る
+
+```bash
+export UV_CACHE_DIR="$TMPDIR/uvcache"
+uv venv --python 3.10.12 work/venv310
+```
+
+採点環境と同じ 3.10.12 に合わせている。
+
+### 2. LeRobot v0.6.0 のソースを取得して同梱する
+
+```bash
+python3 -c "
+import io, tarfile, urllib.request, pathlib, shutil
+url = 'https://codeload.github.com/huggingface/lerobot/tar.gz/refs/tags/v0.6.0'
+data = urllib.request.urlopen(url, timeout=300).read()
+dest = pathlib.Path('work'); target = dest / 'lerobot-src'
+if target.exists(): shutil.rmtree(target)
+with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as tf:
+    root = tf.getnames()[0].split('/')[0]; tf.extractall(dest)
+(dest / root).rename(target)
+"
+
+work/venv310/bin/python solution/tools/vendor_lerobot.py \
+    --python310 work/venv310/bin/python
+```
+
+`vendor_lerobot.py` は 3.12 専用の構文・API だけを書き換える。置換対象が 1 箇所で
+なければ例外にするため、LeRobot のバージョンが変われば黙って壊れずに落ちる。
+
+### 3. 重みを `work/artifacts/model_weights/` に置く
+
+**VLM の `model.safetensors` は含めない**（VLM の重みはポリシー側の
+チェックポイントに含まれている）。
+
+| 取得元 | revision | 置き場所 |
+|---|---|---|
+| `lerobot/smolvla_libero_plus` | `7bb70aa5bc92b82c9239142775d3a173103567ff` | `model_weights/` |
+| `HuggingFaceTB/SmolVLM2-500M-Video-Instruct`（設定とトークナイザのみ） | — | `model_weights/vlm/` |
+
+Colab で追加学習した場合は、マージ済みモデルの中身で `model_weights/` 直下を
+差し替える。`vlm/` はそのまま残す（[COLAB.md](COLAB.md) 参照）。
+
+### 4. zip を作る
+
+```bash
+work/venv310/bin/python solution/tools/build_submission.py
+```
+
+`work/submission.zip` と `work/submission.sha256` が出力される。
+ハッシュはレポートの「提出チェックポイントのハッシュ値」にそのまま使える。
+
+## 検証
+
+**ローカル（macOS）では採点環境を再現できない。** CUDA が無く、`torchvision` は
+CUDA 13 ビルドのため import できない。検証は Docker コンテナで行う。
+
+```bash
+docker build -t parc2026 .
+docker run -it --rm -v "$PWD/work:/host_work" parc2026
+```
+
+コンテナ内では、本番と同じく `--system-site-packages` 付きの提出物専用 venv を作る。
+配布キットの依存は `/workspace/venv` にあるため、パスを足して同じ階層を再現する。
+
+```bash
+/usr/bin/python3.10 -m venv --system-site-packages /opt/subvenv
+echo /workspace/venv/lib/python3.10/site-packages \
+  > /opt/subvenv/lib/python3.10/site-packages/_kit_site_packages.pth
+/opt/subvenv/bin/pip install -r /sub/requirements.txt
+
+# ローカル検証時のみ。配布 Docker の torch は +cpu のため、
+# PyPI の CUDA 13 ビルドの torchvision は import できない。
+/opt/subvenv/bin/pip install --no-deps --force-reinstall \
+  --index-url https://download.pytorch.org/whl/cpu torchvision==0.26.0
+
+cd /workspace && /opt/subvenv/bin/python validate_submission.py /sub/submission.zip
+```
+
+> **`HF_HOME` を空ディレクトリに向け、`HF_HUB_OFFLINE=1` を立てて検証すること。**
+> そうしないと、採点環境（通信遮断）でだけ起きる Hub アクセスの失敗を見逃す。
+
+環境をまたいだときは、内容が一致しているかを確認する。
+
+```bash
+work/venv310/bin/python solution/tools/digest_submission.py --per-entry
+```
+
+## 現在の状態
+
+| 項目 | 結果 |
+|---|---|
+| Python 3.10.12 での import・重みロード | OK（クリーンキャッシュ・完全オフラインで 17 秒） |
+| `requirements.txt` のみのクリーン venv で起動 | OK（`pip check` クリーン、torch/numpy 不変） |
+| `/health` → `/reset` → `/act` | OK（`(7,) float32`、NaN なし） |
+| action chunk のキャッシュ | OK（重い推論 1 回 → 以降 50 ステップはキャッシュ） |
+| `validate_submission.py`（静的） | PASS（errors=0, warnings=0） |
+| **推論 10 秒以内** | **未達**。CPU 2 コアで 23.4 秒。GPU 実測が必要 |
+| **CUDA 13 の torchvision が import できるか** | **未検証**。静的なリンク情報からの推論に留まる |
