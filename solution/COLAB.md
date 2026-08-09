@@ -141,7 +141,8 @@ flowchart TB
 | **マージセル**の直後 | 新規セル **E** | マージ済みモデルを Drive へ |
 | **比較セル**の直後 | 新規セル **F** | 評価結果と比較 CSV を Drive へ |
 | **マージセル**より後ならどこでも | 新規セル **G** | 推論 1 チャンクの所要時間を GPU で測る |
-| **データ選択セル**の後半 | 差し替え **H** | 学習データを spatial 10 タスクから全 40 タスクへ広げる |
+| **データ選択セル**の後半 | 差し替え **H(a)(b)** | 全 40 タスクへ広げ、明るさで散らして選ぶ |
+| **学習セル**の `command` 内 | 追記 **H(c)** | 画像拡張を有効にする（1 行） |
 
 A〜F は切断対策である。**G だけは目的が違い**、本番の 10 秒制限をクリアできるかを
 確かめるための計測で、学習とは独立に実行できる。**H は精度を上げるための変更**で、
@@ -598,7 +599,15 @@ else:
 
 ---
 
-## H. 学習データを全 40 タスクへ広げる
+## H. 学習データの選び方を変える
+
+変更は 3 つある。**(a) と (b) はデータ選択セル、(c) は学習セル**である。
+
+| | 何を | 効き方 |
+|---|---|---|
+| **(a)** | libero_spatial の 10 タスク → **全 40 タスク**（4 スイート） | 他スイートの劣化を防ぐ |
+| **(b)** | 1 タスク内の 5 本を、番号順ではなく**明るさで散らして**選ぶ | 視覚摂動の幅を張る |
+| **(c)** | **画像拡張を有効化**する | 元データに無い視覚変動を足す |
 
 ### なぜ変えるのか
 
@@ -621,7 +630,7 @@ else:
 とある。したがって example の 4 タスクに合わせ込むのも筋が悪く、
 **広く汎化させる**のが正しい方向になる。
 
-### 広げてもダウンロードはほとんど増えない
+### (a) 全 40 タスクへ広げる — ダウンロードはほとんど増えない
 
 `lerobot/libero_plus` は 40 タスク・14,347 エピソード・15.8 GB である。
 「タスクを絞れば転送量が減る」と考えたくなるが、**この構成では減らない**。
@@ -646,6 +655,30 @@ else:
 これも Colab のディスクには収まるが、ダウンロード時間が延びる。
 **まず 40 タスク × 5 本で回し、時間に余裕があれば増やす**のがよい。
 
+### (b) 1 タスクの中では「明るさ」で散らして選ぶ
+
+タスクを広げるだけでは足りない。**1 タスクの中のどの 5 本を選ぶか**も効く。
+
+`lerobot/libero_plus` の 1 タスク（275 エピソード）について、メタデータに
+記録されている front カメラの平均輝度を調べた結果が次である。
+
+```
+min = 0.155      中央 = 0.272      max = 0.489      幅 = 3.2 倍
+```
+
+**Light Conditions の摂動が、既に学習データの中に入っている。**
+配布ノートブックの `choose_evenly_spaced` は**エピソード番号**で等間隔に選ぶため、
+この輝度の幅を張れている保証がない。**輝度で並べ替えてから等間隔に選べば、
+視覚摂動の幅を明示的に確保できる。**
+
+運営 Q&A No.21 で「摂動 7 カテゴリのすべてが含まれるわけではなく、
+テクスチャなどの摂動が該当する」と回答されており、
+**視覚摂動こそが本番で問われる軸**である。そこを狙って張る。
+
+> **罠**: `dataset_metadata.episodes` にはこの統計が**入っていない**。
+> LeRobot の `load_episodes()` が `stats/` で始まる列を明示的に落としているためである。
+> メタデータの parquet を直接読む必要がある。ダウンロード済みなので追加通信は発生しない。
+
 ### 差し替える場所
 
 **データ選択セル**（`## 6. Spatial学習データを選ぶ` の直後、`import re` と
@@ -663,18 +696,94 @@ available_by_normalized = {
 `task_to_episodes` の構築）は**そのまま残す**。
 
 ```python
-# === 学習データを全 40 タスクへ広げる ===
-# 配布ノートブックは SPATIAL_TASK_NAMES の 10 タスクだけを使うが、
-# 本番評価は 3 スイートにまたがる非公開タスクで行われる。
-# 動画ファイルにタスクの局所性が無いため、タスクを増やしても転送量はほぼ変わらない。
+# === (a) 全 40 タスクへ広げ、(b) 明るさで散らして選ぶ ===
+# (a) 配布既定は libero_spatial の 10 タスクだけだが、本番評価は複数スイートに
+#     またがる非公開タスクで行われる。動画ファイルにタスクの局所性が無いため、
+#     タスクを増やしても転送量はほぼ変わらない。
+# (b) Light Conditions の摂動はエピソード間の平均輝度に現れる。エピソード番号の
+#     等間隔ではなく輝度で並べ替えてから選ぶことで、視覚摂動の幅を明示的に張る。
+
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
 
 TRAIN_TASK_NAMES = sorted(task_to_episodes)
 
-selected_by_task = {
-    task_name: choose_evenly_spaced(
-        task_to_episodes[task_name],
-        TRAIN_EPISODES_PER_TASK,
+
+def flatten_numbers(value) -> list[float]:
+    """入れ子になった配列を、平坦な float のリストにする。
+
+    parquet の統計値は array([array([array([0.35])])]) のように
+    object dtype で三重に入れ子になっているため、np.mean が
+    スカラーではなく配列を返してしまう。再帰的にほどく。
+    """
+    if isinstance(value, (int, float, np.number)):
+        return [float(value)]
+    return [number for item in value for number in flatten_numbers(item)]
+
+
+def load_episode_brightness() -> dict[int, float]:
+    """エピソードごとの front カメラ平均輝度を返す。取れなければ空 dict。
+
+    LeRobotDatasetMetadata.episodes は stats/ で始まる列を落とすため、
+    メタデータの parquet を直接読む。取得済みなので追加通信は無い。
+    """
+    column = "stats/observation.images.front/mean"
+    meta_dir = Path(dataset_metadata.root) / "meta" / "episodes"
+    parquet_files = sorted(meta_dir.rglob("*.parquet"))
+
+    if not parquet_files:
+        return {}
+
+    frame = pd.concat(
+        [pd.read_parquet(path) for path in parquet_files],
+        ignore_index=True,
     )
+    if column not in frame.columns:
+        return {}
+
+    values = [float(np.mean(flatten_numbers(cell))) for cell in frame[column]]
+    return dict(zip(frame["episode_index"].astype(int), values))
+
+
+def choose_spread_by_value(
+    episode_indices: list[int],
+    count: int,
+    value_by_episode: dict[int, float],
+) -> list[int]:
+    """値で並べ替えてから、両端を含めて等間隔に count 本選ぶ。"""
+    ordered = sorted(episode_indices, key=lambda index: value_by_episode[index])
+
+    if count >= len(ordered):
+        return list(ordered)
+    if count <= 1:
+        return [ordered[len(ordered) // 2]]
+
+    positions = [
+        round(rank * (len(ordered) - 1) / (count - 1)) for rank in range(count)
+    ]
+    return [ordered[position] for position in positions]
+
+
+brightness_by_episode = load_episode_brightness()
+
+if brightness_by_episode:
+    print(f"明るさで散らして選ぶ（{len(brightness_by_episode)} 本の統計を利用）")
+else:
+    print("警告: 明るさ統計を取得できなかった。エピソード番号の等間隔で選ぶ")
+
+
+def choose_episodes(episode_indices: list[int]) -> list[int]:
+    if brightness_by_episode:
+        return choose_spread_by_value(
+            episode_indices, TRAIN_EPISODES_PER_TASK, brightness_by_episode
+        )
+    return choose_evenly_spaced(episode_indices, TRAIN_EPISODES_PER_TASK)
+
+
+selected_by_task = {
+    task_name: choose_episodes(task_to_episodes[task_name])
     for task_name in TRAIN_TASK_NAMES
 }
 
@@ -692,14 +801,42 @@ if len(EPISODE_INDICES) != expected_count:
 
 print(f"Training data: {len(TRAIN_TASK_NAMES)} tasks "
       f"× {TRAIN_EPISODES_PER_TASK} episodes = {len(EPISODE_INDICES)} episodes")
-for task_name in TRAIN_TASK_NAMES:
-    print(f"  {len(task_to_episodes[task_name]):4d} 本中 "
-          f"{TRAIN_EPISODES_PER_TASK} 本: {task_name}")
+
+if brightness_by_episode:
+    chosen = [brightness_by_episode[index] for index in EPISODE_INDICES]
+    whole = [
+        brightness_by_episode[index]
+        for episode_indices in task_to_episodes.values()
+        for index in episode_indices
+    ]
+    print(f"  選んだ分の明るさ  : {min(chosen):.3f} 〜 {max(chosen):.3f}")
+    print(f"  データセット全体  : {min(whole):.3f} 〜 {max(whole):.3f}")
 ```
 
 `SPATIAL_TASK_NAMES` は**設定セルに残しておいてよい**。使われなくなるだけで、
 元の 10 タスクに戻したくなったときに `TRAIN_TASK_NAMES = SPATIAL_TASK_NAMES` の
 1 行で戻せる。
+
+**実行したら、最後の 2 行を見てほしい。** 「選んだ分の明るさ」の範囲が
+「データセット全体」と一致していれば、(b) は狙いどおり効いている。
+
+このコードは実データ（14,347 エピソード分のメタデータ）で動作確認済みである。
+期待される出力は次のとおり。
+
+```
+明るさで散らして選ぶ（14347 本の統計を利用）
+Training data: 40 tasks × 5 episodes = 200 episodes
+  選んだ分の明るさ  : 0.086 〜 0.723
+  データセット全体  : 0.086 〜 0.723
+```
+
+配布既定の「番号で等間隔」と比べた実測差は次のとおりで、
+**明るさの標準偏差が 40% 広がる**。
+
+| 選び方 | 明るさの範囲 | 標準偏差 |
+|---|---|---|
+| 番号で等間隔（配布既定） | 0.161 〜 0.669 | 0.1163 |
+| **明るさで等間隔** | **0.086 〜 0.723** | **0.1631** |
 
 ### そもそも、なぜ「広げないと危ない」のか
 
@@ -729,7 +866,7 @@ fine-tune 例に記載）。配布ノートブックの batch 1 × 3,000 ステ�
 | `STEPS` | `3000` | `20000` | 学習データが 4 倍になる。3000 では 200 エピソードを 1 周もしない |
 | `BATCH_SIZE` | `1` | `4` | 勾配が安定する。VRAM が足りなければ 2 に落とす |
 
-### 画像拡張を有効にする（1 行、効果が大きい見込み）
+### (c) 画像拡張を有効にする（1 行）
 
 **学習セル**の `command` リストに 1 行足す。`--dataset.use_imagenet_stats=false`
 の**すぐ下**が分かりやすい。
@@ -743,12 +880,21 @@ LeRobot には画像拡張が内蔵されているが、**既定で無効**で�
 brightness / contrast / saturation / hue / sharpness のジッタが
 最大 3 種類ランダムに掛かる。
 
-これを推す理由は、**Track 1 の摂動の種類と正面から噛み合う**からである。
+**3 つの変更のうち、これだけが「元データに無い入力」をモデルに見せる。**
+(a) と (b) は既にベースモデルが見たエピソードの選び直しにすぎないが、
+拡張は新しい視覚変動を作り出す。
+
+推す理由は、**Track 1 の摂動の種類と正面から噛み合う**からである。
 
 | example タスクの摂動 | 対応する拡張 |
 |---|---|
 | Light Conditions（2 タスク） | brightness / contrast |
 | Background Textures（2 タスク） | saturation / hue / sharpness |
+
+運営 Q&A No.21 の回答（摂動 7 カテゴリのすべてが含まれるわけではなく、
+「テクスチャなどの摂動」が該当する）とも整合する。
+**Camera Viewpoints や Sensor Noise 向けの拡張（ランダムクロップ、ノイズ付加）を
+足す優先度は低い。**
 
 学習時だけの話なので、提出物側には一切影響しない。
 
