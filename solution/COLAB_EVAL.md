@@ -26,13 +26,14 @@ Colab の GPU（EGL 描画）に移すと桁が変わる。
 |---|---|---|---|
 | 1 | **A** GPU と EGL の確認 | （EGL のベンダ設定を作る） | 10 秒 |
 | 2 | **B** キットのセットアップ | `KIT_DIR` `KIT_PYTHON` `run()` `LOG_DIR` | 5〜10 分 |
-| 3 | **C** 重みの用意 | `WEIGHTS_DIR` `USE_FINETUNED` | 2 分 |
-| 4 | **D-1** 方策側の依存 | `LEROBOT_DIR` `LEROBOT_SRC` | 3 分 |
-| 5 | **D-2** `policy_server.py` の配置 | **`SUBMISSION_DIR`** **`SERVER`** | 5 秒 |
-| 6 | **E-1** 設定 | `PORT` `N_EPISODES` `POLICY_ENV` `server_env` `eval_env` | 1 秒 |
-| 7 | **E-2** 遅さの切り分け（初回のみ） | — | 3 分 |
-| 8 | **E-3** 評価の実行 | — | 45 分 |
-| 9 | **F** 結果の読み取り | — | 1 秒 |
+| 3 | **B-2** ログのパッチ | （エピソードごとの結果とぶつけた物体を出す） | 1 秒 |
+| 4 | **C** 重みの用意 | `WEIGHTS_DIR` `USE_FINETUNED` | 2 分 |
+| 5 | **D-1** 方策側の依存 | `LEROBOT_DIR` `LEROBOT_SRC` | 3 分 |
+| 6 | **D-2** `policy_server.py` の配置 | **`SUBMISSION_DIR`** **`SERVER`** | 5 秒 |
+| 7 | **E-1** 設定 | `PORT` `N_EPISODES` `POLICY_ENV` `server_env` `eval_env` | 1 秒 |
+| 8 | **E-2** 遅さの切り分け（初回のみ） | — | 3 分 |
+| 9 | **E-3** 評価の実行 | — | 45 分 |
+| 10 | **F** 結果の読み取り | — | 1 秒 |
 
 **2 回目以降の掃引は `E-1` → `E-3` → `F` だけでよい。** `E-1` の `POLICY_ENV` を
 書き換えて流し直す。
@@ -253,6 +254,64 @@ run("apt-cache policy python3.10", check=False)
 > **`setup.sh` は `~/.libero/config.yaml` を書き換える。** Colab は使い捨てなので問題ないが、
 > ローカルで同じことをすると既存の LIBERO 設定が `.bak` に退避される。
 
+### B-2. エピソードごとの結果を出すパッチ
+
+配布キットは**エピソード単位の結果をログに出さない**。INFO に出るのは
+タスク単位の集計だけで、途中経過が見えないまま 45 分待つことになる。
+
+さらに、衝突判定に使った `object_max_disp`（**どの物体がどれだけ動いたか**）は
+判定した直後に捨てられる。**何にぶつかったのかが分からない**ため、衝突対策の
+打ち手が決まらない。
+
+**ログを 1 行足すだけのパッチを当てる。** 判定にも採点にも触らない。
+
+```python
+# === エピソードごとの結果と、ぶつけた物体をログに出す ===
+# キットは git clone で取ってくるため、リポジトリ側の修正は反映されない。
+# 判定式には触らず、その直後に logger.info を 1 つ足すだけ。
+from pathlib import Path
+
+target = Path(KIT_DIR) / "pipeline" / "rollout.py"
+source = target.read_text()
+
+anchor = "        collided = any(d > collision_threshold for d in object_max_disp.values())\n"
+addition = '''        _offenders = {k: v for k, v in object_max_disp.items() if v > collision_threshold}
+        logger.info(
+            "  [結果] %s ep%d: %s %d steps%s",
+            task_info.name, episode_id,
+            "成功" if (bool(done) and not _offenders) else ("衝突" if _offenders else "未完了"),
+            total_steps,
+            ("  ぶつけた物体: " + ", ".join(
+                f"{k}={v * 1000:.1f}mm"
+                for k, v in sorted(_offenders.items(), key=lambda kv: -kv[1]))) if _offenders else "",
+        )
+'''
+
+if "ぶつけた物体" in source:
+    print("適用済み")
+elif anchor not in source:
+    raise RuntimeError("アンカーが見つかりません。キットの版を確認してください")
+else:
+    target.write_text(source.replace(anchor, anchor + addition, 1))
+    print("パッチを適用しました")
+```
+
+`KIT_DIR` を使うので **B の後**、評価を回す **E-3 より前**であれば
+どこでもよい。**セッションにつき 1 回でよく**、掃引のたびに実行する必要はない
+（`E-3` は毎回このファイルを読み直すプロセスを立てる）。
+
+出力はこうなる。
+
+```
+  [結果] put_the_bowl_on_the_stove_light_11 ep3: 衝突 214 steps  ぶつけた物体: wooden_cabinet=3.7mm
+  [結果] put_the_bowl_on_the_stove_light_11 ep4: 成功 96 steps
+```
+
+> **B を再実行してもパッチは消えない。** `git clone` は `KIT_DIR` が
+> 存在しないときだけ走る。セッションを作り直したときだけ当て直す。
+>
+> 2 回目以降は `適用済み` と出るだけで、二重には当たらない。
+
 ---
 
 ## C. 重みを用意する
@@ -455,7 +514,28 @@ run(check, tail=20)
 | 場所 | `solution/policy_server.py`（このファイルと同じディレクトリ） |
 | 提出物との関係 | **完全に同一**。zip はこのファイルをルート直下に入れているだけ |
 | Colab での違い | `vendor/` が無いので、同梱版ではなくインストール済みの LeRobot を使う |
-| 後処理 | `PARC_*` を設定しなければ**すべて無効**。既定は素の挙動 |
+| つまみ | `PARC_*` の 4 つ。**`PARC_N_ACTION_STEPS` だけは既定が 10 で、無効ではない**（下表） |
+
+### `PARC_*` の 4 つのつまみ
+
+`policy_server.py` が読む環境変数はこれで全部である
+（`HF_HUB_OFFLINE` などのキャッシュ関連を除く）。**`POLICY_ENV` に書かなければ
+既定値が使われる。** 4 つは独立で、組み合わせても構わない。
+
+| 変数 | 既定 | 何をするか | いつ効くか |
+|---|---|---|---|
+| **`PARC_N_ACTION_STEPS`** | **`10`** | 1 回の推論で作る 50 ステップ分の chunk のうち、**何ステップ実行してから作り直すか**。小さいほど観測を見直す頻度が上がり、開ループ中の誤差の蓄積が打ち切られる。代償は推論回数（1 ステップあたり `38.6 ms + 850 ms / n`） | **常時。これだけ既定で有効** |
+| `PARC_EMA_ALPHA` | `0`（無効） | 出力した行動に**直前の行動をこの割合だけ混ぜる**。`0.3` なら「3 割は前の行動」。動きの行き過ぎが減り、軌道が滑らかになる。**並進と回転の 6 次元だけ**で、グリッパは触らない（中間値になると掴めなくなるため） | 衝突と jerk を減らしたいとき |
+| `PARC_BLEND_STEPS` | `0`（無効） | **chunk の継ぎ目の直後だけ**、直前の行動へ寄せて段差を消す。`3` なら継ぎ目から 3 ステップ、重みを 3/4 → 2/4 → 1/4 と減らしながら混ぜる。EMA と違い**常時はかからない**。こちらも 6 次元のみ | 再計画の頻度を上げて jerk が悪化したとき |
+| `PARC_SAMPLES` | `1`（無効） | chunk を**この本数だけ引き直し、互いに最も近いもの（medoid）を採用**する。平均ではなく実在の 1 本を選ぶので、グリッパが中間値にならない。外れた chunk を捨てられる代わりに**推論コストがこの倍数になる** | 上の 3 つを詰めたあと |
+
+**`PARC_EMA_ALPHA` と `PARC_SAMPLES` は別物である。** 前者は出力した行動を
+時間方向にならす処理、後者は同じ観測から chunk を複数引いて 1 本選ぶ処理で、
+効く場所も計算コストも違う。
+
+> 運営 Q&A No.10 で「VLA が生成した Action を、全タスク共通のルールで整える処理」は
+> 禁止事項に含まれないと明言されている。4 つとも**モデル出力と過去の行動しか
+> 参照しない**（タスク名・seed・シミュレータの内部状態は見ない）。
 
 **左のファイルペインへドラッグ**するか、Drive 経由で置く。
 置き場所は `/content/policy_server.py`（下のセルが専用ディレクトリへ移す）。
@@ -504,11 +584,14 @@ N_EPISODES = 20          # 1 タスクあたり。4 タスクなので総数は�
 MAX_STEPS = 600
 PORT = 8000
 
-# 推論時の後処理。空なら素の挙動。掃引はここを変える。
+# 推論時のつまみ。**空でも素の挙動にはならない**（n_action_steps の既定は 10）。
+# 4 つあり、書かなかったものは policy_server.py の既定値になる。
+# 意味と既定値は下の表を参照。掃引はここだけを書き換える。
 POLICY_ENV = {
-    # "PARC_N_ACTION_STEPS": "25",
-    # "PARC_SAMPLES": "3",
-    # "PARC_BLEND_STEPS": "3",
+    # "PARC_N_ACTION_STEPS": "10",   # 既定 10。1 回の推論で実行するステップ数
+    # "PARC_EMA_ALPHA": "0.3",       # 既定 0（無効）。直前の行動を混ぜる割合
+    # "PARC_BLEND_STEPS": "3",       # 既定 0（無効）。継ぎ目を均すステップ数
+    # "PARC_SAMPLES": "3",           # 既定 1（無効）。chunk を引く本数
 }
 
 import os, subprocess, sys, time, urllib.request, json
@@ -907,12 +990,22 @@ for key in ("mean_avg_cartesian_jerk", "mean_rms_cartesian_jerk", "mean_sparc",
 
 セル E の `POLICY_ENV` を変えて回し直す。**変えるのは 1 度に 1 つ**。
 
+**済んだもの**（20 エピソード/タスク、初期状態 0〜19）。
+
+| 設定 | 成功率 | 衝突率 |
+|---|---|---|
+| `PARC_N_ACTION_STEPS=50`（チェックポイントの値） | 0.0625 | 0.3375 |
+| **`PARC_N_ACTION_STEPS=10`（現在の既定）** | **0.875** | **0.087** |
+
+**残る損失の 7 割は衝突である**（失敗 10 本のうち 7 本）。以降はここを削る。
+
 | 順番 | 設定 | 狙い | 注意 |
 |---|---|---|---|
-| 1 | 既定（空） | 基準を取る | まずこれ |
-| 2 | `PARC_N_ACTION_STEPS=25` | 再計画を 2 倍に | 総時間も 1.3 倍 |
-| 3 | `PARC_N_ACTION_STEPS=10` | 再計画を 5 倍に | **1 時間制限に注意**（後述） |
-| 4 | `PARC_BLEND_STEPS=3` | 境界の段差を消す | 成功率が出てから |
+| 1 | `PARC_EMA_ALPHA=0.3` | 行き過ぎを抑えて接触を減らす | **本命**。効かなければ 0.15 と 0.5 も見る |
+| 2 | `PARC_BLEND_STEPS=3` | 継ぎ目の段差を消す | `avg_cartesian_jerk` が 4.00 → 4.52 と唯一悪化している |
+| 3 | `PARC_N_ACTION_STEPS=5` | さらに閉ループ寄りに | 総時間 1.7 倍 |
+| 4 | `PARC_N_ACTION_STEPS=2` | 端まで見る | 総時間 3.8 倍。エピソードを半分に減らす |
+| 5 | `PARC_SAMPLES=3` | 外れた chunk を捨てる | コストが 3 倍。最後 |
 
 **見る順序を間違えないこと。** スコアは「ゲートを通ったエピソードだけが
 滑らかさで採点される」構造なので、
