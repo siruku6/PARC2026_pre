@@ -47,86 +47,16 @@ flowchart LR
 
 ## 再生成の手順
 
-### 1. Python 3.10 の venv を作る
+**→ [../docs/手順書/02_提出物のzipを作る.md](../docs/手順書/02_提出物のzipを作る.md)**
 
-```bash
-export UV_CACHE_DIR="$TMPDIR/uvcache"
-uv venv --python 3.10.12 work/venv310
-```
+venv の作成・LeRobot の同梱・重みの配置・zip の組み立てと検証・既知のハッシュは、
+すべてそちらに集約している。ケース 0（土台を作る）から順に読む。
 
-採点環境と同じ 3.10.12 に合わせている。
-
-### 2. LeRobot v0.6.0 のソースを取得して同梱する
-
-```bash
-python3 -c "
-import io, tarfile, urllib.request, pathlib, shutil
-url = 'https://codeload.github.com/huggingface/lerobot/tar.gz/refs/tags/v0.6.0'
-data = urllib.request.urlopen(url, timeout=300).read()
-dest = pathlib.Path('work'); target = dest / 'lerobot-src'
-if target.exists(): shutil.rmtree(target)
-with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as tf:
-    root = tf.getnames()[0].split('/')[0]; tf.extractall(dest)
-(dest / root).rename(target)
-"
-
-work/venv310/bin/python solution/tools/vendor_lerobot.py \
-    --python310 work/venv310/bin/python
-```
-
-`vendor_lerobot.py` は 3.12 専用の構文・API だけを書き換える。置換対象が 1 箇所で
-なければ例外にするため、LeRobot のバージョンが変われば黙って壊れずに落ちる。
-
-### 3. 重みを `work/artifacts/model_weights/` に置く
-
-**VLM の `model.safetensors` は含めない**（VLM の重みはポリシー側の
-チェックポイントに含まれている）。
-
-| 取得元 | revision | 置き場所 |
-|---|---|---|
-| `lerobot/smolvla_libero_plus` | `7bb70aa5bc92b82c9239142775d3a173103567ff` | `model_weights/` |
-| `HuggingFaceTB/SmolVLM2-500M-Video-Instruct`（設定とトークナイザのみ） | — | `model_weights/vlm/` |
-
-Colab で追加学習した場合は、マージ済みモデルの中身で `model_weights/` 直下を
-差し替える。`vlm/` はそのまま残す（[COLAB.md](COLAB.md) 参照）。
-
-### 4. zip を作る
+いちばん多いのは「`policy_server.py` を変えたので作り直す」場合で、これは 1 行である。
 
 ```bash
 work/venv310/bin/python solution/tools/build_submission.py
 ```
-
-`work/submission.zip` と `work/submission.sha256` が出力される。
-ハッシュはレポートの「提出チェックポイントのハッシュ値」にそのまま使える。
-
-### 既知の正解ハッシュ
-
-`work/` は git 管理外なので、zip 自体は残らない。**素の重み（追加学習なし）で
-組んだ提出物のハッシュをここに記録しておく**。手順 1〜4 をやり直したときに
-この値と一致すれば、同じものが再生成できたと言える。
-
-重みはいずれも `lerobot/smolvla_libero_plus` の `7bb70aa5`（追加学習なし）、
-環境変数はすべて未設定（後処理は無効）である。
-
-| 版 | コミット | sha256 | 備考 |
-|---|---|---|---|
-| **提出済み** | `8fbcf6f`（タグ `scored-0.05832`） | `f80abc7bc99c2007ad88b1577e9e8e9f727e09b045132cf24fa287e7e05ea3a6` | **本番スコア 0.05832** |
-| 現在 | HEAD | `88d4607be62d17273fcb6885b3affb8f44478fc5ace6787864f21e9084d11601` | `PARC_SAMPLES` を追加 |
-
-**どちらも既定の挙動は同一である。** 差分は `policy_server.py` に
-後処理の入口（`PARC_*`）を足したことだけで、環境変数を設定しなければ
-一切触らない。バイト列が変わるためハッシュだけが変わる。
-
-**本番で通ったことが確実なのはタグ `scored-0.05832` である。** 何かがおかしく
-なったときはここへ戻る。
-
-```bash
-git checkout scored-0.05832 -- solution/policy_server.py solution/requirements.txt
-```
-
-一致しない場合は、LeRobot のバージョン・重みの revision・`requirements.txt` の
-いずれかが変わっている。追加学習した重みに差し替えれば当然変わるので、
-そのときは行を足す。
 
 ### 推論時の後処理（既定はすべて無効）
 
@@ -160,32 +90,38 @@ flowchart LR
 
 #### `PARC_N_ACTION_STEPS` — 何ステップ分を実行するか
 
-既定はチェックポイントの値 **50**。設定するとその値で上書きする。
+**既定は `10`。これだけは無効ではなく、常に効いている。**
+チェックポイントの値は 50 だが、`policy_server.py` が起動時に上書きする。
 
 **縮めると閉ループ制御に寄る。** 50 なら 50 ステップに 1 回しか観測を見ないが、
-10 にすれば 10 ステップごとに観測を取り直して計画し直す。把持のずれや
-対象外の物体への接近を早く補正できるため、**成功率（＝スコアのゲート）に効く**
-可能性がある。
+10 にすれば 10 ステップごとに観測を取り直して計画し直す。開ループの間に
+積み上がる誤差が、5 倍の頻度で打ち切られる。
 
-代償は総実行時間である。推論回数が `50 / n` 倍になる。
+**これがこれまでで最大の改善だった。** 追加学習なしで次のとおりである
+（20 エピソード/タスク、初期状態 0〜19。[../docs/strategy/05_実測結果.md](../docs/strategy/05_実測結果.md)）。
 
-**本番採点の実測では、トラック評価の合計時間は 147.6 秒**（上限 3,600 秒の 4.1%）
-だった。総ステップ数は 2,500 程度、エピソード数にして 4 本ほどである。
-つまり**時間の余裕は 24 倍あり、推論回数を増やす制約にはならない**。
+| 設定 | 成功率 | 衝突率 |
+|---|---|---|
+| `50`（チェックポイントの値） | 0.0625 | 0.3375 |
+| **`10`（現在の既定）** | **0.875** | **0.087** |
 
-| 設定 | 推論回数 | 合計時間の見込み | 上限に対して |
-|---|---|---|---|
-| `50`（既定） | 50 | 149 秒 | 4.1% |
-| `25` | 100 | 179 秒 | 5.0% |
-| `10` | 250 | 269 秒 | 7.5% |
+代償は推論回数が `50 / n` 倍になることだが、**時間制限には当たらない**。
+1 ステップの所要は `env.step 38.6 ms + 推論 850 ms / n` で説明でき、
+実測（n=50 で 55.2 ms、n=10 で 122.5 ms）と一致する。
 
-見込みは、シミュレーション 47.5 ms/step（L4・EGL、運営 Q&A No.3 の参加者計測）と
-推論 0.6 秒/chunk として計算したもの。
+| 設定 | 80 エピソードの実測・外挿 | 上限 3,600 秒に対して |
+|---|---|---|
+| `50` | 2,460 秒 | 68% |
+| **`10`** | **約 1,650 秒** | **46%** |
+
+本番はローカルよりはるかに少ないエピソード数しか回さない（n=50 で 147.6 秒＝
+総ステップ約 2,500）ため、実際の余裕はさらに大きい。**成功すると 600 ステップの
+時間切れを待たずに終わる**ぶんも縮む。
 
 なお**スコアの `time` 指標は壁時計ではなくステップ数**なので（運営 Q&A No.23）、
 推論回数を増やしても `time` の配点は悪化しない。
 
-**まず `25`、次に `10` を試す。** 時間制限を理由に控える必要はない。
+**次に試すのは `5` と `2` である。** 最適値が 10 とは限らない。
 
 ---
 
@@ -324,83 +260,14 @@ PARC_BLEND_STEPS=3 bash solution/tools/run_local_eval.sh
 スコアは「ゲートを通ったエピソードだけが滑らかさで採点される」構造なので、
 **成功率を下げる設定は、滑らかさがどれだけ改善しても採用してはいけない。**
 
-## 追加学習した重みへの差し替え
+## 追加学習した重みへの差し替え・検証
 
-Colab で学習してマージしたモデルを持ち帰ったあとの手順である。
-配布ノートブックの**マージセル**が出す `..._merged/` を入力に取る。
+**→ [../docs/手順書/02_提出物のzipを作る.md](../docs/手順書/02_提出物のzipを作る.md)**
 
-```bash
-# 1. 取り込む前に検査だけする（何も書き換えない）
-work/venv310/bin/python solution/tools/install_weights.py ~/Downloads/merged_model --dry-run
+`install_weights.py` の使い方、取り込み前の 4 つの検査、素の重みへの戻し方、
+Docker コンテナでの採点環境に近い検証は、すべてそちらにある。
 
-# 2. 問題なければ取り込む
-work/venv310/bin/python solution/tools/install_weights.py ~/Downloads/merged_model
-
-# 3. zip を作り直す（組み立て直後に中身を検証する）
-work/venv310/bin/python solution/tools/build_submission.py
-```
-
-**マージセルの出力には `vlm/` が含まれない。** SmolVLM の設定とトークナイザは
-今ある `model_weights/vlm/` から引き継ぐ必要があり、`install_weights.py` が
-これを機械的に行う。手作業でコピーすると必ず取りこぼす。
-
-取り込み前に次を検査し、1 つでも引っかかれば**書き換えずに中止する**。
-
-| 検査 | 引っかかると何が起きるはずだったか |
-|---|---|
-| 必須ファイルが揃っているか | 採点環境でモデルロードに失敗して 0 点 |
-| `config.json` の `use_peft` が偽か | LoRA 未マージのまま提出 |
-| `model.safetensors` に `lora_` が残っていないか | 同上 |
-| テンソル構成が既存と一致しているか | `MyPolicy` が重みを読めない |
-
-**既存の重みは削除せず `work/artifacts/model_weights.bak/` へ退避する。**
-追加学習の結果が悪ければ、この 1 行で素の重みへ戻せる。
-
-```bash
-rm -rf work/artifacts/model_weights && \
-  mv work/artifacts/model_weights.bak work/artifacts/model_weights
-```
-
-`build_submission.py` は zip を書いたあとに開き直し、エントリの集合の一致、
-`policy_server.py` と `requirements.txt` の内容一致、`model_weights/vlm/` と
-`vendor/lerobot/` の存在を確認する。**過去に「zip の中の `requirements.txt` だけ
-古い」という事故を起こしているため**、ここで機械的に潰す。
-
-## 検証
-
-**ローカル（macOS）では採点環境を再現できない。** CUDA が無く、`torchvision` は
-CUDA 13 ビルドのため import できない。検証は Docker コンテナで行う。
-
-```bash
-docker build -t parc2026 .
-docker run -it --rm -v "$PWD/work:/host_work" parc2026
-```
-
-コンテナ内では、本番と同じく `--system-site-packages` 付きの提出物専用 venv を作る。
-配布キットの依存は `/workspace/venv` にあるため、パスを足して同じ階層を再現する。
-
-```bash
-/usr/bin/python3.10 -m venv --system-site-packages /opt/subvenv
-echo /workspace/venv/lib/python3.10/site-packages \
-  > /opt/subvenv/lib/python3.10/site-packages/_kit_site_packages.pth
-/opt/subvenv/bin/pip install -r /sub/requirements.txt
-
-# ローカル検証時のみ。配布 Docker の torch は +cpu のため、
-# PyPI の CUDA 13 ビルドの torchvision は import できない。
-/opt/subvenv/bin/pip install --no-deps --force-reinstall \
-  --index-url https://download.pytorch.org/whl/cpu torchvision==0.26.0
-
-cd /workspace && /opt/subvenv/bin/python validate_submission.py /sub/submission.zip
-```
-
-> **`HF_HOME` を空ディレクトリに向け、`HF_HUB_OFFLINE=1` を立てて検証すること。**
-> そうしないと、採点環境（通信遮断）でだけ起きる Hub アクセスの失敗を見逃す。
-
-環境をまたいだときは、内容が一致しているかを確認する。
-
-```bash
-work/venv310/bin/python solution/tools/digest_submission.py --per-entry
-```
+学習そのものは [../docs/手順書/01_再学習する.md](../docs/手順書/01_再学習する.md)。
 
 ## 現在の状態
 

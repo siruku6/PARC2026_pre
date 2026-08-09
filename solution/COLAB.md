@@ -962,26 +962,15 @@ brightness / contrast / saturation / hue / sharpness のジッタが
 
 ## 持ち帰ったあとの手順
 
-Drive の `merged_model/` の中身で、ローカルの
-`work/artifacts/model_weights/` 直下を差し替える。
+**→ [../docs/手順書/02_提出物のzipを作る.md](../docs/手順書/02_提出物のzipを作る.md) のケース 2**
 
-| ファイル | 差し替え |
-|---|---|
-| `config.json` | ✓ |
-| `model.safetensors` | ✓ |
-| `policy_preprocessor.json` / `policy_preprocessor_step_*.safetensors` | ✓ |
-| `policy_postprocessor.json` / `policy_postprocessor_step_*.safetensors` | ✓ |
-| `vlm/` | **そのまま残す**。ノートブックは作らない。学習で変わらない |
-| `train_config.json` | 不要（推論は `config.json` を読む） |
+Drive の `merged_model/` を `install_weights.py` に渡すだけでよい。
+差し替えるファイルの取捨、`vlm/` の引き継ぎ、取り込み前の検査、
+素の重みへの戻し方は、すべてそちらに集約している。
 
-そのあと [README.md](README.md) の手順で zip を作り直し、**必ず
-`validate_submission.py` を通す**。追加学習で `config.json` の
-`input_features` がデータセットから再導出されるため、
-`MyPolicy` が想定どおり動くかを毎回確認する。
-
-```bash
-work/venv310/bin/python solution/tools/build_submission.py
-```
+**必ず `validate_submission.py` まで通すこと。** 追加学習で `config.json` の
+`input_features` がデータセットから再導出されるため、`MyPolicy` が想定どおり
+動くかを毎回確認する必要がある。
 
 ## 注意点
 
