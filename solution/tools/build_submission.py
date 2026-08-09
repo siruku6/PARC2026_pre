@@ -124,6 +124,55 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _verify_zip(output: Path, entries: list[tuple[Path, str]]) -> None:
+    """書き終えた zip を開き直し、中身が意図どおりかを確かめる。
+
+    過去に「zip の中の requirements.txt だけ古い」という事故を起こしている。
+    提出は 1 日 1 回しかできないため、組み立てた直後にここで潰す。
+
+    Parameters
+    ----------
+    output : Path
+        書き出した zip。
+    entries : list[tuple[Path, str]]
+        `_collect_entries` が返した (実ファイル, zip 内のパス) の一覧。
+
+    Raises
+    ------
+    ValueError
+        エントリの集合が一致しない、テキストの中身が食い違う、
+        あるいは必須の構成要素が欠けている場合。
+    """
+    expected = {arcname: path for path, arcname in entries}
+
+    with zipfile.ZipFile(output) as archive:
+        actual = {info.filename: info.file_size for info in archive.infolist() if not info.is_dir()}
+
+        missing = sorted(set(expected) - set(actual))
+        extra = sorted(set(actual) - set(expected))
+        if missing or extra:
+            raise ValueError(f"zip の中身が一致しません（不足 {missing[:3]} / 余分 {extra[:3]}）")
+
+        # 自分で書いたコードは中身まで突き合わせる。ここが古いのが最も危ない。
+        for arcname in _SOLUTION_FILES:
+            if archive.read(arcname) != expected[arcname].read_bytes():
+                raise ValueError(f"zip の中の {arcname} が {expected[arcname]} と一致しません")
+
+        # 重みとトークナイザは、あるべきものが欠けていないかだけ見る。
+        for required in ("model_weights/model.safetensors", "model_weights/config.json"):
+            if required not in actual:
+                raise ValueError(f"zip に {required} がありません")
+        if not any(name.startswith("model_weights/vlm/") for name in actual):
+            raise ValueError(
+                "zip に model_weights/vlm/ がありません"
+                "（トークナイザが無いと採点環境で Hub へ取りに行って失敗します）"
+            )
+        if not any(name.startswith("vendor/lerobot/") for name in actual):
+            raise ValueError("zip に vendor/lerobot/ がありません")
+
+    print(f"[build] 検証     {len(expected)} エントリ一致、必須構成あり")
+
+
 def main() -> None:
     args = _parse_args()
     solution: Path = args.solution.resolve()
@@ -132,6 +181,7 @@ def main() -> None:
 
     entries = _collect_entries(solution, artifacts)
     _write_zip(output, entries)
+    _verify_zip(output, entries)
 
     checksum = _sha256(output)
     checksum_path = output.with_suffix(".sha256")

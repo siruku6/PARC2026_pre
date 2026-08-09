@@ -14,11 +14,13 @@
 | `requirements.txt` | 提出物の依存（確定版） |
 | `requirements-dev.txt` | ローカル検証用の依存。**提出物には使わない** |
 | `tools/vendor_lerobot.py` | LeRobot のソースを Python 3.10 で動く形へ書き換えて同梱する |
-| `tools/build_submission.py` | 提出用 zip を組み立て、sha256 を記録する |
+| `tools/install_weights.py` | Colab で追加学習したマージ済みモデルを取り込む |
+| `tools/build_submission.py` | 提出用 zip を組み立て、検証し、sha256 を記録する |
 | `tools/digest_submission.py` | 提出物の内容ダイジェスト。環境間の同期確認に使う |
+| `tools/run_local_eval.sh` | 配布キットの評価パイプラインを提出物に対して回す（コンテナ内） |
 
-`tools/` の 3 本は**どのディレクトリから実行してもよい**。入出力はスクリプト自身の
-位置から求めたリポジトリルート基準で解決する。
+`tools/` の Python スクリプトは**どのディレクトリから実行してもよい**。入出力は
+スクリプト自身の位置から求めたリポジトリルート基準で解決する。
 
 ## 生成物の置き場（`work/`、git 管理外）
 
@@ -110,6 +112,48 @@ work/venv310/bin/python solution/tools/build_submission.py
 一致しない場合は、LeRobot のバージョン・重みの revision・`requirements.txt` の
 いずれかが変わっている。追加学習した重みに差し替えれば当然変わるので、
 そのときは新しい行を足す。
+
+## 追加学習した重みへの差し替え
+
+Colab で学習してマージしたモデルを持ち帰ったあとの手順である。
+配布ノートブックの**マージセル**が出す `..._merged/` を入力に取る。
+
+```bash
+# 1. 取り込む前に検査だけする（何も書き換えない）
+work/venv310/bin/python solution/tools/install_weights.py ~/Downloads/merged_model --dry-run
+
+# 2. 問題なければ取り込む
+work/venv310/bin/python solution/tools/install_weights.py ~/Downloads/merged_model
+
+# 3. zip を作り直す（組み立て直後に中身を検証する）
+work/venv310/bin/python solution/tools/build_submission.py
+```
+
+**マージセルの出力には `vlm/` が含まれない。** SmolVLM の設定とトークナイザは
+今ある `model_weights/vlm/` から引き継ぐ必要があり、`install_weights.py` が
+これを機械的に行う。手作業でコピーすると必ず取りこぼす。
+
+取り込み前に次を検査し、1 つでも引っかかれば**書き換えずに中止する**。
+
+| 検査 | 引っかかると何が起きるはずだったか |
+|---|---|
+| 必須ファイルが揃っているか | 採点環境でモデルロードに失敗して 0 点 |
+| `config.json` の `use_peft` が偽か | LoRA 未マージのまま提出 |
+| `model.safetensors` に `lora_` が残っていないか | 同上 |
+| テンソル構成が既存と一致しているか | `MyPolicy` が重みを読めない |
+
+**既存の重みは削除せず `work/artifacts/model_weights.bak/` へ退避する。**
+追加学習の結果が悪ければ、この 1 行で素の重みへ戻せる。
+
+```bash
+rm -rf work/artifacts/model_weights && \
+  mv work/artifacts/model_weights.bak work/artifacts/model_weights
+```
+
+`build_submission.py` は zip を書いたあとに開き直し、エントリの集合の一致、
+`policy_server.py` と `requirements.txt` の内容一致、`model_weights/vlm/` と
+`vendor/lerobot/` の存在を確認する。**過去に「zip の中の `requirements.txt` だけ
+古い」という事故を起こしているため**、ここで機械的に潰す。
 
 ## 検証
 
