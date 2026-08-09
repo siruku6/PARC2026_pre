@@ -933,15 +933,56 @@ RESULTS_TXT.write_text(
     encoding="utf-8",
 )
 
-print("\n=== 手元へ保存するファイル ===")
-for path in (Path("/content/results/server_8000.json"), RESULTS_TXT, EVAL_LOG):
-    size = path.stat().st_size / 1e3 if path.exists() else 0
-    print(f"  {'あり' if path.exists() else '無し'}  {size:8.0f} KB  {path}")
-print("\n左のファイルペインからダウンロードする。**JSON と results.txt は必ず取る。**")
-
 if process.returncode != 0:
     print("--- ログの末尾 ---")
     print(EVAL_LOG.read_text(encoding="utf-8")[-3000:])
+
+# === 結果を Drive へ退避する ===
+# **/content はランタイムが切れると消える。** 手元へ落とすのを忘れて
+# 一度失っており、35 分の再実行になった。人の記憶に頼らず自動で逃がす。
+# 失敗しても評価結果そのものは残るので、例外で全体を止めない。
+import shutil
+
+def _run_label() -> str:
+    """設定から、取り違えようのないディレクトリ名を作る。"""
+    parts = [f"n{POLICY_ENV.get('PARC_N_ACTION_STEPS', '10')}", f"ep{N_EPISODES}"]
+    for key, value in sorted(POLICY_ENV.items()):
+        if key != "PARC_N_ACTION_STEPS":
+            parts.append(f"{key.replace('PARC_', '').lower()}{value}".replace(".", ""))
+    return "_".join(parts)
+
+try:
+    if not Path("/content/drive/MyDrive").is_dir():
+        from google.colab import drive
+        drive.mount("/content/drive")      # 初回は認証を求められる
+
+    destination = (Path("/content/drive/MyDrive/parc2026/eval")
+                   / f"{time.strftime('%m%d_%H%M%S')}_{_run_label()}")
+    destination.mkdir(parents=True, exist_ok=True)
+
+    for path in (Path("/content/results/server_8000.json"), RESULTS_TXT, EVAL_LOG):
+        if path.exists():
+            shutil.copy(path, destination / path.name)
+    print(f"\nDrive へ退避した: {destination}")
+    for path in sorted(destination.iterdir()):
+        print(f"  {path.stat().st_size / 1e3:8.0f} KB  {path.name}")
+except Exception as error:
+    print(f"\n**Drive への退避に失敗した: {error}**")
+    print("下の一覧から手動でダウンロードすること。")
+
+print("\n=== 手元に残すファイル ===")
+for path in (Path("/content/results/server_8000.json"), RESULTS_TXT, EVAL_LOG):
+    size = path.stat().st_size / 1e3 if path.exists() else 0
+    print(f"  {'あり' if path.exists() else '無し'}  {size:8.0f} KB  {path}")
+```
+
+ディレクトリ名は設定から自動で決まるので、**何を測った回なのかが後から分かる。**
+
+```
+/content/drive/MyDrive/parc2026/eval/
+├── 0810_091203_n10_ep20/                    … つまみ無し
+├── 0810_101500_n10_ep20_ema_alpha03/        … EMA 0.3
+└── 0810_113000_n10_ep20_blend_steps3/       … 境界ブレンド 3
 ```
 
 > **セルを消してしまったら、このページから貼り直す。**
