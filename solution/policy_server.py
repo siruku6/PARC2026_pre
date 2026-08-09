@@ -121,6 +121,15 @@ class MyPolicy(BasePolicy):
         # 設定とトークナイザは同梱物から読む（本体の重みは含めていない）。
         config.vlm_model_name = str(weights / "vlm")
 
+        # 1 回の推論で作った chunk のうち、何ステップ分を実行するか。
+        # 既定はチェックポイントの値（50）で、chunk を丸ごと開ループで実行する。
+        # 縮めると再計画の頻度が上がって誤差の蓄積に強くなる代わりに、
+        # 推論回数が増えてトラック全体 1 時間の制限に効く。
+        # 環境変数が無ければ一切触らないため、既定の挙動は変わらない。
+        n_action_steps = os.environ.get("PARC_N_ACTION_STEPS")
+        if n_action_steps:
+            config.n_action_steps = int(n_action_steps)
+
         self._policy = SmolVLAPolicy.from_pretrained(weights, config=config)
         self._policy.to(self._device)
         self._policy.eval()

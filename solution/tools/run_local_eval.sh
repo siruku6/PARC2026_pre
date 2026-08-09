@@ -30,6 +30,13 @@ SERVER_LOG="${SERVER_LOG:-$SUBMISSION_DIR/server.log}"
 # 「観測変換が正しいか」を確かめる目的のときだけ大きくする。
 TIMEOUT="${TIMEOUT:-10}"
 
+# 1 回の推論で作った chunk のうち何ステップ分を実行するか。
+# 空ならチェックポイントの値（50）をそのまま使う。閉ループ化の A/B に使う。
+#   PARC_N_ACTION_STEPS=25 bash run_local_eval.sh
+if [ -n "${PARC_N_ACTION_STEPS:-}" ]; then
+    export PARC_N_ACTION_STEPS
+fi
+
 export MUJOCO_GL="${MUJOCO_GL:-osmesa}"
 export PYTHONPATH="$KIT_DIR/LIBERO-plus:$KIT_DIR:$KIT_DIR/compe"
 export HF_HOME="${HF_HOME:-$SUBMISSION_DIR/empty_hf}"
@@ -67,6 +74,9 @@ done
 echo "[eval] 評価を開始 (n_episodes=$N_EPISODES, max_steps=$MAX_STEPS, timeout=${TIMEOUT}s)"
 if [ "$TIMEOUT" != "10" ]; then
     echo "[eval] 注意: /act のタイムアウトを本番（10秒）から緩めている。スコアの参考にはならない。"
+fi
+if [ -n "${PARC_N_ACTION_STEPS:-}" ]; then
+    echo "[eval] n_action_steps=${PARC_N_ACTION_STEPS}（既定の 50 から変更している）"
 fi
 cd "$KIT_DIR"
 "$KIT_PYTHON" -m pipeline \

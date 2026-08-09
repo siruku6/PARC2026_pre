@@ -105,9 +105,16 @@ work/venv310/bin/python solution/tools/build_submission.py
 組んだ提出物のハッシュをここに記録しておく**。手順 1〜4 をやり直したときに
 この値と一致すれば、同じものが再生成できたと言える。
 
-| 版 | sha256 | サイズ |
-|---|---|---|
-| v1: 素の重み（`lerobot/smolvla_libero_plus` の `7bb70aa5`） | `55d9f3031d85408527c1888c79179a338f3cf21bbcbed3d83a228134c1075cbd` | 918 MB |
+重みはいずれも `lerobot/smolvla_libero_plus` の `7bb70aa5`（追加学習なし）である。
+
+| 版 | 対応コミット | sha256 | サイズ |
+|---|---|---|---|
+| v1 | `51e932b` | `55d9f3031d85408527c1888c79179a338f3cf21bbcbed3d83a228134c1075cbd` | 918 MB |
+| v2 | `4f62ef6` 以降 | `26e332b983a4732fa6877c6e4c458cae6676f58b20ddf085f8e9a28fbf98f5ff` | 918 MB |
+
+**v1 と v2 の挙動は同一である。** 差分は `policy_server.py` に
+`PARC_N_ACTION_STEPS` の入口を足したことだけで、環境変数を設定しなければ
+一切触らない。バイト列が変わるためハッシュだけが変わる。
 
 一致しない場合は、LeRobot のバージョン・重みの revision・`requirements.txt` の
 いずれかが変わっている。追加学習した重みに差し替えれば当然変わるので、
