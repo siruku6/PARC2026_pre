@@ -371,8 +371,12 @@ if RESUME:
     print(f"[drive] Drive から {restored} ファイルを復元")
 
     checkpoint_root = LOCAL_RUN_DIR / "checkpoints"
+    # 数値として並べる。ディレクトリ名はゼロ埋めされる（桁数は
+    # max(6, len(str(STEPS))) なので STEPS=20000 なら 001000〜020000）が、
+    # STEPS を変えて再開すると桁数が変わり、文字列ソートでは逆転しうる。
     checkpoints = sorted(
-        path for path in checkpoint_root.glob("*") if path.is_dir() and path.name.isdigit()
+        (path for path in checkpoint_root.glob("*") if path.is_dir() and path.name.isdigit()),
+        key=lambda path: int(path.name),
     ) if checkpoint_root.is_dir() else []
 
     if checkpoints:
@@ -921,6 +925,28 @@ brightness / contrast / saturation / hue / sharpness のジッタが
 100 ステップの所要時間しだいでは、ここを 2 に上げる価値がある。
 
 ---
+
+## 途中のチェックポイントで打ち切るとき
+
+`STEPS` を最後まで回せないとき、どの時点なら妥協できるかは**学習率がどこまで
+落ちているか**で決まる。スケジューラは `CosineDecayWithWarmupSchedulerConfig` で、
+ピーク 3e-4 から 3e-5 へコサインで落とす。**`--steps` と
+`--policy.scheduler_decay_steps` に同じ `STEPS` が渡るため自動スケールは働かず、
+途中で止めれば学習率は高いままである。**
+
+`STEPS=20000` のときの学習率は次のようになる。
+
+| ステップ | 学習率 | ピーク比 | 妥協できるか |
+|---|---|---|---|
+| 5,000 | 2.60e-4 | 87% | ✗ 焼き鈍しが全く効いていない |
+| 10,000 | 1.65e-4 | 55% | △ 途中で放り出した状態 |
+| **15,000** | **6.95e-5** | **23%** | **○ 実用的な下限** |
+| 18,000 | 3.66e-5 | 12% | ◎ ほぼ完走と同じ |
+| 20,000 | 3.00e-5 | 10% | ◎ 完走 |
+
+**15,000 を超えていれば、打ち切っても大きくは損をしない。**
+10,000 以下で止めるくらいなら、`STEPS` を小さくして最初から回し直した方がよい
+（データはセッション内にキャッシュされているため再ダウンロードは発生しない）。
 
 ## 中断したときの再開手順
 
