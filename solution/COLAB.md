@@ -962,7 +962,7 @@ brightness / contrast / saturation / hue / sharpness のジッタが
 
 ## 持ち帰ったあとの手順
 
-**→ [../docs/手順書/02_提出物のzipを作る.md](../docs/手順書/02_提出物のzipを作る.md) のケース 2**
+**→ [../docs/howto/02_build_submission.md](../docs/howto/02_build_submission.md) のケース 2**
 
 Drive の `merged_model/` を `install_weights.py` に渡すだけでよい。
 差し替えるファイルの取捨、`vlm/` の引き継ぎ、取り込み前の検査、

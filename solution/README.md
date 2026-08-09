@@ -47,7 +47,7 @@ flowchart LR
 
 ## 再生成の手順
 
-**→ [../docs/手順書/02_提出物のzipを作る.md](../docs/手順書/02_提出物のzipを作る.md)**
+**→ [../docs/howto/02_build_submission.md](../docs/howto/02_build_submission.md)**
 
 venv の作成・LeRobot の同梱・重みの配置・zip の組み立てと検証・既知のハッシュは、
 すべてそちらに集約している。ケース 0（土台を作る）から順に読む。
@@ -262,12 +262,12 @@ PARC_BLEND_STEPS=3 bash solution/tools/run_local_eval.sh
 
 ## 追加学習した重みへの差し替え・検証
 
-**→ [../docs/手順書/02_提出物のzipを作る.md](../docs/手順書/02_提出物のzipを作る.md)**
+**→ [../docs/howto/02_build_submission.md](../docs/howto/02_build_submission.md)**
 
 `install_weights.py` の使い方、取り込み前の 4 つの検査、素の重みへの戻し方、
 Docker コンテナでの採点環境に近い検証は、すべてそちらにある。
 
-学習そのものは [../docs/手順書/01_再学習する.md](../docs/手順書/01_再学習する.md)。
+学習そのものは [../docs/howto/01_retrain.md](../docs/howto/01_retrain.md)。
 
 ## 現在の状態
 

@@ -3,7 +3,7 @@
 **この手順を最後まで実行すると、Omnicampus へ出せる `work/submission.zip` ができる。**
 
 追加学習した重みを使う場合は、先に
-[01_再学習する.md](01_再学習する.md) を終えて `merged_model/` を用意しておく。
+[01_retrain.md](01_retrain.md) を終えて `merged_model/` を用意しておく。
 
 ## 全体像
 
@@ -63,7 +63,7 @@ work/venv310/bin/python solution/tools/build_submission.py
 
 # ケース 2. 追加学習した重みに差し替える
 
-入力は [01_再学習する.md](01_再学習する.md) が出す `merged_model/` である。
+入力は [01_retrain.md](01_retrain.md) が出す `merged_model/` である。
 
 ```bash
 # 1. 検査だけする（何も書き換えない）
@@ -279,7 +279,7 @@ Omnicampus に `work/submission.zip` をアップロードする。
 |---|---|---|
 | `[build] 検証` の行が出ない | 古い `build_submission.py` | `git pull` してやり直す |
 | `requirements.txt に lerobot` で中止する | 同梱方式では不要な行を足した | その行を消す |
-| `install_weights.py` が `use_peft が真` で中止する | マージしていないチェックポイントを渡した | [01_再学習する.md](01_再学習する.md) の A-5 を実行する |
+| `install_weights.py` が `use_peft が真` で中止する | マージしていないチェックポイントを渡した | [01_retrain.md](01_retrain.md) の A-5 を実行する |
 | 採点で「モデルロードに失敗」 | `model_weights/vlm/` が欠けている | ケース 0 の 0-3 をやり直す |
 | 採点で `evdev` のビルドエラー | `requirements.txt` に `lerobot` を書いた | 上と同じ |
 | 追加学習したのにスコアが変わらない | LoRA が未マージ | `--dry-run` の検査結果を読む |
