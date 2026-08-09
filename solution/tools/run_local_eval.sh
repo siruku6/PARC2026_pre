@@ -33,12 +33,13 @@ TIMEOUT="${TIMEOUT:-10}"
 # 推論時の後処理。いずれも空なら無効で、素の挙動になる。
 # 詳細は solution/README.md の「推論時の後処理」を参照。
 #   PARC_N_ACTION_STEPS=25 bash run_local_eval.sh   # 閉ループ寄りにする
+#   PARC_SAMPLES=3         bash run_local_eval.sh   # chunk を 3 回引いて典型を選ぶ
 #   PARC_BLEND_STEPS=3     bash run_local_eval.sh   # chunk 境界の段差を消す
 #   PARC_EMA_ALPHA=0.3     bash run_local_eval.sh   # 常時の指数平滑
 #
 # 呼び出し側で VAR=値 の形で渡せば子プロセスへ引き継がれるが、
 # 明示的に export して意図を残す。
-for _name in PARC_N_ACTION_STEPS PARC_BLEND_STEPS PARC_EMA_ALPHA; do
+for _name in PARC_N_ACTION_STEPS PARC_SAMPLES PARC_BLEND_STEPS PARC_EMA_ALPHA; do
     if [ -n "$(eval "printf '%s' \"\${$_name:-}\"")" ]; then
         export "$_name"
     fi
@@ -84,6 +85,9 @@ if [ "$TIMEOUT" != "10" ]; then
 fi
 if [ -n "${PARC_N_ACTION_STEPS:-}" ]; then
     echo "[eval] n_action_steps=${PARC_N_ACTION_STEPS}（既定の 50 から変更している）"
+fi
+if [ -n "${PARC_SAMPLES:-}" ]; then
+    echo "[eval] samples=${PARC_SAMPLES}（chunk を複数回引いて medoid を選ぶ。推論時間はこの倍数）"
 fi
 if [ -n "${PARC_BLEND_STEPS:-}" ]; then
     echo "[eval] blend_steps=${PARC_BLEND_STEPS}（chunk 境界の平滑化を有効化している）"

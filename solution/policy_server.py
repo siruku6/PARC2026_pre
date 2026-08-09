@@ -159,11 +159,52 @@ class MyPolicy(BasePolicy):
         self._ema_alpha = float(os.environ.get("PARC_EMA_ALPHA", "0"))
         self._n_action_steps = int(self._policy.config.n_action_steps)
 
+        # chunk を何回引くか。1 なら素の挙動。
+        self._samples = int(os.environ.get("PARC_SAMPLES", "1"))
+        if self._samples > 1:
+            self._install_chunk_sampler()
+
         self._previous_action: np.ndarray | None = None
         self._step_index = 0
 
         self._instruction = ""
         self._warm_up()
+
+    def _install_chunk_sampler(self) -> None:
+        """chunk を複数回引き、最も典型的な 1 本を選ぶようにする。
+
+        flow matching は確率的で、**同じ観測でも引くたびに違う行動列が出る**。
+        実際、同じ初期状態を与えても成功する回と失敗する回がある。
+        複数引いて中心的なものを採れば、外れを引く確率を下げられる。
+
+        平均ではなく **medoid**（他との距離の総和が最小の実サンプル）を使う。
+        平均には 2 つの問題がある。
+
+        - 右へ避ける軌道と左へ避ける軌道を混ぜると、まっすぐ障害物へ向かう
+          「どちらでもない」行動になりうる（モード間の平均）
+        - グリッパは ±1 のバンバン制御なので、混ぜると中間値になり掴めない
+
+        medoid は必ず実際に引いた 1 本を返すため、どちらも起きない。
+
+        `select_action` は `predict_action_chunk` ではなく
+        `_get_action_chunk` を直接呼ぶため、包むのはそちらである。
+        """
+        policy = self._policy
+        torch = self._torch
+        original = policy._get_action_chunk
+        count = self._samples
+
+        def sampled_chunk(batch, noise=None, **kwargs):
+            chunks = torch.stack(
+                [original(batch, noise, **kwargs) for _ in range(count)]
+            )
+            # 距離は姿勢 6 次元だけで測る。グリッパは ±1 に振れるため、
+            # 含めるとそこだけで距離が決まってしまう。
+            flat = chunks[..., _POSE_DIMS].reshape(count, -1)
+            distances = torch.cdist(flat, flat).sum(dim=1)
+            return chunks[int(distances.argmin())]
+
+        policy._get_action_chunk = sampled_chunk
 
     def get_action(self, obs: dict[str, np.ndarray]) -> np.ndarray:
         batch = self._build_batch(obs)

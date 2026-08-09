@@ -108,16 +108,21 @@ work/venv310/bin/python solution/tools/build_submission.py
 重みはいずれも `lerobot/smolvla_libero_plus` の `7bb70aa5`（追加学習なし）、
 環境変数はすべて未設定（後処理は無効）である。
 
-| 対応コミット | sha256 | サイズ |
-|---|---|---|
-| `51e932b` | `55d9f3031d85408527c1888c79179a338f3cf21bbcbed3d83a228134c1075cbd` | 918 MB |
-| `bfbfde0` | `26e332b983a4732fa6877c6e4c458cae6676f58b20ddf085f8e9a28fbf98f5ff` | 918 MB |
-| **現在** | `f80abc7bc99c2007ad88b1577e9e8e9f727e09b045132cf24fa287e7e05ea3a6` | 918 MB |
+| 版 | コミット | sha256 | 備考 |
+|---|---|---|---|
+| **提出済み** | `8fbcf6f`（タグ `scored-0.05832`） | `f80abc7bc99c2007ad88b1577e9e8e9f727e09b045132cf24fa287e7e05ea3a6` | **本番スコア 0.05832** |
+| 現在 | HEAD | `88d4607be62d17273fcb6885b3affb8f44478fc5ace6787864f21e9084d11601` | `PARC_SAMPLES` を追加 |
 
-**3 つとも既定の挙動は同一である。** 差分は `policy_server.py` に
-`PARC_N_ACTION_STEPS` / `PARC_BLEND_STEPS` / `PARC_EMA_ALPHA` の入口を
-足したことだけで、環境変数を設定しなければ一切触らない。
-バイト列が変わるためハッシュだけが変わる。
+**どちらも既定の挙動は同一である。** 差分は `policy_server.py` に
+後処理の入口（`PARC_*`）を足したことだけで、環境変数を設定しなければ
+一切触らない。バイト列が変わるためハッシュだけが変わる。
+
+**本番で通ったことが確実なのはタグ `scored-0.05832` である。** 何かがおかしく
+なったときはここへ戻る。
+
+```bash
+git checkout scored-0.05832 -- solution/policy_server.py solution/requirements.txt
+```
 
 一致しない場合は、LeRobot のバージョン・重みの revision・`requirements.txt` の
 いずれかが変わっている。追加学習した重みに差し替えれば当然変わるので、
@@ -180,6 +185,38 @@ flowchart LR
 **まず `25` で試すこと。** `10` は 1 時間に対して余裕が乏しい。
 
 ---
+
+#### `PARC_SAMPLES` — chunk を複数回引いて典型的な 1 本を選ぶ
+
+既定 `1`（無効）。`3` などにすると、**同じ観測から chunk を 3 回引き**、
+その中で最も典型的なものを選ぶ。
+
+SmolVLA は flow matching なので出力が確率的である。**同じ初期状態でも
+成功する回と失敗する回がある**（実際、同じ初期状態のエピソードで、
+配布パイプラインは失敗し、こちらの単発ロールアウトは `done=True` になった）。
+複数引いて中心的なものを採れば、外れを引く確率を下げられる。
+
+**平均ではなく medoid（他との距離の総和が最小の実サンプル）を使う。**
+平均には 2 つの問題がある。
+
+| 問題 | 内容 |
+|---|---|
+| モード間の平均 | 右へ避ける軌道と左へ避ける軌道を混ぜると、まっすぐ障害物へ向かう「どちらでもない」行動になりうる |
+| グリッパの中間値 | 6 次元目は ±1 のバンバン制御。混ぜると中間値になり掴めない |
+
+medoid は必ず実際に引いた 1 本を返すため、どちらも起きない。
+距離は姿勢 6 次元だけで測る（グリッパを含めるとそこだけで距離が決まってしまう）。
+
+代償は推論時間が `PARC_SAMPLES` 倍になることである。
+
+| 設定 | 重い推論 1 回（L4 想定） | 10 秒制限 | トラック 1 時間 |
+|---|---|---|---|
+| `1`（既定） | 約 0.85 秒 | 余裕あり | 余裕あり |
+| `3` | 約 2.6 秒 | 余裕あり | **推論時間が 3 倍** |
+| `5` | 約 4.3 秒 | 余裕あり | **推論時間が 5 倍** |
+
+`PARC_N_ACTION_STEPS` との併用は**時間が掛け算になる**ため注意する。
+`n_action_steps=25` かつ `samples=3` なら、推論の総時間は既定の 6 倍になる。
 
 #### `PARC_BLEND_STEPS` — chunk 境界の段差を消す
 
@@ -256,7 +293,9 @@ weight = (BLEND_STEPS - 境界からの経過) / (BLEND_STEPS + 1)
 
 #### A/B の回し方
 
-コンテナ内で、設定を変えながら同じ評価を回して比較する。
+設定を変えながら同じ評価を回して比較する。**手元の CPU コンテナでは
+12 エピソードに 2.5 時間かかり、成功率 10% と 20% すら区別できない。**
+比較は [COLAB_EVAL.md](COLAB_EVAL.md) の GPU 評価で行うこと。
 
 ```bash
 # 既定（何もしない）
@@ -264,6 +303,9 @@ bash solution/tools/run_local_eval.sh
 
 # 閉ループ寄りにする
 PARC_N_ACTION_STEPS=25 bash solution/tools/run_local_eval.sh
+
+# chunk を 3 回引いて典型的な 1 本を選ぶ
+PARC_SAMPLES=3 bash solution/tools/run_local_eval.sh
 
 # 境界の段差を消す
 PARC_BLEND_STEPS=3 bash solution/tools/run_local_eval.sh
