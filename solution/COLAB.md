@@ -701,6 +701,25 @@ for task_name in TRAIN_TASK_NAMES:
 元の 10 タスクに戻したくなったときに `TRAIN_TASK_NAMES = SPATIAL_TASK_NAMES` の
 1 行で戻せる。
 
+### そもそも、なぜ「広げないと危ない」のか
+
+ベースモデル `lerobot/smolvla_libero_plus` は、**同じ `lerobot/libero_plus`
+（40 タスク全部）で batch 64 × 20,000 ステップ**で学習済みである
+（[モデルカード](https://huggingface.co/lerobot/smolvla_libero_plus)の
+fine-tune 例に記載）。配布ノートブックの batch 1 × 3,000 ステップは、
+サンプル数にして **その 0.23%** にすぎない。
+
+ここから読み取るべきことは 2 つある。
+
+1. **追加学習で「新しい知識」は入らない。** ベースは既に 40 タスク全部を見ている。
+   できるのは重みの配分を変えることだけである
+2. **spatial 10 タスクだけで追加学習すると、残り 30 タスクの性能を落としかねない。**
+   これは破滅的忘却そのものである。Track 1 の example の 4 分の 3 は
+   その「残り 30 タスク」側にある
+
+つまり H は「カバー率を上げる改善」であると同時に、
+**配布ノートブックのまま回すと踏む地雷を外す変更**でもある。
+
 ### 併せて変える設定
 
 **設定セル**（`BASE_MODEL_REPO = ...` で始まるもの）の値を変える。
@@ -709,6 +728,29 @@ for task_name in TRAIN_TASK_NAMES:
 |---|---|---|---|
 | `STEPS` | `3000` | `20000` | 学習データが 4 倍になる。3000 では 200 エピソードを 1 周もしない |
 | `BATCH_SIZE` | `1` | `4` | 勾配が安定する。VRAM が足りなければ 2 に落とす |
+
+### 画像拡張を有効にする（1 行、効果が大きい見込み）
+
+**学習セル**の `command` リストに 1 行足す。`--dataset.use_imagenet_stats=false`
+の**すぐ下**が分かりやすい。
+
+```python
+    "--dataset.image_transforms.enable=true",
+```
+
+LeRobot には画像拡張が内蔵されているが、**既定で無効**である
+（`ImageTransformsConfig.enable = False`）。有効にすると、各フレームに
+brightness / contrast / saturation / hue / sharpness のジッタが
+最大 3 種類ランダムに掛かる。
+
+これを推す理由は、**Track 1 の摂動の種類と正面から噛み合う**からである。
+
+| example タスクの摂動 | 対応する拡張 |
+|---|---|
+| Light Conditions（2 タスク） | brightness / contrast |
+| Background Textures（2 タスク） | saturation / hue / sharpness |
+
+学習時だけの話なので、提出物側には一切影響しない。
 
 `SAVE_FREQ` は追記 B で `1000` にしておく。これで**途中で切れても最大 1000
 ステップ分しか失わない**。`STEPS` を大きくしても怖くないのは、A〜F の
