@@ -82,30 +82,104 @@ GPU 名が出なければ**ランタイムのタイプが GPU になっていな
 # === 配布キットのセットアップ ===
 # setup.sh は python3.10 を前提にしている。Colab は 3.12 なので apt で 3.10 を足す。
 # 評価パイプライン側は 3.10 の venv に閉じ込め、方策側は Colab の 3.12 を使う。
-import os, subprocess, textwrap
+#
+# 失敗したときに原因が分かるよう、出力は多めに残す。
+import os, subprocess, shutil
 from pathlib import Path
 
 KIT_DIR = Path("/content/PARC2026_pre")
+LOG_DIR = Path("/content/setup_logs"); LOG_DIR.mkdir(exist_ok=True)
 
-def run(command: str, check: bool = True) -> None:
+def run(command: str, check: bool = True, tail: int = 30, log: str | None = None) -> int:
+    """シェルコマンドを実行し、出力の末尾を表示する。全文はログに残す。"""
     print(f"$ {command}")
     result = subprocess.run(command, shell=True, capture_output=True, text=True)
-    tail = (result.stdout + result.stderr).strip().splitlines()[-6:]
-    print("\n".join(tail))
-    if check and result.returncode != 0:
-        raise RuntimeError(f"失敗 ({result.returncode}): {command}")
+    output = result.stdout + result.stderr
 
-run("apt-get -qq update")
-run("apt-get -qq install -y python3.10 python3.10-venv "
-    "libosmesa6 libegl1 libglfw3 libglew-dev libmagickwand-dev unzip")
+    if log:
+        (LOG_DIR / log).write_text(output, encoding="utf-8")
+
+    lines = output.strip().splitlines()
+    if result.returncode != 0:
+        print(f"--- 失敗 (returncode={result.returncode}) 末尾 {tail} 行 ---")
+        print("\n".join(lines[-tail:]))
+        if log:
+            print(f"--- 全文: {LOG_DIR / log} ---")
+        if check:
+            raise RuntimeError(f"失敗 ({result.returncode}): {command}")
+    else:
+        print("\n".join(lines[-4:]) if lines else "(出力なし)")
+    return result.returncode
+
+run("apt-get -qq update", log="apt_update.log")
+run("apt-get -qq install -y libosmesa6 libegl1 libglfw3 libglew-dev "
+    "libmagickwand-dev unzip build-essential", log="apt_system.log")
+
+# python3.10 が入るなら使う。入らなければ Colab の Python（3.12）で作る。
+# ここは採点環境への忠実性の話ではない（それは Docker 側で済んでいる）。
+# キットが gym==0.25.2 / robosuite==1.4.0 という古い版を固定しているため、
+# 素性の分かっている 3.10 の方が安全というだけである。
+import sys
+run("apt-get -qq install -y python3.10 python3.10-venv python3.10-dev",
+    check=False, log="apt_python310.log")
+
+KIT_PYTHON = shutil.which("python3.10") or sys.executable
+print(f"\nキット側の Python: {KIT_PYTHON}")
+if "3.10" not in KIT_PYTHON:
+    print("  python3.10 が使えないため Colab の Python を使う。"
+          "gym / robosuite が古いため、後段で落ちたらログを見ること。")
 
 if not KIT_DIR.exists():
     run(f"git clone --depth 1 https://github.com/matsuolab/PARC2026_pre {KIT_DIR}")
 
 os.chdir(KIT_DIR)
-run("PYTHON=python3.10 bash setup.sh")
+run(f"PYTHON={KIT_PYTHON} bash setup.sh", tail=40, log="setup.log")
 print("キットのセットアップ完了")
 ```
+
+> **どちらの Python でも `setup.sh` は `venv` を作る。** 方策側（Colab の 3.12 本体）とは
+> 別の環境になるため、`numpy==1.26.4` が方策側へ漏れることはない。
+> **2 プロセス構成は Python の版に関係なく必要である。**
+
+### `setup.sh` が失敗したとき
+
+失敗すると末尾 40 行が表示され、全文が `/content/setup_logs/setup.log` に残る。
+**`[setup] N/5` のどこまで進んだかで切り分ける。**
+
+| 止まった段階 | 何が起きているか | 対処 |
+|---|---|---|
+| `1/5 venv + 依存` | `python3.10` が無い、または pip が失敗 | 下記「python3.10 が入らないとき」 |
+| `2/5 LIBERO-plus / LIBERO の取得` | git clone の失敗 | 再実行する（一時的な失敗が多い） |
+| `3/5 パッチ` | ほぼ起きない | ログを見る |
+| `4/5 アセット` | `assets.zip`（HF）の取得や `unzip` の失敗 | `unzip` が入っているか確認して再実行 |
+| `5/5 libero 設定` | ほぼ起きない | ログを見る |
+
+止まった段階が分からないときは次で確認する。
+
+```python
+print((LOG_DIR / "setup.log").read_text()[-4000:])
+```
+
+#### 依存のインストールで落ちるとき（`1/5` で止まる）
+
+`gym==0.25.2` や `robosuite==1.4.0` は 2022 年前後の版で、
+**新しい Python では wheel が無い / ビルドに失敗する**ことがある。
+どのパッケージで落ちたかはログの末尾に出る。
+
+```python
+print((LOG_DIR / "setup.log").read_text()[-4000:])
+```
+
+`python3.10` が使えていればまず起きない。Colab の Python（3.12）で落ちた場合は、
+`python3.10` を入れられないか先に確認する価値がある。
+
+```python
+run("apt-cache policy python3.10", check=False)
+```
+
+`Candidate: (none)` なら apt に無い。その場合は deadsnakes を足す手もあるが、
+**そこまでするより先に、落ちたパッケージ 1 つだけを新しい版で入れて
+`setup.sh` を再実行する**方が速いことが多い。
 
 > **`setup.sh` は `~/.libero/config.yaml` を書き換える。** Colab は使い捨てなので問題ないが、
 > ローカルで同じことをすると既存の LIBERO 設定が `.bak` に退避される。
