@@ -33,6 +33,7 @@ Colab はセル番号を表示しないので、**直前の見出しと、セル
 |---|---|---|---|
 | **ランタイム確認セル** | `## 1. Colabランタイムを確認する` | `import importlib` | `print(f"GPU: {torch.cuda.get_device_name(0)}")` |
 | **設定セル** | `## 4. 学習・評価条件を設定する` | `BASE_MODEL_REPO = "lerobot/smolvla_libero_plus"` | `MIXED_PRECISION = (...)` |
+| **データ選択セル** | `## 6. Spatial学習データを選ぶ` | `import re`／`from collections import defaultdict` | `print("Training data: 10 tasks × 5 episodes = 50 episodes")` |
 | **学習セル** | `## 8. LoRA学習を実行する` | `import re`／`from collections import deque` | `print("Training complete.")` |
 | **マージセル** | `## 9. LoRAをマージしてモデル全体を保存する` | `import contextlib` | `print("Merged model ready.")` |
 | **比較セル** | `## 13. 成功率を比較する` | `import pandas as pd` | `print(f"Overall: ...")` |
@@ -140,9 +141,11 @@ flowchart TB
 | **マージセル**の直後 | 新規セル **E** | マージ済みモデルを Drive へ |
 | **比較セル**の直後 | 新規セル **F** | 評価結果と比較 CSV を Drive へ |
 | **マージセル**より後ならどこでも | 新規セル **G** | 推論 1 チャンクの所要時間を GPU で測る |
+| **データ選択セル**の後半 | 差し替え **H** | 学習データを spatial 10 タスクから全 40 タスクへ広げる |
 
 A〜F は切断対策である。**G だけは目的が違い**、本番の 10 秒制限をクリアできるかを
-確かめるための計測で、学習とは独立に実行できる。
+確かめるための計測で、学習とは独立に実行できる。**H は精度を上げるための変更**で、
+配布ノートブックの既定値が本番の評価範囲と噛み合っていないことへの対処である。
 
 最後の `## 14. 学習済みモデルと比較結果をダウンロードする` のセル
 （`files.download(...)` があるもの）はそのままでよい。Drive にあれば必須ではない。
@@ -592,6 +595,142 @@ else:
 
 なお **Colab は Python 3.12 なので、ここで動いても 3.10 の動作確認にはならない**。
 3.10 の確認は Docker 側で行うこと（[README.md](README.md) の「検証」）。
+
+---
+
+## H. 学習データを全 40 タスクへ広げる
+
+### なぜ変えるのか
+
+配布ノートブックは `SPATIAL_TASK_NAMES` に並べた **libero_spatial の
+「黒いボウル」10 タスクだけ**で学習する。ところが Track 1 の example タスク
+（[compe/t1/T1_TASKS.csv](../compe/t1/T1_TASKS.csv)）は 3 つのスイートにまたがる。
+
+| # | タスク | suite | 摂動 | 難度 | 配布ノートブックの学習データに含まれるか |
+|---|---|---|---|---|---|
+| 1 | black bowl in top drawer → plate | libero_spatial | Background Textures | L3 | **○** |
+| 2 | tomato sauce → basket | libero_object | Background Textures | L5 | ✗ |
+| 3 | milk → basket | libero_object | Light Conditions | L2 | ✗ |
+| 4 | bowl on stove | libero_goal | Light Conditions | L4 | ✗ |
+
+**4 つのうち 1 つしかカバーしていない。** さらに
+[compe/t1/README.md](../compe/t1/README.md) には
+
+> 本番評価は非公開タスクを含む別のタスクセットで実施される。
+
+とある。したがって example の 4 タスクに合わせ込むのも筋が悪く、
+**広く汎化させる**のが正しい方向になる。
+
+### 広げてもダウンロードはほとんど増えない
+
+`lerobot/libero_plus` は 40 タスク・14,347 エピソード・15.8 GB である。
+「タスクを絞れば転送量が減る」と考えたくなるが、**この構成では減らない**。
+
+動画は 40 個のファイルに分かれているが、**1 ファイルに 40 タスク全部の
+エピソードが混ざって入っている**（1 タスクが平均 40 ファイルにまたがる）。
+局所性が無いので、タスクを絞ってもファイルはほぼ全部必要になる。
+
+実際に必要なバイト数を、メタデータから計算した結果が次である。
+
+| 選び方 | エピソード数 | 動画ファイル数 | ダウンロード量 |
+|---|---|---|---|
+| 配布ノートブック相当（spatial 10 タスク × 5 本） | 50 | 29 | 6.0 GB |
+| **全 40 タスク × 5 本** | **200** | **31** | **6.4 GB** |
+| 全 40 タスク × 20 本 | 800 | 76 | 15.8 GB |
+| 全エピソード | 14,347 | 76 | 15.8 GB |
+
+**タスク数 4 倍・エピソード数 4 倍が、転送量 +0.4 GB で手に入る。**
+変えない理由が無い。
+
+1 タスクあたり 5 本を超えて増やすと全ファイルが必要になり 15.8 GB になる。
+これも Colab のディスクには収まるが、ダウンロード時間が延びる。
+**まず 40 タスク × 5 本で回し、時間に余裕があれば増やす**のがよい。
+
+### 差し替える場所
+
+**データ選択セル**（`## 6. Spatial学習データを選ぶ` の直後、`import re` と
+`from collections import defaultdict` で始まり
+`print("Training data: 10 tasks × 5 episodes = 50 episodes")` で終わるもの）の**後半**を差し替える。
+
+セルの中の
+
+```python
+available_by_normalized = {
+```
+
+という行から**セルの末尾まで**を消して、次を貼る。
+それより前（`normalize_task_name` などの関数定義と `dataset_metadata`、
+`task_to_episodes` の構築）は**そのまま残す**。
+
+```python
+# === 学習データを全 40 タスクへ広げる ===
+# 配布ノートブックは SPATIAL_TASK_NAMES の 10 タスクだけを使うが、
+# 本番評価は 3 スイートにまたがる非公開タスクで行われる。
+# 動画ファイルにタスクの局所性が無いため、タスクを増やしても転送量はほぼ変わらない。
+
+TRAIN_TASK_NAMES = sorted(task_to_episodes)
+
+selected_by_task = {
+    task_name: choose_evenly_spaced(
+        task_to_episodes[task_name],
+        TRAIN_EPISODES_PER_TASK,
+    )
+    for task_name in TRAIN_TASK_NAMES
+}
+
+EPISODE_INDICES = sorted(
+    episode_index
+    for episode_indices in selected_by_task.values()
+    for episode_index in episode_indices
+)
+
+expected_count = len(TRAIN_TASK_NAMES) * TRAIN_EPISODES_PER_TASK
+if len(EPISODE_INDICES) != expected_count:
+    raise RuntimeError(
+        f"Episode selection failed: {len(EPISODE_INDICES)} != {expected_count}"
+    )
+
+print(f"Training data: {len(TRAIN_TASK_NAMES)} tasks "
+      f"× {TRAIN_EPISODES_PER_TASK} episodes = {len(EPISODE_INDICES)} episodes")
+for task_name in TRAIN_TASK_NAMES:
+    print(f"  {len(task_to_episodes[task_name]):4d} 本中 "
+          f"{TRAIN_EPISODES_PER_TASK} 本: {task_name}")
+```
+
+`SPATIAL_TASK_NAMES` は**設定セルに残しておいてよい**。使われなくなるだけで、
+元の 10 タスクに戻したくなったときに `TRAIN_TASK_NAMES = SPATIAL_TASK_NAMES` の
+1 行で戻せる。
+
+### 併せて変える設定
+
+**設定セル**（`BASE_MODEL_REPO = ...` で始まるもの）の値を変える。
+
+| 変数 | 既定 | 変更後 | 理由 |
+|---|---|---|---|
+| `STEPS` | `3000` | `20000` | 学習データが 4 倍になる。3000 では 200 エピソードを 1 周もしない |
+| `BATCH_SIZE` | `1` | `4` | 勾配が安定する。VRAM が足りなければ 2 に落とす |
+
+`SAVE_FREQ` は追記 B で `1000` にしておく。これで**途中で切れても最大 1000
+ステップ分しか失わない**。`STEPS` を大きくしても怖くないのは、A〜F の
+切断対策が入っているからである。
+
+> `STEPS` を変えると `--policy.scheduler_decay_steps={STEPS}` も自動で追従する
+> （学習セルが同じ変数を参照している）。学習率スケジュールは崩れない。
+
+### 最初の 1 回で見るべきこと
+
+学習セルは `LOG_FREQ=100` ステップごとに進捗を出す。**最初の 100 ステップの
+ログが出た時点で一度止めて、次を報告してほしい。**
+
+| 見るもの | なぜ |
+|---|---|
+| 100 ステップに要した秒数 | `STEPS=20000` が現実的かを決める。1 ステップ 1 秒なら 5.5 時間かかる |
+| `loss` の値 | 発散していないか |
+| VRAM が足りたか（OOM で落ちていないか） | 落ちていれば `BATCH_SIZE` を 2 に下げる |
+
+学習は **`--num_workers=0`**（学習セルの `command` 内）で動くため、動画のデコードが
+メインプロセスで走る。GPU ではなく**データ供給が律速になっている可能性が高い**。
+100 ステップの所要時間しだいでは、ここを 2 に上げる価値がある。
 
 ---
 
