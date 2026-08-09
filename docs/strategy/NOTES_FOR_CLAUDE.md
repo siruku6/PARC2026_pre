@@ -220,6 +220,37 @@ Allowed options are only `--hash`, `--require-hashes`, `--no-index`, `--pre`, `-
 Practical effect: **you cannot pin a wheel from the PyTorch CUDA index**. Everything must resolve
 from default PyPI, or already be present in the image.
 
+### 4.6 Whether `av` is required depends on whether `datasets` is installed
+
+`policy_server.py` does `from lerobot.policies.factory import make_pre_post_processors`.
+That import chain reaches `lerobot/policies/groot/processor_groot.py`, which contains:
+
+```python
+if TYPE_CHECKING or _datasets_available:
+    from lerobot.datasets.lerobot_dataset import LeRobotDataset
+else:
+    LeRobotDataset = None
+```
+
+`lerobot/datasets/__init__.py` calls `require_package("datasets")` **and**
+`require_package("av")` at module level. So:
+
+| `datasets` present? | Branch | `av` needed? |
+|---|---|---|
+| No | skipped | **No** |
+| Yes | taken → imports `lerobot.datasets` | **Yes** |
+
+Our `requirements.txt` declares neither. This works because the submission venv has no
+`datasets` — verified in the container, and confirmed by the production run scoring 0.05832.
+
+**Latent fragility.** The production venv is created with `--system-site-packages`. If the
+grading image ever gains `datasets` without `av`, server startup fails and the track scores 0.
+Adding `av` to `requirements.txt` would remove the risk at the cost of changing an artifact
+that is already known-good. Not done as of 2026-08-09; revisit if a startup failure appears.
+
+Colab hits this immediately because Colab ships `datasets` — see
+[solution/COLAB_EVAL.md](../../solution/COLAB_EVAL.md) section D.
+
 ---
 
 ## 5. Dependency facts (verified 2026-08-08)

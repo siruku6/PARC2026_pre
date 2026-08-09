@@ -313,7 +313,16 @@ import torch
 LEROBOT_TAG = "v0.6.0"
 LEROBOT_DIR = Path("/content/lerobot")
 
-run("pip install -q fastapi uvicorn msgpack")
+# av が要る理由は非自明なので記録しておく。
+# lerobot/policies/factory.py は groot の設定を import し、その連鎖で
+# groot/processor_groot.py に到達する。そこは
+#     if TYPE_CHECKING or _datasets_available:
+#         from lerobot.datasets.lerobot_dataset import LeRobotDataset
+# という分岐になっており、`datasets` が入っていると通る。すると
+# lerobot/datasets/__init__.py が require_package("av") を呼ぶ。
+# **Colab には datasets が既定で入っているため、av も必要になる。**
+# 提出物の環境には datasets が無いので分岐がスキップされ、av は要らない。
+run("pip install -q fastapi uvicorn msgpack av")
 
 if not LEROBOT_DIR.exists():
     run(f"pip uninstall -y -q lerobot torchao", check=False)
