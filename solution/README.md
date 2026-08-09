@@ -142,5 +142,8 @@ work/venv310/bin/python solution/tools/digest_submission.py --per-entry
 | `/health` → `/reset` → `/act` | OK（`(7,) float32`、NaN なし） |
 | action chunk のキャッシュ | OK（重い推論 1 回 → 以降 50 ステップはキャッシュ） |
 | `validate_submission.py`（静的） | PASS（errors=0, warnings=0） |
-| **推論 10 秒以内** | **未達**。CPU 2 コアで 23.4 秒。GPU 実測が必要 |
-| **CUDA 13 の torchvision が import できるか** | **未検証**。静的なリンク情報からの推論に留まる |
+| 評価パイプラインが実タスクで回るか | OK（`compe.t1` の 4 タスクを認識、最後まで完走） |
+| 観測変換の正しさ | OK（`lerobot/envs/libero.py` と配布キットの突き合わせで確認） |
+| **推論 10 秒以内** | **OK**。Colab T4 で 0.85 秒（CPU 2 コアでは 23.4 秒） |
+| **起動 120 秒以内** | **OK**。Colab T4 で重みロード 41.5 秒 |
+| **CUDA 13 の torchvision が import できるか** | **未検証**。Colab の CUDA は 13 ではない。CUDA 12 では動作を確認 |
