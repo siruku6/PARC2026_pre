@@ -322,7 +322,11 @@ LEROBOT_DIR = Path("/content/lerobot")
 # lerobot/datasets/__init__.py が require_package("av") を呼ぶ。
 # **Colab には datasets が既定で入っているため、av も必要になる。**
 # 提出物の環境には datasets が無いので分岐がスキップされ、av は要らない。
-run("pip install -q fastapi uvicorn msgpack av")
+#
+# バージョンを固定するのは、LeRobot v0.6.0 が av>=15,<16 を宣言しているため。
+# 素で入れると 17 系になり、lerobot/datasets/pyav_utils.py が使う
+# av.option が無くなっていて AttributeError になる。
+run("pip install -q fastapi uvicorn msgpack 'av>=15.0.0,<16.0.0'")
 
 if not LEROBOT_DIR.exists():
     run(f"pip uninstall -y -q lerobot torchao", check=False)
@@ -376,6 +380,28 @@ print("bf16 対応:", torch.cuda.is_bf16_supported())
 > 上の 3 行（`sys.modules` の掃除・`sys.path` の差し替え・`invalidate_caches`）が
 > それを避けている。**この対処は別プロセスには効かない**ので、
 > サーバー起動時にも同じ手当てが要る（セル E で `PYTHONPATH` に入れている）。
+
+### それでも `av` 関連で落ちるとき
+
+`lerobot.datasets` の中で別の不整合が出る場合は、**`datasets` を消して分岐そのものを
+通らなくする**方が確実である。提出物の環境と同じ状態になり、起動も速くなる。
+
+```python
+run("pip uninstall -y -q datasets", check=False)
+
+# 分岐が閉じたことを確認する
+check = (
+    f"PYTHONPATH={LEROBOT_SRC} python -c "
+    "\"from lerobot.utils.import_utils import _datasets_available; "
+    "print('datasets available:', _datasets_available); "
+    "from lerobot.policies.factory import make_pre_post_processors; "
+    "print('factory の import: 成功')\""
+)
+run(check, tail=20)
+```
+
+`datasets available: False` と出れば、`lerobot.datasets` は読まれない。
+この評価では `datasets` を使わないので消して問題ない。
 
 ### どの `policy_server.py` を使うか
 
