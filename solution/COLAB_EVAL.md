@@ -117,6 +117,9 @@ print("キットのセットアップ完了")
 **素の重み**と**追加学習した重み**のどちらを測るかで分岐する。まず素の重みで
 基準を取り、そのあと学習後と比べるのが順序である。
 
+素の重みは **`0.05832` を出した提出物とまったく同じもの**なので、
+ここで出る数字は本番スコアと直接比べられる。
+
 ```python
 # === 評価する重みを用意する ===
 # USE_FINETUNED = False なら HF から素の重みを取る（Drive 不要）。
@@ -134,21 +137,43 @@ if USE_FINETUNED:
     drive.mount("/content/drive")
     run(f"rm -rf {WEIGHTS_DIR} && cp -r '{DRIVE_MERGED_DIR}' {WEIGHTS_DIR}")
 else:
+    # このリポジトリには eval/（評価動画 402 ファイル・25.6 MB）が入っている。
+    # 推論には不要なので除外する。落とすのはルート直下の 7 ファイルだけでよい。
     snapshot_download(
         "lerobot/smolvla_libero_plus",
         revision="7bb70aa5bc92b82c9239142775d3a173103567ff",
         local_dir=str(WEIGHTS_DIR),
+        ignore_patterns=["eval/*", "eval/**"],
     )
 
 # policy_server.py は model_weights/vlm/ からトークナイザを読む。
-# VLM 本体の重みはポリシー側に含まれるので、設定とトークナイザだけで足りる。
+# VLM 本体の重みはポリシー側のチェックポイントに含まれるので、
+# 設定とトークナイザだけで足りる（*.safetensors は落とさない）。
 snapshot_download(
     "HuggingFaceTB/SmolVLM2-500M-Video-Instruct",
     local_dir=str(WEIGHTS_DIR / "vlm"),
     allow_patterns=["*.json", "*.txt", "*.model", "tokenizer*"],
 )
-print("重みの準備完了:", sorted(p.name for p in WEIGHTS_DIR.iterdir()))
+
+expected = {
+    "config.json", "model.safetensors", "train_config.json",
+    "policy_preprocessor.json", "policy_postprocessor.json",
+    "policy_preprocessor_step_5_normalizer_processor.safetensors",
+    "policy_postprocessor_step_0_unnormalizer_processor.safetensors",
+}
+present = {p.name for p in WEIGHTS_DIR.iterdir() if p.is_file()}
+missing = expected - present
+assert not missing, f"重みが足りません: {missing}"
+assert (WEIGHTS_DIR / "vlm" / "tokenizer_config.json").is_file(), "vlm のトークナイザがありません"
+
+total = sum(p.stat().st_size for p in WEIGHTS_DIR.rglob("*") if p.is_file())
+print(f"重みの準備完了: {total / 1e6:.0f} MB")
+print(sorted(present))
 ```
+
+> 提出物の `model_weights/` はこのセルと**同じ中身**である
+> （ルート直下の 7 ファイル ＋ `vlm/`）。`README.md` と `.gitattributes` が
+> 余分に落ちるが、読み込みには影響しない。
 
 ---
 
@@ -202,8 +227,20 @@ print("bf16 対応:", torch.cuda.is_bf16_supported())
 > T4 は bf16 非対応である。L4（本番と同じ）や A100 なら不要。
 > 学習を T4 で回して評価を L4 で回すと、この一点だけ条件が変わる。
 
-`policy_server.py` をアップロードする。**左のファイルペインへドラッグ**するか、
-Drive 経由で置く。置き場所は `/content/policy_server.py`。
+### どの `policy_server.py` を使うか
+
+**リポジトリの [policy_server.py](policy_server.py) をそのまま使う。**
+提出した zip の中身と同一のファイルであり、書き換えは要らない。
+
+| | |
+|---|---|
+| 場所 | `solution/policy_server.py`（このファイルと同じディレクトリ） |
+| 提出物との関係 | **完全に同一**。zip はこのファイルをルート直下に入れているだけ |
+| Colab での違い | `vendor/` が無いので、同梱版ではなくインストール済みの LeRobot を使う |
+| 後処理 | `PARC_*` を設定しなければ**すべて無効**。既定は素の挙動 |
+
+**左のファイルペインへドラッグ**するか、Drive 経由で置く。
+置き場所は `/content/policy_server.py`。
 
 ```python
 # === policy_server.py の配置を確認する ===
