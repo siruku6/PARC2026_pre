@@ -127,13 +127,17 @@ class MyPolicy(BasePolicy):
         config.vlm_model_name = str(weights / "vlm")
 
         # 1 回の推論で作った chunk のうち、何ステップ分を実行するか。
-        # 既定はチェックポイントの値（50）で、chunk を丸ごと開ループで実行する。
-        # 縮めると再計画の頻度が上がって誤差の蓄積に強くなる代わりに、
-        # 推論回数が増えてトラック全体 1 時間の制限に効く。
-        # 環境変数が無ければ一切触らないため、既定の挙動は変わらない。
-        n_action_steps = os.environ.get("PARC_N_ACTION_STEPS")
-        if n_action_steps:
-            config.n_action_steps = int(n_action_steps)
+        #
+        # チェックポイントの値は 50 で、chunk を丸ごと開ループで実行する。
+        # **10 に縮めると成功率が 0.0625 → 0.90 に跳ねる**（実測。
+        # docs/strategy/05_実測結果.md）。方策は各時点の判断自体は正しく、
+        # 失敗の原因は開ループ 50 ステップの間に誤差が積み上がることだった。
+        # 再計画を 5 倍の頻度で入れると、その蓄積が毎回打ち切られる。
+        #
+        # 代償は推論回数が 5 倍になること。1 ステップあたり 55 ms → 123 ms
+        # （T4 実測）だが、40 エピソードで 827 秒であり、トラック全体
+        # 1 時間の制限に対してはなお十分な余裕がある。
+        config.n_action_steps = int(os.environ.get("PARC_N_ACTION_STEPS", "10"))
 
         self._policy = SmolVLAPolicy.from_pretrained(weights, config=config)
         self._policy.to(self._device)
