@@ -499,6 +499,59 @@ print(result.stdout or result.stderr[-2000:])
 落ちている場合は `MUJOCO_GL` が伝わっていないか、`libEGL` が無い。
 `eval_env` に `MUJOCO_GL: "egl"` が入っているかと、セル A の `libEGL` の確認を見直す。
 
+### 推論側の速度も測る
+
+1 エピソードの所要時間は **シミュレーション ＋ 推論**である。遅いときに
+どちらが原因かを分けないと直せない。サーバーが起動している状態で実行する。
+
+```python
+# === /act 1 回の所要時間を測る ===
+import msgpack, urllib.request, time
+import numpy as np
+
+def call(path, payload):
+    request = urllib.request.Request(
+        f"http://localhost:{PORT}{path}", data=msgpack.packb(payload),
+        headers={"Content-Type": "application/msgpack"},
+    )
+    with urllib.request.urlopen(request, timeout=120) as response:
+        return msgpack.unpackb(response.read())
+
+call("/reset", {"instruction": "Put the bowl on the stove"})
+observation = {
+    "agentview_image": np.random.randint(0, 255, (128, 128, 3), dtype=np.uint8).tolist(),
+    "robot0_eye_in_hand_image": np.random.randint(0, 255, (128, 128, 3), dtype=np.uint8).tolist(),
+    "robot0_eef_pos": [0.0, 0.0, 0.0],
+    "robot0_eef_quat": [0.0, 0.0, 0.0, 1.0],
+    "robot0_gripper_qpos": [0.0, 0.0],
+}
+for index in range(3):
+    started = time.time()
+    call("/act", {"observation": observation})
+    print(f"  act[{index}] {time.time() - started:6.3f} 秒")
+```
+
+| `act[0]` の実測 | 判断 |
+|---|---|
+| **0.5〜1.5 秒** | GPU で推論できている |
+| 5 秒以上 | **CPU で推論している可能性が高い。** `CUDA_VISIBLE_DEVICES` とサーバーログを見る |
+
+`act[1]` `act[2]` がほぼ 0 秒なら chunk のキャッシュは正常である。
+
+### 1 エピソードの内訳を見積もる
+
+```
+1 エピソード ≈ 600 × (env.step の秒数) + 12 × (act[0] の秒数)
+```
+
+| 構成 | 内訳 | 1 エピソード |
+|---|---|---|
+| EGL ＋ GPU 推論 | 600×0.04 + 12×0.85 | **約 34 秒** |
+| osmesa ＋ GPU 推論 | 600×0.30 + 12×0.85 | 約 190 秒 |
+| EGL ＋ CPU 推論 | 600×0.04 + 12×15 | 約 204 秒 |
+
+**遅いときは、この式のどちらの項が大きいかで原因が決まる。**
+
 > このセルは `eval_env` を使うため、**下の評価セルを一度実行して `eval_env` を
 > 定義してから**でないと動かない。順番に困る場合は、評価セルの
 > `eval_env.update({...})` までを別セルに切り出しておくとよい。
@@ -573,7 +626,12 @@ try:
          "--track", "track1",
          "--n-episodes", str(N_EPISODES),
          "--max-steps", str(MAX_STEPS),
-         "--output-dir", "/content/results"],
+         "--output-dir", "/content/results",
+         # これが無いとエピソード単位の進捗が一切出ない。
+         # rollout.py はエピソード完了を logger.debug で出しており、
+         # 既定の INFO では「タスク評価完了」までまとめて無言になる。
+         # 1 タスク 20 エピソードなら、最初の出力まで 20 エピソード分待つことになる。
+         "--verbose"],
         cwd=str(KIT_DIR), env=eval_env,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
     )
@@ -591,10 +649,12 @@ finally:
 print(f"所要 {time.time() - started:.0f} 秒")
 ```
 
-> **数分間まったく出力が変わらなくても、たいていは正常である。**
-> 1 エピソードは 600 ステップあり、GPU でも 30〜60 秒かかる。
-> 最初のエピソードが終わるまでは `Episode ...` の行が出ない。
-> **10 分以上まったく動かない場合だけ**、下の「進んでいるか確かめる」を見る。
+> **`--verbose` を外すと、長時間まったく無言になる。**
+> `pipeline/rollout.py` はエピソード完了を `logger.debug` で出しており、
+> 既定の INFO レベルでは表示されない。INFO で出るのは
+> **タスク単位の「タスク評価完了」だけ**である。
+> `--n-episodes 20` なら、最初の 1 行が出るまで 20 エピソード分待つことになる。
+> 実際にこれで「止まった」と誤認した。
 
 ### 進んでいるか確かめる
 
