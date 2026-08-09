@@ -133,9 +133,36 @@ if not KIT_DIR.exists():
     run(f"git clone --depth 1 https://github.com/matsuolab/PARC2026_pre {KIT_DIR}")
 
 os.chdir(KIT_DIR)
+
+# Colab は MPLBACKEND に matplotlib_inline を設定している。キットの venv には
+# そのパッケージが無いため、libero が matplotlib を import した瞬間に
+# 「'module://matplotlib_inline.backend_inline' is not a valid value for backend」
+# で落ちる。評価は画面表示をしないので、以降ずっと Agg にしておく。
+os.environ["MPLBACKEND"] = "Agg"
+
 run(f"PYTHON={KIT_PYTHON} bash setup.sh", tail=40, log="setup.log")
+
+# torch 2.11.0 は setuptools<82 を要求するが、Colab の venv には新しいものが入る。
+# 警告のまま放置すると import で落ちることがあるため揃えておく。
+run(f"{KIT_DIR}/venv/bin/pip install -q 'setuptools<82'", check=False)
+
+# 動作確認。setup.sh 自身の確認は MPLBACKEND のせいで落ちるため、ここでやり直す。
+verify = (
+    f'MPLBACKEND=Agg PYTHONPATH="{KIT_DIR}/LIBERO-plus:{KIT_DIR}:{KIT_DIR}/compe" '
+    f'{KIT_DIR}/venv/bin/python -c '
+    '"import torch, libero.libero.benchmark; '
+    'from compe.t1 import register_t1; register_t1(); '
+    'print(\'suite 登録 OK / torch\', torch.__version__)"'
+)
+run(verify, tail=20, log="verify.log")
 print("キットのセットアップ完了")
 ```
+
+> **`setup.sh` の最後の「動作確認（suite 登録）」は Colab では必ず失敗する。**
+> `MPLBACKEND` が原因であり、セットアップ自体（`1/5`〜`5/5`）が完了していれば問題ない。
+> 上のセルは `setup.sh` を通したあとに、環境変数を直して確認をやり直している。
+> `setup.sh` は再実行しても venv・clone・アセットを作り直さないため、
+> 失敗後にこのセルをもう一度流すだけでよい。
 
 > **どちらの Python でも `setup.sh` は `venv` を作る。** 方策側（Colab の 3.12 本体）とは
 > 別の環境になるため、`numpy==1.26.4` が方策側へ漏れることはない。
@@ -402,6 +429,7 @@ for elapsed in range(300):
 eval_env = dict(os.environ)
 eval_env.update({
     "MUJOCO_GL": "egl",                                     # GPU 描画。ここが要
+    "MPLBACKEND": "Agg",                                    # Colab の既定値だと落ちる
     "PYTHONPATH": f"{KIT_DIR}/LIBERO-plus:{KIT_DIR}:{KIT_DIR}/compe",
     "LIBERO_ROOT": f"{KIT_DIR}/LIBERO-plus",
 })
