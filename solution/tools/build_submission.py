@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import re
 import zipfile
 from pathlib import Path
 
@@ -45,6 +46,11 @@ _ARTIFACT_DIRS = ("model_weights", "vendor")
 # 実行時に生成されるもの。含めるとサイズが膨らむだけで意味がない。
 _EXCLUDE_PARTS = frozenset({"__pycache__", ".hf_home", ".ipynb_checkpoints", ".DS_Store"})
 _EXCLUDE_SUFFIXES = frozenset({".pyc"})
+
+# 採点環境では `pip install lerobot` が失敗する（依存の evdev がビルドできない）。
+# 他の参加者が実際にこれで採点エラーになっている。方式 A は vendor/lerobot を
+# 同梱するので不要だが、うっかり書き足すと採点 1 回分を失う。
+_FORBIDDEN_REQUIREMENTS = frozenset({"lerobot", "evdev"})
 
 
 def _parse_args() -> argparse.Namespace:
@@ -68,6 +74,37 @@ def _parse_args() -> argparse.Namespace:
         help="出力する zip（既定: work/submission.zip）",
     )
     return parser.parse_args()
+
+
+def _check_requirements(path: Path) -> None:
+    """採点環境で pip install に失敗するパッケージが宣言されていないか確かめる。
+
+    `lerobot` は依存の `evdev` がビルドできず、採点環境ではインストールが
+    失敗する。`validate_submission.py` は依存解決まで見ないため**ローカルでは
+    PASS したまま本番で採点エラーになる**。ここで止める。
+
+    Parameters
+    ----------
+    path : Path
+        提出物の requirements.txt。
+
+    Raises
+    ------
+    ValueError
+        採点環境で入らないパッケージが宣言されている場合。
+    """
+    for line_number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        line = raw_line.split("#", 1)[0].strip()
+        if not line or line.startswith("-"):
+            continue
+
+        name = re.split(r"[<>=!~\[;\s]", line, maxsplit=1)[0].strip().lower().replace("_", "-")
+        if name in _FORBIDDEN_REQUIREMENTS:
+            raise ValueError(
+                f"{path}:{line_number} に {name} が宣言されています。"
+                "採点環境ではインストールに失敗します（evdev のビルドが通らない）。"
+                "LeRobot は vendor/ に同梱するため、ここに書く必要はありません。"
+            )
 
 
 def _collect_entries(solution: Path, artifacts: Path) -> list[tuple[Path, str]]:
@@ -179,6 +216,7 @@ def main() -> None:
     artifacts: Path = args.artifacts.resolve()
     output: Path = args.output.resolve()
 
+    _check_requirements(solution / "requirements.txt")
     entries = _collect_entries(solution, artifacts)
     _write_zip(output, entries)
     _verify_zip(output, entries)
