@@ -451,6 +451,60 @@ print("  重み:", sorted(p.name for p in weights_link.iterdir())[:4], "…")
 
 ## E. 評価を回す
 
+### 先に EGL が効いているか測る（30 秒）
+
+**ここを外すと 8 倍遅くなり、45 分の予定が 6 時間になる。** 本番と同じ EGL で
+描画できているかを、評価を始める前に確かめる。
+
+```python
+# === env.step の速度を測って EGL の効きを確かめる ===
+import subprocess
+
+benchmark = f'''
+import os, time, contextlib, io
+import numpy as np
+from pipeline.config import EvalConfig
+from pipeline.environment import EnvironmentManager
+
+with contextlib.redirect_stdout(io.StringIO()):
+    manager = EnvironmentManager(EvalConfig())
+    tasks = manager.get_task_infos("libero_t1")
+    env = manager.create_env(tasks[0])
+    env.reset()
+    env.set_init_state(tasks[0].init_states[0])
+    for _ in range(10):
+        env.step(np.zeros(7, dtype=np.float32))
+
+    started = time.time()
+    for _ in range(50):
+        env.step(np.zeros(7, dtype=np.float32))
+    elapsed = time.time() - started
+
+print(f"env.step: {{elapsed / 50 * 1000:.1f}} ms/step")
+print(f"600 ステップのエピソード: シミュレーションだけで {{elapsed / 50 * 600:.0f}} 秒")
+'''
+
+result = subprocess.run(
+    [f"{KIT_DIR}/venv/bin/python", "-c", benchmark],
+    cwd=str(KIT_DIR), env=eval_env, capture_output=True, text=True,
+)
+print(result.stdout or result.stderr[-2000:])
+```
+
+| 実測 | 判断 |
+|---|---|
+| **40〜60 ms/step** | **EGL が効いている。** 期待どおり |
+| 250〜350 ms/step | **osmesa に落ちている。** GPU 描画になっていない |
+
+落ちている場合は `MUJOCO_GL` が伝わっていないか、`libEGL` が無い。
+`eval_env` に `MUJOCO_GL: "egl"` が入っているかと、セル A の `libEGL` の確認を見直す。
+
+> このセルは `eval_env` を使うため、**下の評価セルを一度実行して `eval_env` を
+> 定義してから**でないと動かない。順番に困る場合は、評価セルの
+> `eval_env.update({...})` までを別セルに切り出しておくとよい。
+
+### 評価を実行する
+
 サーバーを起動し、キットのパイプラインを当てる。**`MUJOCO_GL=egl` が肝**である。
 
 ```python
@@ -504,6 +558,9 @@ eval_env = dict(os.environ)
 eval_env.update({
     "MUJOCO_GL": "egl",                                     # GPU 描画。ここが要
     "MPLBACKEND": "Agg",                                    # Colab の既定値だと落ちる
+    # これが無いと子プロセスの出力がブロックバッファリングされ、
+    # 数 KB 溜まるまで一行も表示されない。**止まって見えるが動いている。**
+    "PYTHONUNBUFFERED": "1",
     "PYTHONPATH": f"{KIT_DIR}/LIBERO-plus:{KIT_DIR}:{KIT_DIR}/compe",
     "LIBERO_ROOT": f"{KIT_DIR}/LIBERO-plus",
 })
@@ -520,15 +577,55 @@ try:
         cwd=str(KIT_DIR), env=eval_env,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
     )
+    # 出力は絞りすぎない。進んでいることが分からないと、止まったのか
+    # 遅いのかを区別できない。うるさい警告だけ落とす。
+    noisy = ("robosuite WARNING", "Gym has been unmaintained",
+             "Please upgrade to Gymnasium", "migration_guide")
     for line in process.stdout:
-        if any(word in line for word in ("Episode", "成功", "失敗", "スコア", "Track")):
-            print(line.rstrip())
+        if not any(word in line for word in noisy):
+            print(f"[{time.time() - started:5.0f}s] {line.rstrip()}")
     process.wait()
 finally:
     server.terminate()
 
 print(f"所要 {time.time() - started:.0f} 秒")
 ```
+
+> **数分間まったく出力が変わらなくても、たいていは正常である。**
+> 1 エピソードは 600 ステップあり、GPU でも 30〜60 秒かかる。
+> 最初のエピソードが終わるまでは `Episode ...` の行が出ない。
+> **10 分以上まったく動かない場合だけ**、下の「進んでいるか確かめる」を見る。
+
+### 進んでいるか確かめる
+
+ノートブックのカーネルは評価セルで占有されているため、**別のセルを実行できない**。
+判断材料は 2 つある。
+
+**① `PYTHONUNBUFFERED=1` を入れ忘れていないか。**
+入れないと子プロセスの出力がブロックバッファリングされ、数 KB 溜まるまで
+一行も表示されない。**動いているのに止まって見える。**
+
+**② 中断してサーバーログを見る。**
+評価セルを止めても、`finally` でサーバーが終了し、ログは残る。
+
+```python
+log = open("/content/server.log").read()
+print("POST /act の回数:", log.count("POST /act"))
+print("POST /reset の回数:", log.count("POST /reset"))
+print(log[-1500:])
+```
+
+`POST /act` が数百〜数千回あれば**確実に進んでいた**。回数からどこまで進んだかも分かる。
+
+| `/act` の回数 | 意味 |
+|---|---|
+| 0 | 評価が始まっていない。環境構築か EGL の問題 |
+| 数十 | 1 エピソードの途中。遅いだけの可能性が高い → EGL を測る |
+| 数百以上 | 正常に進んでいた。`PYTHONUNBUFFERED` を入れて回し直せばよい |
+
+**中断せずに待てるなら待つ方がよい。** 結果の JSON は最後にまとめて
+書かれるため、途中で止めるとその回は捨てることになる。
+80 エピソードで 45〜60 分が目安である。
 
 > **`--timeout` は指定しない。** 既定の 10 秒が本番と同じであり、GPU なら
 > 推論 0.85 秒で余裕がある。ここで落ちるなら本番でも落ちる。
