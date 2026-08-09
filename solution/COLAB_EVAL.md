@@ -798,9 +798,21 @@ try:
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
     )
     # 出力は絞りすぎない。進んでいることが分からないと、止まったのか
-    # 遅いのかを区別できない。うるさい警告だけ落とす。
-    noisy = ("robosuite WARNING", "Gym has been unmaintained",
-             "Please upgrade to Gymnasium", "migration_guide")
+    # 遅いのかを区別できない。うるさいものだけ落とす。
+    #
+    # urllib3 は要注意。--verbose が root logger を DEBUG にするため、
+    # requests が使う urllib3 が **/act 1 回ごとに 1 行**出す。
+    # 600 ステップ × 80 エピソードで数万行になり、肝心の進捗が埋もれる。
+    noisy = (
+        "urllib3",                    # /act のたびに出る接続ログ
+        "Starting new HTTP",
+        "robosuite WARNING",
+        "Gym has been unmaintained",
+        "Please upgrade to Gymnasium",
+        "migration_guide",
+        "PIL.",                       # 画像まわりの DEBUG
+        "matplotlib",
+    )
     for line in process.stdout:
         if not any(word in line for word in noisy):
             print(f"[{time.time() - started:5.0f}s] {line.rstrip()}")
