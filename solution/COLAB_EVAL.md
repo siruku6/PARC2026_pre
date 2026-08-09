@@ -591,6 +591,17 @@ if render_ms is not None:
 どのベンダ実装を使うかは `/usr/share/glvnd/egl_vendor.d/` の JSON が決める。
 ここに NVIDIA の登録が無いと、ローダは Mesa のソフトウェア EGL を掴む。
 
+**2026-08-09 の Colab で実際にこうなっていた。**
+
+```
+ベンダ設定: ['50_mesa.json']          ← NVIDIA の登録が無い
+MUJOCO_GL = egl                        ← 環境変数は届いている
+GLContext = robosuite.renderers.context.egl_context   ← robosuite は EGL を選んでいる
+env.step: 431.8 ms/step                ← それでもソフトウェア描画
+```
+
+`10_nvidia.json` は `50_mesa.json` より優先される（数字が小さい方が先）。
+
 ```python
 # === EGL が NVIDIA の実装を掴んでいるか確認して、必要なら直す ===
 import os, subprocess
