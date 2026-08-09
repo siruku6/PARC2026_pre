@@ -33,6 +33,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -72,6 +73,9 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--no-image-transforms", action="store_true",
                         help="画像拡張を無効にする（既定は有効）")
+    parser.add_argument("--video-backend", type=str, default="torchcodec",
+                        choices=("torchcodec", "pyav"),
+                        help="動画のデコーダ。torchcodec が torch と対で壊れたときの逃げ道")
     parser.add_argument("--resume", action="store_true",
                         help="直近のチェックポイントから再開する")
     return parser.parse_args()
@@ -82,7 +86,15 @@ def _patch_dtype_for_gpu() -> None:
 
     配布ノートブックが同じ置換をしている。揃えないと、学習を回した GPU に
     よってモデルの挙動が変わってしまう。Ampere 以降なら何もしない。
+
+    `torch.cuda.is_bf16_supported()` が GPU の無い環境で何を返すかは torch の
+    版によって違う（内部で `current_device()` を呼ぶ実装では例外になる）。
+    版に依存しないよう、先に `is_available()` で切る。
     """
+    if not torch.cuda.is_available():
+        print("[train] GPU が無いため dtype の書き換えはしない")
+        return
+
     if torch.cuda.is_bf16_supported():
         print("[train] bf16 対応の GPU。書き換えは不要")
         return
@@ -100,7 +112,7 @@ def _patch_dtype_for_gpu() -> None:
     print("[train] bf16 非対応の GPU のため fp16 へ書き換えた")
 
 
-def _flatten_numbers(value) -> list[float]:
+def _flatten_numbers(value: Any) -> list[float]:
     """入れ子になった配列を、平坦な float のリストにする。
 
     parquet の統計値は array([array([array([0.35])])]) のように object dtype で
@@ -256,7 +268,7 @@ def _build_command(
         f"--dataset.revision={_DATASET_REVISION}",
         f"--dataset.episodes=[{','.join(map(str, episode_indices))}]",
         "--dataset.use_imagenet_stats=false",
-        "--dataset.video_backend=torchcodec",
+        f"--dataset.video_backend={args.video_backend}",
         f"--output_dir={output_dir}",
         f"--job_name={args.run_name}",
         f"--steps={args.steps}",

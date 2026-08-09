@@ -41,9 +41,38 @@ torch は wheel に同梱された CUDA を使う。**ホストのドライバ�
 
 | ドライバ | 指定 |
 |---|---|
-| 550 以降（既定） | そのまま |
-| より新しい | `--build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu128` |
+| cu128 が動くもの（既定） | そのまま |
+| より新しい | `--build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu130` |
 | GPU 無しで配線だけ見る | `--build-arg TORCH_INDEX=https://download.pytorch.org/whl/cpu` |
+
+### torch と torchcodec は対で決まる
+
+**版を片方だけ動かしてはいけない。**
+
+`torchcodec` は torch の ABI に直接リンクしているのに、**依存を一切宣言しない**
+（LeRobot の `uv.lock` で確認済み。`torchvision` は `torch` を宣言しているのに、
+`torchcodec` は空である）。LeRobot 側の宣言も
+`torch>=2.7,<2.12` と `torchcodec>=0.3.0,<0.12.0` という緩いものでしかない。
+
+つまり **pip は不整合を検出できない。インストールは成功し、実行時に落ちる。**
+しかも落ちるのは最初のバッチを読むときなので、**学習データ 6.4 GB を
+落としきったあと**である。
+
+Dockerfile は LeRobot v0.6.0 の `uv.lock` が解決した組み合わせに固定している。
+
+| | 版 | 根拠 |
+|---|---|---|
+| torch | **2.11.0** | `uv.lock`。採点イメージの 2.11.0+cu130 とも一致する |
+| torchcodec | **0.11.1** | 同上。lerobot より**先に**入れて固定する |
+
+イメージの最後で `from torchcodec.decoders import VideoDecoder` を実行し、
+**対が崩れていればビルドが失敗する**ようにしてある。実行時まで持ち越さない。
+
+それでも動画のデコードで落ちる場合は、逃げ道として PyAV に切り替えられる。
+
+```bash
+python /workspace/train.py --video-backend pyav
+```
 
 ## 2. 学習する
 
@@ -225,6 +254,7 @@ flowchart LR
 |---|---|
 | **Python の版** | 学習側は 3.12。採点環境の 3.10 互換は `vendor_lerobot.py` が別途担保する |
 | **CUDA の版** | 学習側は torch の wheel 同梱版。採点環境の CUDA 13 とは無関係 |
+| **torch と torchcodec** | **対で固定してある**（2.11.0 / 0.11.1）。片方だけ上げると実行時に落ちる |
 | **bf16** | `train.py` が起動時に GPU を見て、非対応なら fp16 へ書き換える。Colab と同じ処理 |
 | **`--steps` の変更** | 学習率スケジュールが変わる。再開時は前回と同じ値にすること |
 | **HF キャッシュ** | ホストへマウントしないと 6.4 GB を毎回取り直す |
