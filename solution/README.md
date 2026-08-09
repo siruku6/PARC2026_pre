@@ -97,6 +97,20 @@ work/venv310/bin/python solution/tools/build_submission.py
 `work/submission.zip` と `work/submission.sha256` が出力される。
 ハッシュはレポートの「提出チェックポイントのハッシュ値」にそのまま使える。
 
+### 既知の正解ハッシュ
+
+`work/` は git 管理外なので、zip 自体は残らない。**素の重み（追加学習なし）で
+組んだ提出物のハッシュをここに記録しておく**。手順 1〜4 をやり直したときに
+この値と一致すれば、同じものが再生成できたと言える。
+
+| 版 | sha256 | サイズ |
+|---|---|---|
+| v1: 素の重み（`lerobot/smolvla_libero_plus` の `7bb70aa5`） | `55d9f3031d85408527c1888c79179a338f3cf21bbcbed3d83a228134c1075cbd` | 918 MB |
+
+一致しない場合は、LeRobot のバージョン・重みの revision・`requirements.txt` の
+いずれかが変わっている。追加学習した重みに差し替えれば当然変わるので、
+そのときは新しい行を足す。
+
 ## 検証
 
 **ローカル（macOS）では採点環境を再現できない。** CUDA が無く、`torchvision` は
