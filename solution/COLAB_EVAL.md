@@ -334,10 +334,25 @@ if not LEROBOT_DIR.exists():
     run(f"pip install -q --upgrade -e '{LEROBOT_DIR}[smolvla]'")
     run("pip uninstall -y -q torchao", check=False)
 
+# clone 先 /content/lerobot には __init__.py が無いため、`import lerobot` が
+# これを名前空間パッケージとして掴んでしまい lerobot.__file__ が None になる。
+# 学習用ノートブックと同じく、実体のある src/ を sys.path の先頭へ置く。
+LEROBOT_SRC = LEROBOT_DIR / "src"
+
 for name in [m for m in sys.modules if m == "lerobot" or m.startswith("lerobot.")]:
     del sys.modules[name]
 
+sys.path = [p for p in sys.path if p not in {str(LEROBOT_DIR), str(LEROBOT_SRC)}]
+sys.path.insert(0, str(LEROBOT_SRC))
+
+import importlib
+importlib.invalidate_caches()
+
 import lerobot
+assert lerobot.__file__ is not None, "lerobot が名前空間パッケージとして読まれています"
+assert LEROBOT_SRC.resolve() in Path(lerobot.__file__).resolve().parents, \
+    f"LeRobot の読込先が正しくありません: {lerobot.__file__}"
+
 print("lerobot:", Path(lerobot.__file__).parent)
 print("bf16 対応:", torch.cuda.is_bf16_supported())
 ```
@@ -345,6 +360,13 @@ print("bf16 対応:", torch.cuda.is_bf16_supported())
 > **`torch.cuda.is_bf16_supported()` が False なら、必ず上の書き換えを通すこと。**
 > T4 は bf16 非対応である。L4（本番と同じ）や A100 なら不要。
 > 学習を T4 で回して評価を L4 で回すと、この一点だけ条件が変わる。
+
+> **`lerobot.__file__` が `None` になるのは、clone 先の `/content/lerobot` が
+> `__init__.py` を持たないためである。** `/content` が `sys.path` に入っていると
+> そこが名前空間パッケージとして拾われ、実体の `src/lerobot` に届かない。
+> 上の 3 行（`sys.modules` の掃除・`sys.path` の差し替え・`invalidate_caches`）が
+> それを避けている。**この対処は別プロセスには効かない**ので、
+> サーバー起動時にも同じ手当てが要る（セル E で `PYTHONPATH` に入れている）。
 
 ### どの `policy_server.py` を使うか
 
@@ -359,21 +381,35 @@ print("bf16 対応:", torch.cuda.is_bf16_supported())
 | 後処理 | `PARC_*` を設定しなければ**すべて無効**。既定は素の挙動 |
 
 **左のファイルペインへドラッグ**するか、Drive 経由で置く。
-置き場所は `/content/policy_server.py`。
+置き場所は `/content/policy_server.py`（下のセルが専用ディレクトリへ移す）。
 
 ```python
-# === policy_server.py の配置を確認する ===
+# === policy_server.py を専用ディレクトリへ配置する ===
+# /content 直下のままだと、サーバーの別プロセスで `import lerobot` が
+# clone 先の /content/lerobot（__init__.py 無し）を掴んでしまう。
+# スクリプトの置き場所は sys.path の先頭に入るため、隣に lerobot/ が
+# 無いディレクトリへ移しておく。
 from pathlib import Path
 import shutil
 
-SERVER = Path("/content/policy_server.py")
+SUBMISSION_DIR = Path("/content/submission")
+SUBMISSION_DIR.mkdir(exist_ok=True)
+SERVER = SUBMISSION_DIR / "policy_server.py"
+
+uploaded = Path("/content/policy_server.py")
+if uploaded.is_file():
+    shutil.copy2(uploaded, SERVER)
 assert SERVER.is_file(), "policy_server.py を /content/ に置いてください"
 
 # model_weights は policy_server.py と同じ階層に無ければならない。
-target = SERVER.parent / "model_weights"
-if not target.exists():
-    target.symlink_to(WEIGHTS_DIR)
-print("配置 OK:", SERVER, "->", sorted(p.name for p in target.iterdir())[:4], "…")
+weights_link = SUBMISSION_DIR / "model_weights"
+if not weights_link.exists():
+    weights_link.symlink_to(WEIGHTS_DIR)
+
+assert not (SUBMISSION_DIR / "lerobot").exists(), \
+    "この階層に lerobot/ があると import が壊れます"
+print("配置 OK:", SERVER)
+print("  重み:", sorted(p.name for p in weights_link.iterdir())[:4], "…")
 ```
 
 ---
@@ -396,7 +432,7 @@ POLICY_ENV = {
     # "PARC_BLEND_STEPS": "3",
 }
 
-import os, subprocess, time, urllib.request, json
+import os, subprocess, sys, time, urllib.request, json
 from pathlib import Path
 
 server_env = dict(os.environ)
@@ -407,11 +443,14 @@ server_env.update({k: v for k, v in POLICY_ENV.items() if v})
 server_env["HF_HUB_OFFLINE"] = "0"
 server_env["TRANSFORMERS_OFFLINE"] = "0"
 server_env["CUDA_VISIBLE_DEVICES"] = "0"
+# 別プロセスなので、ノートブック側の sys.path 操作は効かない。
+# 実体のある src/ を PYTHONPATH で明示する。
+server_env["PYTHONPATH"] = str(LEROBOT_SRC)
 
 log = open("/content/server.log", "w")
 server = subprocess.Popen(
-    ["python", str(SERVER), "--port", str(PORT)],
-    cwd="/content", env=server_env, stdout=log, stderr=subprocess.STDOUT,
+    [sys.executable, str(SERVER), "--port", str(PORT)],
+    cwd=str(SUBMISSION_DIR), env=server_env, stdout=log, stderr=subprocess.STDOUT,
 )
 print(f"サーバー起動 (pid={server.pid})  設定: {POLICY_ENV or '既定'}")
 
