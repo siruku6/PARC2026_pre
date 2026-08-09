@@ -451,17 +451,36 @@ print("  重み:", sorted(p.name for p in weights_link.iterdir())[:4], "…")
 
 ## E. 評価を回す
 
-### 先に EGL が効いているか測る（30 秒）
+### 先に遅さの原因を切り分ける（3 分）
 
-**ここを外すと 8 倍遅くなり、45 分の予定が 6 時間になる。** 本番と同じ EGL で
-描画できているかを、評価を始める前に確かめる。
+1 エピソードの所要時間は **シミュレーション ＋ 推論**で決まる。
+
+```
+1 エピソード ≈ 600 × (env.step の秒数) + 12 × (重い /act の秒数)
+```
+
+| 構成 | 内訳 | 1 エピソード | 80 エピソード |
+|---|---|---|---|
+| **EGL ＋ GPU 推論**（狙い） | 600×0.04 + 12×0.85 | **34 秒** | **45 分** |
+| osmesa ＋ GPU 推論 | 600×0.30 + 12×0.85 | 190 秒 | 4.2 時間 |
+| EGL ＋ CPU 推論 | 600×0.04 + 12×15 | 204 秒 | 4.5 時間 |
+
+**遅いときは、どちらの項が大きいかで原因が決まる。** 両方まとめて測る。
 
 ```python
-# === env.step の速度を測って EGL の効きを確かめる ===
-import subprocess
+# === 遅さの原因を切り分ける（描画 vs 推論）===
+# セル B〜D を実行済みであること（KIT_DIR / eval_env / SERVER /
+# SUBMISSION_DIR / LEROBOT_SRC / PORT を使う）。
+# eval_env は評価セルで定義されるため、一度そこまで実行しておく。
+import os, subprocess, sys, time, urllib.request
+from pathlib import Path
 
-benchmark = f'''
-import os, time, contextlib, io
+import msgpack
+import numpy as np
+
+# --- 1. 描画: env.step の速度 ---
+benchmark = '''
+import contextlib, io, time
 import numpy as np
 from pipeline.config import EvalConfig
 from pipeline.environment import EnvironmentManager
@@ -474,87 +493,103 @@ with contextlib.redirect_stdout(io.StringIO()):
     env.set_init_state(tasks[0].init_states[0])
     for _ in range(10):
         env.step(np.zeros(7, dtype=np.float32))
-
     started = time.time()
     for _ in range(50):
         env.step(np.zeros(7, dtype=np.float32))
     elapsed = time.time() - started
-
-print(f"env.step: {{elapsed / 50 * 1000:.1f}} ms/step")
-print(f"600 ステップのエピソード: シミュレーションだけで {{elapsed / 50 * 600:.0f}} 秒")
+print(f"env.step: {elapsed / 50 * 1000:.1f} ms/step")
 '''
-
 result = subprocess.run(
-    [f"{KIT_DIR}/venv/bin/python", "-c", benchmark],
-    cwd=str(KIT_DIR), env=eval_env, capture_output=True, text=True,
+    [f"{KIT_DIR}/venv/bin/python", "-u", "-c", benchmark],
+    cwd=str(KIT_DIR), env=eval_env, capture_output=True, text=True, timeout=900,
 )
-print(result.stdout or result.stderr[-2000:])
-```
+render_line = result.stdout.strip() or result.stderr.strip()[-800:]
+print("[描画] " + render_line)
 
-| 実測 | 判断 |
-|---|---|
-| **40〜60 ms/step** | **EGL が効いている。** 期待どおり |
-| 250〜350 ms/step | **osmesa に落ちている。** GPU 描画になっていない |
-
-落ちている場合は `MUJOCO_GL` が伝わっていないか、`libEGL` が無い。
-`eval_env` に `MUJOCO_GL: "egl"` が入っているかと、セル A の `libEGL` の確認を見直す。
-
-### 推論側の速度も測る
-
-1 エピソードの所要時間は **シミュレーション ＋ 推論**である。遅いときに
-どちらが原因かを分けないと直せない。サーバーが起動している状態で実行する。
-
-```python
-# === /act 1 回の所要時間を測る ===
-import msgpack, urllib.request, time
-import numpy as np
-
-def call(path, payload):
+# --- 2. 推論: /act の速度 ---
+# 配布キットと同じ形式で送る。obs は {key: {data, dtype, shape}} の msgpack、
+# 応答は {"data": bytes} である（policy_server.py の serialize/deserialize に対応）。
+def post(path: str, body: bytes, content_type: str) -> bytes:
     request = urllib.request.Request(
-        f"http://localhost:{PORT}{path}", data=msgpack.packb(payload),
-        headers={"Content-Type": "application/msgpack"},
+        f"http://localhost:{PORT}{path}", data=body,
+        headers={"Content-Type": content_type},
     )
-    with urllib.request.urlopen(request, timeout=120) as response:
-        return msgpack.unpackb(response.read())
+    with urllib.request.urlopen(request, timeout=300) as response:
+        return response.read()
 
-call("/reset", {"instruction": "Put the bowl on the stove"})
-observation = {
-    "agentview_image": np.random.randint(0, 255, (128, 128, 3), dtype=np.uint8).tolist(),
-    "robot0_eye_in_hand_image": np.random.randint(0, 255, (128, 128, 3), dtype=np.uint8).tolist(),
-    "robot0_eef_pos": [0.0, 0.0, 0.0],
-    "robot0_eef_quat": [0.0, 0.0, 0.0, 1.0],
-    "robot0_gripper_qpos": [0.0, 0.0],
-}
-for index in range(3):
+def serialize_obs(observation: dict) -> bytes:
+    return msgpack.packb({
+        key: {"data": value.tobytes(), "dtype": str(value.dtype), "shape": list(value.shape)}
+        for key, value in observation.items()
+    }, use_bin_type=True)
+
+server_env = dict(os.environ)
+server_env.update({"HF_HUB_OFFLINE": "0", "TRANSFORMERS_OFFLINE": "0",
+                   "CUDA_VISIBLE_DEVICES": "0", "PYTHONPATH": str(LEROBOT_SRC)})
+log = open("/content/server_probe.log", "w")
+server = subprocess.Popen([sys.executable, str(SERVER), "--port", str(PORT)],
+                          cwd=str(SUBMISSION_DIR), env=server_env,
+                          stdout=log, stderr=subprocess.STDOUT)
+try:
     started = time.time()
-    call("/act", {"observation": observation})
-    print(f"  act[{index}] {time.time() - started:6.3f} 秒")
+    for _ in range(300):
+        try:
+            urllib.request.urlopen(f"http://localhost:{PORT}/health", timeout=2)
+            break
+        except Exception:
+            if server.poll() is not None:
+                raise RuntimeError(open("/content/server_probe.log").read()[-2000:])
+            time.sleep(1)
+    print(f"[推論] 起動 {time.time() - started:.0f} 秒")
+
+    # /reset は JSON、/act は msgpack。配布キットの remote_policy.py と同じ。
+    post("/reset", b'{"instruction": "Put the bowl on the stove"}', "application/json")
+
+    observation = {
+        "agentview_image": np.random.randint(0, 255, (128, 128, 3), dtype=np.uint8),
+        "robot0_eye_in_hand_image": np.random.randint(0, 255, (128, 128, 3), dtype=np.uint8),
+        "robot0_eef_pos": np.zeros(3, dtype=np.float32),
+        "robot0_eef_quat": np.array([0, 0, 0, 1], dtype=np.float32),
+        "robot0_gripper_qpos": np.zeros(2, dtype=np.float32),
+    }
+    payload = serialize_obs(observation)
+    timings = []
+    for index in range(3):
+        begin = time.time()
+        post("/act", payload, "application/x-msgpack")
+        timings.append(time.time() - begin)
+        print(f"[推論] act[{index}] {timings[-1]:6.3f} 秒")
+finally:
+    server.terminate()
+
+# --- 3. 判定 ---
+render_ms = float(render_line.split(":")[-1].replace("ms/step", "").strip()) if "ms/step" in render_line else None
+if render_ms is not None:
+    episode = 600 * render_ms / 1000 + 12 * timings[0]
+    print()
+    print(f"1 エピソードの見込み: {episode:.0f} 秒  → 80 エピソードで {episode * 80 / 3600:.1f} 時間")
+    print(f"  うちシミュレーション {600 * render_ms / 1000:.0f} 秒 / 推論 {12 * timings[0]:.0f} 秒")
 ```
 
-| `act[0]` の実測 | 判断 |
-|---|---|
-| **0.5〜1.5 秒** | GPU で推論できている |
-| 5 秒以上 | **CPU で推論している可能性が高い。** `CUDA_VISIBLE_DEVICES` とサーバーログを見る |
+| 測定 | 正常 | 異常 | 異常時の意味 |
+|---|---|---|---|
+| **`env.step`** | 40〜60 ms | 250〜350 ms | **osmesa に落ちている。GPU 描画になっていない** |
+| **`act[0]`** | 0.5〜1.5 秒 | 5 秒以上 | **CPU で推論している** |
+| `act[1]` `act[2]` | ほぼ 0 秒 | 大きい | chunk のキャッシュが効いていない |
 
-`act[1]` `act[2]` がほぼ 0 秒なら chunk のキャッシュは正常である。
+#### `env.step` が遅いとき（osmesa に落ちている）
 
-### 1 エピソードの内訳を見積もる
+`eval_env` に `MUJOCO_GL: "egl"` が入っているかを確認する。入っているのに
+遅い場合は `libEGL` が見えていない。セル A の確認に戻る。
 
-```
-1 エピソード ≈ 600 × (env.step の秒数) + 12 × (act[0] の秒数)
-```
+**どうしても EGL が効かない場合は `N_EPISODES` を 5 に下げる**（4 タスク × 5 =
+20 エピソード、約 1 時間）。統計的な力は落ちるが、測れないよりはるかによい。
 
-| 構成 | 内訳 | 1 エピソード |
-|---|---|---|
-| EGL ＋ GPU 推論 | 600×0.04 + 12×0.85 | **約 34 秒** |
-| osmesa ＋ GPU 推論 | 600×0.30 + 12×0.85 | 約 190 秒 |
-| EGL ＋ CPU 推論 | 600×0.04 + 12×15 | 約 204 秒 |
+#### `act[0]` が遅いとき（CPU で推論している）
 
-**遅いときは、この式のどちらの項が大きいかで原因が決まる。**
-
-> このセルは `eval_env` を使うため、**下の評価セルを一度実行して `eval_env` を
-> 定義してから**でないと動かない。順番に困る場合は、評価セルの
-> `eval_env.update({...})` までを別セルに切り出しておくとよい。
+`/content/server_probe.log` の先頭に出る読み込みログと、`nvidia-smi` を見る。
+`policy_server.py` は `torch.cuda.is_available()` で自動判定するため、
+サーバーのプロセスから GPU が見えていない可能性が高い。
 
 ### 評価を実行する
 
