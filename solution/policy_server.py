@@ -62,6 +62,11 @@ class BasePolicy(ABC):
 # ここを編集する（MyPolicy の中身だけを自分のモデルに置き換える）
 # ============================================================
 
+# 行動 7 次元のうち 0〜5 は EEF の並進・回転の差分。6 はグリッパで、
+# 逆正規化統計の min/max がちょうど ±1、std 0.999 のバンバン制御である。
+# 後処理で均してよいのは前半 6 次元だけ。
+_POSE_DIMS = slice(0, 6)
+
 
 class MyPolicy(BasePolicy):
     """同梱した LeRobot v0.6.0 で SmolVLA を動かす。
@@ -146,6 +151,17 @@ class MyPolicy(BasePolicy):
         )
         self._env_preprocessor = PolicyProcessorPipeline(steps=[LiberoProcessorStep()])
 
+        # 行動の後処理。いずれも未設定なら無効で、既定の挙動は変わらない。
+        # 運営 Q&A No.10 で「VLA が生成した Action を、全タスク共通のルールで
+        # 整える処理」は禁止事項に含まれないと明言されている。
+        # 使うのはモデル出力と過去の行動だけで、タスクや seed は参照しない。
+        self._blend_steps = int(os.environ.get("PARC_BLEND_STEPS", "0"))
+        self._ema_alpha = float(os.environ.get("PARC_EMA_ALPHA", "0"))
+        self._n_action_steps = int(self._policy.config.n_action_steps)
+
+        self._previous_action: np.ndarray | None = None
+        self._step_index = 0
+
         self._instruction = ""
         self._warm_up()
 
@@ -156,14 +172,72 @@ class MyPolicy(BasePolicy):
             action = self._policy.select_action(batch)
 
         action = self._postprocessor(action)
-        return np.asarray(
+        action = np.asarray(
             action[0].detach().to("cpu").numpy(), dtype=np.float32
         ).reshape(7)
+        return self._smooth(action)
+
+    def _smooth(self, action: np.ndarray) -> np.ndarray:
+        """姿勢 6 次元だけを均す。グリッパ（7 次元目）は素通しする。
+
+        chunk 境界では、新しい観測から作り直した行動が前ステップと不連続に
+        なりうる。これが jerk / SPARC を悪化させる。境界の直後だけ前の行動を
+        混ぜて段差を消す。逆正規化統計は次のとおりで、次元ごとにスケールが
+        大きく違うため、絶対量ではなく凸結合（スケール不変）で扱う。
+
+        | 次元 | 中身 | min/max | std |
+        |---|---|---|---|
+        | 0-2 | EEF 並進の差分 | ±0.9375 | 0.34〜0.45 |
+        | 3-5 | EEF 回転の差分 | ±0.36 | 0.04〜0.08 |
+        | 6 | グリッパ | **ちょうど ±1.0** | **0.999** |
+
+        6 次元目は min/max がちょうど ±1、std がほぼ 1 のバンバン制御である。
+        均すと中間値になり、掴めなくなる。**触ってはいけない。**
+
+        Parameters
+        ----------
+        action : np.ndarray
+            逆正規化済みの行動 (7,)。
+
+        Returns
+        -------
+        smoothed : np.ndarray
+            後処理後の行動 (7,)。無効時は入力をそのまま返す。
+        """
+        enabled = self._blend_steps > 0 or self._ema_alpha > 0.0
+
+        if not enabled or self._previous_action is None:
+            self._previous_action = action
+            self._step_index += 1
+            return action
+
+        smoothed = action.copy()
+        previous = self._previous_action
+
+        if self._ema_alpha > 0.0:
+            smoothed[_POSE_DIMS] = (
+                self._ema_alpha * previous[_POSE_DIMS]
+                + (1.0 - self._ema_alpha) * smoothed[_POSE_DIMS]
+            )
+
+        # chunk 境界（step_index が n_action_steps の倍数）の直後だけ効かせる。
+        offset = self._step_index % self._n_action_steps
+        if offset < self._blend_steps:
+            weight = (self._blend_steps - offset) / (self._blend_steps + 1.0)
+            smoothed[_POSE_DIMS] = (
+                weight * previous[_POSE_DIMS] + (1.0 - weight) * smoothed[_POSE_DIMS]
+            )
+
+        self._previous_action = smoothed
+        self._step_index += 1
+        return smoothed
 
     def reset(self, instruction: str = "") -> None:
         self._instruction = instruction
         # chunk のキャッシュを捨てる。忘れると前エピソードの action を出し続ける。
         self._policy.reset()
+        self._previous_action = None
+        self._step_index = 0
 
     def _build_batch(self, obs: dict[str, np.ndarray]) -> dict:
         """評価パイプラインの観測を、モデルが期待する batch へ変換する。"""
