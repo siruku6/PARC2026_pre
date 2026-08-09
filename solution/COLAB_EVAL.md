@@ -17,6 +17,30 @@ Colab の GPU（EGL 描画）に移すと桁が変わる。
 
 **学習セッションとは別のアカウントで開くこと。** 学習は止めない。
 
+## 実行順序
+
+**上から順に 1 度ずつ実行する。** 後のセルは前のセルが定義した変数を使うため、
+飛ばすと `NameError` になる。どのセルが何を定義するかは次のとおり。
+
+| 順 | セル | 定義するもの | 所要 |
+|---|---|---|---|
+| 1 | **A** GPU と EGL の確認 | （EGL のベンダ設定を作る） | 10 秒 |
+| 2 | **B** キットのセットアップ | `KIT_DIR` `KIT_PYTHON` `run()` `LOG_DIR` | 5〜10 分 |
+| 3 | **C** 重みの用意 | `WEIGHTS_DIR` `USE_FINETUNED` | 2 分 |
+| 4 | **D-1** 方策側の依存 | `LEROBOT_DIR` `LEROBOT_SRC` | 3 分 |
+| 5 | **D-2** `policy_server.py` の配置 | **`SUBMISSION_DIR`** **`SERVER`** | 5 秒 |
+| 6 | **E-1** 設定 | `PORT` `N_EPISODES` `POLICY_ENV` `server_env` `eval_env` | 1 秒 |
+| 7 | **E-2** 遅さの切り分け（初回のみ） | — | 3 分 |
+| 8 | **E-3** 評価の実行 | — | 45 分 |
+| 9 | **F** 結果の読み取り | — | 1 秒 |
+
+**2 回目以降の掃引は `E-1` → `E-3` → `F` だけでよい。** `E-1` の `POLICY_ENV` を
+書き換えて流し直す。
+
+> `SUBMISSION_DIR` が未定義というエラーは、**D-2 を実行していない**（または
+> 古い版のままになっている）ことを意味する。`E-1` の末尾に `assert` を入れて
+> あるので、そこで気づける。
+
 ## なぜ 2 プロセスに分けるのか
 
 評価側と方策側は**依存が正面衝突する**。
@@ -469,7 +493,57 @@ print("  重み:", sorted(p.name for p in weights_link.iterdir())[:4], "…")
 
 ## E. 評価を回す
 
-### 先に遅さの原因を切り分ける（3 分）
+### E-1. 設定（先にこれを実行する）
+
+**以降のセルはすべてここで定義した変数を使う。** 診断も本番も、まずこれを流す。
+
+```python
+# === 評価の設定 ===
+# ここだけを書き換えて、下のセルは触らずに掃引する。
+N_EPISODES = 20          # 1 タスクあたり。4 タスクなので総数はこの 4 倍
+MAX_STEPS = 600
+PORT = 8000
+
+# 推論時の後処理。空なら素の挙動。掃引はここを変える。
+POLICY_ENV = {
+    # "PARC_N_ACTION_STEPS": "25",
+    # "PARC_SAMPLES": "3",
+    # "PARC_BLEND_STEPS": "3",
+}
+
+import os, subprocess, sys, time, urllib.request, json
+from pathlib import Path
+
+# --- 方策サーバー側の環境 ---
+server_env = dict(os.environ)
+server_env.update({k: v for k, v in POLICY_ENV.items() if v})
+# policy_server.py は setdefault で offline を立てる。Colab は通信できるので
+# 明示的に解除する。**採点環境は遮断されるため、オフラインの確認は Docker 側で行う。**
+server_env["HF_HUB_OFFLINE"] = "0"
+server_env["TRANSFORMERS_OFFLINE"] = "0"
+server_env["CUDA_VISIBLE_DEVICES"] = "0"
+# 別プロセスなので、ノートブック側の sys.path 操作は効かない。
+server_env["PYTHONPATH"] = str(LEROBOT_SRC)
+
+# --- 評価パイプライン側の環境 ---
+eval_env = dict(os.environ)
+eval_env.update({
+    "MUJOCO_GL": "egl",          # GPU 描画。セル A のベンダ設定と対で効く
+    "MPLBACKEND": "Agg",         # Colab の既定値だと libero の import が落ちる
+    "PYTHONUNBUFFERED": "1",     # 無いと出力がバッファされ、止まったように見える
+    "PYTHONPATH": f"{KIT_DIR}/LIBERO-plus:{KIT_DIR}:{KIT_DIR}/compe",
+    "LIBERO_ROOT": f"{KIT_DIR}/LIBERO-plus",
+})
+
+for name in ("KIT_DIR", "LEROBOT_SRC", "SUBMISSION_DIR", "SERVER", "WEIGHTS_DIR"):
+    assert name in globals(), f"{name} が未定義です。セル A〜D を順に実行してください"
+
+print(f"設定: {N_EPISODES} エピソード/タスク, 後処理 {POLICY_ENV or '既定'}")
+print(f"  サーバー: {SERVER}")
+print(f"  キット  : {KIT_DIR}")
+```
+
+### E-2. 先に遅さの原因を切り分ける（3 分・初回のみ）
 
 1 エピソードの所要時間は **シミュレーション ＋ 推論**で決まる。
 
@@ -487,12 +561,7 @@ print("  重み:", sorted(p.name for p in weights_link.iterdir())[:4], "…")
 
 ```python
 # === 遅さの原因を切り分ける（描画 vs 推論）===
-# セル B〜D を実行済みであること（KIT_DIR / eval_env / SERVER /
-# SUBMISSION_DIR / LEROBOT_SRC / PORT を使う）。
-# eval_env は評価セルで定義されるため、一度そこまで実行しておく。
-import os, subprocess, sys, time, urllib.request
-from pathlib import Path
-
+# E-1 を実行済みであること（eval_env / server_env / PORT を使う）。
 import msgpack
 import numpy as np
 
@@ -541,13 +610,6 @@ def serialize_obs(observation: dict) -> bytes:
         for key, value in observation.items()
     }, use_bin_type=True)
 
-# 配置セルの版によっては SUBMISSION_DIR が無い。その場合は /content を使う。
-SUBMISSION_DIR = globals().get("SUBMISSION_DIR", Path("/content"))
-SERVER = globals().get("SERVER", Path("/content/policy_server.py"))
-
-server_env = dict(os.environ)
-server_env.update({"HF_HUB_OFFLINE": "0", "TRANSFORMERS_OFFLINE": "0",
-                   "CUDA_VISIBLE_DEVICES": "0", "PYTHONPATH": str(LEROBOT_SRC)})
 log = open("/content/server_probe.log", "w")
 server = subprocess.Popen([sys.executable, str(SERVER), "--port", str(PORT)],
                           cwd=str(SUBMISSION_DIR), env=server_env,
@@ -692,39 +754,14 @@ robosuite としては EGL を選んでいる。**それでも遅いならベン
 `policy_server.py` は `torch.cuda.is_available()` で自動判定するため、
 サーバーのプロセスから GPU が見えていない可能性が高い。
 
-### 評価を実行する
+### E-3. 評価を実行する
 
-サーバーを起動し、キットのパイプラインを当てる。**`MUJOCO_GL=egl` が肝**である。
+**E-1 を実行済みであること。** サーバーを起動し、キットのパイプラインを当てる。
 
 ```python
 # === 評価の実行 ===
-# N_EPISODES を増やすほど成功率の推定が安定する。
-# 4 タスク × 20 エピソード = 80 エピソードで約 45 分。
-N_EPISODES = 20
-MAX_STEPS = 600
-PORT = 8000
-
-# 推論時の後処理。既定（空文字）なら素の挙動。掃引はここを変える。
-POLICY_ENV = {
-    # "PARC_N_ACTION_STEPS": "25",
-    # "PARC_BLEND_STEPS": "3",
-}
-
-import os, subprocess, sys, time, urllib.request, json
-from pathlib import Path
-
-server_env = dict(os.environ)
-server_env.update({k: v for k, v in POLICY_ENV.items() if v})
-# policy_server.py は setdefault で offline を立てる。Colab は通信できるので
-# 明示的に解除しておく。**採点環境は遮断されるため、オフラインの確認は
-# Docker 側で別途行うこと。**
-server_env["HF_HUB_OFFLINE"] = "0"
-server_env["TRANSFORMERS_OFFLINE"] = "0"
-server_env["CUDA_VISIBLE_DEVICES"] = "0"
-# 別プロセスなので、ノートブック側の sys.path 操作は効かない。
-# 実体のある src/ を PYTHONPATH で明示する。
-server_env["PYTHONPATH"] = str(LEROBOT_SRC)
-
+# 設定は E-1 で決めている。掃引するときは E-1 の POLICY_ENV だけを変えて、
+# E-1 → E-3 の順に流し直す。
 log = open("/content/server.log", "w")
 server = subprocess.Popen(
     [sys.executable, str(SERVER), "--port", str(PORT)],
@@ -742,17 +779,6 @@ for elapsed in range(300):
             print(open("/content/server.log").read()[-3000:])
             raise RuntimeError("サーバーが起動に失敗しました")
         time.sleep(1)
-
-eval_env = dict(os.environ)
-eval_env.update({
-    "MUJOCO_GL": "egl",                                     # GPU 描画。ここが要
-    "MPLBACKEND": "Agg",                                    # Colab の既定値だと落ちる
-    # これが無いと子プロセスの出力がブロックバッファリングされ、
-    # 数 KB 溜まるまで一行も表示されない。**止まって見えるが動いている。**
-    "PYTHONUNBUFFERED": "1",
-    "PYTHONPATH": f"{KIT_DIR}/LIBERO-plus:{KIT_DIR}:{KIT_DIR}/compe",
-    "LIBERO_ROOT": f"{KIT_DIR}/LIBERO-plus",
-})
 
 started = time.time()
 try:
