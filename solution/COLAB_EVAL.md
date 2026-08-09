@@ -922,11 +922,30 @@ finally:
     server.terminate()
 
 print(f"\n所要 {time.time() - started:.0f} 秒  終了コード {process.returncode}")
-print(f"全文: {EVAL_LOG}（{EVAL_LOG.stat().st_size / 1e6:.1f} MB）")
+
+# **[結果] 行だけを小さいファイルへ抜き出す。**
+# 全文ログは数 MB あり、手元へ持ち帰るのが億劫になる。エピソードごとの
+# 結果と、ぶつけた物体だけなら数十 KB で済む。
+RESULTS_TXT = EVAL_LOG.with_suffix(".results.txt")
+RESULTS_TXT.write_text(
+    "\n".join(l for l in EVAL_LOG.read_text(encoding="utf-8").splitlines()
+              if "[結果]" in l),
+    encoding="utf-8",
+)
+
+print("\n=== 手元へ保存するファイル ===")
+for path in (Path("/content/results/server_8000.json"), RESULTS_TXT, EVAL_LOG):
+    size = path.stat().st_size / 1e3 if path.exists() else 0
+    print(f"  {'あり' if path.exists() else '無し'}  {size:8.0f} KB  {path}")
+print("\n左のファイルペインからダウンロードする。**JSON と results.txt は必ず取る。**")
+
 if process.returncode != 0:
     print("--- ログの末尾 ---")
     print(EVAL_LOG.read_text(encoding="utf-8")[-3000:])
 ```
+
+> **セルを消してしまったら、このページから貼り直す。**
+> ノートブックは使い捨てだが、セルの内容はこのリポジトリが正である。
 
 > **B-2 のパッチを当てていないと `[結果]` が 1 行も出ない。**
 > その場合、画面には 60 秒ごとの心拍だけが出て `0 エピソード完了` のままになる。
