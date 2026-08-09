@@ -841,6 +841,20 @@ robosuite としては EGL を選んでいる。**それでも遅いならベン
 
 **E-1 を実行済みであること。** サーバーを起動し、キットのパイプラインを当てる。
 
+> **画面には出さない。ログファイルへ書く。**
+> 以前は評価の出力をそのままセルへ流していたが、**ブラウザが固まる**。
+> Colab の出力はブラウザ側にすべて保持されるため、数万行を出すと Chrome が
+> 応答しなくなり、貼り付けることすらできなくなる。ノートブックのカーネル側にも
+> 出力が積み上がるので、メモリ不足で評価ごと落ちうる。
+>
+> **`--verbose` も外した。** これは root logger を DEBUG にする指定で、
+> `urllib3` が `/act` 1 回ごとに 1 行出す原因だった（数万行の正体）。
+> B-2 のパッチがエピソードごとの結果を `logger.info` で出すようになったため、
+> **DEBUG に落とす理由がもう無い。**
+>
+> 画面に出るのは**エピソードの結果行と、60 秒ごとの心拍だけ**である。
+> 全文は `LOG_DIR/eval_*.log` に残るので、あとから grep できる。
+
 ```python
 # === 評価の実行 ===
 # 設定は E-1 で決めている。掃引するときは E-1 の POLICY_ENV だけを変えて、
@@ -863,7 +877,13 @@ for elapsed in range(300):
             raise RuntimeError("サーバーが起動に失敗しました")
         time.sleep(1)
 
+EVAL_LOG = Path(LOG_DIR) / f"eval_{time.strftime('%H%M%S')}.log"
+HEARTBEAT_SEC = 60          # 画面に心拍を出す間隔
+
 started = time.time()
+done = collided = succeeded = 0
+last_beat = started
+
 try:
     process = subprocess.Popen(
         [f"{KIT_DIR}/venv/bin/python", "-m", "pipeline",
@@ -871,58 +891,81 @@ try:
          "--track", "track1",
          "--n-episodes", str(N_EPISODES),
          "--max-steps", str(MAX_STEPS),
-         "--output-dir", "/content/results",
-         # これが無いとエピソード単位の進捗が一切出ない。
-         # rollout.py はエピソード完了を logger.debug で出しており、
-         # 既定の INFO では「タスク評価完了」までまとめて無言になる。
-         # 1 タスク 20 エピソードなら、最初の出力まで 20 エピソード分待つことになる。
-         "--verbose"],
+         "--output-dir", "/content/results"],
+        # --verbose は付けない。root logger が DEBUG になり、urllib3 が
+        # /act 1 回ごとに 1 行出すため数万行になる。エピソードごとの結果は
+        # B-2 のパッチが logger.info で出すので、DEBUG に落とす必要が無い。
         cwd=str(KIT_DIR), env=eval_env,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
     )
-    # 出力は絞りすぎない。進んでいることが分からないと、止まったのか
-    # 遅いのかを区別できない。うるさいものだけ落とす。
-    #
-    # urllib3 は要注意。--verbose が root logger を DEBUG にするため、
-    # requests が使う urllib3 が **/act 1 回ごとに 1 行**出す。
-    # 600 ステップ × 80 エピソードで数万行になり、肝心の進捗が埋もれる。
-    noisy = (
-        "urllib3",                    # /act のたびに出る接続ログ
-        "Starting new HTTP",
-        "robosuite WARNING",
-        "Gym has been unmaintained",
-        "Please upgrade to Gymnasium",
-        "migration_guide",
-        "PIL.",                       # 画像まわりの DEBUG
-        "matplotlib",
-    )
-    for line in process.stdout:
-        if not any(word in line for word in noisy):
-            print(f"[{time.time() - started:5.0f}s] {line.rstrip()}")
+
+    # **全文はファイルへ、画面へは要点だけ。**
+    # Colab の出力はブラウザ側に全部保持される。数万行流すと Chrome が固まり、
+    # カーネル側にも積み上がってメモリ不足で落ちる。
+    with EVAL_LOG.open("w", encoding="utf-8") as sink:
+        for line in process.stdout:
+            sink.write(line)
+
+            if "[結果]" in line:
+                done += 1
+                collided += "衝突" in line
+                succeeded += "成功" in line
+                print(f"[{time.time() - started:5.0f}s] {line.rstrip()[-110:]}")
+                last_beat = time.time()
+            elif time.time() - last_beat >= HEARTBEAT_SEC:
+                print(f"[{time.time() - started:5.0f}s] 実行中… "
+                      f"{done} エピソード完了（成功 {succeeded} / 衝突 {collided}）")
+                last_beat = time.time()
+
     process.wait()
 finally:
     server.terminate()
 
-print(f"所要 {time.time() - started:.0f} 秒")
+print(f"\n所要 {time.time() - started:.0f} 秒  終了コード {process.returncode}")
+print(f"全文: {EVAL_LOG}（{EVAL_LOG.stat().st_size / 1e6:.1f} MB）")
+if process.returncode != 0:
+    print("--- ログの末尾 ---")
+    print(EVAL_LOG.read_text(encoding="utf-8")[-3000:])
 ```
 
-> **`--verbose` を外すと、長時間まったく無言になる。**
-> `pipeline/rollout.py` はエピソード完了を `logger.debug` で出しており、
-> 既定の INFO レベルでは表示されない。INFO で出るのは
-> **タスク単位の「タスク評価完了」だけ**である。
-> `--n-episodes 20` なら、最初の 1 行が出るまで 20 エピソード分待つことになる。
-> 実際にこれで「止まった」と誤認した。
+> **B-2 のパッチを当てていないと `[結果]` が 1 行も出ない。**
+> その場合、画面には 60 秒ごとの心拍だけが出て `0 エピソード完了` のままになる。
+> 進んではいるので、`EVAL_LOG` を見れば分かる。
+>
+> `--verbose` を外しても `logger.info` は出る。`pipeline/cli.py` は
+> `log_level = logging.DEBUG if args.verbose else logging.INFO` なので、
+> **既定が INFO** である。`--verbose` は DEBUG に下げるための指定でしかない。
+
+**掃引を繰り返す前に、メニューの「編集 → すべての出力を消去」を実行すること。**
+Colab の出力は**セッションを通じて積み上がる**。1 回分が収まっていても、
+3 回 4 回と回すうちにブラウザが重くなる。
+
+#### 途中で落ちたとき
+
+**終了コードとログの末尾が自動で出る。** それを見て切り分ける。
+
+| 症状 | 見当 |
+|---|---|
+| 終了コードが `-9`（SIGKILL） | **メモリ不足。** Colab がプロセスを殺した。`N_EPISODES` を下げる |
+| 終了コードが `1` で末尾に traceback | その例外が原因。ログをそのまま読む |
+| セル自体が消える・ブラウザが固まる | 出力の量。**このセルが古い版のままでないか確認する** |
+
+途中まででも `[結果]` 行は残っているので、**そこまでの成功率と衝突は集計できる。**
+次の「結果を読む」の集計セルは、`eval_result` の JSON が無くてもログだけで動く。
 
 ### 進んでいるか確かめる
 
 ノートブックのカーネルは評価セルで占有されているため、**別のセルを実行できない**。
-判断材料は 2 つある。
+判断材料は 3 つある。
 
-**① `PYTHONUNBUFFERED=1` を入れ忘れていないか。**
+**① 心拍が出ているか。** 60 秒ごとに `実行中… N エピソード完了` が出る。
+これが増えていれば進んでいる。
+
+**② `PYTHONUNBUFFERED=1` を入れ忘れていないか。**
 入れないと子プロセスの出力がブロックバッファリングされ、数 KB 溜まるまで
 一行も表示されない。**動いているのに止まって見える。**
 
-**② 中断してサーバーログを見る。**
+**③ 中断してサーバーログを見る。**
 評価セルを止めても、`finally` でサーバーが終了し、ログは残る。
 
 ```python
@@ -983,6 +1026,59 @@ for key in ("mean_avg_cartesian_jerk", "mean_rms_cartesian_jerk", "mean_sparc",
 **信頼区間を必ず見ること。** 20 エピソードで成功率 0.10 なら 95%CI は
 おおよそ [0.03, 0.30] で、0.20 との差は判定できない。
 **条件を比べるなら 1 条件あたり 80 エピソード以上**が要る。
+
+### 何にぶつかったのかを集計する
+
+上のセルは JSON を読むため、**評価が完走していないと動かない**。
+こちらはログを読むので、**途中で落ちた回でも、そこまでの分を集計できる。**
+B-2 のパッチが出す `[結果]` 行が入力である。
+
+```python
+# === ログから衝突の中身を集計する ===
+# eval_result の JSON には「衝突したか」しか入らない。何にぶつかったのかは
+# B-2 のパッチが出すログ行にしかない。衝突が損失の大半を占めるため、
+# 対象物が分からないと次の手が決まらない。
+import re
+from collections import Counter
+
+lines = [l for l in EVAL_LOG.read_text(encoding="utf-8").splitlines() if "[結果]" in l]
+if not lines:
+    raise RuntimeError("[結果] 行がありません。B-2 のパッチを当てずに回しています")
+
+outcomes = Counter()
+objects = Counter()
+by_task = {}
+
+for line in lines:
+    task = re.search(r"\[結果\] (\S+) ep(\d+): (\S+)", line)
+    if not task:
+        continue
+    name, _, outcome = task.groups()
+    outcomes[outcome] += 1
+    slot = by_task.setdefault(name, Counter())
+    slot[outcome] += 1
+    for obj, mm in re.findall(r"(\w+)=([\d.]+)mm", line):
+        objects[obj] += 1
+
+total = sum(outcomes.values())
+print(f"{total} エピソード分の記録")
+for outcome, count in outcomes.most_common():
+    print(f"  {outcome:6s} {count:3d}  ({count / total:.1%})")
+
+print("\nぶつけた物体（衝突エピソード数）")
+for obj, count in objects.most_common():
+    print(f"  {count:3d}  {obj}")
+
+print("\nタスク別")
+for name, slot in by_task.items():
+    detail = " ".join(f"{k} {v}" for k, v in slot.most_common())
+    print(f"  {name[:46]:46s} {detail}")
+```
+
+**同じ物体が繰り返し出るなら、そこが本丸である。** 例えば
+`wooden_cabinet` ばかりなら引き出しへ手を入れる動作の問題で、
+`basket` ばかりなら置く瞬間に縁へ触れている。前者は軌道を滑らかにしても
+直らないが、後者は `PARC_EMA_ALPHA` が効く見込みがある。
 
 ---
 
