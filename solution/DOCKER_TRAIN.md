@@ -90,26 +90,90 @@ docker run --gpus all --rm -it \
     python /workspace/train.py --resume
 ```
 
-最新のチェックポイントを数値順で選び、`--config_path` を組み立てて渡す。
-`load_training_state` が **step / optimizer / scheduler / RNG を全て復元**するため、
-学習率スケジュールもそのまま続く。
+最新のチェックポイントを数値順で選び、**最小限の引数だけ**渡す。
 
-> **`--policy.path` と `--resume` は排他である。** `_resolve_pretrained_from_cli()` が
-> policy path を優先するため、両方渡すと再開が黙って無視される。
-> `train.py` は再開時に `--policy.path` を付けない。
+```
+lerobot-train
+--resume=true
+--config_path=/out/<run-name>/checkpoints/009000/pretrained_model/train_config.json
+--output_dir=/out/<run-name>
+--batch_size=8 --num_workers=4 --persistent_workers=true --save_freq=500
+```
+
+**再開時に学習条件を渡し直してはいけない。** 条件はチェックポイントの
+`train_config.json` から復元される。重ねて渡すと元の条件を上書きしてしまう。
+
+| 引数 | 再開時に渡すか | 理由 |
+|---|---|---|
+| `--policy.*` | **渡さない** | `--policy.path` は `_resolve_pretrained_from_cli()` が優先するため、渡すと**再開が黙って無視される** |
+| `--dataset.*` | **渡さない** | エピソードの選択も画像拡張も config に入っている |
+| `--steps` | **渡さない** | 学習率は `scheduler_decay_steps` で決まる。変えるとスケジュールが途中で別物になる |
+| `--output_dir` | **必ず渡す** | config には**元の環境のパス**（Colab なら `/content/outputs/...`）が入っている |
+| `--batch_size` / `--num_workers` / `--save_freq` | 渡してよい | 学習条件を壊さない |
 
 ### Colab で作ったチェックポイントから続ける
 
-Drive の `train/checkpoints/` をホストへ持ってきて、同じ構造に置けばよい。
+**必要なのは 2 つのディレクトリで、両方揃っていないと再開できない。**
+
+```
+work/train/<run-name>/checkpoints/009000/
+├── pretrained_model/
+│   ├── config.json                                      … 方策の設定
+│   ├── adapter_model.safetensors                        … LoRA の重み
+│   ├── train_config.json                                … 学習条件（--config_path が指す先）
+│   ├── policy_preprocessor.json / *.safetensors         … 前処理
+│   └── policy_postprocessor.json / *.safetensors        … 後処理
+└── training_state/
+    ├── optimizer_state.safetensors                      … 最適化器
+    ├── optimizer_param_groups.json
+    ├── scheduler_state.json                             … 学習率スケジュール
+    ├── rng_state.safetensors                            … 乱数
+    └── training_step.json                               … **何ステップ目か**
+```
+
+Drive から丸ごと持ってくればよい。
 
 ```bash
 mkdir -p work/train/smolvla_lora_all_suites
-cp -r <Drive>/parc2026/<RUN_NAME>/train/checkpoints work/train/smolvla_lora_all_suites/
-# 以降は --resume で続く
+cp -r "<Drive>/parc2026/260809_smolvla_lora_multiple_suites_001/train/checkpoints" \
+      work/train/smolvla_lora_all_suites/
+
+# 中身の確認。両方あることを必ず見る
+ls work/train/smolvla_lora_all_suites/checkpoints/009000/
 ```
 
-**ただし `--steps` を Colab のときと同じ値にすること。** 学習率は
-`scheduler_decay_steps` で決まるので、ここがずれるとスケジュールが変わる。
+**ディレクトリ名はゼロ埋め 6 桁である**（桁数は `max(6, len(str(steps)))`）。
+`--steps 20000` なら `009000` になる。Colab で作られたものをそのまま使えばよい。
+
+#### ステップ数をコードに伝える必要は無い
+
+`load_training_state` が `training_state/training_step.json` から読む。
+`train.py` はチェックポイントのディレクトリを数値順に並べて最新を選ぶだけで、
+何ステップ目かは一切渡していない。
+
+```python
+def load_training_step(save_dir: Path) -> int:
+    training_step = load_json(save_dir / TRAINING_STEP)
+    return training_step["step"]
+```
+
+**`training_state/` を持ってこないと、ここで `NotADirectoryError` になる。**
+`pretrained_model/` だけコピーすると、再開ではなく「そのチェックポイントを
+初期重みとして最初から学習」に近い状態になってしまうため、必ず両方入れる。
+
+#### バッチサイズを変えても構わない
+
+Colab では VRAM の都合で小さくしていたはずだが、GPU マシンでは上げてよい。
+チェックポイントには当時のバッチサイズが記録されており、食い違うと警告が出るが
+**エポックとオフセットは正しく復元される**。
+
+```
+Resuming with batch_size=8 but the checkpoint was written with batch_size=4.
+The data order resumes at the right epoch/offset, but per-rank sample-exactness
+requires the same batch size.
+```
+
+サンプル単位で完全に同じ順序にはならない、というだけの話である。
 
 ## 3. マージする
 

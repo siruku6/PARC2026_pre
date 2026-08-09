@@ -197,20 +197,49 @@ def _find_resume_checkpoint(output_dir: Path) -> Path | None:
     return checkpoints[-1] if checkpoints else None
 
 
+def _build_resume_command(
+    args: argparse.Namespace, output_dir: Path, resume_from: Path
+) -> list[str]:
+    """再開用の引数を組み立てる。**最小限しか渡さない。**
+
+    再開時は学習条件がチェックポイントの `train_config.json` から復元される。
+    ここで `--policy.*` や `--dataset.*` を重ねて渡すと、元の条件を上書きして
+    しまう。特に `--policy.path` は `_resolve_pretrained_from_cli()` が
+    優先するため、渡すと再開そのものが黙って無視される。
+
+    例外は `--output_dir` である。チェックポイントの config には**元の環境の
+    パス**（Colab なら `/content/outputs/...`）が入っているため、明示的に
+    上書きしないと存在しない場所へ書こうとする。
+
+    バッチサイズとワーカー数は学習条件を壊さないので渡してよい。
+    バッチサイズを変えるとデータ順の再現性は落ちるが、LeRobot は警告を出すだけで
+    エポックとオフセットは正しく復元する。
+
+    `--steps` は渡さない。学習率は `scheduler_decay_steps` で決まっており、
+    ここを変えるとスケジュールが途中で別物になる。
+    """
+    return [
+        "lerobot-train",
+        "--resume=true",
+        f"--config_path={resume_from / 'pretrained_model' / 'train_config.json'}",
+        f"--output_dir={output_dir}",
+        f"--batch_size={args.batch_size}",
+        f"--num_workers={args.num_workers}",
+        f"--persistent_workers={'true' if args.num_workers > 0 else 'false'}",
+        f"--save_freq={args.save_freq}",
+    ]
+
+
 def _build_command(
     args: argparse.Namespace,
     base_model: Path,
     episode_indices: list[int],
     output_dir: Path,
-    resume_from: Path | None,
 ) -> list[str]:
-    """lerobot-train へ渡す引数を組み立てる。
-
-    `--policy.path` と `--resume` は排他である。`_resolve_pretrained_from_cli()` が
-    policy path を優先するため、両方渡すと再開が黙って無視される。
-    """
+    """最初から学習するときの引数を組み立てる。"""
     command = [
         "lerobot-train",
+        f"--policy.path={base_model}",
         f"--policy.vlm_model_name={_VLM_REPO}",
         "--policy.push_to_hub=false",
         "--policy.repo_id=null",
@@ -250,12 +279,6 @@ def _build_command(
     if not args.no_image_transforms:
         command.append("--dataset.image_transforms.enable=true")
 
-    if resume_from is not None:
-        command.append("--resume=true")
-        command.append(f"--config_path={resume_from / 'pretrained_model' / 'train_config.json'}")
-    else:
-        command.append(f"--policy.path={base_model}")
-
     return command
 
 
@@ -270,28 +293,34 @@ def main() -> None:
     resume_from = _find_resume_checkpoint(output_dir) if args.resume else None
     if args.resume and resume_from is None:
         print("[train] 再開できるチェックポイントが無いため、最初から学習する")
-    elif resume_from is not None:
-        print(f"[train] 再開: {resume_from.name}")
 
-    print("[train] 初期重みを取得")
-    base_model = Path(snapshot_download(
-        _BASE_MODEL_REPO, revision=_BASE_MODEL_REVISION, ignore_patterns=["eval/*", "eval/**"],
-    ))
+    if resume_from is not None:
+        # 再開時は学習条件をチェックポイントから復元する。エピソードの選び直しも
+        # 初期重みの取得も要らない。ステップ数は training_state から読まれる。
+        print(f"[train] 再開: {resume_from.name}（step は training_state から復元される）")
+        command = _build_resume_command(args, output_dir, resume_from)
+        print(f"[train] 学習を再開（batch {args.batch_size}）")
+    else:
+        print("[train] 初期重みを取得")
+        base_model = Path(snapshot_download(
+            _BASE_MODEL_REPO, revision=_BASE_MODEL_REVISION,
+            ignore_patterns=["eval/*", "eval/**"],
+        ))
 
-    print("[train] データセットのメタデータを取得")
-    dataset_root = Path(snapshot_download(
-        _DATASET_REPO, revision=_DATASET_REVISION, repo_type="dataset",
-        allow_patterns=["meta/**"],
-    ))
+        print("[train] データセットのメタデータを取得")
+        dataset_root = Path(snapshot_download(
+            _DATASET_REPO, revision=_DATASET_REVISION, repo_type="dataset",
+            allow_patterns=["meta/**"],
+        ))
 
-    episode_indices = _select_episodes(dataset_root, args.episodes_per_task)
-    (output_dir / "episodes.json").write_text(
-        json.dumps({"episodes": episode_indices, "per_task": args.episodes_per_task}),
-        encoding="utf-8",
-    )
+        episode_indices = _select_episodes(dataset_root, args.episodes_per_task)
+        (output_dir / "episodes.json").write_text(
+            json.dumps({"episodes": episode_indices, "per_task": args.episodes_per_task}),
+            encoding="utf-8",
+        )
 
-    command = _build_command(args, base_model, episode_indices, output_dir, resume_from)
-    print(f"[train] 学習を開始（{args.steps} ステップ、batch {args.batch_size}）")
+        command = _build_command(args, base_model, episode_indices, output_dir)
+        print(f"[train] 学習を開始（{args.steps} ステップ、batch {args.batch_size}）")
 
     process = subprocess.run(command)
     sys.exit(process.returncode)
