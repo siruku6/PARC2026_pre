@@ -523,6 +523,10 @@ def serialize_obs(observation: dict) -> bytes:
         for key, value in observation.items()
     }, use_bin_type=True)
 
+# 配置セルの版によっては SUBMISSION_DIR が無い。その場合は /content を使う。
+SUBMISSION_DIR = globals().get("SUBMISSION_DIR", Path("/content"))
+SERVER = globals().get("SERVER", Path("/content/policy_server.py"))
+
 server_env = dict(os.environ)
 server_env.update({"HF_HUB_OFFLINE": "0", "TRANSFORMERS_OFFLINE": "0",
                    "CUDA_VISIBLE_DEVICES": "0", "PYTHONPATH": str(LEROBOT_SRC)})
@@ -577,13 +581,72 @@ if render_ms is not None:
 | **`act[0]`** | 0.5〜1.5 秒 | 5 秒以上 | **CPU で推論している** |
 | `act[1]` `act[2]` | ほぼ 0 秒 | 大きい | chunk のキャッシュが効いていない |
 
-#### `env.step` が遅いとき（osmesa に落ちている）
+#### `env.step` が遅いとき（400 ms 前後）
 
-`eval_env` に `MUJOCO_GL: "egl"` が入っているかを確認する。入っているのに
-遅い場合は `libEGL` が見えていない。セル A の確認に戻る。
+**Colab で最初に疑うのはここである。** EGL は「初期化に成功したが
+ソフトウェア実装に落ちた」という壊れ方をする。**例外は出ない。**
 
-**どうしても EGL が効かない場合は `N_EPISODES` を 5 に下げる**（4 タスク × 5 =
-20 エピソード、約 1 時間）。統計的な力は落ちるが、測れないよりはるかによい。
+原因は **NVIDIA の EGL ベンダ設定ファイルが無い**ことである。
+`apt-get install libegl1` が入れるのは**ローダ**（libglvnd）だけで、
+どのベンダ実装を使うかは `/usr/share/glvnd/egl_vendor.d/` の JSON が決める。
+ここに NVIDIA の登録が無いと、ローダは Mesa のソフトウェア EGL を掴む。
+
+```python
+# === EGL が NVIDIA の実装を掴んでいるか確認して、必要なら直す ===
+import os, subprocess
+from pathlib import Path
+
+icd = Path("/usr/share/glvnd/egl_vendor.d/10_nvidia.json")
+print("ベンダ設定:", sorted(p.name for p in Path("/usr/share/glvnd/egl_vendor.d").glob("*.json"))
+      if Path("/usr/share/glvnd/egl_vendor.d").is_dir() else "(ディレクトリが無い)")
+
+if not icd.is_file():
+    icd.parent.mkdir(parents=True, exist_ok=True)
+    icd.write_text(
+        '{\n'
+        '    "file_format_version" : "1.0.0",\n'
+        '    "ICD" : {\n'
+        '        "library_path" : "libEGL_nvidia.so.0"\n'
+        '    }\n'
+        '}\n'
+    )
+    print(f"{icd} を作成した")
+else:
+    print(f"{icd} は既にある")
+
+# robosuite がどの実装を選んだかを確かめる
+probe = '''
+import os
+print("MUJOCO_GL =", os.environ.get("MUJOCO_GL"))
+import robosuite.utils.binding_utils as binding
+print("GLContext =", binding.GLContext.__module__)
+'''
+result = subprocess.run([f"{KIT_DIR}/venv/bin/python", "-c", probe],
+                        cwd=str(KIT_DIR), env=eval_env, capture_output=True, text=True)
+print(result.stdout or result.stderr[-1500:])
+```
+
+`GLContext = robosuite.renderers.context.egl_context` になっていれば、
+robosuite としては EGL を選んでいる。**それでも遅いならベンダ設定の問題**である。
+上のセルで JSON を作ったあと、`env.step` の計測をやり直す。
+
+| 直したあとの `env.step` | 判断 |
+|---|---|
+| 40〜60 ms | **解決。** 80 エピソードが 45 分になる |
+| 400 ms 前後のまま | ソフトウェア実装のまま。下の妥協案へ |
+
+#### どうしても EGL が効かないとき
+
+`N_EPISODES` を下げて測る。**測れないよりはるかによい。**
+
+| `N_EPISODES` | 総エピソード | 所要（431 ms/step のとき） | 成功率 10% の 95%CI |
+|---|---|---|---|
+| 20 | 80 | 5.8 時間 | [0.05, 0.19] |
+| **5** | **20** | **1.4 時間** | [0.03, 0.30] |
+| 3 | 12 | 52 分 | [0.02, 0.40] |
+
+信頼区間は広がるが、**素の重みと追加学習後で大きな差があれば 20 エピソードでも見える**。
+細かい掃引（`n_action_steps` の 25 と 10 の比較など）は EGL が直ってからにする。
 
 #### `act[0]` が遅いとき（CPU で推論している）
 
