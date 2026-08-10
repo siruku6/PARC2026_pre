@@ -214,6 +214,40 @@ def _resolve_init_state_stem(
     return None
 
 
+def _place_variant(
+    task_id: str,
+    suite: str,
+    bddl_root: Path,
+    stems_by_suite: dict[str, list[str]],
+) -> tuple[str, Path, str] | None:
+    """変種の bddl と初期状態がそろって存在する置き場を決める。
+
+    `register.py` は `problem_folder` **1 つ**で bddl と初期状態の両方を探す
+    （`bddl_files/<folder>/<task_id>.bddl` と
+    `init_files/<folder>/<init_states_file>`）。したがって
+    **両方が同じ置き場にそろっていなければ、評価の開始直後に落ちる。**
+
+    分類表のスイート名を最初に試し、外れたら他の置き場も見る。LIBERO-plus は
+    `libero_mix` や `libero_newobj` のように分類表のスイート名と一致しない
+    ディレクトリを持つため、名前だけで決め打ちできない。
+
+    Returns
+    -------
+    placed : tuple[str, Path, str] | None
+        (置き場の名前, bddl のパス, 初期状態ファイルの名前（拡張子なし）)。
+        そろう置き場が無ければ None。
+    """
+    candidates = [suite] + [name for name in stems_by_suite if name != suite]
+    for folder in candidates:
+        bddl = bddl_root / folder / f"{task_id}.bddl"
+        if not bddl.is_file():
+            continue
+        stem = _resolve_init_state_stem(task_id, folder, stems_by_suite)
+        if stem is not None:
+            return folder, bddl, stem
+    return None
+
+
 def _load_excluded(path: Path) -> set[str]:
     """example のタスク ID を読む。検証用スイートから外すため。"""
     if not path.is_file():
@@ -451,6 +485,18 @@ def main() -> None:
     _report(rows, skipped)
     print(f"\n書き出した: {args.output}")
     print(f"1 タスクあたり 1 エピソードなら計 {len(rows)} エピソード")
+
+    # **カテゴリ別の本数を最後に置く。** ノートブックは成功時に末尾しか
+    # 表示しないため、いちばん大事な行が流れて消えることを防ぐ。
+    suites = len({row["suite"] for row in rows})
+    empty = _report_coverage(rows, args.categories, args.per_cell, suites)
+    if empty:
+        print(
+            f"\n**警告: {len(empty)} カテゴリが全滅している。**\n"
+            f"  {empty}\n"
+            "  この状態で測ると、そのカテゴリの弱さは**見えない**。\n"
+            "  上の「落としたもの」の理由を見て、置き場の対応を直すこと。"
+        )
 
 
 if __name__ == "__main__":
