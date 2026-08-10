@@ -49,6 +49,7 @@ ARG TORCH_INDEX=https://download.pytorch.org/whl/cu128
 # ノートブックが Colab のプリインストール版で動いていたのも同じ対である。
 ARG TORCH_VERSION=2.11.0
 ARG TORCHCODEC_VERSION=0.11.1
+ARG TORCHVISION_VERSION=0.26.0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git build-essential ca-certificates ffmpeg \
@@ -70,6 +71,44 @@ RUN pip install --no-cache-dir "torch==${TORCH_VERSION}" --index-url ${TORCH_IND
 # 触られない。あとから入れると <0.12.0 の最新が選ばれ、対が崩れる。
 RUN pip install --no-cache-dir "torchcodec==${TORCHCODEC_VERSION}" --index-url ${TORCH_INDEX}
 
+# torchcodec 0.11.x はコアの .so が CUDA の NPP（画像・色空間変換）ライブラリに
+# 直接リンクされている。GPU デコードを使わない呼び出しでも import 時に読み込まれる
+# ため、無いと "libnppicc.so.12: cannot open shared object file" で落ちる。
+# https://github.com/meta-pytorch/torchcodec/issues/1323
+#
+# torch の cu128 wheel が連れてくる nvidia-*-cu12 群には NPP が含まれない
+# （torch 自体は NPP を使わないため）。torchcodec もこれを依存として宣言しない
+# （上の注記のとおり）ので、明示的に入れる。
+# TORCH_INDEX（pytorch のミラー）には無いパッケージなので、素の PyPI から取る
+# ＝ --index-url は付けない。
+#
+# **pip install するだけでは足りない。** libnvrtc など torch が使う CUDA ライブラリは
+# torch 自身が import 時に site-packages/nvidia/*/lib を明示的に preload する
+# （torch/cuda/__init__.py の固定リストに載っている）ため動的リンカが見つけられるが、
+# NPP はそのリストに無い。site-packages 配下に .so を置くだけでは動的リンカの探索先に
+# 入らないので、ldconfig に directory を教えて明示的に登録する。
+# ここで `ldconfig -p | grep` に失敗させておけば、登録漏れをビルド時に検出できる。
+RUN pip install --no-cache-dir "nvidia-npp-cu12" \
+    && NPP_SO="$(find /usr/local/lib/python3.12/site-packages/nvidia \
+            -name 'libnppicc.so*' -print -quit)" \
+    && test -n "$NPP_SO" \
+    && dirname "$NPP_SO" > /etc/ld.so.conf.d/nvidia-npp.conf \
+    && ldconfig \
+    && ldconfig -p | grep -q libnppicc.so.12
+
+# **torchvision も torch と対で決まる**（LeRobot の transforms が
+# `torchvision.transforms.v2` を使うため必須）。ここで固定せずに lerobot の
+# editable install に任せると、torchvision は `--index-url` の付かない素の
+# PyPI から解決される。PyPI の torchvision は torch 2.11.0+cu128 とは別の
+# ビルドのため、ABI が合わず import 時点で落ちる。2026-08-10 に実際に落ちた。
+#
+#   RuntimeError: operator torchvision::nms does not exist
+#
+# 対応表（https://github.com/pytorch/vision#readme）で torch 2.11 は
+# torchvision 0.26 と対になっている。torch/torchcodec と同じ理由で、
+# 同じ index から先に入れておく。
+RUN pip install --no-cache-dir "torchvision==${TORCHVISION_VERSION}" --index-url ${TORCH_INDEX}
+
 # 学習用ノートブックと同じタグ・同じ extras。ここを変えると重みの互換性が崩れる。
 # training は dataset を含むため、dataset を重ねて書く必要はない。
 ARG LEROBOT_TAG=v0.6.0
@@ -85,12 +124,18 @@ RUN git clone --quiet --depth 1 --branch ${LEROBOT_TAG} \
 # **入ってさえいれば壊れていても「使える」と答える。** ここで止めないと、
 # 学習データ 6.4 GB を落としきったあとにデコードで落ちる。
 RUN python -c "\
-import torch, torchcodec; \
+import torch, torchcodec, torchvision; \
 from torchcodec.decoders import VideoDecoder; \
-print(f'torch {torch.__version__} / torchcodec {torchcodec.__version__} 整合')"
+torchvision.ops.nms; \
+print(f'torch {torch.__version__} / torchcodec {torchcodec.__version__} '\
+      f'/ torchvision {torchvision.__version__} 整合')"
 
 WORKDIR /workspace
-COPY train.py /workspace/train.py
+# **学習とマージの両方を入れる。** マージ（LoRA を初期重みへ畳み込む）は同じ
+# LeRobot / peft / torch の組み合わせを要求するので、イメージを分けない。
+# 片方だけ COPY すると、学習が終わったあとに
+# "can't open file '/workspace/merge.py'" で止まる。
+COPY train.py merge.py /workspace/
 
 # 既定の出力先。ホストのディレクトリをここへマウントする。
 VOLUME ["/out"]

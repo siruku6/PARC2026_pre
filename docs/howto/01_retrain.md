@@ -87,7 +87,7 @@ docker build -t parc2026-train solution/train
 最後にこの行が出れば成功である。
 
 ```
-torch 2.11.0+cu128 / torchcodec 0.11.1 整合
+torch 2.11.0+cu128 / torchcodec 0.11.1 / torchvision 0.26.0+cu128 整合
 ```
 
 ホストのドライバが cu128 に対応していなければ index を変える。
@@ -257,6 +257,37 @@ ls work/train/smolvla_lora_all_suites/checkpoints/009000/
 `pretrained_model/` だけコピーすると、再開ではなく「そのチェックポイントを
 初期重みとして最初から学習」に近い状態になってしまう。
 
+### 初期重みの置き場所は train.py が直す
+
+LoRA のアダプタは「どの重みへの差分か」を**絶対パスで**覚えている。Colab で作った
+チェックポイントには Colab の置き場（`/content/hf_cache/...`）が入っており、
+コンテナ側（`/root/.cache/huggingface`）では存在しない場所になる。
+
+LeRobot はこの値を初期重みの指定としてそのまま使い、**場所として存在しなければ
+HF のリポジトリ名として解釈する。** 直さないとこう落ちる。
+
+```
+HFValidationError: Repo id must be in the form 'repo_name' or 'namespace/repo_name':
+'/content/hf_cache/hub/models--lerobot--smolvla_libero_plus/snapshots/7bb70aa...'
+```
+
+`train.py` が `--resume` のときに `adapter_config.json` の
+`base_model_name_or_path` を見て、存在しなければ**この環境での置き場所へ
+書き換える。** 何を書き換えたかは出力に出る。
+
+```
+[train] 初期重みの場所を書き換えた（adapter_config.json）
+[train]   前: /content/hf_cache/hub/models--lerobot--smolvla_libero_plus/snapshots/7bb70aa...
+[train]   後: /root/.cache/huggingface/hub/models--lerobot--smolvla_libero_plus/snapshots/7bb70aa...
+```
+
+**モデルは同じもので、変わるのは場所の文字列だけである**（revision
+`7bb70aa5bc92b82c9239142775d3a173103567ff` を指定して取り直している）。
+別のモデルを指していた場合は書き換えずに止まる。
+
+`config.json` と `train_config.json` にも同じパスが入っているが、こちらは
+再開時に LeRobot がチェックポイント自身のパスで上書きするため読まれない。
+
 ### ステップ数をコードに伝える必要は無い
 
 `load_training_state` が `training_state/training_step.json` から読む。
@@ -290,6 +321,20 @@ docker run --rm -it \
 **GPU は不要**なので `--gpus` は付けなくてよい。`--step` を省略すると最新を使う。
 
 出力は `work/train/<run-name>/merged_model/` である。
+
+**`merged_model/config.json` の `n_action_steps` は 50 のままだが、直さなくてよい。**
+提出物側が重みを読んだあとに 5 で上書きする。なぜ学習後に変えて構うのか、逆に
+`chunk_size` を触ってはいけないのかは
+[../reference/03_chunk_params.md](../reference/03_chunk_params.md) にある。
+
+> **出力はコンテナの root が書く。** そのままではホストのユーザーから読めないので、
+> 次へ進む前に持ち主を移す。
+>
+> ```bash
+> sudo chown -R "$USER:$USER" work/train/<run-name>/merged_model
+> chmod -R u+rw,go+r work/train/<run-name>/merged_model
+> ```
+
 **ここまで来たら [02_build_submission.md](02_build_submission.md) へ進む。**
 
 ---
@@ -331,7 +376,11 @@ docker run --rm -it \
 | 症状 | 原因 | 対処 |
 |---|---|---|
 | データを落としきったあと `undefined symbol` で落ちる | torch と torchcodec の版が対になっていない | A-1 のイメージを作り直す。それでも駄目なら `--video-backend pyav` |
+| `RuntimeError: operator torchvision::nms does not exist` | torch と torchvision の版が対になっていない | A-1 のイメージを作り直す（Dockerfile で torchvision を torch と同じ index から固定済み） |
 | `--resume` したのに step 0 から始まる | `--policy.path` を渡している | A-3 の表のとおり、最小限の引数だけにする |
 | `NotADirectoryError` | `training_state/` が無い | A-4 のとおり両方コピーする |
+| `HFValidationError: Repo id must be in the form ...` で `/content/hf_cache/...` が出る | Colab の置き場所がアダプタに焼き付いている | `train.py` が `--resume` で直す（A-4 の「初期重みの置き場所は train.py が直す」）。古い train.py なら入れ替える |
 | 毎回 6.4 GB を落とし直す | HF キャッシュをマウントしていない | `-v "$HOME/.cache/huggingface:/root/.cache/huggingface"` |
 | 学習は終わったのに推論で使えない | マージしていない | A-5 を実行する |
+| `can't open file '/workspace/merge.py'` | イメージが `train.py` しか持っていない古いもの | A-1 でイメージを作り直す（`COPY train.py merge.py` に修正済み。`COPY` は最後の行なのでキャッシュが効いて数秒で終わる） |
+| `merged_model/` を読もうとして `PermissionError` | コンテナの root が書いたファイルの持ち主がホストのユーザーと違う | A-5 の `chown` を実行する |
