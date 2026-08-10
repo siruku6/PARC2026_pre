@@ -590,6 +590,15 @@ POLICY_ENV = {
     # "PARC_SAMPLES": "3",           # 既定 1（無効）。chunk を引く本数
 }
 
+# ロールアウトを mp4 に撮るか。**None なら撮らない。**
+# 撮るのは採点ハーネス側（キットの pipeline/rollout.py）なので、
+# POLICY_ENV ではなく下の eval_env に入る。**提出物とは無関係である。**
+#
+# **既定では失敗した回だけ残る。** 84 件回しても成功した回は書き出さない。
+# 上乗せは 1 歩 0.33 ms（env.step 39 ms の 0.8%）で、90 分の測定なら +3 分。
+RECORD_DIR = "/content/videos"      # 撮らないなら None
+RECORD_WHICH = "failures"           # "all" にすると成功も撮る
+
 import os, subprocess, sys, time, urllib.request, json
 from pathlib import Path
 
@@ -614,13 +623,27 @@ eval_env.update({
     "LIBERO_ROOT": f"{KIT_DIR}/LIBERO-plus",
 })
 
+# --- 録画（評価パイプライン側に渡す）---
+if RECORD_DIR:
+    eval_env["PARC_RECORD_DIR"] = RECORD_DIR
+    eval_env["PARC_RECORD_WHICH"] = RECORD_WHICH
+    # 上限。84 件で失敗が多いと本数が伸びるので、既定の 40 より広く取る。
+    eval_env["PARC_RECORD_MAX"] = "60"
+
 for name in ("KIT_DIR", "LEROBOT_SRC", "SUBMISSION_DIR", "SERVER", "WEIGHTS_DIR"):
     assert name in globals(), f"{name} が未定義です。セル A〜D を順に実行してください"
 
 print(f"設定: {N_EPISODES} エピソード/タスク, 後処理 {POLICY_ENV or '既定'}")
 print(f"  サーバー: {SERVER}")
 print(f"  キット  : {KIT_DIR}")
+print(f"  録画    : {RECORD_DIR or '（撮らない）'}"
+      + (f"  which={RECORD_WHICH}" if RECORD_DIR else ""))
 ```
+
+> **録画はキットにパッチが当たっていないと動かない。** セル B で
+> `patch_kit_for_variants.py` を流していれば当たっている（`rollout_recorder.py`
+> の複製もそこで行われる）。当たっていなければ**何も起きないだけ**で、
+> 評価は普通に走る。
 
 ### E-2. 先に遅さの原因を切り分ける（3 分・初回のみ）
 
@@ -1164,6 +1187,31 @@ if EVAL_LOG:
             print(f"  {name[:46]:46s} "
                   + " ".join(f"{k} {v}" for k, v in slot.most_common()))
 
+# --- 2.5 撮れた動画を並べる -------------------------------------------
+# **見るべき順に並べる。** 打ち切りに張り付いた回が先頭に来る。
+# コマ並べ画像も作るので、動画を再生する前に当たりを付けられる。
+VIDEO_DIR = Path(RECORD_DIR) if RECORD_DIR else None
+# 集計スクリプトは collect_colab_files.py が /content/ へ置いている。
+SUMMARIZE = Path("/content/summarize_rollout_videos.py")
+if VIDEO_DIR and VIDEO_DIR.is_dir() and any(VIDEO_DIR.glob("*.mp4")):
+    print()
+    if SUMMARIZE.is_file():
+        # キットの venv で回す。cv2 はそちらに入っている。
+        subprocess.run([f"{KIT_DIR}/venv/bin/python", str(SUMMARIZE), str(VIDEO_DIR)],
+                       check=False)
+    else:
+        print(f"**{SUMMARIZE} が無い。** 一覧だけ出す:")
+        for path in sorted(VIDEO_DIR.glob("*.mp4")):
+            print(f"  {path.stat().st_size / 1e3:8.0f} KB  {path.name}")
+elif RECORD_DIR:
+    print(f"\n**動画が 1 本も無い（{RECORD_DIR}）。**")
+    print("  失敗した回が無かったか、パッチが当たっていない。"
+          "eval ログに [録画] の行があるか見ること:")
+    if EVAL_LOG:
+        for line in EVAL_LOG.read_text(errors="replace").splitlines():
+            if "[録画]" in line:
+                print(f"    {line.strip()}")
+
 # --- 3. Drive へ退避 ---------------------------------------------------
 # **/content はランタイムが切れると消える。** 実際に一度失っている。
 # 退避に失敗しても集計はもう出ているので、例外で止めない。
@@ -1188,9 +1236,23 @@ try:
         if path and path.exists():
             shutil.copy(path, destination / path.name)
 
+    # **動画も一緒に退避する。** これを忘れると 90 分の測定の映像が
+    # ランタイム切断で消える。1 本 1 MB 程度なので 60 本でも 60 MB。
+    if VIDEO_DIR and VIDEO_DIR.is_dir():
+        videos = sorted(VIDEO_DIR.glob("*.mp4")) + sorted(VIDEO_DIR.glob("sheets/*.png"))
+        if videos:
+            video_destination = destination / "videos"
+            video_destination.mkdir(exist_ok=True)
+            for path in videos:
+                shutil.copy(path, video_destination / path.name)
+            print(f"  動画 {len(videos)} 件を {video_destination} へ")
+
     print(f"\n=== Drive へ退避した ===\n  {destination}")
     for path in sorted(destination.iterdir()):
-        print(f"  {path.stat().st_size / 1e3:8.0f} KB  {path.name}")
+        if path.is_dir():
+            print(f"  {'':8s}    {path.name}/  ({len(list(path.iterdir()))} 件)")
+        else:
+            print(f"  {path.stat().st_size / 1e3:8.0f} KB  {path.name}")
 except Exception as error:
     print(f"\n**Drive への退避に失敗した: {error}**")
     print("左のファイルペインから手動でダウンロードすること:")

@@ -26,6 +26,9 @@
 | `tools/collect_colab_files.py` | Colab へ上げるファイルを `work/colab_upload/` に集める |
 | `tools/export_claude_setup.sh` | Claude の方針と skill を別のマシンへ持ち出す（GPU マシン用） |
 | `tools/verify_merge.py` | マージ済みモデルを初期重みと比べ、**学習が反映されたか**を確かめる |
+| `tools/patch_kit_for_variants.py` | 配布キットを、変種で測れて結末と映像が残る状態に書き換える |
+| `tools/rollout_recorder.py` | ロールアウトを mp4 に撮る。**上のパッチがキットへ複製して使う** |
+| `tools/summarize_rollout_videos.py` | 撮れた mp4 を、見るべき順に並べてコマ並べ画像にする |
 
 `tools/` の Python スクリプトは**どのディレクトリから実行してもよい**。入出力は
 スクリプト自身の位置から求めたリポジトリルート基準で解決する。
@@ -267,6 +270,74 @@ PARC_BLEND_STEPS=3 bash solution/tools/run_local_eval.sh
 
 スコアは「ゲートを通ったエピソードだけが滑らかさで採点される」構造なので、
 **成功率を下げる設定は、滑らかさがどれだけ改善しても採用してはいけない。**
+
+## ロールアウトを動画で見る
+
+**数字では区別できないものを見るための手段である。** 本番の 8 本中 4 本が
+300 歩を使い切って届いていないが、成功率と衝突率だけでは
+**止まっているのか、往復しているのか、掴めずに空振りしているのか**が分からない。
+
+**録画するのは採点ハーネス側で、提出物には手を入れていない。**
+採点環境はファイルを返さないため（返るのは標準出力のログだけ）、提出物側に
+仕込んでも映像は持ち帰れない。撮れるのは手元と Colab で回した回である。
+
+```mermaid
+flowchart LR
+    R["tools/rollout_recorder.py"] -->|"patch_kit_for_variants.py が複製"| K["キット<br/>pipeline/rollout_recorder.py"]
+    P["patch_kit_for_variants.py"] -->|"3 か所へ呼び出しを差し込む"| Q["キット<br/>pipeline/rollout.py"]
+    Q --> M["*.mp4（失敗した回だけ）"]
+    M -->|"summarize_rollout_videos.py"| S["一覧＋コマ並べ画像"]
+```
+
+評価を回す側に環境変数を渡すだけで有効になる。**空なら完全に無効**なので、
+パッチは当てたままにしておいてよい。
+
+```bash
+PARC_RECORD_DIR=/out/videos bash solution/tools/run_local_eval.sh
+python3 solution/tools/summarize_rollout_videos.py /out/videos
+```
+
+| 変数 | 既定 | 意味 |
+|---|---|---|
+| `PARC_RECORD_DIR` | （空） | 出力先。**空なら録画しない** |
+| `PARC_RECORD_WHICH` | `failures` | `failures`＝失敗だけ／`all`＝全部 |
+| `PARC_RECORD_FPS` | `20` | `control_freq` が 20 なので既定で実時間 |
+| `PARC_RECORD_SCALE` | `3` | 128 px を何倍に伸ばすか（文字を読むため） |
+| `PARC_RECORD_MAX` | `40` | 本数の上限。ディスクの保険 |
+
+**映像に焼くもの。** 左に俯瞰（`front`）、右に手先（`wrist`）を並べ、
+**モデルへ渡るのと同じ向き**（180 度回転後）で書く。
+
+| 焼くもの | 読み方 |
+|---|---|
+| `123/300  grip CLOSE` | 何歩目か。グリッパは ±1 のバンバン制御なので**掴む瞬間が文字で分かる** |
+| `path 0.58m  disp 0.02m  grip x11` | 通った距離と、出発点からの直線距離。**食い違いが失敗の型を示す** |
+| `stalled` / `wandering` | 変位が 3 cm 未満のとき。経路長 0.5 m 超なら往復、未満なら静止 |
+| `TIMEOUT` / `COLLIDED` / `SUCCESS` | 最後の 1 秒だけ大きく出る。衝突ならぶつけた物体と距離も |
+
+> **映像の中の文字は ASCII に限っている。** キットが固定している
+> opencv-python-headless 4.11.0.86 の `putText` は Hershey フォントしか持たず、
+> 日本語を 1 文字ずつ `?` にする（実測で確認）。**ファイル名とログは
+> 日本語のまま**で、そちらは化けない。
+
+**費用は評価に相乗りさせて構わない水準である**（手元の実測）。
+
+| 測ったもの | 値 |
+|---|---|
+| 1 歩の上乗せ | **0.33 ms**（本番の `env.step` 39 ms に対して 0.8%） |
+| メモリの山 | 31 MB（300 歩・2 カメラ。等倍で貯めて書き出し時に拡大する） |
+| 書き出し | 1 エピソードにつき約 2 秒 |
+| 84 件を全部撮った場合 | 90 分の測定に **+2.9 分** |
+
+**録画が壊れても評価は続く。** `cv2` が無い、画像のキーが違う、書き込めない —
+どの場合も 1 度だけ警告を出して以降は諦める。**90 分の測定を録画のために
+落とさない。**
+
+配線だけを数分で確かめるなら、重みを使わずに済む。
+
+```bash
+RECORD=1 bash solution/tools/smoke_test_suite.sh   # 5 タスク・20 歩
+```
 
 ## 追加学習した重みへの差し替え・検証
 
