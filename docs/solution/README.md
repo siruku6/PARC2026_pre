@@ -25,6 +25,7 @@
 | `tools/check_validation_suite.py` | 上の一覧が本当に開けるかを、**評価を回す前に**確かめる |
 | `tools/collect_colab_files.py` | Colab へ上げるファイルを `work/colab_upload/` に集める |
 | `tools/export_claude_setup.sh` | Claude の方針と skill を別のマシンへ持ち出す（GPU マシン用） |
+| `tools/verify_merge.py` | マージ済みモデルを初期重みと比べ、**学習が反映されたか**を確かめる |
 
 `tools/` の Python スクリプトは**どのディレクトリから実行してもよい**。入出力は
 スクリプト自身の位置から求めたリポジトリルート基準で解決する。

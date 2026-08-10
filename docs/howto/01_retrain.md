@@ -105,6 +105,12 @@ flowchart TD
 | [../../solution/train/train.py](../../solution/train/train.py) | エピソードの選択 ＋ 学習の実行 |
 | [../../solution/train/merge.py](../../solution/train/merge.py) | LoRA を初期重みへ畳み込む |
 
+マージのあとに 1 つ走らせる（コンテナの外でよい）。
+
+| ファイル | 役割 |
+|---|---|
+| [../../solution/tools/verify_merge.py](../../solution/tools/verify_merge.py) | **畳み込みが本当に効いたか**を初期重みと比べて確かめる（A-6） |
+
 ## A-0. 前提を確かめる
 
 **コンテナに CUDA は入れない。** torch の wheel に同梱されたものを使うため、
@@ -331,6 +337,49 @@ docker run --rm -it \
 **GPU は不要**なので `--gpus` は付けなくてよい。`--step` を省略すると最新を使う。
 
 出力は `work/train/<run-name>/merged_model/` である。
+
+## A-6. マージが本当にできているか確かめる
+
+**`merge.py` の検査だけでは足りない。** あれは「LoRA が残っていないこと」しか
+見ていないので、**畳み込みに失敗して LoRA が消えただけの場合も通る。**
+極端に言えば**初期重みをそのまま出しても合格する。**
+
+初期重みと 1 テンソルずつ比べる。
+
+```bash
+python3 solution/tools/verify_merge.py work/train/smolvla_lora_all_suites/merged_model
+```
+
+通ればこう出る。
+
+```
+変化したテンソル 2 個のうち、大きい順に 2 件
+        相対変化         最大絶対差  テンソル名
+    1.29e-03      3.00e-03  model.layers.0.self_attn.q_proj.weight
+    4.44e-04      1.00e-03  model.layers.0.self_attn.v_proj.weight
+
+判定
+  変化したテンソル      2 個（LoRA の対象 2 / 対象外 0）
+  いちばん大きい相対変化 1.29e-03
+
+  正常。学習の成果が入っており、壊れてもいない。
+```
+
+見ているのは 4 つである。**どれか 1 つでも外れると終了コード 1 で止まる。**
+
+| 見るところ | 外れると何が起きていたか |
+|---|---|
+| **初期重みと 1 ビットでも違うか** | 違わなければ**学習の成果が入っていない**。チェックポイントを間違えている |
+| 変化量が小さすぎないか（相対 1e-5 未満） | 学習が数歩しか進んでいない、または別のチェックポイントを見ている |
+| 変化量が大きすぎないか（相対 1 超）・NaN や Inf | 重みが壊れている |
+| **変化が LoRA の対象**（`q_proj` `k_proj` `v_proj` `o_proj`）**に出ているか** | LoRA の当たり先が想定と違う |
+
+あわせて `config.json` の `use_peft` `pretrained_path` `load_vlm_weights` も見る。
+**`pretrained_path` が残っていると、提出物の側では解決できないパスになる。**
+
+初期重みは HuggingFace から取る（`model.safetensors` だけなので通信は 1 ファイル）。
+手元にあるなら `--base-model <ディレクトリ>` で渡せば通信しない。
+
 **ここまで来たら [02_build_submission.md](02_build_submission.md) へ進む。**
 
 ---
