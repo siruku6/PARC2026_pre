@@ -17,7 +17,7 @@
 | [howto/](howto/) | 手順書。上から順にやれば終わる形で書いてある |
 | [solution/](solution/) | 提出物と Colab の説明。コード本体は `../solution/` |
 | [strategy/](strategy/) | 何を狙うか、なぜそうするか。判断の材料 |
-| [reference/](reference/) | 調べて分かった事実（モデル・評価データ） |
+| [reference/](reference/) | 調べて分かった事実（モデル・評価データ・設定の意味） |
 | [prod_eval_results/](prod_eval_results/) | 本番採点の生ログと読み解き |
 
 ## よく開くファイル
