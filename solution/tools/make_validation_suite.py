@@ -214,6 +214,33 @@ def _resolve_init_state_stem(
     return None
 
 
+def _resolve_bddl(task_id: str, suite: str, bddl_root: Path) -> Path | None:
+    """変種の bddl を返す。**変種専用のファイルが無いのが普通である。**
+
+    LIBERO-plus の 10,030 変種のうち **6,287 件は自分の名前の bddl を持たない。**
+    カメラ視点・ロボット初期姿勢・観測ノイズの摂動は、bddl ではなく
+    **変種名そのものに数値として埋め込まれている**（`libero/libero/envs/
+    env_wrapper.py` の `_view_` / `_initstate_` / `_noise_` の解釈）。
+
+        ..._place_it_on_the_plate_view_0_0_100_2_352_initstate_0
+                                  └ 水平 0・垂直 0・倍率 1.00・端点回転 2・端点垂直 352
+                                                        └ ロボット初期姿勢 0
+
+    したがって bddl は `_view_` より前で探す。**ここを「ファイルが無い」として
+    落とすと、7 カテゴリのうち 4 つが丸ごと消える**（実際に起きた）。
+
+    Returns
+    -------
+    bddl : Path | None
+        実体のある bddl。見つからなければ None。
+    """
+    for stem in (task_id, task_id.split("_view_")[0]):
+        candidate = bddl_root / suite / f"{stem}.bddl"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def _place_variant(
     task_id: str,
     suite: str,
@@ -223,13 +250,8 @@ def _place_variant(
     """変種の bddl と初期状態がそろって存在する置き場を決める。
 
     `register.py` は `problem_folder` **1 つ**で bddl と初期状態の両方を探す
-    （`bddl_files/<folder>/<task_id>.bddl` と
-    `init_files/<folder>/<init_states_file>`）。したがって
-    **両方が同じ置き場にそろっていなければ、評価の開始直後に落ちる。**
-
-    分類表のスイート名を最初に試し、外れたら他の置き場も見る。LIBERO-plus は
-    `libero_mix` や `libero_newobj` のように分類表のスイート名と一致しない
-    ディレクトリを持つため、名前だけで決め打ちできない。
+    （`bddl_files/<folder>/<...>.bddl` と `init_files/<folder>/<init_states_file>`）。
+    したがって**両方が同じ置き場にそろっていなければ、評価の開始直後に落ちる。**
 
     Returns
     -------
@@ -239,8 +261,8 @@ def _place_variant(
     """
     candidates = [suite] + [name for name in stems_by_suite if name != suite]
     for folder in candidates:
-        bddl = bddl_root / folder / f"{task_id}.bddl"
-        if not bddl.is_file():
+        bddl = _resolve_bddl(task_id, folder, bddl_root)
+        if bddl is None:
             continue
         stem = _resolve_init_state_stem(task_id, folder, stems_by_suite)
         if stem is not None:
@@ -325,10 +347,11 @@ def _build_rows(
 ) -> tuple[list[dict], list[str]]:
     """CSV の行を作り、実体が無いものは落とす。
 
-    **評価パイプラインが実際に開くパスをそのまま確かめる。** bddl は
-    `<bddl_root>/<suite>/<task_id>.bddl` に無ければならない（`register.py` が
-    `problem_folder` にスイート名を入れるため）。別のスイートの下から
-    同名ファイルを拾ってしまうと、CSV は通るのに評価の開始直後に落ちる。
+    **`task_id` は一切書き換えずに CSV へ入れる。** 摂動の値は変種名そのものに
+    埋め込まれており、`env_wrapper.py` が `_view_` で切って解釈する。
+    ここで実体のある名前（`_view_` より前）に置き換えてしまうと、
+    **ファイルは開けるのに摂動がすべて無効になり、素のタスクを測ってしまう。**
+    `bddl` は存在確認と指示文の読み取りにだけ使う。
 
     Returns
     -------

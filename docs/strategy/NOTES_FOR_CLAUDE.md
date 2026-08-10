@@ -176,6 +176,42 @@ variant records `{"id", "name", "category", "difficulty_level"}`. **Variant reco
 `{"name": <the whole record>, "category": <suite name>}`, so every category filter matches
 nothing. This bug cost one Colab run.
 
+### 3.4 Most variants have NO bddl file of their own — the perturbation is in the name
+
+Verified by counting a local clone of LIBERO-plus: **6,287 of the 10,030 variants have no
+`<name>.bddl`.** Camera-viewpoint, robot-initial-state and sensor-noise perturbations are
+encoded **as numbers inside the variant name** and parsed at env-construction time by
+`libero/libero/envs/env_wrapper.py:207-233`:
+
+```
+..._place_it_on_the_plate_view_0_0_100_2_352_initstate_0_noise_3
+                          └ horizon, vertical, scale%, endpoint_rot, endpoint_vert
+                                              └ init_state (robot suffix)  └ noise
+```
+
+`env_wrapper` splits on `_view_` to find the real bddl, so the file only has to exist for
+the **base** task. Two consequences, both silent:
+
+- Treating "no `<name>.bddl`" as a skip **wipes out 4 of the 7 categories**. That is what
+  produced a 36-task suite (3 categories × 4 suites × 3) instead of 84.
+- Rewriting `task_id` to the resolved base name makes every file open **and disables every
+  perturbation** — you would measure the unperturbed task and never know. Pass `task_id`
+  through untouched; only use the resolved path to check existence and read `:language`.
+
+The split is clean: all 6,287 have both `_view_` and `_initstate_`, and all 3,743 without
+`_view_` do have a real bddl. No ambiguous cases.
+
+### 3.5 Upstream's own init-states resolution is buggy; use longest-prefix match
+
+`Benchmark.get_task_init_states` (LIBERO-plus) does `name.split("_table_")[0]`, which
+truncates `pick_up_the_black_bowl_from_table_center_...` to
+`pick_up_the_black_bowl_from` — a task that does not exist. 1,621 variants fail this way.
+Since init-states files exist **only for base tasks** (10 per suite), resolve by
+**longest-prefix match against the filenames that actually exist**, requiring the next
+character to be a separator. Verified: 0 of 10,030 unresolved.
+`solution/tools/make_validation_suite.py` does this and writes the answer to the CSV's
+`init_states_file` column; the H cell patches `register.py` to honour that column.
+
 ---
 
 ## 4. Traps when running things in this repo
