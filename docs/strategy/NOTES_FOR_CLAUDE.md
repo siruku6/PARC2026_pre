@@ -201,6 +201,28 @@ the **base** task. Two consequences, both silent:
 The split is clean: all 6,287 have both `_view_` and `_initstate_`, and all 3,743 without
 `_view_` do have a real bddl. No ambiguous cases.
 
+### 3.4b The distributed harness also opens the variant bddl — and does NOT strip `_view_`
+
+`env_wrapper` strips `_view_` only when **constructing the env**. The harness opens the bddl
+a second time, for collision detection, and that path is unstripped:
+
+```python
+bddl_path = suite.get_task_bddl_file_path(task_id)   # pipeline/environment.py:73
+...
+def parse_obj_of_interest(bddl_file):                # pipeline/environment.py:32
+    txt = Path(bddl_file).read_text()                # FileNotFoundError for _view_ variants
+```
+
+The exception propagates to `Pipeline.run`, which catches it per-track and writes
+`_errored_track_score` — so **the run ends with exit code 0 and looks healthy**. On
+2026-08-10 this stopped a supposed 84-task run after 3 tasks in 173 s. The H cell of
+`docs/solution/COLAB_EVAL.md` patches `parse_obj_of_interest` with the same `_view_` rule.
+
+**Verify before spending an hour on a run:** `solution/tools/check_validation_suite.py`
+rebuilds all three paths (env bddl, collision bddl, init states) exactly as the harness
+does and names the first row that fails. It reproduces the 48-row/4-category failure
+without `--patched` and passes 84/84 with it.
+
 ### 3.5 Upstream's own init-states resolution is buggy; use longest-prefix match
 
 `Benchmark.get_task_init_states` (LIBERO-plus) does `name.split("_table_")[0]`, which

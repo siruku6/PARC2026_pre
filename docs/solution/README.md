@@ -22,6 +22,7 @@
 | `tools/digest_submission.py` | 提出物の内容ダイジェスト。環境間の同期確認に使う |
 | `tools/run_local_eval.sh` | 配布キットの評価パイプラインを提出物に対して回す（コンテナ内） |
 | `tools/make_validation_suite.py` | example 以外のタスクで測るための一覧を作る（Colab へ上げる） |
+| `tools/check_validation_suite.py` | 上の一覧が本当に開けるかを、**評価を回す前に**確かめる |
 | `tools/collect_colab_files.py` | Colab へ上げるファイルを `work/colab_upload/` に集める |
 | `tools/export_claude_setup.sh` | Claude の方針と skill を別のマシンへ持ち出す（GPU マシン用） |
 

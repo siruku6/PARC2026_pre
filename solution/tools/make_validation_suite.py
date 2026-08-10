@@ -321,10 +321,26 @@ def _select(
             continue
         cells.setdefault((entry["suite"], entry["category"]), []).append(entry)
 
+    picked = {
+        key: _spread(sorted(cells[key], key=lambda item: item["name"]), per_cell)
+        for key in sorted(cells)
+    }
+
+    # **カテゴリを 1 件ずつ順番に取り出して並べる。**
+    # 評価パイプラインの `--max-tasks N` は先頭 N 件を取るだけなので
+    # （`pipeline.py` の `task_infos[:max_tasks]`）、セル単位に固めて並べると
+    # 「5 件だけ試す」が 1 カテゴリしか踏まない。**疎通確認の意味が薄れる。**
+    # カテゴリを巡回させておけば、先頭 7 件で 7 カテゴリ全部に当たる。
+    by_category: dict[str, list[dict]] = {}
+    for (suite, category), items in sorted(picked.items()):
+        by_category.setdefault(category, []).extend(items)
+
     selected: list[dict] = []
-    for key in sorted(cells):
-        group = sorted(cells[key], key=lambda item: item["name"])
-        selected.extend(_spread(group, per_cell))
+    queues = [by_category[name] for name in sorted(by_category)]
+    for index in range(max(len(queue) for queue in queues)):
+        for queue in queues:
+            if index < len(queue):
+                selected.append(queue[index])
     return selected
 
 

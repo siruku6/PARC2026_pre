@@ -1455,10 +1455,46 @@ shutil.copy("/content/VAL_TASKS.csv", original)
 import csv as _csv
 rows = list(_csv.DictReader(original.open()))
 print(f"\n差し替えた: {len(rows)} タスク（example は {backup.name} に退避）")
-for row in rows[:5]:
+for row in rows[:7]:
     print(f"  {row['suite']:16s} {row['category']:22s} {row['task_id'][:44]}")
 print(f"  ... 計 {len(rows)} 件")
+
+# --- 4. 評価を回す前に、全部開けるか確かめる ---
+# **82 分回してから「4 行目で落ちていた」と分かるのは高すぎる。**
+# 配布キットと LIBERO-plus の実際のコードと同じ手順でパスを組み立てて、
+# 開けない行をここで名指しする。落ちたらこのセルで止まるので、
+# E-3 へ進む前に気づける。
+run(f'{KIT_DIR}/venv/bin/python /content/check_validation_suite.py '
+    f'--csv /content/VAL_TASKS.csv --libero-plus {KIT_DIR}/LIBERO-plus --patched',
+    tail=30, log="val_check.log")
 ```
+
+**先頭 7 件が 7 カテゴリになるように並べてある。** `--max-tasks 5` で
+5 件だけ回すと 5 カテゴリを踏むので、**疎通確認が 1 カテゴリに偏らない。**
+
+### まず 5 件だけ回して、最後まで行くか見る（5 分）
+
+**84 件を 82 分かけて回す前に、これをやる。** 8/10 は 3 タスクで止まったのに
+終了コード 0 で終わり、**画面上は正常に見えた。**
+
+E-1 → E-3 の前に、E-3 のセルの `subprocess.Popen` の引数へ
+`"--max-tasks", "5"` を 1 行足して流す。
+
+```
+         "--max-steps", str(MAX_STEPS),
+         "--max-tasks", "5",          # ← 疎通確認のときだけ足す
+         "--output-dir", "/content/results"],
+```
+
+**見るのはスコアではなく次の 3 点である。**
+
+| 見るところ | 通っている | 失敗している |
+|---|---|---|
+| `[結果]` 行の数 | **5 本**そろう | 途中で止まる |
+| 所要時間 | 4〜6 分 | **極端に短い**（3 分未満）|
+| F の出力 | 成功率と 95%CI が出る | 「評価が例外で落ちている」 |
+
+**5 本そろったら `--max-tasks` の行を消して 84 件を回す。**
 
 ### エピソード数の決め方
 

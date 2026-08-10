@@ -42,6 +42,10 @@ _UPLOAD_FILES: tuple[tuple[str, str], ...] = (
         "solution/tools/make_validation_suite.py",
         "検証用スイートを作る。COLAB_EVAL.md のセル H だけで使う。",
     ),
+    (
+        "solution/tools/check_validation_suite.py",
+        "作った CSV が本当に開けるかを、評価を回す前に確かめる。セル H が呼ぶ。",
+    ),
 )
 
 _READ_ME = """\
