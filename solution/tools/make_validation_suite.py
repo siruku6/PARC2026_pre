@@ -300,29 +300,31 @@ def _build_rows(
     -------
     rows : list[dict]
         `T1_TASKS.csv` と同じ列 ＋ `init_states_file`。
-    skipped : list[str]
-        落とした理由つきのタスク名。**黙って減らさない。**
+    skipped : list[dict]
+        `category` / `reason` / `detail` を持つ辞書の列。**黙って減らさない。**
     """
     rows: list[dict] = []
-    skipped: list[str] = []
+    skipped: list[dict] = []
+
+    def drop(entry: dict, reason: str, detail: str) -> None:
+        skipped.append(
+            {"category": entry["category"], "reason": reason, "detail": detail}
+        )
 
     for entry in selected:
         task_id = entry["name"]
-        suite = entry["suite"]
-
-        bddl = bddl_root / suite / f"{task_id}.bddl"
-        if not bddl.is_file():
-            skipped.append(f"{task_id}: bddl が無い（{bddl}）")
+        placed = _place_variant(task_id, entry["suite"], bddl_root, stems_by_suite)
+        if placed is None:
+            drop(
+                entry, "bddl と初期状態がそろう置き場が無い",
+                f"{task_id} → 分類表のスイートは {entry['suite']}",
+            )
             continue
+        folder, bddl, stem = placed
 
         instruction = _instruction_of(entry, bddl)
         if not instruction:
-            skipped.append(f"{task_id}: 指示文を取れない")
-            continue
-
-        stem = _resolve_init_state_stem(task_id, suite, stems_by_suite)
-        if stem is None:
-            skipped.append(f"{task_id}: 初期状態ファイルが無い（{suite}/）")
+            drop(entry, "指示文を取れない", f"{task_id} → {bddl}")
             continue
 
         rows.append({
@@ -330,7 +332,10 @@ def _build_rows(
             "task_id": task_id,
             "instruction": instruction,
             "libero_plus_id": entry.get("id", ""),
-            "suite": suite,
+            # **bddl が実際に在った置き場を書く。** register.py はこの値を
+            # problem_folder にして bddl と初期状態の**両方**を探すため、
+            # 分類表のスイート名とは違うことがある。
+            "suite": folder,
             "category": entry["category"],
             "difficulty_level": entry.get("difficulty_level", ""),
             # **接尾辞を剥がした結果をここに書き出す。** 評価側で regex を
@@ -351,19 +356,55 @@ def _print_population(entries: list[dict], excluded: set[str]) -> None:
         print(f"       {suite:16s} {category:22s} {count}")
 
 
-def _report(rows: list[dict], skipped: list[str]) -> None:
-    """選んだ結果を表で見せる。"""
+def _report(rows: list[dict], skipped: list[dict]) -> None:
+    """選んだ結果と落とした理由を表で見せる。
+
+    落としたものは**カテゴリ × 理由で束ねて数える。** 1 件ずつ並べると数十行になり、
+    ノートブックが末尾しか表示しない設定だと**全部流れて消える**（実際に起きた）。
+    """
     print(f"\n選んだタスク変種: {len(rows)} 件")
     counts = collections.Counter((row["suite"], row["category"]) for row in rows)
     for (suite, category), count in sorted(counts.items()):
         print(f"  {suite:16s} {category:22s} {count}")
 
     if skipped:
-        print(f"\n**落としたもの: {len(skipped)} 件**")
-        for reason in skipped[:20]:
-            print(f"  {reason}")
-        if len(skipped) > 20:
-            print(f"  ... 他 {len(skipped) - 20} 件")
+        print(f"\n落としたもの: {len(skipped)} 件（カテゴリ × 理由）")
+        grouped = collections.Counter(
+            (item["category"], item["reason"]) for item in skipped
+        )
+        for (category, reason), count in sorted(
+            grouped.items(), key=lambda pair: -pair[1]
+        ):
+            print(f"  {count:4d}  {category:22s} {reason}")
+        print("\n  例:")
+        for item in skipped[:3]:
+            print(f"    {item['detail']}")
+
+
+def _report_coverage(
+    rows: list[dict], categories: list[str], per_cell: int, suites: int
+) -> list[str]:
+    """カテゴリごとに何本取れたかを出し、全滅したカテゴリの名前を返す。
+
+    **この表を最後に出す。** ノートブックの `run()` は成功時に末尾の数行しか
+    表示しないため、いちばん大事な情報を最後に置く必要がある。
+
+    Returns
+    -------
+    empty : list[str]
+        1 本も取れなかったカテゴリ。**測定の目的が崩れているので呼び出し側で警告する。**
+    """
+    counts = collections.Counter(row["category"] for row in rows)
+    print(f"\n=== カテゴリ別の本数（目標 各 {per_cell * suites} 本）===")
+    empty: list[str] = []
+    for category in categories:
+        count = counts.get(category, 0)
+        if count == 0:
+            empty.append(category)
+            print(f"  {category:22s} {count:4d}  ← **全滅**")
+        else:
+            print(f"  {category:22s} {count:4d}")
+    return empty
 
 
 def main() -> None:

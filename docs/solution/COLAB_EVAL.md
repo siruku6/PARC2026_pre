@@ -1069,21 +1069,41 @@ def wilson(rate: float, n: int) -> tuple[float, float]:
 
 
 # --- 1. 集計値（JSON があるときだけ） ---------------------------------
+# **JSON があっても中身が結果とは限らない。** トラックが例外で落ちると
+# pipeline.py の _errored_track_score が {"error": 1.0, "n_tasks": 0.0} だけを
+# 書き出す。ここで鍵の有無を見ずに読むと KeyError になり、**本当の原因である
+# 例外の行を探しに行けない。**
 if RESULT_JSON.exists():
     track = json.loads(RESULT_JSON.read_text())["tracks"][0]
     overall = track["overall_metrics"]
-    n, rate = overall["n_total_episodes"], overall["mean_success_rate"]
-    low, high = wilson(rate, n)
 
-    print(f"\n成功率   {rate:.3f}   95%CI [{low:.3f}, {high:.3f}]  n={n}")
-    print(f"衝突率   {overall['mean_collision_rate']:.3f}\n")
-    for task in track["tasks"]:
-        print(f"  成功 {task['success_rate']:.2f}  衝突 "
-              f"{task['metrics']['collision_rate']:.2f}  {task['task_name'][:50]}")
-    print()
-    for key in ("mean_avg_cartesian_jerk", "mean_rms_cartesian_jerk",
-                "mean_sparc", "mean_cartesian_path_length"):
-        print(f"  {key:32s} {overall[key]:9.4f}")
+    if "n_total_episodes" not in overall:
+        print("\n**評価が例外で落ちている。** JSON はエラー記録だけを持つ。")
+        print(f"  overall_metrics = {overall}")
+        if EVAL_LOG:
+            log_text = EVAL_LOG.read_text(encoding="utf-8")
+            marks = [
+                line for line in log_text.splitlines()
+                if "Traceback" in line or "Error" in line or "失敗" in line
+                or "例外" in line
+            ]
+            print(f"\n  ログ中のエラー行（末尾 15 行）: 全 {len(marks)} 件")
+            for line in marks[-15:]:
+                print(f"    {line[:160]}")
+            print(f"\n  全文: {EVAL_LOG}")
+    else:
+        n, rate = overall["n_total_episodes"], overall["mean_success_rate"]
+        low, high = wilson(rate, n)
+
+        print(f"\n成功率   {rate:.3f}   95%CI [{low:.3f}, {high:.3f}]  n={n}")
+        print(f"衝突率   {overall['mean_collision_rate']:.3f}\n")
+        for task in track["tasks"]:
+            print(f"  成功 {task['success_rate']:.2f}  衝突 "
+                  f"{task['metrics']['collision_rate']:.2f}  {task['task_name'][:50]}")
+        print()
+        for key in ("mean_avg_cartesian_jerk", "mean_rms_cartesian_jerk",
+                    "mean_sparc", "mean_cartesian_path_length"):
+            print(f"  {key:32s} {overall[key]:9.4f}")
 
 # --- 2. エピソード単位の集計（ログから） ------------------------------
 # JSON には「衝突したか」しか入らない。**何にぶつかったのか**は
