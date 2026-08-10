@@ -20,7 +20,7 @@
 | [solution/](solution/) | 提出物と Colab の説明。コード本体は `../solution/` |
 | [strategy/](strategy/) | 何を狙うか、なぜそうするか。判断の材料 |
 | [reference/](reference/) | 調べて分かった事実（モデル・評価データ） |
-| [prod_eval_results/](prod_eval_results/) | 本番採点の生ログと読み解き |
+| [prod_eval_results/](../outputs/prod_eval_results/) | 本番採点の生ログと読み解き |
 
 ## よく開くファイル
 
