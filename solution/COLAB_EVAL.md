@@ -866,6 +866,8 @@ server = subprocess.Popen(
     cwd=str(SUBMISSION_DIR), env=server_env, stdout=log, stderr=subprocess.STDOUT,
 )
 print(f"サーバー起動 (pid={server.pid})  設定: {POLICY_ENV or '既定'}")
+# **サーバーの出力はファイルへ流している。** 版と実効設定はそこにしか出ない。
+# 起動待ちのあとに読み出して、意図した構成で立っているかを画面で確かめる。
 
 for elapsed in range(300):
     try:
@@ -877,6 +879,12 @@ for elapsed in range(300):
             print(open("/content/server.log").read()[-3000:])
             raise RuntimeError("サーバーが起動に失敗しました")
         time.sleep(1)
+
+# 版と実効設定を画面へ出す。**古い policy_server.py のままだとこの行が出ない**ので、
+# 差し替え忘れにその場で気づける。
+for line in open("/content/server.log"):
+    if line.startswith("[parc]"):
+        print(line.rstrip())
 
 EVAL_LOG = Path(LOG_DIR) / f"eval_{time.strftime('%H%M%S')}.log"
 HEARTBEAT_SEC = 60          # 画面に心拍を出す間隔
