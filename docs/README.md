@@ -9,6 +9,7 @@
 | **測った数字** | [strategy/05_実測結果.md](strategy/05_実測結果.md) |
 | **提出物のしくみ** | [solution/README.md](solution/README.md) |
 | **次のコンペに持ち越すこと** | [talk/lessons_learned.md](talk/lessons_learned.md) |
+| **レポートに書く値** | [reference/03_report_values.md](reference/03_report_values.md) |
 
 ## ディレクトリ
 
