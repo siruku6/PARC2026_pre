@@ -23,7 +23,8 @@
 #   0.1.0  素の重み・後処理なし（n_action_steps=50）      スコア 0.05832
 #   0.2.0  n_action_steps=10                              スコア 0.096
 #   0.3.0  n_action_steps=5 ＋ EMA 0.3                    スコア 0.1409
-__version__ = "0.3.0"
+#   1.0.0  ＋ LoRA 追加学習 15,000 歩（推論の設定は 0.3.0 と同じ）
+__version__ = "1.0.0"
 
 import argparse
 from abc import ABC, abstractmethod

@@ -63,7 +63,7 @@ work/venv310/bin/python solution/tools/build_submission.py
 
 # ケース 2. 追加学習した重みに差し替える
 
-入力は [01_retrain.md](01_retrain.md) が出す `merged_model/` である。
+入力は [01_retrain.md](01_retrain.md) が出す `merged_model/` である。これは GPU マシンで学習した結果をディレクトリごとコピしてくれば良い。
 
 ```bash
 # 1. 検査だけする（何も書き換えない）
@@ -231,20 +231,19 @@ work/venv310/bin/python solution/tools/digest_submission.py --per-entry
 ハッシュを記録しておく。** 作り直したときにこの値と一致すれば、
 同じものが再生成できたと言える。
 
-重みはいずれも `lerobot/smolvla_libero_plus` の `7bb70aa5`（追加学習なし）である。
-
 `policy_server.py` の先頭に `__version__` を置いてある。**採点ログの先頭に
 構成が出る**ので、スコアと提出物の対応が後から辿れる。
 
 ```
-[parc] policy_server 0.3.0  device=cuda  n_action_steps=5  ema_alpha=0.3  blend_steps=0  samples=1
+[parc] policy_server 1.0.0  device=cuda  n_action_steps=5  ema_alpha=0.3  blend_steps=0  samples=1
 ```
 
-| 版 | 設定 | sha256 | **本番スコア** |
-|---|---|---|---|
-| **0.1.0** | 素の重み・後処理なし（n=50） | `f80abc7b…` | **0.05832** |
-| **0.2.0** | n=10 | `8ed91671…` | **0.096** |
-| **0.3.0** | n=5 ＋ EMA 0.3 | `c1685507…` | **0.1409** |
+| 版 | 重み | 設定 | sha256 | **本番スコア** |
+|---|---|---|---|---|
+| **0.1.0** | 素（`7bb70aa5`） | 後処理なし（n=50） | `f80abc7b…` | **0.05832** |
+| **0.2.0** | 素 | n=10 | `8ed91671…` | **0.096** |
+| **0.3.0** | 素 | n=5 ＋ EMA 0.3 | `c1685507…` | **0.1409** |
+| **1.0.0** | **LoRA 15,000 歩** | 0.3.0 と同じ | `420aff5d…` | 未提出 |
 
 0.1.0 はタグ `scored-0.05832` に対応する。**版の上げ方**は次のとおり。
 
