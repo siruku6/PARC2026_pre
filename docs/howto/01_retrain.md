@@ -47,9 +47,16 @@ GPU マシン側で展開する。
 
 ```bash
 mkdir -p ~/.claude && tar xzf ~/claude-setup.tgz -C ~/.claude
+ls ~/.claude/skills/                        # 7 個並ぶ
+grep -c "How to apply" ~/.claude/CLAUDE.md  # 3 と出る
 ```
 
 **認証情報は入っていない。** GPU マシンでは `claude` を改めて認証すること。
+
+> `Ignoring unknown extended header keyword 'LIBARCHIVE.xattr...'` が並ぶ版が
+> あった。**展開は成功していた**が（Linux の tar が macOS の拡張属性を
+> 読み飛ばしていただけ）、失敗と見分けが付かないので送る側で載せないようにした。
+> 上の 2 行で中身を確かめれば、警告の有無に関わらず判断できる。
 
 ## 全体像
 

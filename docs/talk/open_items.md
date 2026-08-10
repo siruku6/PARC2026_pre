@@ -54,6 +54,7 @@ bash solution/tools/export_claude_setup.sh   # 手元で。work/claude-setup.tgz
 scp work/claude-setup.tgz <GPU マシン>:~/
 # GPU マシン側で
 mkdir -p ~/.claude && tar xzf ~/claude-setup.tgz -C ~/.claude
+ls ~/.claude/skills/                         # 7 個並べば成功
 ```
 
 そのうえでイメージを建てる。

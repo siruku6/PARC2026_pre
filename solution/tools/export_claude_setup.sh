@@ -39,7 +39,26 @@ for item in "${ITEMS[@]}"; do
     fi
 done
 
-tar czf "$OUTPUT" -C "${HOME}/.claude" "${ITEMS[@]}"
+# macOS 由来のメタデータを載せない。
+#
+# macOS の tar（bsdtar）は既定でファイルの拡張属性を書き込む。Finder や
+# Gatekeeper が付ける `com.apple.provenance` などである。これを GNU tar
+# （Linux の既定）で展開すると、1 ファイルにつき 1 行こう警告が出る。
+#
+#   tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+#
+# **展開自体は成功している**（GNU tar は知らないヘッダを読み飛ばすだけ）。
+# ただし失敗と見分けが付かないので、送る側で載せないようにする。
+#   --no-xattrs       … 拡張属性を書かない
+#   --no-mac-metadata … AppleDouble（`._` で始まる分身ファイル）を作らない
+#
+# GNU tar にこの 2 つは無いので、bsdtar のときだけ渡す。
+TAR_OPTIONS=()
+if tar --version 2>/dev/null | grep -q bsdtar; then
+    TAR_OPTIONS=(--no-xattrs --no-mac-metadata)
+fi
+
+tar czf "$OUTPUT" "${TAR_OPTIONS[@]}" -C "${HOME}/.claude" "${ITEMS[@]}"
 
 echo "作った: ${OUTPUT}  ($(du -h "$OUTPUT" | cut -f1))"
 echo
