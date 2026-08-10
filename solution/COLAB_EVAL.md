@@ -25,15 +25,19 @@ Colab の GPU（EGL 描画）に移すと桁が変わる。
 | 順 | セル | 定義するもの | 所要 |
 |---|---|---|---|
 | 1 | **A** GPU と EGL の確認 | （EGL のベンダ設定を作る） | 10 秒 |
-| 2 | **B** キットのセットアップ | `KIT_DIR` `KIT_PYTHON` `run()` `LOG_DIR` | 5〜10 分 |
-| 3 | **B-2** ログのパッチ | （エピソードごとの結果とぶつけた物体を出す） | 1 秒 |
-| 4 | **C** 重みの用意 | `WEIGHTS_DIR` `USE_FINETUNED` | 2 分 |
-| 5 | **D-1** 方策側の依存 | `LEROBOT_DIR` `LEROBOT_SRC` | 3 分 |
-| 6 | **D-2** `policy_server.py` の配置 | **`SUBMISSION_DIR`** **`SERVER`** | 5 秒 |
-| 7 | **E-1** 設定 | `PORT` `N_EPISODES` `POLICY_ENV` `server_env` `eval_env` | 1 秒 |
-| 8 | **E-2** 遅さの切り分け（初回のみ） | — | 3 分 |
-| 9 | **E-3** 評価の実行 | — | 45 分 |
-| 10 | **F** 結果の読み取り | — | 1 秒 |
+| 2 | **B** キットのセットアップ ＋ ログのパッチ | `KIT_DIR` `KIT_PYTHON` `run()` `LOG_DIR` | 5〜10 分 |
+| 3 | **C** 重みの用意 | `WEIGHTS_DIR` `USE_FINETUNED` | 2 分 |
+| 4 | **D-1** 方策側の依存 | `LEROBOT_DIR` `LEROBOT_SRC` | 3 分 |
+| 5 | **D-2** `policy_server.py` の配置 | **`SUBMISSION_DIR`** **`SERVER`** | 5 秒 |
+| 6 | **E-1** 設定 | `PORT` `N_EPISODES` `POLICY_ENV` `server_env` `eval_env` | 1 秒 |
+| 7 | **E-2** 遅さの切り分け（初回のみ） | — | 3 分 |
+| 8 | **E-3** 評価の実行（**回すだけ**） | — | 45 分 |
+| 9 | **F** 読み取り・集計・Drive への退避（**出力はすべてここ**） | — | 5 秒 |
+
+**セルは 9 つ。役割は 1 つずつに分けてある。**
+特に **E-3 は回すだけ、F は出力だけ**である。以前は退避処理が E-3 と
+手書きのセルに散っており、どれを実行したのか分からなくなって
+**評価ログを失った**（35 分の再実行になった）。
 
 **2 回目以降、設定を変えて比べるときは `E-1` → `E-3` → `F` だけでよい。** `E-1` の `POLICY_ENV` を
 書き換えて流し直す。
@@ -189,6 +193,33 @@ run(f"PYTHON={KIT_PYTHON} bash setup.sh", tail=40, log="setup.log")
 # 警告のまま放置すると import で落ちることがあるため揃えておく。
 run(f"{KIT_DIR}/venv/bin/pip install -q 'setuptools<82'", check=False)
 
+# --- エピソードごとの結果をログに出す ---
+# 配布キットはタスク単位の集計しか出さず、45 分間まったく出力が変わらない。
+# さらに衝突判定に使った object_max_disp（**どの物体がどれだけ動いたか**）を
+# 判定した直後に捨てるため、何にぶつかったのかが分からない。
+# 判定式には触らず、その直後に logger.info を 1 つ足す。
+target = KIT_DIR / "pipeline" / "rollout.py"
+source = target.read_text()
+anchor = "        collided = any(d > collision_threshold for d in object_max_disp.values())\n"
+addition = '''        _offenders = {k: v for k, v in object_max_disp.items() if v > collision_threshold}
+        logger.info(
+            "  [結果] %s ep%d: %s %d steps%s",
+            task_info.name, episode_id,
+            "成功" if (bool(done) and not _offenders) else ("衝突" if _offenders else "未完了"),
+            total_steps,
+            ("  ぶつけた物体: " + ", ".join(
+                f"{k}={v * 1000:.1f}mm"
+                for k, v in sorted(_offenders.items(), key=lambda kv: -kv[1]))) if _offenders else "",
+        )
+'''
+if "ぶつけた物体" in source:
+    print("ログのパッチ: 適用済み")
+elif anchor not in source:
+    raise RuntimeError("パッチのアンカーが見つかりません。キットの版を確認してください")
+else:
+    target.write_text(source.replace(anchor, anchor + addition, 1))
+    print("ログのパッチ: 適用した")
+
 # 動作確認。setup.sh 自身の確認は MPLBACKEND のせいで落ちるため、ここでやり直す。
 verify = (
     f'MPLBACKEND=Agg PYTHONPATH="{KIT_DIR}/LIBERO-plus:{KIT_DIR}:{KIT_DIR}/compe" '
@@ -254,63 +285,25 @@ run("apt-cache policy python3.10", check=False)
 > **`setup.sh` は `~/.libero/config.yaml` を書き換える。** Colab は使い捨てなので問題ないが、
 > ローカルで同じことをすると既存の LIBERO 設定が `.bak` に退避される。
 
-### B-2. エピソードごとの結果を出すパッチ
+### ログのパッチについて
 
-配布キットは**エピソード単位の結果をログに出さない**。INFO に出るのは
-タスク単位の集計だけで、途中経過が見えないまま 45 分待つことになる。
-
-さらに、衝突判定に使った `object_max_disp`（**どの物体がどれだけ動いたか**）は
-判定した直後に捨てられる。**何にぶつかったのかが分からない**ため、衝突対策の
-打ち手が決まらない。
-
-**ログを 1 行足すだけのパッチを当てる。** 判定にも採点にも触らない。
-
-```python
-# === エピソードごとの結果と、ぶつけた物体をログに出す ===
-# キットは git clone で取ってくるため、リポジトリ側の修正は反映されない。
-# 判定式には触らず、その直後に logger.info を 1 つ足すだけ。
-from pathlib import Path
-
-target = Path(KIT_DIR) / "pipeline" / "rollout.py"
-source = target.read_text()
-
-anchor = "        collided = any(d > collision_threshold for d in object_max_disp.values())\n"
-addition = '''        _offenders = {k: v for k, v in object_max_disp.items() if v > collision_threshold}
-        logger.info(
-            "  [結果] %s ep%d: %s %d steps%s",
-            task_info.name, episode_id,
-            "成功" if (bool(done) and not _offenders) else ("衝突" if _offenders else "未完了"),
-            total_steps,
-            ("  ぶつけた物体: " + ", ".join(
-                f"{k}={v * 1000:.1f}mm"
-                for k, v in sorted(_offenders.items(), key=lambda kv: -kv[1]))) if _offenders else "",
-        )
-'''
-
-if "ぶつけた物体" in source:
-    print("適用済み")
-elif anchor not in source:
-    raise RuntimeError("アンカーが見つかりません。キットの版を確認してください")
-else:
-    target.write_text(source.replace(anchor, anchor + addition, 1))
-    print("パッチを適用しました")
-```
-
-`KIT_DIR` を使うので **B の後**、評価を回す **E-3 より前**であれば
-どこでもよい。**セッションにつき 1 回でよく**、設定を変えるたびに実行する必要はない
-（`E-3` は毎回このファイルを読み直すプロセスを立てる）。
-
-出力はこうなる。
+上のセルの最後で `pipeline/rollout.py` にログ行を 1 つ足している。
+**判定にも採点にも触らない。** 得られるのはこれである。
 
 ```
   [結果] put_the_bowl_on_the_stove_light_11 ep3: 衝突 214 steps  ぶつけた物体: wooden_cabinet=3.7mm
   [結果] put_the_bowl_on_the_stove_light_11 ep4: 成功 96 steps
 ```
 
-> **B を再実行してもパッチは消えない。** `git clone` は `KIT_DIR` が
-> 存在しないときだけ走る。セッションを作り直したときだけ当て直す。
->
-> 2 回目以降は `適用済み` と出るだけで、二重には当たらない。
+| 無いと困ること | |
+|---|---|
+| **何にぶつかったのか分からない** | 衝突は失敗の大半を占める。対象物が分からないと次の手が決まらない |
+| **45 分間まったく出力が変わらない** | 進んでいるのか止まったのか区別できない |
+
+> **キットは `git clone` で取ってくるため、リポジトリ側の修正は反映されない。**
+> このセルで当てる必要がある。B を再実行してもパッチは消えない
+> （`git clone` は `KIT_DIR` が無いときだけ走る)。2 回目以降は
+> `適用済み` と出るだけで、二重には当たらない。
 
 ---
 
@@ -937,53 +930,13 @@ if process.returncode != 0:
     print("--- ログの末尾 ---")
     print(EVAL_LOG.read_text(encoding="utf-8")[-3000:])
 
-# === 結果を Drive へ退避する ===
-# **/content はランタイムが切れると消える。** 手元へ落とすのを忘れて
-# 一度失っており、35 分の再実行になった。人の記憶に頼らず自動で逃がす。
-# 失敗しても評価結果そのものは残るので、例外で全体を止めない。
-import shutil
-
-def _run_label() -> str:
-    """設定から、取り違えようのないディレクトリ名を作る。"""
-    parts = [f"n{POLICY_ENV.get('PARC_N_ACTION_STEPS', '10')}", f"ep{N_EPISODES}"]
-    for key, value in sorted(POLICY_ENV.items()):
-        if key != "PARC_N_ACTION_STEPS":
-            parts.append(f"{key.replace('PARC_', '').lower()}{value}".replace(".", ""))
-    return "_".join(parts)
-
-try:
-    if not Path("/content/drive/MyDrive").is_dir():
-        from google.colab import drive
-        drive.mount("/content/drive")      # 初回は認証を求められる
-
-    destination = (Path("/content/drive/MyDrive/parc2026/eval")
-                   / f"{time.strftime('%m%d_%H%M%S')}_{_run_label()}")
-    destination.mkdir(parents=True, exist_ok=True)
-
-    for path in (Path("/content/results/server_8000.json"), RESULTS_TXT, EVAL_LOG):
-        if path.exists():
-            shutil.copy(path, destination / path.name)
-    print(f"\nDrive へ退避した: {destination}")
-    for path in sorted(destination.iterdir()):
-        print(f"  {path.stat().st_size / 1e3:8.0f} KB  {path.name}")
-except Exception as error:
-    print(f"\n**Drive への退避に失敗した: {error}**")
-    print("下の一覧から手動でダウンロードすること。")
-
-print("\n=== 手元に残すファイル ===")
-for path in (Path("/content/results/server_8000.json"), RESULTS_TXT, EVAL_LOG):
-    size = path.stat().st_size / 1e3 if path.exists() else 0
-    print(f"  {'あり' if path.exists() else '無し'}  {size:8.0f} KB  {path}")
+print(f"全文: {EVAL_LOG}（{EVAL_LOG.stat().st_size / 1e6:.1f} MB）")
+print("**結果の読み取り・集計・退避は F で行う。続けて F を実行すること。**")
 ```
 
-ディレクトリ名は設定から自動で決まるので、**何を測った回なのかが後から分かる。**
-
-```
-/content/drive/MyDrive/parc2026/eval/
-├── 0810_091203_n10_ep20/                    … つまみ無し
-├── 0810_101500_n10_ep20_ema_alpha03/        … EMA 0.3
-└── 0810_113000_n10_ep20_blend_steps3/       … 境界ブレンド 3
-```
+**このセルは評価を回すだけである。** 読み取りも集計も Drive への退避も
+[F](#f-結果を読む集計する退避する) に集約してある。役割が混ざると、
+どのセルを実行したのか分からなくなる。
 
 > **セルを消してしまったら、このページから貼り直す。**
 > ノートブックは使い捨てだが、セルの内容はこのリポジトリが正である。
@@ -1052,93 +1005,161 @@ print(log[-1500:])
 
 ---
 
-## F. 結果を読む
+## F. 結果を読む・集計する・退避する
+
+**出力に関わる処理はすべてこのセルにある。** E-3 は評価を回すだけで、
+読み取りも集計も Drive への退避もここでやる。
+
+**単体で何度でも実行してよい。** 直近の評価ログを自動で探すため、
+E-3 のあとならいつでも走る。**評価が途中で落ちて JSON が無くても、
+ログだけで集計できる。**
 
 ```python
-# === 結果の読み取り ===
-import json
+# === F. 結果を読む・集計する・退避する ===
+import json, math, re, shutil, time
+from collections import Counter
 from pathlib import Path
 
-result = json.loads(Path("/content/results/server_8000.json").read_text())
-track = result["tracks"][0]
-overall = track["overall_metrics"]
+RESULT_JSON = Path("/content/results/server_8000.json")
+SERVER_LOG = Path("/content/server.log")
+logs = sorted(Path(LOG_DIR).glob("eval_*.log"), key=lambda p: p.stat().st_mtime)
+EVAL_LOG = logs[-1] if logs else None
 
-episodes = overall["n_total_episodes"]
-rate = overall["mean_success_rate"]
-# 二項分布の 95% 信頼区間（Wilson）。何エピソード回せば足りるかの判断に使う。
-import math
-z = 1.96
-denominator = 1 + z**2 / episodes
-center = (rate + z**2 / (2 * episodes)) / denominator
-margin = z * math.sqrt(rate * (1 - rate) / episodes + z**2 / (4 * episodes**2)) / denominator
+print(f"評価ログ  {EVAL_LOG or '（無い。E-3 を実行していない）'}")
+print(f"JSON      {RESULT_JSON if RESULT_JSON.exists() else '（無い。評価が完走していない）'}")
+# JSON は完走時にしか書かれない。落ちた回では**前回の結果が残っている**ため、
+# 気づかずに古い数字を読むことがある。時刻で検出する。
+if RESULT_JSON.exists() and EVAL_LOG and RESULT_JSON.stat().st_mtime < EVAL_LOG.stat().st_mtime - 60:
+    print("  **注意: JSON が評価ログより古い。前の回の結果を読んでいる。**")
 
-print(f"成功率   {rate:.3f}   95%CI [{center - margin:.3f}, {center + margin:.3f}]  n={episodes}")
-print(f"衝突率   {overall['mean_collision_rate']:.3f}")
-print()
-for task in track["tasks"]:
-    print(f"  成功 {task['success_rate']:.2f}  衝突 {task['metrics']['collision_rate']:.2f}  {task['task_name'][:50]}")
-print()
-for key in ("mean_avg_cartesian_jerk", "mean_rms_cartesian_jerk", "mean_sparc",
-            "mean_cartesian_path_length"):
-    print(f"  {key:32s} {overall[key]:9.4f}")
+
+def wilson(rate: float, n: int) -> tuple[float, float]:
+    """二項分布の 95% 信頼区間。20 本と 80 本では判定できる差が違う。"""
+    z = 1.96
+    d = 1 + z**2 / n
+    center = (rate + z**2 / (2 * n)) / d
+    margin = z * math.sqrt(rate * (1 - rate) / n + z**2 / (4 * n**2)) / d
+    return center - margin, center + margin
+
+
+# --- 1. 集計値（JSON があるときだけ） ---------------------------------
+if RESULT_JSON.exists():
+    track = json.loads(RESULT_JSON.read_text())["tracks"][0]
+    overall = track["overall_metrics"]
+    n, rate = overall["n_total_episodes"], overall["mean_success_rate"]
+    low, high = wilson(rate, n)
+
+    print(f"\n成功率   {rate:.3f}   95%CI [{low:.3f}, {high:.3f}]  n={n}")
+    print(f"衝突率   {overall['mean_collision_rate']:.3f}\n")
+    for task in track["tasks"]:
+        print(f"  成功 {task['success_rate']:.2f}  衝突 "
+              f"{task['metrics']['collision_rate']:.2f}  {task['task_name'][:50]}")
+    print()
+    for key in ("mean_avg_cartesian_jerk", "mean_rms_cartesian_jerk",
+                "mean_sparc", "mean_cartesian_path_length"):
+        print(f"  {key:32s} {overall[key]:9.4f}")
+
+# --- 2. エピソード単位の集計（ログから） ------------------------------
+# JSON には「衝突したか」しか入らない。**何にぶつかったのか**は
+# B のパッチが出すログ行にしかない。
+RESULTS_TXT = None
+if EVAL_LOG:
+    lines = [l for l in EVAL_LOG.read_text(encoding="utf-8").splitlines() if "[結果]" in l]
+    # 全文は数 MB あって持ち帰るのが億劫になる。結果行だけなら数十 KB。
+    RESULTS_TXT = EVAL_LOG.with_suffix(".results.txt")
+    RESULTS_TXT.write_text("\n".join(lines), encoding="utf-8")
+
+    if not lines:
+        print("\n**[結果] 行が 0 件。B のパッチを当てずに回している。**")
+    else:
+        outcomes, objects, by_task = Counter(), Counter(), {}
+        for line in lines:
+            found = re.search(r"\[結果\] (\S+) ep(\d+): (\S+)", line)
+            if not found:
+                continue
+            name, _, outcome = found.groups()
+            outcomes[outcome] += 1
+            by_task.setdefault(name, Counter())[outcome] += 1
+            for obj, _mm in re.findall(r"(\w+)=([\d.]+)mm", line):
+                objects[obj] += 1
+
+        total = sum(outcomes.values())
+        print(f"\n=== ログから {total} エピソード分 ===")
+        for outcome, count in outcomes.most_common():
+            print(f"  {outcome:6s} {count:3d}  ({count / total:.1%})")
+
+        if objects:
+            print("\nぶつけた物体（衝突したエピソード数）")
+            for obj, count in objects.most_common():
+                print(f"  {count:3d}  {obj}")
+
+        print("\nタスク別")
+        for name, slot in by_task.items():
+            print(f"  {name[:46]:46s} "
+                  + " ".join(f"{k} {v}" for k, v in slot.most_common()))
+
+# --- 3. Drive へ退避 ---------------------------------------------------
+# **/content はランタイムが切れると消える。** 実際に一度失っている。
+# 退避に失敗しても集計はもう出ているので、例外で止めない。
+def run_label() -> str:
+    """設定から、取り違えようのないディレクトリ名を作る。"""
+    parts = [f"n{POLICY_ENV.get('PARC_N_ACTION_STEPS', '10')}", f"ep{N_EPISODES}"]
+    for key, value in sorted(POLICY_ENV.items()):
+        if key != "PARC_N_ACTION_STEPS":
+            parts.append(f"{key.replace('PARC_', '').lower()}{value}".replace(".", ""))
+    return "_".join(parts)
+
+
+try:
+    if not Path("/content/drive/MyDrive").is_dir():
+        from google.colab import drive
+        drive.mount("/content/drive")          # 初回は認証を求められる
+
+    destination = (Path("/content/drive/MyDrive/parc2026/eval")
+                   / f"{time.strftime('%m%d_%H%M%S')}_{run_label()}")
+    destination.mkdir(parents=True, exist_ok=True)
+    for path in (RESULT_JSON, RESULTS_TXT, EVAL_LOG, SERVER_LOG):
+        if path and path.exists():
+            shutil.copy(path, destination / path.name)
+
+    print(f"\n=== Drive へ退避した ===\n  {destination}")
+    for path in sorted(destination.iterdir()):
+        print(f"  {path.stat().st_size / 1e3:8.0f} KB  {path.name}")
+except Exception as error:
+    print(f"\n**Drive への退避に失敗した: {error}**")
+    print("左のファイルペインから手動でダウンロードすること:")
+    for path in (RESULT_JSON, RESULTS_TXT, EVAL_LOG):
+        if path and path.exists():
+            print(f"  {path}")
 ```
+
+### 退避先は設定から自動で決まる
+
+```
+/content/drive/MyDrive/parc2026/eval/
+├── 0810_091203_n10_ep20/                    … つまみ無し
+├── 0810_101500_n10_ep20_ema_alpha03/        … EMA 0.3
+└── 0810_113000_n10_ep20_blend_steps3/       … 境界ブレンド 3
+```
+
+**何を測った回なのかが後から分かる。** 手で名前を付けていると、
+付け忘れと取り違えが必ず起きる。
+
+### 読む順序
 
 **信頼区間を必ず見ること。** 20 エピソードで成功率 0.10 なら 95%CI は
 おおよそ [0.03, 0.30] で、0.20 との差は判定できない。
 **条件を比べるなら 1 条件あたり 80 エピソード以上**が要る。
 
-### 何にぶつかったのかを集計する
+| 優先 | 見るもの | なぜ |
+|---|---|---|
+| 1 | 成功率と衝突率 | **ゲート**。ここが下がったら他が良くても採用しない |
+| 2 | ぶつけた物体 | 同じ物体が繰り返し出るなら、そこが本丸 |
+| 3 | jerk / SPARC / 軌道長 | ゲートを通ったエピソードの中での配点 |
 
-上のセルは JSON を読むため、**評価が完走していないと動かない**。
-こちらはログを読むので、**途中で落ちた回でも、そこまでの分を集計できる。**
-B-2 のパッチが出す `[結果]` 行が入力である。
-
-```python
-# === ログから衝突の中身を集計する ===
-# eval_result の JSON には「衝突したか」しか入らない。何にぶつかったのかは
-# B-2 のパッチが出すログ行にしかない。衝突が損失の大半を占めるため、
-# 対象物が分からないと次の手が決まらない。
-import re
-from collections import Counter
-
-lines = [l for l in EVAL_LOG.read_text(encoding="utf-8").splitlines() if "[結果]" in l]
-if not lines:
-    raise RuntimeError("[結果] 行がありません。B-2 のパッチを当てずに回しています")
-
-outcomes = Counter()
-objects = Counter()
-by_task = {}
-
-for line in lines:
-    task = re.search(r"\[結果\] (\S+) ep(\d+): (\S+)", line)
-    if not task:
-        continue
-    name, _, outcome = task.groups()
-    outcomes[outcome] += 1
-    slot = by_task.setdefault(name, Counter())
-    slot[outcome] += 1
-    for obj, mm in re.findall(r"(\w+)=([\d.]+)mm", line):
-        objects[obj] += 1
-
-total = sum(outcomes.values())
-print(f"{total} エピソード分の記録")
-for outcome, count in outcomes.most_common():
-    print(f"  {outcome:6s} {count:3d}  ({count / total:.1%})")
-
-print("\nぶつけた物体（衝突エピソード数）")
-for obj, count in objects.most_common():
-    print(f"  {count:3d}  {obj}")
-
-print("\nタスク別")
-for name, slot in by_task.items():
-    detail = " ".join(f"{k} {v}" for k, v in slot.most_common())
-    print(f"  {name[:46]:46s} {detail}")
-```
-
-**同じ物体が繰り返し出るなら、そこが本丸である。** 例えば
-`wooden_cabinet` ばかりなら引き出しへ手を入れる動作の問題で、
-`basket` ばかりなら置く瞬間に縁へ触れている。前者は軌道を滑らかにしても
-直らないが、後者は `PARC_EMA_ALPHA` が効く見込みがある。
+`wooden_cabinet` ばかりなら引き出しへ手を入れる動作の問題で、平滑化では
+直らない。`basket` ばかりなら置く瞬間に縁へ触れており、`PARC_EMA_ALPHA` が
+効く見込みがある。
 
 ---
 
