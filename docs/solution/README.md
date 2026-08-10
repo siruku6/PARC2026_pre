@@ -23,6 +23,7 @@
 | `tools/run_local_eval.sh` | 配布キットの評価パイプラインを提出物に対して回す（コンテナ内） |
 | `tools/make_validation_suite.py` | example 以外のタスクで測るための一覧を作る（Colab へ上げる） |
 | `tools/collect_colab_files.py` | Colab へ上げるファイルを `work/colab_upload/` に集める |
+| `tools/export_claude_setup.sh` | Claude の方針と skill を別のマシンへ持ち出す（GPU マシン用） |
 
 `tools/` の Python スクリプトは**どのディレクトリから実行してもよい**。入出力は
 スクリプト自身の位置から求めたリポジトリルート基準で解決する。

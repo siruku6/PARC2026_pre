@@ -47,6 +47,17 @@ Colab のセッション上限で 9,100 ステップで切れたまま。学習�
 
 **8/10 に GPU マシンが来た。Colab の切断対策が要らなくなる。**
 
+**先に Claude の設定を持ち込む。** clone しただけでは方針と skill が付いてこない。
+
+```bash
+bash solution/tools/export_claude_setup.sh   # 手元で。work/claude-setup.tgz ができる
+scp work/claude-setup.tgz <GPU マシン>:~/
+# GPU マシン側で
+mkdir -p ~/.claude && tar xzf ~/claude-setup.tgz -C ~/.claude
+```
+
+そのうえでイメージを建てる。
+
 ```bash
 nvidia-smi                                   # CUDA Version: が 12.8 以上か見る
 docker run --rm --gpus all ubuntu nvidia-smi # コンテナから GPU が見えるか
