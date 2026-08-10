@@ -8,6 +8,7 @@
 | **手を動かす手順** | [howto/](howto/) |
 | **測った数字** | [strategy/05_実測結果.md](strategy/05_実測結果.md) |
 | **提出物のしくみ** | [solution/README.md](solution/README.md) |
+| **次のコンペに持ち越すこと** | [talk/lessons_learned.md](talk/lessons_learned.md) |
 
 ## ディレクトリ
 
@@ -25,6 +26,7 @@
 | ファイル | いつ |
 |---|---|
 | [talk/open_items.md](talk/open_items.md) | 作業を始めるとき。手つかずのものが優先順位つきで並ぶ |
+| [talk/lessons_learned.md](talk/lessons_learned.md) | コンペが終わったあと。**次の 3 日の組み立て方**まで書いてある |
 | [howto/01_retrain.md](howto/01_retrain.md) | 追加学習を回すとき |
 | [howto/02_build_submission.md](howto/02_build_submission.md) | zip を作って出すとき |
 | [solution/COLAB_EVAL.md](solution/COLAB_EVAL.md) | Colab で評価を回すとき |
