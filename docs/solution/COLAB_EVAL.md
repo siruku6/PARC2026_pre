@@ -1146,10 +1146,15 @@ if EVAL_LOG:
         import csv as _csv
         definition = KIT_DIR / "compe/t1/T1_TASKS.csv"
         category_of = {}
-        with definition.open(newline="") as stream:
-            for row in _csv.DictReader(stream):
-                if row.get("category"):
-                    category_of[row["task_id"]] = row["category"]
+        # **CSV が無くてもここで止まらない。** 集計とログの退避のほうが大事で、
+        # カテゴリ別は「あれば嬉しい」情報である。
+        if definition.is_file():
+            with definition.open(newline="") as stream:
+                for row in _csv.DictReader(stream):
+                    if row.get("category"):
+                        category_of[row["task_id"]] = row["category"]
+        else:
+            print(f"\n（{definition} が無いのでカテゴリ別は省略）")
 
         if category_of:
             per_category: dict[str, Counter] = {}
