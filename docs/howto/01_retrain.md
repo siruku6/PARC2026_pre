@@ -91,12 +91,21 @@ torch 2.11.0+cu128 / torchcodec 0.11.1 整合
 ```
 
 ホストのドライバが cu128 に対応していなければ index を変える。
+`nvidia-smi` の `CUDA Version:` の欄を見て決める。
 
 | 状況 | 指定 |
 |---|---|
-| 既定 | そのまま |
-| より新しいドライバ | `--build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu130` |
-| GPU 無しで配線だけ見る | `--build-arg TORCH_INDEX=https://download.pytorch.org/whl/cpu` |
+| **12.8 以上** | そのまま |
+| 13.0 以上でそちらに寄せたい | `--build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu130` |
+| x86_64 のマシンで GPU 無しに配線だけ見る | `--build-arg TORCH_INDEX=https://download.pytorch.org/whl/cpu` |
+
+> **`cpu` は arm64（Apple Silicon など）では通らない。**
+> torchcodec 0.11.1 の aarch64 向け wheel が `cpu` の index に無く、0.13.0 からしか
+> 置かれていない（`cu128` / `cu130` にはある）。**0.13.0 へ上げる逃げ道も無い**
+> ——LeRobot が `torchcodec<0.12.0` と宣言しているため、後続の
+> `pip install lerobot[training]` で 0.11.x へ引き戻され、同じ壁に当たる。
+>
+> **arm64 で配線だけ見たいときは `cu128` を指定する。** GPU が無くても import は通る。
 
 > ### なぜ torch と torchcodec を対で固定しているのか
 >
@@ -131,6 +140,15 @@ torch 2.11.0+cu128 / torchcodec 0.11.1 整合
 > PyPI の 0.11.1 が要求するのは `.so.13`（CUDA 13）なので、
 > **cu128 の torch（`.so.12` を持ってくる）と組んでも同じ失敗になる。**
 > Dockerfile 側は修正済みで、両方に `--index-url ${TORCH_INDEX}` が付いている。
+>
+> **index ごとの 0.11.1 の在りか**（2026-08-10 に確認）。
+>
+> | index | x86_64 | aarch64 |
+> |---|---|---|
+> | PyPI（既定） | あり（CUDA 入り） | あり（CUDA 入り） |
+> | `cpu` | あり | **無い（0.13.0 から）** |
+> | `cu128` | あり | あり |
+> | `cu130` | あり | あり |
 
 ## A-2. 学習する
 

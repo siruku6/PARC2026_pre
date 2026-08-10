@@ -11,3 +11,4 @@ assets.zip
 # 追跡したいファイルは solution/ に置くこと。
 work/
 outputs/
+.claude/settings.json

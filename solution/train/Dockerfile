@@ -17,10 +17,25 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV HF_HOME=/root/.cache/huggingface
 
-# torch の wheel をどの index から取るか。ホストのドライバに合わせて変える。
+# torch と torchcodec の wheel をどの index から取るか。ホストのドライバに合わせる。
+#
 #   cu128 … 既定。LeRobot v0.6.0 の uv.lock が torch 2.11.0+cu128 を解決する
 #   cu130 … より新しいドライバ（採点イメージはこちら）
-#   cpu   … GPU 無しで配線だけ確認するとき
+#   cpu   … **x86_64 のホストでしか使えない。** 下の注記を読むこと
+#
+# **`cpu` は arm64（Apple Silicon など）では通らない。**
+# torchcodec 0.11.1 の aarch64 向け wheel が、index ごとに揃っていないためである。
+#
+#   | index | 0.11.1 x86_64 | 0.11.1 aarch64 |
+#   |-------|---------------|----------------|
+#   | cpu   | あり          | **無い（0.13.0 から）** |
+#   | cu128 | あり          | あり           |
+#   | cu130 | あり          | あり           |
+#
+# 0.13.0 へ上げる逃げ道は無い。LeRobot が `torchcodec<0.12.0` と宣言しているため、
+# 後続の `pip install lerobot[training]` で 0.11.x へ引き戻され、同じ壁に当たる。
+# **arm64 で配線だけ見たいときは `--build-arg TORCH_INDEX=.../cu128` を使う**
+# （GPU が無くても import は通る）。
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cu128
 
 # **torch と torchcodec は、版だけでなく CUDA の系統も対で決まる。**
