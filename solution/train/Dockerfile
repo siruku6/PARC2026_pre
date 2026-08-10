@@ -23,7 +23,7 @@ ENV HF_HOME=/root/.cache/huggingface
 #   cpu   … GPU 無しで配線だけ確認するとき
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cu128
 
-# **torch と torchcodec の版は対で決まる。片方だけ動かしてはいけない。**
+# **torch と torchcodec は、版だけでなく CUDA の系統も対で決まる。**
 #
 # LeRobot は torch>=2.7,<2.12 と torchcodec>=0.3.0,<0.12.0 としか宣言していない。
 # 一方 **torchcodec は依存を一切宣言しない**（uv.lock で確認済み）。torch の ABI に
@@ -41,9 +41,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN pip install --no-cache-dir "torch==${TORCH_VERSION}" --index-url ${TORCH_INDEX}
 
+# **torch と同じ index から取ること。`--index-url` を省くと PyPI から落ちてくる。**
+# torchcodec の README いわく「Linux では CUDA 入りの wheel が既定で入り、GPU が
+# 無くても動く」。ただしそれは `libnvrtc` があればの話で、**cpu 版の torch には
+# CUDA ライブラリが 1 つも入っていない。** 省略して 2026-08-10 に実際に落ちた。
+#
+#   OSError: libnvrtc.so.13: cannot open shared object file
+#
+# PyPI の 0.11.1 が要求するのは `.so.13`（CUDA 13）なので、cu128 の torch
+# （`.so.12` を持ってくる）と組んでも同じ失敗になる。**index を揃えるのが正しい。**
+#
 # lerobot より先に入れる。先に固定しておけば、後続の解決は制約を満たすので
 # 触られない。あとから入れると <0.12.0 の最新が選ばれ、対が崩れる。
-RUN pip install --no-cache-dir "torchcodec==${TORCHCODEC_VERSION}"
+RUN pip install --no-cache-dir "torchcodec==${TORCHCODEC_VERSION}" --index-url ${TORCH_INDEX}
 
 # 学習用ノートブックと同じタグ・同じ extras。ここを変えると重みの互換性が崩れる。
 # training は dataset を含むため、dataset を重ねて書く必要はない。
@@ -54,6 +64,11 @@ RUN git clone --quiet --depth 1 --branch ${LEROBOT_TAG} \
     && pip uninstall -y -q torchao || true
 
 # 版の対が崩れていないことを、ビルド時に確かめる。実行時まで持ち越さない。
+#
+# **このチェックは消してはいけない。** LeRobot の自動フォールバックは
+# `importlib.util.find_spec("torchcodec")` で判定しており（import_utils.py）、
+# **入ってさえいれば壊れていても「使える」と答える。** ここで止めないと、
+# 学習データ 6.4 GB を落としきったあとにデコードで落ちる。
 RUN python -c "\
 import torch, torchcodec; \
 from torchcodec.decoders import VideoDecoder; \

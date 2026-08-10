@@ -111,6 +111,26 @@ torch 2.11.0+cu128 / torchcodec 0.11.1 整合
 > Dockerfile は LeRobot v0.6.0 の `uv.lock` が解決した対
 > （torch 2.11.0 / torchcodec 0.11.1）に固定し、**ビルドの最後で
 > `VideoDecoder` を import して、崩れていればビルドを失敗させている。**
+>
+> **このチェックは消してはいけない。** LeRobot 側の自動フォールバックは
+> `importlib.util.find_spec("torchcodec")` で判定しており、
+> **入ってさえいれば壊れていても「使える」と答える。**
+>
+> ### 版だけでなく CUDA の系統も揃える（2026-08-10 に踏んだ）
+>
+> `TORCH_INDEX` は **torch と torchcodec の両方**に効かせる必要がある。
+> torchcodec の README いわく「Linux では CUDA 入りの wheel が既定で入り、
+> GPU が無くても動く」。ただしそれは `libnvrtc` があればの話である。
+>
+> `--index-url` を省いて PyPI から取ると、CPU 版の torch と組んだ時点で落ちる。
+>
+> ```
+> OSError: libnvrtc.so.13: cannot open shared object file
+> ```
+>
+> PyPI の 0.11.1 が要求するのは `.so.13`（CUDA 13）なので、
+> **cu128 の torch（`.so.12` を持ってくる）と組んでも同じ失敗になる。**
+> Dockerfile 側は修正済みで、両方に `--index-url ${TORCH_INDEX}` が付いている。
 
 ## A-2. 学習する
 
