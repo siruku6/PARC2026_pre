@@ -11,6 +11,7 @@ bddl は存在しない（`libero/libero/envs/env_wrapper.py` が `_view_` で�
 | `compe/t1/register.py` | 初期状態ファイルを正規表現で探す。摂動の付け方はカテゴリごとに違うため取りこぼす |
 | `pipeline/environment.py` | 衝突判定のため bddl を自分で開く。`_view_` を切らないので `FileNotFoundError` |
 | `pipeline/rollout.py` | エピソードごとの結末を出さない。**何にぶつかったのかが分からない** |
+| `pipeline/rollout.py` | 映像を残さない。**打ち切りに張り付いた回で何が起きたか見られない** |
 
 2 番目の例外はトラック全体を止めるが、`pipeline.py` がトラックごとに握って
 `_errored_track_score` を書くため、**終了コード 0 で正常終了に見える。**
@@ -21,6 +22,13 @@ bddl は存在しない（`libero/libero/envs/env_wrapper.py` が `_view_` で�
 （どの物体がどれだけ動いたか）を判定の直後に捨てる。判定式には触らず、
 そのあとに `logger.info` を 1 つ足す。
 
+4 番目は数字では埋まらない穴である。**本番の 8 本中 4 本が 300 歩を
+使い切って届いていない**のに、止まっているのか往復しているのか掴めずに
+空振りしているのかが分からない。録画の本体は
+[rollout_recorder.py](rollout_recorder.py) にあり、ここから
+`pipeline/` へ複製する。**`PARC_RECORD_DIR` が空なら完全に無効**なので、
+当てたままにしておいて構わない。
+
 **何度実行してもよい。** すでに当たっていれば「適用済み」と出て何もしない。
 
     python3 solution/tools/patch_kit_for_variants.py --kit-dir /workspace
@@ -29,8 +37,10 @@ Reads:
   - <kit-dir>/compe/t1/register.py
   - <kit-dir>/pipeline/environment.py
   - <kit-dir>/pipeline/rollout.py
+  - solution/tools/rollout_recorder.py
 Generates:
-  - 同じ 3 ファイル（上書き）
+  - 上の 3 ファイル（上書き）
+  - <kit-dir>/pipeline/rollout_recorder.py（複製）
 """
 
 from __future__ import annotations
@@ -135,6 +145,62 @@ _PATCHES: tuple[tuple[str, str, str, str], ...] = (
         '            )) if _offenders else "",\n'
         "        )\n",
     ),
+    (
+        "pipeline/rollout.py",
+        "録画を始める（PARC_RECORD_DIR が空なら何もしない）",
+        "        start_time = time.time()\n"
+        "        joint_positions: list[np.ndarray] = []\n",
+        "        # **映像を残す。** 打ち切りに張り付いた回で、止まっているのか\n"
+        "        # 往復しているのか掴めずに空振りしているのかは、成功率と\n"
+        "        # 衝突率では区別できない。`PARC_RECORD_DIR` が空なら無効で、\n"
+        "        # ここは None を返すだけである（以降の呼び出しも起きない）。\n"
+        "        # import に失敗しても評価は続ける。**録画のために 90 分の\n"
+        "        # 測定を落とさない。**\n"
+        "        try:\n"
+        "            from .rollout_recorder import begin_episode as _begin_recording\n"
+        "            _recorder = _begin_recording(task_info.name, episode_id)\n"
+        "        except Exception:\n"
+        "            _recorder = None\n"
+        "        start_time = time.time()\n"
+        "        joint_positions: list[np.ndarray] = []\n",
+    ),
+    (
+        "pipeline/rollout.py",
+        "1 歩ごとに、方策が見た画像と出した行動を貯める",
+        "            action = self.env_manager.apply_action_noise(action, perturbation)\n",
+        "            action = self.env_manager.apply_action_noise(action, perturbation)\n"
+        "\n"
+        "            # **方策が実際に見た観測**（摂動を掛けたあと）を渡す。\n"
+        "            # env.step のあとの obs は次の歩のものなので、ここで貯める。\n"
+        "            if _recorder is not None:\n"
+        "                _recorder.add(obs_for_policy, action)\n",
+    ),
+    (
+        "pipeline/rollout.py",
+        "結末が決まってから mp4 を書く",
+        "        return EpisodeResult(\n"
+        "            task_name=task_info.name,\n",
+        "        # 結末をファイル名と映像に焼くため、書き出しはここまで待つ。\n"
+        "        # **既定では失敗した回だけ残す**（PARC_RECORD_WHICH=all で全部）。\n"
+        "        if _recorder is not None:\n"
+        "            _recorder.finalize(\n"
+        '                "成功" if success else ("衝突" if collided else "未完了"),\n'
+        "                {\n"
+        "                    k: v for k, v in object_max_disp.items()\n"
+        "                    if v > collision_threshold\n"
+        "                },\n"
+        "            )\n"
+        "\n"
+        "        return EpisodeResult(\n"
+        "            task_name=task_info.name,\n",
+    ),
+)
+
+# パッチだけでは足りず、キットへ丸ごと置く必要があるファイル。
+# `pipeline/` の中に置くのは、パッチが `from .rollout_recorder import` と
+# 相対 import で読むためである。
+_COPIES: tuple[tuple[str, str], ...] = (
+    ("rollout_recorder.py", "pipeline/rollout_recorder.py"),
 )
 
 
@@ -152,12 +218,35 @@ def is_applied(kit_dir: Path) -> bool:
     当たっていない状態を検査側が信じてしまうと、82 分の評価が 4 行目で
     落ちるのを見逃す。判定には置換後の文字列そのものを使うので、
     パッチの定義と食い違うことがない。
+
+    **録画のファイル（`_COPIES`）は判定に入れない。** 測れるかどうかを
+    左右しないので、無くても「当たっている」と答える。
     """
     return all(
         (kit_dir / relative_path).is_file()
         and after in (kit_dir / relative_path).read_text(encoding="utf-8")
         for relative_path, _, _, after in _PATCHES
     )
+
+
+def _copy(source: Path, destination: Path) -> str:
+    """付随ファイルをキットへ置き、何をしたかを返す。
+
+    **中身が同じでも上書きする。** 手元で録画のコードを直したのに、キットに
+    古いものが残っていると、直したはずの挙動が出ないまま原因を別の場所に
+    探しに行くことになる（F セルの版番号と同じ理由）。
+
+    **無くても例外にしない。** 録画は任意の機能であり、Colab では
+    `/content/` への置き忘れが起こりうる。ここで落とすと、**評価の下準備
+    （セル B）ごと止まって本題の測定ができなくなる。** 差し込んだ側は
+    import に失敗しても `None` を返すので、録画されないだけで済む。
+    """
+    if not source.is_file():
+        return (f"**無い**  {source.name} を置けなかった。"
+                "録画は無効のまま評価は走る")
+    existed = destination.is_file()
+    destination.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    return ("置き換えた" if existed else "置いた  ") + f"  {destination.name}"
 
 
 def _apply(path: Path, description: str, before: str, after: str) -> str:
@@ -202,6 +291,10 @@ def main() -> None:
     for relative_path, description, before, after in _PATCHES:
         result = _apply(args.kit_dir / relative_path, description, before, after)
         print(f"  {result}  ({relative_path})")
+    tools_dir = Path(__file__).resolve().parent
+    for source_name, destination in _COPIES:
+        result = _copy(tools_dir / source_name, args.kit_dir / destination)
+        print(f"  {result}  ({destination})")
     print("[patch] 完了")
 
 

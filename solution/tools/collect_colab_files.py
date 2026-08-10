@@ -48,7 +48,16 @@ _UPLOAD_FILES: tuple[tuple[str, str], ...] = (
     ),
     (
         "solution/tools/patch_kit_for_variants.py",
-        "配布キットへのパッチ 3 か所。セル B と セル H が呼ぶ。**これが無いと B で落ちる。**",
+        "配布キットへのパッチ。セル B と セル H が呼ぶ。**これが無いと B で落ちる。**",
+    ),
+    (
+        "solution/tools/rollout_recorder.py",
+        "ロールアウトの録画。**patch_kit_for_variants.py が同じ /content/ から"
+        "探してキットへ複製する**ので、2 つは必ず揃えて置く。",
+    ),
+    (
+        "solution/tools/summarize_rollout_videos.py",
+        "撮れた mp4 を見るべき順に並べ、コマ並べ画像にする。セル F が呼ぶ。",
     ),
 )
 

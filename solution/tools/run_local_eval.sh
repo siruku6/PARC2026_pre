@@ -12,6 +12,12 @@
 #   N_EPISODES=1 MAX_STEPS=100 bash run_local_eval.sh --max-tasks 1   # 疎通確認
 #   N_EPISODES=5 MAX_STEPS=600 bash run_local_eval.sh                 # 本測定
 #
+# ロールアウトを mp4 に撮るには、**評価を回す側**に PARC_RECORD_DIR を渡す。
+# 録画するのは採点ハーネス（`pipeline/rollout.py`）であり、提出物側ではない。
+# パッチが当たっていないキットでは何も起きない。
+#
+#   PARC_RECORD_DIR=/out/videos bash run_local_eval.sh
+#
 # 追加の引数は python -m pipeline へそのまま渡す。
 set -euo pipefail
 
@@ -78,6 +84,19 @@ for elapsed in $(seq 1 300); do
     fi
     sleep 1
 done
+
+if [ -n "${PARC_RECORD_DIR:-}" ]; then
+    # **提出物ではなく評価側の環境変数である。** ここで export しておかないと、
+    # `python -m pipeline` の子プロセスに渡らず、静かに 1 本も撮れない。
+    export PARC_RECORD_DIR
+    for _name in PARC_RECORD_WHICH PARC_RECORD_FPS PARC_RECORD_SCALE PARC_RECORD_MAX; do
+        if [ -n "$(eval "printf '%s' \"\${$_name:-}\"")" ]; then
+            export "$_name"
+        fi
+    done
+    echo "[eval] 録画あり: $PARC_RECORD_DIR" \
+         "（which=${PARC_RECORD_WHICH:-failures}・既定は失敗した回だけ）"
+fi
 
 echo "[eval] 評価を開始 (n_episodes=$N_EPISODES, max_steps=$MAX_STEPS, timeout=${TIMEOUT}s)"
 if [ "$TIMEOUT" != "10" ]; then

@@ -15,12 +15,14 @@
 #
 #   bash solution/tools/smoke_test_suite.sh              # 5 タスク・20 歩
 #   TASKS=7 MAX_STEPS=40 bash solution/tools/smoke_test_suite.sh
+#   RECORD=1 bash solution/tools/smoke_test_suite.sh     # 録画の配線も確かめる
 #
 # Reads:
-#   - solution/tools/ の 3 スクリプト（コンテナへ読み取り専用で渡す）
+#   - solution/tools/ の 4 スクリプト（コンテナへ読み取り専用で渡す）
 #   - コンテナ内の /workspace（配布キットと LIBERO-plus）
 # Generates:
 #   - work/smoke/VAL_TASKS.csv・eval.log・server.log・server_8000.json
+#   - work/smoke/videos/*.mp4（RECORD=1 のとき）
 set -euo pipefail
 
 REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -28,6 +30,7 @@ IMAGE="${IMAGE:-parc2026}"
 TASKS="${TASKS:-5}"
 MAX_STEPS="${MAX_STEPS:-20}"
 PER_CELL="${PER_CELL:-3}"
+RECORD="${RECORD:-}"
 OUTPUT_DIR="${OUTPUT_DIR:-$REPOSITORY_ROOT/work/smoke}"
 
 mkdir -p "$OUTPUT_DIR"
@@ -38,6 +41,7 @@ echo "[smoke] イメージ $IMAGE / $TASKS タスク / $MAX_STEPS 歩 / 出力 $
 # 壊れやすく、壊れても静かに間違った文字列が書かれるため。
 docker run --rm \
     -e TASKS="$TASKS" -e MAX_STEPS="$MAX_STEPS" -e PER_CELL="$PER_CELL" \
+    -e RECORD="$RECORD" \
     -v "$REPOSITORY_ROOT/solution/tools:/host/tools:ro" \
     -v "$OUTPUT_DIR:/out" \
     "$IMAGE" bash /host/tools/smoke_test_inside.sh
