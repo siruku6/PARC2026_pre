@@ -43,6 +43,11 @@ from patch_kit_for_variants import is_applied  # noqa: E402
 # パッチを当てていない状態を再現するためだけに使う。
 _KIT_SUFFIX_RE = re.compile(r"_light_[^.]*|_table_\d+")
 
+# 初期状態ファイルの拡張子と、物体を増やす摂動だけが置かれている階層。
+# `make_validation_suite.py` と同じ値である。
+_INIT_SUFFIX = ".pruned_init"
+_NEWOBJ_DIR = "libero_newobj"
+
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -103,24 +108,96 @@ def _init_states_path(row: dict, init_root: Path, patched: bool) -> Path:
     """初期状態ファイルのパスを返す。
 
     出典: `compe/t1/register.py` の `_init_states_for`。
-    パッチ後は CSV の `init_states_file` 列をそのまま使う。**パッチ前は
-    `<task_id>.pruned_init` から `_SUFFIX_RE` で接尾辞を剥がすので、
-    `_view_` を含む変種では存在しない名前になる。** ここを patched と
+    パッチ後は CSV の `init_states_file` 列をそのまま使う。**`/` を含む値は
+    置き場からの相対パス**として扱い、スイート名を足さない（物体が増える
+    摂動の初期状態は `libero_newobj/<suite>/` にある）。
+
+    **パッチ前は** `<task_id>.pruned_init` から `_SUFFIX_RE` で接尾辞を剥がすので、
+    `_view_` を含む変種では存在しない名前になる。ここを patched と
     無関係に CSV 列で計算してしまうと、「未パッチの世界」を再現できない。
     """
     if patched:
         name = row.get("init_states_file") or f"{row['task_id']}.pruned_init"
-        return init_root / row["suite"] / name
+        return init_root / name if "/" in name else init_root / row["suite"] / name
     stripped = _KIT_SUFFIX_RE.sub("", row["task_id"])
     return init_root / row["suite"] / f"{stripped}.pruned_init"
+
+
+def _count_bddl_objects(bddl_path: Path) -> int | None:
+    """bddl の `(:objects ...)` に並ぶ物体の数を返す。読めなければ None。
+
+    物体を増やす摂動を見分けるために使う。**名前だけでは足りない** ——
+    `_add_` という綴りに頼らず、bddl と初期状態の食い違いそのものを見たい。
+    """
+    if not bddl_path.is_file():
+        return None
+    found = re.search(r"\(:objects(.*?)\n\s*\)", bddl_path.read_text(), re.S)
+    if found is None:
+        return None
+    # `名前 - 型` の並びなので、`-` でない語だけ数える。
+    return len([word for word in found.group(1).split() if word != "-"]) // 2
+
+
+def _check_init_states_origin(row: dict, bddl_root: Path, init_root: Path,
+                              patched: bool) -> str | None:
+    """初期状態が、その変種のために作られたものかを確かめる。
+
+    **見るのは 2 つ。順番に意味がある。**
+
+    1. **専用の初期状態が実在するのに使っていないか。** 物体を増やす摂動
+       （`_add_` / `_level`）は `libero_newobj/<suite>/` に変種名そのものの
+       ファイルを持つ。元タスクの状態で代用すると、物体数が違えば落ち、
+       **同じなら落ちずに摂動だけが消える**（後者のほうが厄介である）。
+    2. **物体の数が合っているか。** 1 に当てはまらない摂動でも、
+       置き場の取り違えで数が食い違えば評価の開始直後にこうなる。
+
+           ValueError: could not broadcast input array
+                       from shape (23,) into shape (49,)
+
+    自由度そのものは読まない。初期状態は torch の pickle であり、
+    **この道具は torch を要らないことが利点**なので中は開けない。
+
+    Returns
+    -------
+    problem : str | None
+        食い違いの説明。問題なければ None。
+    """
+    if not patched:
+        return None
+    name = row.get("init_states_file") or ""
+    if "/" in name:
+        return None   # 変種そのものの初期状態を指しているので合っている
+
+    dedicated = f"{row['task_id']}{_INIT_SUFFIX}"
+    if (init_root / _NEWOBJ_DIR / row["suite"] / dedicated).is_file():
+        return (
+            f"専用の初期状態があるのに使っていない: "
+            f"{_NEWOBJ_DIR}/{row['suite']}/{dedicated} が実在する"
+            f"（いまは {name} を指している）"
+        )
+
+    variant_bddl = _bddl_path_for_env(_bddl_path_from_register(row, bddl_root))
+    origin_stem = name[: -len(_INIT_SUFFIX)] if name.endswith(_INIT_SUFFIX) else ""
+    if not origin_stem or origin_stem == variant_bddl.stem:
+        return None   # 同じ bddl を見ているので比べる必要が無い
+
+    variant_count = _count_bddl_objects(variant_bddl)
+    origin_count = _count_bddl_objects(bddl_root / row["suite"] / f"{origin_stem}.bddl")
+    if variant_count is None or origin_count is None or variant_count == origin_count:
+        return None
+
+    return (
+        f"物体の数が合わない: bddl {variant_bddl.name} は {variant_count} 個だが、"
+        f"初期状態 {name} は {origin_count} 個のタスクのもの"
+    )
 
 
 def _check_row(
     row: dict, bddl_root: Path, init_root: Path, patched: bool
 ) -> list[str]:
-    """1 行について、開けないパスの理由を並べて返す。空なら通る。"""
+    """1 行について、評価が落ちる理由を並べて返す。空なら通る。"""
     declared = _bddl_path_from_register(row, bddl_root)
-    return [
+    problems = [
         f"{label}が無い: {path.name}"
         for label, path in (
             ("環境生成の bddl", _bddl_path_for_env(declared)),
@@ -129,6 +206,10 @@ def _check_row(
         )
         if not path.is_file()
     ]
+    mismatch = _check_init_states_origin(row, bddl_root, init_root, patched)
+    if mismatch is not None:
+        problems.append(mismatch)
+    return problems
 
 
 def _report(

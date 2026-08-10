@@ -67,6 +67,13 @@ _LANGUAGE_RE = re.compile(r"\(:language\s+(.+?)\)", re.S)
 # 初期状態ファイルの拡張子。`.init` もあるが、評価側は pruned を読む。
 _INIT_SUFFIX = ".pruned_init"
 
+# 物体を増やす摂動の初期状態だけが置かれているディレクトリ。中がもう 1 段
+# （`libero_newobj/libero_goal/...`）で、他のスイートとは構造が違う。
+_NEWOBJ_DIR = "libero_newobj"
+
+# 物体が増える摂動の目印。**元タスクの初期状態では自由度が合わない。**
+_NEWOBJ_MARKERS = ("_add_", "_level")
+
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -166,6 +173,10 @@ def _index_init_state_stems(init_states_root: Path) -> dict[str, list[str]]:
 
     長い順に並べて返す。**最長前方一致で引くため**、この順序に意味がある。
 
+    `libero_newobj/` は中がもう 1 段（`libero_newobj/libero_goal/...`）なので
+    見ない。**物体を増やす摂動の初期状態はそちらにあり、扱いが違う**ので
+    `_resolve_newobj_init` が別に受け持つ。
+
     Returns
     -------
     stems_by_suite : dict[str, list[str]]
@@ -173,6 +184,8 @@ def _index_init_state_stems(init_states_root: Path) -> dict[str, list[str]]:
     """
     stems_by_suite: dict[str, list[str]] = {}
     for suite_dir in sorted(p for p in init_states_root.iterdir() if p.is_dir()):
+        if suite_dir.name == _NEWOBJ_DIR:
+            continue
         stems = [
             path.name[: -len(_INIT_SUFFIX)]
             for path in suite_dir.iterdir()
@@ -180,6 +193,33 @@ def _index_init_state_stems(init_states_root: Path) -> dict[str, list[str]]:
         ]
         stems_by_suite[suite_dir.name] = sorted(stems, key=len, reverse=True)
     return stems_by_suite
+
+
+def _resolve_newobj_init(
+    task_id: str, suite: str, init_states_root: Path
+) -> str | None:
+    """物体を増やす摂動（`_add_` / `_level`）の初期状態ファイル名を返す。
+
+    **これらは元タスクの初期状態を使えない。** bddl に物体が増えているぶん
+    自由度も増えるので、元タスクの状態を流し込むと大きさが合わずに落ちる。
+
+        ValueError: could not broadcast input array from shape (23,) into shape (49,)
+
+    LIBERO-plus は専用の初期状態を **`init_files/libero_newobj/<suite>/`** に
+    2,400 件持っており、本家の `benchmark/__init__.py` も `_add_` と `_level`
+    のときだけそこを見ている（`get_task_init_states`）。
+    **元タスク名への前方一致は使えない。** 変種名そのもののファイルがある。
+
+    Returns
+    -------
+    relative_path : str | None
+        初期状態の置き場からの相対パス（`libero_newobj/<suite>/<変種名>.pruned_init`）。
+        **`/` を含めることがパッチ側の分岐の目印になる。** 無ければ None。
+    """
+    name = f"{task_id}{_INIT_SUFFIX}"
+    if not (init_states_root / _NEWOBJ_DIR / suite / name).is_file():
+        return None
+    return f"{_NEWOBJ_DIR}/{suite}/{name}"
 
 
 def _resolve_init_state_stem(
@@ -248,6 +288,7 @@ def _place_variant(
     task_id: str,
     suite: str,
     bddl_root: Path,
+    init_states_root: Path,
     stems_by_suite: dict[str, list[str]],
 ) -> tuple[str, Path, str] | None:
     """変種の bddl と初期状態がそろって存在する置き場を決める。
@@ -256,20 +297,30 @@ def _place_variant(
     （`bddl_files/<folder>/<...>.bddl` と `init_files/<folder>/<init_states_file>`）。
     したがって**両方が同じ置き場にそろっていなければ、評価の開始直後に落ちる。**
 
+    物体が増える摂動（`_add_` / `_level`）だけは初期状態が
+    `init_files/libero_newobj/<folder>/` にある。**元タスクの初期状態を
+    当ててはいけない**（自由度が合わず broadcast で落ちる）。
+
     Returns
     -------
     placed : tuple[str, Path, str] | None
-        (置き場の名前, bddl のパス, 初期状態ファイルの名前（拡張子なし）)。
+        (置き場の名前, bddl のパス, 初期状態ファイルの名前（拡張子つき）)。
         そろう置き場が無ければ None。
     """
+    needs_newobj = any(marker in task_id for marker in _NEWOBJ_MARKERS)
     candidates = [suite] + [name for name in stems_by_suite if name != suite]
     for folder in candidates:
         bddl = _resolve_bddl(task_id, folder, bddl_root)
         if bddl is None:
             continue
+        if needs_newobj:
+            name = _resolve_newobj_init(task_id, folder, init_states_root)
+            if name is not None:
+                return folder, bddl, name
+            continue
         stem = _resolve_init_state_stem(task_id, folder, stems_by_suite)
         if stem is not None:
-            return folder, bddl, stem
+            return folder, bddl, f"{stem}{_INIT_SUFFIX}"
     return None
 
 
@@ -359,6 +410,7 @@ def _instruction_of(entry: dict, bddl: Path) -> str | None:
 def _build_rows(
     selected: list[dict],
     bddl_root: Path,
+    init_states_root: Path,
     stems_by_suite: dict[str, list[str]],
 ) -> tuple[list[dict], list[dict]]:
     """CSV の行を作り、実体が無いものは落とす。
@@ -386,14 +438,16 @@ def _build_rows(
 
     for entry in selected:
         task_id = entry["name"]
-        placed = _place_variant(task_id, entry["suite"], bddl_root, stems_by_suite)
+        placed = _place_variant(
+            task_id, entry["suite"], bddl_root, init_states_root, stems_by_suite
+        )
         if placed is None:
             drop(
                 entry, "bddl と初期状態がそろう置き場が無い",
                 f"{task_id} → 分類表のスイートは {entry['suite']}",
             )
             continue
-        folder, bddl, stem = placed
+        folder, bddl, init_states_file = placed
 
         instruction = _instruction_of(entry, bddl)
         if not instruction:
@@ -411,9 +465,14 @@ def _build_rows(
             "suite": folder,
             "category": entry["category"],
             "difficulty_level": entry.get("difficulty_level", ""),
-            # **接尾辞を剥がした結果をここに書き出す。** 評価側で regex を
+            # **どのファイルを開くかをここで決めきる。** 評価側で regex を
             # 当て直させると、カテゴリごとに違う摂動の付け方を取りこぼす。
-            "init_states_file": f"{stem}{_INIT_SUFFIX}",
+            #
+            # 物体が増える摂動だけ `libero_newobj/<suite>/<変種名>.pruned_init`
+            # という**相対パス**を書く。`/` の有無がパッチ側の分岐になっており、
+            # `problem_folder` には畳めない（あちらは bddl の置き場でもある）。
+            # それ以外は接尾辞を剥がした元タスク名のファイル名だけを書く。
+            "init_states_file": init_states_file,
         })
     return rows, skipped
 
@@ -508,7 +567,9 @@ def main() -> None:
     selected = _select(entries, args.categories, excluded, args.per_cell)
     print(f"[val] 候補: {len(selected)} 件")
 
-    rows, skipped = _build_rows(selected, bddl_root, stems_by_suite)
+    rows, skipped = _build_rows(
+        selected, bddl_root, init_states_root, stems_by_suite
+    )
     if not rows:
         _report(rows, skipped)
         raise RuntimeError(

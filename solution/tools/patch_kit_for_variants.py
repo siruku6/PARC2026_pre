@@ -48,6 +48,57 @@ _PATCHES: tuple[tuple[str, str, str, str], ...] = (
         '            or f"{r[\'task_id\']}.pruned_init",',
     ),
     (
+        "compe/t1/register.py",
+        "初期状態が別階層にある摂動（物体を増やすもの）を開けるようにする",
+        "def _init_states_for(task, get_libero_path):\n"
+        "    fn = task.init_states_file\n"
+        "    root = get_libero_path(\"init_states\")\n"
+        "    stem, ext = os.path.splitext(fn)\n"
+        "    stripped = _SUFFIX_RE.sub(\"\", stem) + ext\n"
+        "    p = os.path.join(root, task.problem_folder, stripped)\n"
+        "    return torch.load(p, weights_only=False)",
+        "def _init_states_for(task, get_libero_path):\n"
+        "    fn = task.init_states_file\n"
+        "    root = get_libero_path(\"init_states\")\n"
+        "    # CSV が `/` を含む相対パスを書いていれば、接尾辞を剥がさず\n"
+        "    # そのまま開く。**物体が増える摂動（`_add_` / `_level`）は\n"
+        "    # 変種名そのものの初期状態を持っており**、元タスクの状態を\n"
+        "    # 当てると自由度が合わずに落ちる。\n"
+        "    #   ValueError: could not broadcast input array\n"
+        "    #               from shape (23,) into shape (49,)\n"
+        "    # 本家の benchmark/__init__.py も `_add_` と `_level` のときだけ\n"
+        "    # `libero_newobj/<suite>/` を見て、読んだあと reshape している\n"
+        "    # （`get_task_init_states`）。**problem_folder には畳めない** —\n"
+        "    # あちらは bddl の置き場としても使われるため。\n"
+        "    if \"/\" in fn:\n"
+        "        states = torch.load(os.path.join(root, fn), weights_only=False)\n"
+        "        return states.reshape(1, -1)\n"
+        "    stem, ext = os.path.splitext(fn)\n"
+        "    stripped = _SUFFIX_RE.sub(\"\", stem) + ext\n"
+        "    p = os.path.join(root, task.problem_folder, stripped)\n"
+        "    return torch.load(p, weights_only=False)",
+    ),
+    (
+        "pipeline/rollout.py",
+        "1 タスクの例外でトラック全体を止めない",
+        "            result = self.evaluate_task(policy, task_info, perturbation)\n"
+        "            results.append(result)",
+        "            # **1 タスクの例外で残り全部を捨てない。**\n"
+        "            # ここが素のままだと、例外が evaluate_tasks を抜けて\n"
+        "            # pipeline.py の握りに入り、そのトラックが 0 点になる。\n"
+        "            # 2026-08-10 に 84 タスクの 26 件目で落ち、**残り 58 件が\n"
+        "            # 1 度も試されなかった**（1 時間の測定が無駄になった）。\n"
+        "            try:\n"
+        "                result = self.evaluate_task(policy, task_info, perturbation)\n"
+        "            except Exception as error:\n"
+        "                logger.error(\n"
+        '                    "  [結果] %s: 例外で測れず (%s: %s)",\n'
+        "                    task_info.name, type(error).__name__, error,\n"
+        "                )\n"
+        "                continue\n"
+        "            results.append(result)",
+    ),
+    (
         "pipeline/environment.py",
         "衝突判定の bddl を `_view_` より前で探す",
         "def parse_obj_of_interest(bddl_file: str | Path) -> set[str]:\n"
