@@ -46,6 +46,10 @@ _UPLOAD_FILES: tuple[tuple[str, str], ...] = (
         "solution/tools/check_validation_suite.py",
         "作った CSV が本当に開けるかを、評価を回す前に確かめる。セル H が呼ぶ。",
     ),
+    (
+        "solution/tools/patch_kit_for_variants.py",
+        "配布キットへのパッチ 3 か所。セル B と セル H が呼ぶ。**これが無いと B で落ちる。**",
+    ),
 )
 
 _READ_ME = """\

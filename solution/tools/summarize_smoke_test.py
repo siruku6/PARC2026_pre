@@ -45,11 +45,20 @@ def _check_log(log_path: Path, expected: int) -> tuple[bool, list[str]]:
 
     text = log_path.read_text(encoding="utf-8", errors="replace")
     results = _RESULT_RE.findall(text)
-    notes.append(f"[結果] 行: {len(results)} / {expected}")
 
     if results:
+        notes.append(f"[結果] 行: {len(results)} / {expected}")
         outcomes = collections.Counter(outcome for _, _, outcome, _ in results)
         notes.append("  内訳: " + " ".join(f"{k} {v}" for k, v in outcomes.most_common()))
+    else:
+        # **`[結果]` 行はパッチが出すものであり、キットは出さない。**
+        # 0 件は「走らなかった」ではなく「パッチが当たっていない」ことが多い。
+        # 完走したかどうかは JSON の n_tasks で判定できるので、
+        # ここでは落とさず注意だけ出す。
+        notes.append(
+            "[結果] 行: 0 件 — **patch_kit_for_variants.py の rollout.py への"
+            "パッチが当たっていない。** 完走したかは JSON 側で判定する"
+        )
 
     # 例外はトラックごとに握られるため、ログの中にだけ残る。
     errors = [
@@ -61,7 +70,10 @@ def _check_log(log_path: Path, expected: int) -> tuple[bool, list[str]]:
         notes.append(f"  **ログ中の例外らしい行: {len(errors)} 件**")
         notes.extend(f"    {line[:150]}" for line in errors[:5])
 
-    return len(results) >= expected and not errors, notes
+    # **`[結果]` の本数では合否を決めない。** 完走の判定は JSON の n_tasks で行う
+    # （そちらはキット本体が書くので、パッチの有無に左右されない）。
+    # ここで見るのは「例外が出ていないか」だけ。
+    return not errors, notes
 
 
 def _find_result_json(output_dir: Path) -> Path | None:
@@ -114,7 +126,8 @@ def main() -> None:
 
     print()
     if log_ok and json_ok:
-        print("**通った。** タスクを全部読み込み、結果が出そろい、JSON も集計値を持つ。")
+        print(f"**通った。** {args.expected_tasks} タスクを全部読み込んで最後まで走り、"
+              "JSON も集計値を持つ。")
         print("→ この構成なら 84 タスクを最後まで回せる。")
         raise SystemExit(0)
 

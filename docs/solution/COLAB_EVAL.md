@@ -193,32 +193,17 @@ run(f"PYTHON={KIT_PYTHON} bash setup.sh", tail=40, log="setup.log")
 # 警告のまま放置すると import で落ちることがあるため揃えておく。
 run(f"{KIT_DIR}/venv/bin/pip install -q 'setuptools<82'", check=False)
 
-# --- エピソードごとの結果をログに出す ---
-# 配布キットはタスク単位の集計しか出さず、45 分間まったく出力が変わらない。
-# さらに衝突判定に使った object_max_disp（**どの物体がどれだけ動いたか**）を
-# 判定した直後に捨てるため、何にぶつかったのかが分からない。
-# 判定式には触らず、その直後に logger.info を 1 つ足す。
-target = KIT_DIR / "pipeline" / "rollout.py"
-source = target.read_text()
-anchor = "        collided = any(d > collision_threshold for d in object_max_disp.values())\n"
-addition = '''        _offenders = {k: v for k, v in object_max_disp.items() if v > collision_threshold}
-        logger.info(
-            "  [結果] %s ep%d: %s %d steps%s",
-            task_info.name, episode_id,
-            "成功" if (bool(done) and not _offenders) else ("衝突" if _offenders else "未完了"),
-            total_steps,
-            ("  ぶつけた物体: " + ", ".join(
-                f"{k}={v * 1000:.1f}mm"
-                for k, v in sorted(_offenders.items(), key=lambda kv: -kv[1]))) if _offenders else "",
-        )
-'''
-if "ぶつけた物体" in source:
-    print("ログのパッチ: 適用済み")
-elif anchor not in source:
-    raise RuntimeError("パッチのアンカーが見つかりません。キットの版を確認してください")
-else:
-    target.write_text(source.replace(anchor, anchor + addition, 1))
-    print("ログのパッチ: 適用した")
+# --- キットにパッチを当てる ---
+# **3 か所ある。** 中身は patch_kit_for_variants.py に集約してあるので、
+# Docker で確かめたものとまったく同じコードが当たる。
+#   1. エピソードごとの結末をログに出す（`[結果]` 行。これが無いと
+#      成功・衝突・未完了の区別が付かず、何にぶつかったかも分からない）
+#   2. 初期状態ファイルを CSV の指定から取る（検証用スイート用）
+#   3. 衝突判定の bddl を `_view_` より前で探す（同上）
+#
+# **example の 4 タスクで測るときも 1 は要る。** 2 と 3 は検証用スイートの
+# ときだけ効くが、当てておいて害は無い。
+run(f"{KIT_PYTHON} /content/patch_kit_for_variants.py --kit-dir {KIT_DIR}", tail=10)
 
 # 動作確認。setup.sh 自身の確認は MPLBACKEND のせいで落ちるため、ここでやり直す。
 verify = (
@@ -1391,50 +1376,10 @@ def parse_obj_of_interest(bddl_file):
 # === H. 検証用スイートへ差し替える ===
 import shutil
 
-# --- 1. 初期状態ファイルの決め方を、CSV 指定へ切り替える ---
-# register.py は変種名から正規表現で接尾辞を剥がして初期状態ファイルを探すが、
-# **摂動の付け方はカテゴリごとに違う**（`_table_7`・`_tb_3`・`_light_15`・
-# `_noise_2`・`_language_25`・`_add_13`・`view_0_0_100_0_0_initstate_1`）。
-# 正規表現を足していく形では必ず取りこぼす。
-#
-# **make_validation_suite.py が実在ファイルとの最長前方一致で決めた結果を
-# CSV の init_states_file 列に書いてある**ので、register.py はそれを使う。
-# 列が無い CSV（example の 4 件）でも従来どおり動くようにしておく。
-target = KIT_DIR / "compe" / "t1" / "register.py"
-source = target.read_text()
-old = '            init_states_file=f"{r[\'task_id\']}.pruned_init",'
-new = ('            init_states_file=r.get("init_states_file")\n'
-       '            or f"{r[\'task_id\']}.pruned_init",')
-if new in source:
-    print("初期状態ファイルの指定: 適用済み")
-else:
-    assert old in source, "アンカーが見つかりません。キットの版を確認してください"
-    target.write_text(source.replace(old, new, 1))
-    print("初期状態ファイルの指定: 適用した")
-
-# --- 1-2. 衝突判定が bddl を開くところにも `_view_` の規則を入れる ---
-# environment.py の parse_obj_of_interest は変種名の bddl を直接開く。
-# **`_view_` を含む変種は実体が無いので FileNotFoundError で落ち、
-# 例外はトラック全体を止める。** 摂動は名前に埋まっているため、
-# 実体は `_view_` より前にある。
-target = KIT_DIR / "pipeline" / "environment.py"
-source = target.read_text()
-old = """def parse_obj_of_interest(bddl_file: str | Path) -> set[str]:
-    txt = Path(bddl_file).read_text()"""
-new = '''def parse_obj_of_interest(bddl_file: str | Path) -> set[str]:
-    # LIBERO-plus の 6,287 変種は自分の名前の bddl を持たない。摂動は
-    # 変種名に数値として埋め込まれており、実体は `_view_` より前にある
-    # （envs/env_wrapper.py が環境生成時に同じ切り方をしている）。
-    path = Path(bddl_file)
-    if not path.is_file() and "_view_" in path.name:
-        path = path.with_name(path.name.split("_view_")[0] + ".bddl")
-    txt = path.read_text()'''
-if new in source:
-    print("衝突判定の bddl 解決: 適用済み")
-else:
-    assert old in source, "アンカーが見つかりません。キットの版を確認してください"
-    target.write_text(source.replace(old, new, 1))
-    print("衝突判定の bddl 解決: 適用した")
+# --- 1. キットにパッチを当てる（セル B で当てていれば「適用済み」と出る） ---
+# **中身は patch_kit_for_variants.py にある。** Docker でもこれを使うので、
+# 手元で確かめたものとまったく同じコードが当たる。
+run(f"{KIT_PYTHON} /content/patch_kit_for_variants.py --kit-dir {KIT_DIR}", tail=10)
 
 # --- 2. CSV を作る ---
 run(f'PYTHONPATH="{KIT_DIR}/LIBERO-plus:{KIT_DIR}:{KIT_DIR}/compe" '
