@@ -1,9 +1,12 @@
 # solution/ — 提出物の実装
 
-[docs/strategy/02_環境戦略.md](../docs/strategy/02_環境戦略.md) の**方式 A**（LeRobot の
+[../strategy/02_環境戦略.md](../strategy/02_環境戦略.md) の**方式 A**（LeRobot の
 ソースを提出物へ同梱し、採点環境の Python 3.10 で動かす）を実際に組んだものである。
 
-**追跡するのはこのディレクトリだけ**である。重み・同梱ソース・venv・zip はすべて
+> **説明とコードは置き場所を分けている。**
+> このファイルを含む説明は `docs/solution/`、動かすファイルは `../../solution/` にある。
+
+**追跡するのは `solution/` だけ**である。重み・同梱ソース・venv・zip はすべて
 `work/` 以下に出力され、git 管理外になる。下の手順で丸ごと再生成できる。
 
 ## 中身
@@ -18,6 +21,8 @@
 | `tools/build_submission.py` | 提出用 zip を組み立て、検証し、sha256 を記録する |
 | `tools/digest_submission.py` | 提出物の内容ダイジェスト。環境間の同期確認に使う |
 | `tools/run_local_eval.sh` | 配布キットの評価パイプラインを提出物に対して回す（コンテナ内） |
+| `tools/make_validation_suite.py` | example 以外のタスクで測るための一覧を作る（Colab へ上げる） |
+| `tools/collect_colab_files.py` | Colab へ上げるファイルを `work/colab_upload/` に集める |
 
 `tools/` の Python スクリプトは**どのディレクトリから実行してもよい**。入出力は
 スクリプト自身の位置から求めたリポジトリルート基準で解決する。
@@ -47,7 +52,7 @@ flowchart LR
 
 ## 再生成の手順
 
-**→ [../docs/howto/02_build_submission.md](../docs/howto/02_build_submission.md)**
+**→ [../howto/02_build_submission.md](../howto/02_build_submission.md)**
 
 venv の作成・LeRobot の同梱・重みの配置・zip の組み立てと検証・既知のハッシュは、
 すべてそちらに集約している。ケース 0（土台を作る）から順に読む。
@@ -98,7 +103,7 @@ flowchart LR
 積み上がる誤差が、5 倍の頻度で打ち切られる。
 
 **これがこれまでで最大の改善だった。** 追加学習なしで次のとおりである
-（20 エピソード/タスク、初期状態 0〜19。[../docs/strategy/05_実測結果.md](../docs/strategy/05_実測結果.md)）。
+（20 エピソード/タスク、初期状態 0〜19。[../strategy/05_実測結果.md](../strategy/05_実測結果.md)）。
 
 | 設定 | 成功率 | 衝突率 |
 |---|---|---|
@@ -262,12 +267,12 @@ PARC_BLEND_STEPS=3 bash solution/tools/run_local_eval.sh
 
 ## 追加学習した重みへの差し替え・検証
 
-**→ [../docs/howto/02_build_submission.md](../docs/howto/02_build_submission.md)**
+**→ [../howto/02_build_submission.md](../howto/02_build_submission.md)**
 
 `install_weights.py` の使い方、取り込み前の 4 つの検査、素の重みへの戻し方、
 Docker コンテナでの採点環境に近い検証は、すべてそちらにある。
 
-学習そのものは [../docs/howto/01_retrain.md](../docs/howto/01_retrain.md)。
+学習そのものは [../howto/01_retrain.md](../howto/01_retrain.md)。
 
 ## 現在の状態
 

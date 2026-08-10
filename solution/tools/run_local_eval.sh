@@ -31,7 +31,7 @@ SERVER_LOG="${SERVER_LOG:-$SUBMISSION_DIR/server.log}"
 TIMEOUT="${TIMEOUT:-10}"
 
 # 推論時の後処理。いずれも空なら無効で、素の挙動になる。
-# 詳細は solution/README.md の「推論時の後処理」を参照。
+# 詳細は docs/solution/README.md の「推論時の後処理」を参照。
 #   PARC_N_ACTION_STEPS=25 bash run_local_eval.sh   # 閉ループ寄りにする
 #   PARC_SAMPLES=3         bash run_local_eval.sh   # chunk を 3 回引いて典型を選ぶ
 #   PARC_BLEND_STEPS=3     bash run_local_eval.sh   # chunk 境界の段差を消す

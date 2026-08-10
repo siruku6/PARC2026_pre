@@ -11,7 +11,7 @@
     python merge.py --step 15000          # 特定のステップを指定
 
 途中で打ち切った場合は、学習率がどこまで落ちているかを確認してから選ぶこと
-（[solution/COLAB.md](../COLAB.md) の「途中のチェックポイントで打ち切るとき」）。
+（[docs/solution/COLAB.md](../../docs/solution/COLAB.md) の「途中のチェックポイントで打ち切るとき」）。
 
 Reads:
   - $OUTPUT_ROOT/<run-name>/checkpoints/<step>/pretrained_model/**

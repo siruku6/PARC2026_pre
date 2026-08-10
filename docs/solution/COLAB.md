@@ -1,6 +1,6 @@
 # Colab で学習を回す — 切断に耐える構成
 
-配布ノートブック [examples/smolvla_libero_spatial_lora.ipynb](../examples/smolvla_libero_spatial_lora.ipynb)
+配布ノートブック [examples/smolvla_libero_spatial_lora.ipynb](../../examples/smolvla_libero_spatial_lora.ipynb)
 は、学習結果を `/content` にしか置かない。Colab のセッションが切れた時点で全部消える。
 
 このメモは、**セッションが切れても学習をやり直さずに済む形**へノートブックを直す手順である。
@@ -617,7 +617,7 @@ else:
 
 配布ノートブックは `SPATIAL_TASK_NAMES` に並べた **libero_spatial の
 「黒いボウル」10 タスクだけ**で学習する。ところが Track 1 の example タスク
-（[compe/t1/T1_TASKS.csv](../compe/t1/T1_TASKS.csv)）は 3 つのスイートにまたがる。
+（[compe/t1/T1_TASKS.csv](../../compe/t1/T1_TASKS.csv)）は 3 つのスイートにまたがる。
 
 | # | タスク | suite | 摂動 | 難度 | 配布ノートブックの学習データに含まれるか |
 |---|---|---|---|---|---|
@@ -627,7 +627,7 @@ else:
 | 4 | bowl on stove | libero_goal | Light Conditions | L4 | ✗ |
 
 **4 つのうち 1 つしかカバーしていない。** さらに
-[compe/t1/README.md](../compe/t1/README.md) には
+[compe/t1/README.md](../../compe/t1/README.md) には
 
 > 本番評価は非公開タスクを含む別のタスクセットで実施される。
 
@@ -962,7 +962,7 @@ brightness / contrast / saturation / hue / sharpness のジッタが
 
 ## 持ち帰ったあとの手順
 
-**→ [../docs/howto/02_build_submission.md](../docs/howto/02_build_submission.md) のケース 2**
+**→ [../howto/02_build_submission.md](../howto/02_build_submission.md) のケース 2**
 
 Drive の `merged_model/` を `install_weights.py` に渡すだけでよい。
 差し替えるファイルの取捨、`vlm/` の引き継ぎ、取り込み前の検査、

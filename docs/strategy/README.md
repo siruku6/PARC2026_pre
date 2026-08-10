@@ -227,8 +227,8 @@ flowchart TD
 | [02_環境戦略.md](02_環境戦略.md) | STEP 1。Python 3.10 / 3.12 問題の判断材料 |
 | [03_学習とデータの方針.md](03_学習とデータの方針.md) | STEP 3。配布ノートブックの**どこを変えるか（なぜ）** |
 | **[05_実測結果.md](05_実測結果.md)** | **測った数字はすべてここ。** 判断の前に必ず見る |
-| [../../solution/COLAB.md](../../solution/COLAB.md) | STEP 3。Colab で**どう変えるか（貼れるコード）** |
-| [../../solution/COLAB_EVAL.md](../../solution/COLAB_EVAL.md) | Colab GPU で評価を回す（80 エピソード 45 分） |
+| [../solution/COLAB.md](../solution/COLAB.md) | STEP 3。Colab で**どう変えるか（貼れるコード）** |
+| [../solution/COLAB_EVAL.md](../solution/COLAB_EVAL.md) | Colab GPU で評価を回す（80 エピソード 45 分） |
 | **[../howto/01_retrain.md](../howto/01_retrain.md)** | **手を動かすとき。** 再学習の手順（Docker / Colab） |
 | **[../howto/02_build_submission.md](../howto/02_build_submission.md)** | **手を動かすとき。** zip の組み立てから提出まで |
 | [04_提出物の実装と検証.md](04_提出物の実装と検証.md) | STEP 0 と STEP 4。実装・検証・提出運用 |

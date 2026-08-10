@@ -46,7 +46,7 @@ flowchart TD
 |---|---|---|
 | 時間の上限 | **セッションが切れる**（実際 9,100 ステップで切れた） | 無し |
 | 出力 | Drive へ同期しないと消える | **ホストのディレクトリに残る** |
-| 切断対策 | [../../solution/COLAB.md](../../solution/COLAB.md) の A〜F の仕掛けが要る | 不要 |
+| 切断対策 | [../solution/COLAB.md](../solution/COLAB.md) の A〜F の仕掛けが要る | 不要 |
 | 再現性 | ノートブックの手動編集 | **イメージと引数で固定** |
 
 **使えるなら Docker を選ぶ。** Colab は上限で切れるのが確定しており、
@@ -258,7 +258,7 @@ docker run --rm -it \
 
 # B. Colab で回す
 
-セルの書き換えが必要なため、手順は [../../solution/COLAB.md](../../solution/COLAB.md)
+セルの書き換えが必要なため、手順は [../solution/COLAB.md](../solution/COLAB.md)
 にある。**A〜H の順に読んで差し込む。**
 
 | セル | 何をするか | なぜ必要か |
@@ -283,7 +283,7 @@ docker run --rm -it \
 | 15,000 | 7.4e-5（25%） | **実用の下限** |
 | 20,000 | 3.0e-5 | 想定どおり |
 
-詳細は [../../solution/COLAB.md](../../solution/COLAB.md) の
+詳細は [../solution/COLAB.md](../solution/COLAB.md) の
 「途中のチェックポイントで打ち切るとき」にある。
 
 ---

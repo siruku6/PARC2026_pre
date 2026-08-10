@@ -281,7 +281,7 @@ Omnicampus に `work/submission.zip` をアップロードする。
 **出す前に、ローカル評価で成功率を測っておくこと。**
 ローカル評価は本番スコアを再現する（[../strategy/05_実測結果.md](../strategy/05_実測結果.md)）ので、
 1 日 1 回の枠を試行錯誤に使う必要は無い。手順は
-[../../solution/COLAB_EVAL.md](../../solution/COLAB_EVAL.md) にある。
+[../solution/COLAB_EVAL.md](../solution/COLAB_EVAL.md) にある。
 
 **スコアが返ってきたら、ハッシュと一緒に
 [../strategy/05_実測結果.md](../strategy/05_実測結果.md) へ記録する。**

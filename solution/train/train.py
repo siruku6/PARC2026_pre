@@ -2,7 +2,7 @@
 """SmolVLA の LoRA 追加学習を、Colab を使わずに回す。
 
 配布ノートブック（examples/smolvla_libero_spatial_lora.ipynb）と同じ学習を、
-[solution/COLAB.md](../COLAB.md) の H の変更を適用した状態で実行する。
+[docs/solution/COLAB.md](../../docs/solution/COLAB.md) の H の変更を適用した状態で実行する。
 
 | | 変更 | 配布既定 |
 |---|---|---|

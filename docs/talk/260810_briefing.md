@@ -336,7 +336,7 @@ No.40（いつ枠ができるか）は未回答だが、確認は自分ででき
 2. カテゴリ別の成功率を見て、**どの摂動が弱いか**を確認する
 3. その結果を見て、学習データの選び方を決める
 
-所要 80 分。手順は `solution/COLAB_EVAL.md` にある。
+所要 80 分。手順は `docs/solution/COLAB_EVAL.md` にある。
 
 ---
 
@@ -368,7 +368,7 @@ No.40（いつ枠ができるか）は未回答だが、確認は自分ででき
 | **まだ手をつけていないこと** | `docs/talk/open_items.md` |
 | 測った数字すべて | `docs/strategy/05_実測結果.md` |
 | 用語と全体像 | `docs/strategy/README.md` |
-| 評価の回し方 | `solution/COLAB_EVAL.md` |
+| 評価の回し方 | `docs/solution/COLAB_EVAL.md` |
 | 学習の回し方 | `docs/howto/01_retrain.md` |
 | 提出物の作り方 | `docs/howto/02_build_submission.md` |
 | 本番の採点ログ | `docs/prod_eval_results/` |

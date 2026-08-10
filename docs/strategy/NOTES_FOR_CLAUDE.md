@@ -249,7 +249,7 @@ Adding `av` to `requirements.txt` would remove the risk at the cost of changing 
 that is already known-good. Not done as of 2026-08-09; revisit if a startup failure appears.
 
 Colab hits this immediately because Colab ships `datasets` — see
-[solution/COLAB_EVAL.md](../../solution/COLAB_EVAL.md) section D.
+[docs/solution/COLAB_EVAL.md](../solution/COLAB_EVAL.md) section D.
 
 ---
 
