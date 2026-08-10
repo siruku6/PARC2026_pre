@@ -1210,6 +1210,94 @@ print(f"1 時間で回せるエピソード数の目安: {3600 / (elapsed / epis
 
 ---
 
+## H. 未知タスクで測る（検証用スイート）
+
+**example 4 件での成功率は本番を予測できない。** 0.875 を出しても本番は 0.096
+だった。原因は `compe/t1/README.md` にそのまま書いてある。
+
+> 本番評価は非公開タスクを含む別のタスクセットで実施される。
+
+そこで **LIBERO-plus の 10,030 変種から example 以外を選び、`libero_t1` の
+中身を差し替える。** `register.py` は CSV を読んでスイートを作るだけなので、
+CSV を替えれば評価パイプラインは何も変えずに動く。
+
+選ぶ範囲は example の構成に合わせる。4 件はすべて **Background Textures** か
+**Light Conditions** に属し、運営 Q&A No.21 の「7 カテゴリすべてではない」と
+合わせると、この 2 カテゴリが本命と読める。スイートは 4 つとも混ぜる。
+
+**B のあと、E-1 の前に 1 度だけ実行する。** 元へ戻すには B から流し直す。
+
+まず [make_validation_suite.py](tools/make_validation_suite.py) を
+`/content/` へアップロードしておく（`policy_server.py` と同じ要領）。
+
+```python
+# === H. 検証用スイートへ差し替える ===
+import shutil
+
+# --- 1. 接尾辞の除去を広げる ---
+# register.py は `_light_*` と `_table_N` しか剥がさないため、他のカテゴリでは
+# 初期状態ファイルを見つけられない。運営 Q&A によれば**本番の実装は `_tb_` も
+# 剥がす**ので、こちらを広く取る。
+target = KIT_DIR / "compe" / "t1" / "register.py"
+source = target.read_text()
+old = '_SUFFIX_RE = re.compile(r"_light_[^.]*|_table_\\d+")'
+new = ('_SUFFIX_RE = re.compile(r"_light_[^.]*|_table_\\d+|_tb_\\d+'
+       '|_noise_\\d+|_initstate_\\d+|_add_\\d+")')
+if new in source:
+    print("接尾辞の拡張: 適用済み")
+else:
+    assert old in source, "アンカーが見つかりません。キットの版を確認してください"
+    target.write_text(source.replace(old, new, 1))
+    print("接尾辞の拡張: 適用した")
+
+# --- 2. CSV を作る ---
+run(f'PYTHONPATH="{KIT_DIR}/LIBERO-plus:{KIT_DIR}:{KIT_DIR}/compe" '
+    f'{KIT_DIR}/venv/bin/python /content/make_validation_suite.py '
+    f'--libero-plus {KIT_DIR}/LIBERO-plus '
+    f'--exclude {KIT_DIR}/compe/t1/T1_TASKS.csv '
+    f'--output /content/VAL_TASKS.csv --per-cell 3',
+    tail=40, log="val_suite.log")
+
+# --- 3. example と差し替える ---
+# **元の CSV は退避する。** 比較のために example へ戻すことがある。
+original = KIT_DIR / "compe/t1/T1_TASKS.csv"
+backup = KIT_DIR / "compe/t1/T1_TASKS.csv.example"
+if not backup.exists():
+    shutil.copy(original, backup)
+shutil.copy("/content/VAL_TASKS.csv", original)
+
+import csv as _csv
+rows = list(_csv.DictReader(original.open()))
+print(f"\n差し替えた: {len(rows)} タスク（example は {backup.name} に退避）")
+for row in rows[:5]:
+    print(f"  {row['suite']:16s} {row['category']:22s} {row['task_id'][:44]}")
+print(f"  ... 計 {len(rows)} 件")
+```
+
+### エピソード数の決め方
+
+`N_EPISODES` は**タスクあたり**の本数である。タスク数が増えるので、
+example のときと同じ感覚で設定すると時間が跳ねる。
+
+| `--per-cell` | タスク数 | `N_EPISODES` | 総数 | 所要（n=10） |
+|---|---|---|---|---|
+| 3 | 24 | 3 | 72 | **約 30 分** |
+| 3 | 24 | 5 | 120 | 約 50 分 |
+| 5 | 40 | 3 | 120 | 約 50 分 |
+
+**タスク数を増やすほうがエピソード数を増やすより価値が高い。**
+測りたいのは「見たことのない摂動に耐えるか」であって、
+同じタスクを何度も回しても分からない。
+
+### 例に戻すとき
+
+```python
+shutil.copy(KIT_DIR / "compe/t1/T1_TASKS.csv.example",
+            KIT_DIR / "compe/t1/T1_TASKS.csv")
+```
+
+---
+
 ## 注意点
 
 | 項目 | 内容 |
