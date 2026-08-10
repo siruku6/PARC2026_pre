@@ -1042,6 +1042,11 @@ E-3 のあとならいつでも走る。**評価が途中で落ちて JSON が�
 
 ```python
 # === F. 結果を読む・集計する・退避する ===
+# 版 3。**この行が出ないなら古いセルを実行している。**
+# 貼り替えたつもりで古いままだと、直したはずのエラーがそのまま再現し、
+# 原因を別の場所に探しに行くことになる（実際に起きた）。
+print("[F] 版 3")
+
 import json, math, re, shutil, time
 from collections import Counter
 from pathlib import Path
@@ -1336,6 +1341,29 @@ Light Conditions しか含まないが、それは 4 サンプルにすぎない
 `make_validation_suite.py` は `task_id` を**一切書き換えず**、解決したパスは
 存在確認と指示文の読み取りにだけ使う。
 
+#### ただし配布キット側も `_view_` を知らない
+
+**`env_wrapper.py` が切ってくれるのは、環境を作るときだけである。**
+配布キットの [pipeline/environment.py](../../pipeline/environment.py) は
+衝突判定のために bddl を**自分で開く**。
+
+```python
+bddl_path = suite.get_task_bddl_file_path(task_id)   # 変種名そのまま
+...
+def parse_obj_of_interest(bddl_file):
+    txt = Path(bddl_file).read_text()                # ← ここで FileNotFoundError
+```
+
+`get_task_bddl_file_path` は `_view_` を切らないため、**変種名の bddl が
+実体でないと、タスクを読み込む時点で落ちる。** 例外はトラック全体を止めるので、
+`_view_` を含む行に当たった瞬間に評価が終わる。
+
+**2026-08-10 に実際にこうなった。** 84 タスクのうち 1〜3 行目
+（`_table_` / `_tb_`）だけが走り、4 行目（`_view_`）で落ちて 173 秒で終了した。
+終了コードは 0 で、**画面上は正常に見えた。**
+
+下のセルが `parse_obj_of_interest` にも同じ規則を入れる。
+
 ### 初期状態ファイルの決め方（8/10 に作り直した）
 
 **正規表現で接尾辞を剥がす方式は捨てた。** 摂動の付け方はカテゴリごとに違う。
@@ -1383,6 +1411,30 @@ else:
     assert old in source, "アンカーが見つかりません。キットの版を確認してください"
     target.write_text(source.replace(old, new, 1))
     print("初期状態ファイルの指定: 適用した")
+
+# --- 1-2. 衝突判定が bddl を開くところにも `_view_` の規則を入れる ---
+# environment.py の parse_obj_of_interest は変種名の bddl を直接開く。
+# **`_view_` を含む変種は実体が無いので FileNotFoundError で落ち、
+# 例外はトラック全体を止める。** 摂動は名前に埋まっているため、
+# 実体は `_view_` より前にある。
+target = KIT_DIR / "pipeline" / "environment.py"
+source = target.read_text()
+old = """def parse_obj_of_interest(bddl_file: str | Path) -> set[str]:
+    txt = Path(bddl_file).read_text()"""
+new = '''def parse_obj_of_interest(bddl_file: str | Path) -> set[str]:
+    # LIBERO-plus の 6,287 変種は自分の名前の bddl を持たない。摂動は
+    # 変種名に数値として埋め込まれており、実体は `_view_` より前にある
+    # （envs/env_wrapper.py が環境生成時に同じ切り方をしている）。
+    path = Path(bddl_file)
+    if not path.is_file() and "_view_" in path.name:
+        path = path.with_name(path.name.split("_view_")[0] + ".bddl")
+    txt = path.read_text()'''
+if new in source:
+    print("衝突判定の bddl 解決: 適用済み")
+else:
+    assert old in source, "アンカーが見つかりません。キットの版を確認してください"
+    target.write_text(source.replace(old, new, 1))
+    print("衝突判定の bddl 解決: 適用した")
 
 # --- 2. CSV を作る ---
 run(f'PYTHONPATH="{KIT_DIR}/LIBERO-plus:{KIT_DIR}:{KIT_DIR}/compe" '
