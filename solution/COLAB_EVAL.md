@@ -1093,8 +1093,33 @@ if EVAL_LOG:
             for obj, count in objects.most_common():
                 print(f"  {count:3d}  {obj}")
 
+        # --- 摂動カテゴリ別 ---
+        # **H の検証用スイートで測ったときに効く。** どのカテゴリが弱いかが
+        # 分かれば、学習で何を厚くすべきかが決まる。
+        # 使っている CSV に category 列があるときだけ集計する。
+        import csv as _csv
+        definition = KIT_DIR / "compe/t1/T1_TASKS.csv"
+        category_of = {}
+        with definition.open(newline="") as stream:
+            for row in _csv.DictReader(stream):
+                if row.get("category"):
+                    category_of[row["task_id"]] = row["category"]
+
+        if category_of:
+            per_category: dict[str, Counter] = {}
+            for name, slot in by_task.items():
+                key = category_of.get(name, "（不明）")
+                per_category.setdefault(key, Counter()).update(slot)
+            print("\n摂動カテゴリ別")
+            for key in sorted(per_category):
+                slot = per_category[key]
+                total_here = sum(slot.values())
+                rate = slot.get("成功", 0) / total_here
+                print(f"  {key:24s} 成功 {rate:.2f}  ({total_here} 本)  "
+                      + " ".join(f"{k} {v}" for k, v in slot.most_common()))
+
         print("\nタスク別")
-        for name, slot in by_task.items():
+        for name, slot in sorted(by_task.items()):
             print(f"  {name[:46]:46s} "
                   + " ".join(f"{k} {v}" for k, v in slot.most_common()))
 
@@ -1221,9 +1246,13 @@ print(f"1 時間で回せるエピソード数の目安: {3600 / (elapsed / epis
 中身を差し替える。** `register.py` は CSV を読んでスイートを作るだけなので、
 CSV を替えれば評価パイプラインは何も変えずに動く。
 
-選ぶ範囲は example の構成に合わせる。4 件はすべて **Background Textures** か
-**Light Conditions** に属し、運営 Q&A No.21 の「7 カテゴリすべてではない」と
-合わせると、この 2 カテゴリが本命と読める。スイートは 4 つとも混ぜる。
+**摂動カテゴリは 7 つとも入れる。** example 4 件は Background Textures と
+Light Conditions しか含まないが、それは 4 サンプルにすぎない。運営 Q&A No.21 の
+「7 カテゴリすべてではない」も、どれが出るかは言っていない。
+
+絞ると、当たっていれば無駄がなく、**外れていれば何も見えない**。全部入れて
+カテゴリ別に集計すれば、当たっていてもその行を読めばよく、外れていれば気づける。
+**どこが弱いかが分かれば学習の的も決まる。** スイートも 4 つとも混ぜる。
 
 **B のあと、E-1 の前に 1 度だけ実行する。** 元へ戻すには B から流し直す。
 
@@ -1279,15 +1308,18 @@ print(f"  ... 計 {len(rows)} 件")
 `N_EPISODES` は**タスクあたり**の本数である。タスク数が増えるので、
 example のときと同じ感覚で設定すると時間が跳ねる。
 
+タスク数は `4 スイート × 7 カテゴリ × --per-cell` になる。
+
 | `--per-cell` | タスク数 | `N_EPISODES` | 総数 | 所要（n=10） |
 |---|---|---|---|---|
-| 3 | 24 | 3 | 72 | **約 30 分** |
-| 3 | 24 | 5 | 120 | 約 50 分 |
-| 5 | 40 | 3 | 120 | 約 50 分 |
+| 2 | 56 | 1 | 56 | **約 25 分** |
+| **3** | **84** | **1** | **84** | **約 35 分** |
+| 3 | 84 | 2 | 168 | 約 70 分 |
 
 **タスク数を増やすほうがエピソード数を増やすより価値が高い。**
-測りたいのは「見たことのない摂動に耐えるか」であって、
-同じタスクを何度も回しても分からない。
+測りたいのは「見たことのない摂動に耐えるか」であって、同じタスクを
+何度も回しても分からない。カテゴリごとに 12 本（4 スイート × 3）あれば、
+「このカテゴリが弱い」は読める。
 
 ### 例に戻すとき
 

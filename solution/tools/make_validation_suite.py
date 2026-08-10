@@ -9,10 +9,15 @@
 選んで CSV にする。`compe/t1/register.py` は CSV を読んでスイートを組み立てる
 だけなので、この CSV に差し替えれば評価パイプラインはそのまま動く。
 
-選び方は example の構成に合わせる。example 4 件はすべて Background Textures か
-Light Conditions に属し、運営 Q&A No.21 の「7 カテゴリすべてではない」と
-合わせると、**視覚摂動の 2 カテゴリが本命**と読める。スイート（spatial /
-object / goal / 10）は 4 つとも混ぜる。
+**7 つの摂動カテゴリを全部入れる。** example 4 件は Background Textures と
+Light Conditions しか含まないが、それは 4 サンプルにすぎない。運営 Q&A No.21 の
+「7 カテゴリすべてではない」も、どれが出るかは言っていない。
+
+ここで 2 カテゴリに絞ると、**当たっていれば無駄がなく、外れていれば
+何も見えない**。全部入れてカテゴリ別に集計すれば、当たっていてもその行を
+読めばよく、外れていれば気づける。**どこが弱いかが分かれば学習の的も決まる。**
+
+スイート（spatial / object / goal / 10）も 4 つとも混ぜる。
 
 **Colab のキット環境で実行すること。** LIBERO-plus の実体が要る。
 
@@ -37,8 +42,17 @@ import os
 import re
 from pathlib import Path
 
-# example 4 件が属する 2 カテゴリ。本番もここが中心と読める。
-_DEFAULT_CATEGORIES = ("Background Textures", "Light Conditions")
+# LIBERO-plus の摂動カテゴリ 7 つ。**既定では全部使う。**
+# どれが本番に出るかは非公開であり、絞ると外れたときに何も見えなくなる。
+_DEFAULT_CATEGORIES = (
+    "Background Textures",      # 机や壁のテクスチャ
+    "Camera Viewpoints",        # カメラの位置と向き
+    "Language Instructions",    # 指示文の言い換え
+    "Light Conditions",         # 照明
+    "Objects Layout",           # 物体の配置と種類
+    "Robot Initial States",     # ロボットの初期姿勢
+    "Sensor Noise",             # 観測ノイズ
+)
 
 # 初期状態ファイル名を得るために剥がす接尾辞。
 # **配布キットの register.py は `_light_*` と `_table_N` しか剥がさない。**

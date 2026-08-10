@@ -134,10 +134,16 @@ class MyPolicy(BasePolicy):
         # 失敗の原因は開ループ 50 ステップの間に誤差が積み上がることだった。
         # 再計画を 5 倍の頻度で入れると、その蓄積が毎回打ち切られる。
         #
-        # 代償は推論回数が 5 倍になること。1 ステップあたり 55 ms → 123 ms
-        # （T4 実測）だが、40 エピソードで 827 秒であり、トラック全体
-        # 1 時間の制限に対してはなお十分な余裕がある。
-        config.n_action_steps = int(os.environ.get("PARC_N_ACTION_STEPS", "10"))
+        # 本番採点でも効いた。50 → 10 でスコアが 0.058 → 0.096 になっている。
+        #
+        # **既定は 5。** 本番の実測 2 点から合計時間は
+        # `環境 129.4 秒 + 推論 911.2 秒 / n` と分解でき、n=5 でも 312 秒
+        # （上限 3,600 秒の 8.7%）にとどまる。n=1 ですら 1,041 秒で収まるため、
+        # 時間制限は縮めない理由にならない。
+        #
+        # 小さくしすぎると、毎ステップ独立に flow matching の乱数を引くため
+        # 軌道がガタつく恐れがある。`PARC_EMA_ALPHA` がそれを打ち消す。
+        config.n_action_steps = int(os.environ.get("PARC_N_ACTION_STEPS", "5"))
 
         self._policy = SmolVLAPolicy.from_pretrained(weights, config=config)
         self._policy.to(self._device)
@@ -155,12 +161,17 @@ class MyPolicy(BasePolicy):
         )
         self._env_preprocessor = PolicyProcessorPipeline(steps=[LiberoProcessorStep()])
 
-        # 行動の後処理。いずれも未設定なら無効で、既定の挙動は変わらない。
-        # 運営 Q&A No.10 で「VLA が生成した Action を、全タスク共通のルールで
-        # 整える処理」は禁止事項に含まれないと明言されている。
+        # 行動の後処理。運営 Q&A No.10 で「VLA が生成した Action を、全タスク
+        # 共通のルールで整える処理」は禁止事項に含まれないと明言されている。
         # 使うのはモデル出力と過去の行動だけで、タスクや seed は参照しない。
+        #
+        # **EMA の既定は 0.3。** 直前の行動を 3 割混ぜて動きをならす。
+        # 80 エピソードの実測で、成功率 0.875 → 0.888（誤差の範囲）を保ったまま
+        # avg_cartesian_jerk が 4.5161 → 3.5335（−22%）、rms が −16% になった。
+        # 衝突率も 0.087 → 0.075。懸念した「惰性で行き過ぎて接触が増える」は
+        # 起きていない。n を小さくしたときのガタつきを抑える役目も兼ねる。
         self._blend_steps = int(os.environ.get("PARC_BLEND_STEPS", "0"))
-        self._ema_alpha = float(os.environ.get("PARC_EMA_ALPHA", "0"))
+        self._ema_alpha = float(os.environ.get("PARC_EMA_ALPHA", "0.3"))
         self._n_action_steps = int(self._policy.config.n_action_steps)
 
         # chunk を何回引くか。1 なら素の挙動。
