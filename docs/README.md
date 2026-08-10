@@ -30,7 +30,8 @@
 | [talk/lessons_learned.md](talk/lessons_learned.md) | コンペが終わったあと。**次の 3 日の組み立て方**まで書いてある |
 | [howto/01_retrain.md](howto/01_retrain.md) | 追加学習を回すとき |
 | [howto/02_build_submission.md](howto/02_build_submission.md) | zip を作って出すとき |
-| [solution/COLAB_EVAL.md](solution/COLAB_EVAL.md) | Colab で評価を回すとき |
+| **[howto/03_gpu_eval.md](howto/03_gpu_eval.md)** | **評価を回すとき（GPU マシン。放っておける）** |
+| [solution/COLAB_EVAL.md](solution/COLAB_EVAL.md) | 評価を回すとき（Colab。GPU マシンが無いとき） |
 | [solution/COLAB.md](solution/COLAB.md) | Colab で学習を回すとき |
 | [strategy/05_実測結果.md](strategy/05_実測結果.md) | 判断する前。数字はすべてここ |
 
