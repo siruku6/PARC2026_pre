@@ -12,6 +12,19 @@
     python -m pipeline --server-url http://localhost:8000 --dry-run
 """
 
+# 提出物の版。**採点ログの先頭に出るので、スコアと構成を後から結び付けられる。**
+# 以前は「どの zip がどのスコアだったか」をハッシュと記憶で辿っていた。
+#
+#   major … 重みが変わったとき（追加学習の反映など）
+#   minor … 推論の挙動が変わったとき（既定値の変更、後処理の追加）
+#   patch … 挙動が変わらない修正
+#
+# リーダーボードの履歴との対応:
+#   0.1.0  素の重み・後処理なし（n_action_steps=50）      スコア 0.05832
+#   0.2.0  n_action_steps=10                              スコア 0.096
+#   0.3.0  n_action_steps=5 ＋ EMA 0.3                    スコア 0.1409
+__version__ = "0.3.0"
+
 import argparse
 from abc import ABC, abstractmethod
 
@@ -181,6 +194,16 @@ class MyPolicy(BasePolicy):
 
         self._previous_action: np.ndarray | None = None
         self._step_index = 0
+
+        # **採点ログに構成を残す。** 以前は「どの設定で採点されたか」がログから
+        # 分からず、所要時間から逆算して推定するしかなかった。ここに出しておけば
+        # 提出物とスコアの対応が後から確実に辿れる。
+        print(
+            f"[parc] policy_server {__version__}  device={self._device}  "
+            f"n_action_steps={self._n_action_steps}  ema_alpha={self._ema_alpha}  "
+            f"blend_steps={self._blend_steps}  samples={self._samples}",
+            flush=True,
+        )
 
         self._instruction = ""
         self._warm_up()
