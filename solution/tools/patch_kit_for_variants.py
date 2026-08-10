@@ -94,6 +94,21 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def is_applied(kit_dir: Path) -> bool:
+    """キットにパッチが当たっているかを返す。
+
+    **旗で受け取らずに実物を見る**ために公開している。「当てたつもり」で
+    当たっていない状態を検査側が信じてしまうと、82 分の評価が 4 行目で
+    落ちるのを見逃す。判定には置換後の文字列そのものを使うので、
+    パッチの定義と食い違うことがない。
+    """
+    return all(
+        (kit_dir / relative_path).is_file()
+        and after in (kit_dir / relative_path).read_text(encoding="utf-8")
+        for relative_path, _, _, after in _PATCHES
+    )
+
+
 def _apply(path: Path, description: str, before: str, after: str) -> str:
     """1 か所を書き換え、何をしたかを返す。"""
     if not path.is_file():
@@ -111,8 +126,27 @@ def _apply(path: Path, description: str, before: str, after: str) -> str:
     return f"適用した  {description}"
 
 
+def _refuse_own_repository(kit_dir: Path) -> None:
+    """自分のリポジトリを書き換えようとしたら止める。
+
+    **`compe/` と `pipeline/` は配布キットのファイルであり、提出物では
+    未改変のまま保つ必要がある。** このリポジトリにも同じ 3 ファイルが
+    追跡されているので、`--kit-dir .` のような打ち間違いで汚れてしまう。
+    実際の呼び出し先（Docker の `/workspace`、Colab の clone）は
+    使い捨てなので、この制限に当たらない。
+    """
+    repository_root = Path(__file__).resolve().parents[2]
+    if kit_dir.resolve() == repository_root:
+        raise SystemExit(
+            f"このリポジトリ自身（{repository_root}）は書き換えません。\n"
+            "  配布キットは使い捨ての場所に置いてください"
+            "（Docker なら /workspace、Colab なら /content/PARC2026_pre）。"
+        )
+
+
 def main() -> None:
     args = _parse_args()
+    _refuse_own_repository(args.kit_dir)
     print(f"[patch] キット: {args.kit_dir}")
     for relative_path, description, before, after in _PATCHES:
         result = _apply(args.kit_dir / relative_path, description, before, after)

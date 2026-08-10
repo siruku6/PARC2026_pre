@@ -49,7 +49,7 @@ echo
 echo "[4/6] 全部開けるか、評価の前に確かめる"
 "$PY" "$TOOLS_DIR/check_validation_suite.py" \
     --csv "$OUT_DIR/VAL_TASKS.csv" --libero-plus "$KIT/LIBERO-plus" \
-    --patched --max-tasks "$TASKS"
+    --kit-dir "$KIT" --max-tasks "$TASKS"
 
 echo
 echo "[5/6] ランダム方策のサーバーを起動する"

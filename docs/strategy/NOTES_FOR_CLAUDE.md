@@ -220,8 +220,10 @@ The exception propagates to `Pipeline.run`, which catches it per-track and write
 
 **Verify before spending an hour on a run:** `solution/tools/check_validation_suite.py`
 rebuilds all three paths (env bddl, collision bddl, init states) exactly as the harness
-does and names the first row that fails. It reproduces the 48-row/4-category failure
-without `--patched` and passes 84/84 with it.
+does and names the first row that fails. It **reads `--kit-dir` to decide whether the
+patches are applied** rather than taking a flag — a flag would let "I thought I patched it"
+pass the very check that exists to catch it. Against an unpatched kit it reports 64 failing
+rows; against a patched one, 84/84 open.
 
 ### 3.5 Upstream's own init-states resolution is buggy; use longest-prefix match
 

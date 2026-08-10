@@ -44,6 +44,7 @@ from __future__ import annotations
 import argparse
 import collections
 import csv
+import itertools
 import json
 import re
 import sys
@@ -234,7 +235,9 @@ def _resolve_bddl(task_id: str, suite: str, bddl_root: Path) -> Path | None:
     bddl : Path | None
         実体のある bddl。見つからなければ None。
     """
-    for stem in (task_id, task_id.split("_view_")[0]):
+    # `_view_` が無ければ候補は 1 つ。同じ名前を 2 度 stat しないよう畳む。
+    stems = dict.fromkeys((task_id, task_id.split("_view_")[0]))
+    for stem in stems:
         candidate = bddl_root / suite / f"{stem}.bddl"
         if candidate.is_file():
             return candidate
@@ -321,27 +324,24 @@ def _select(
             continue
         cells.setdefault((entry["suite"], entry["category"]), []).append(entry)
 
-    picked = {
-        key: _spread(sorted(cells[key], key=lambda item: item["name"]), per_cell)
-        for key in sorted(cells)
-    }
+    by_category: dict[str, list[dict]] = {}
+    for suite, category in sorted(cells):
+        group = sorted(cells[(suite, category)], key=lambda item: item["name"])
+        by_category.setdefault(category, []).extend(_spread(group, per_cell))
 
     # **カテゴリを 1 件ずつ順番に取り出して並べる。**
     # 評価パイプラインの `--max-tasks N` は先頭 N 件を取るだけなので
     # （`pipeline.py` の `task_infos[:max_tasks]`）、セル単位に固めて並べると
     # 「5 件だけ試す」が 1 カテゴリしか踏まない。**疎通確認の意味が薄れる。**
     # カテゴリを巡回させておけば、先頭 7 件で 7 カテゴリ全部に当たる。
-    by_category: dict[str, list[dict]] = {}
-    for (suite, category), items in sorted(picked.items()):
-        by_category.setdefault(category, []).extend(items)
-
-    selected: list[dict] = []
-    queues = [by_category[name] for name in sorted(by_category)]
-    for index in range(max(len(queue) for queue in queues)):
-        for queue in queues:
-            if index < len(queue):
-                selected.append(queue[index])
-    return selected
+    return [
+        entry
+        for column in itertools.zip_longest(
+            *(by_category[name] for name in sorted(by_category))
+        )
+        for entry in column
+        if entry is not None
+    ]
 
 
 def _instruction_of(entry: dict, bddl: Path) -> str | None:
@@ -360,7 +360,7 @@ def _build_rows(
     selected: list[dict],
     bddl_root: Path,
     stems_by_suite: dict[str, list[str]],
-) -> tuple[list[dict], list[str]]:
+) -> tuple[list[dict], list[dict]]:
     """CSV の行を作り、実体が無いものは落とす。
 
     **`task_id` は一切書き換えずに CSV へ入れる。** 摂動の値は変種名そのものに

@@ -25,7 +25,10 @@ import json
 import re
 from pathlib import Path
 
-_RESULT_RE = re.compile(r"\[結果\] (\S+) ep(\d+): (\S+) (\d+) steps")
+# 拾うのは結末（成功 / 衝突 / 未完了）だけ。タスク名・エピソード番号・歩数は
+# 位置合わせのために書くが、**捕まえない**（使わないものを捕まえると、
+# どこかに読み手がいるように見えてしまう）。
+_RESULT_RE = re.compile(r"\[結果\] \S+ ep\d+: (\S+) \d+ steps")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -48,7 +51,7 @@ def _check_log(log_path: Path, expected: int) -> tuple[bool, list[str]]:
 
     if results:
         notes.append(f"[結果] 行: {len(results)} / {expected}")
-        outcomes = collections.Counter(outcome for _, _, outcome, _ in results)
+        outcomes = collections.Counter(results)
         notes.append("  内訳: " + " ".join(f"{k} {v}" for k, v in outcomes.most_common()))
     else:
         # **`[結果]` 行はパッチが出すものであり、キットは出さない。**
@@ -83,11 +86,11 @@ def _find_result_json(output_dir: Path) -> Path | None:
     `submission_id = f"server_{port}"`）ため、ポートを変えると名前も変わる。
     **決め打ちにすると「JSON が無い」と誤判定する。**
     """
-    candidates = sorted(
-        (path for path in output_dir.glob("*.json")),
+    return max(
+        output_dir.glob("*.json"),
         key=lambda path: path.stat().st_mtime,
+        default=None,
     )
-    return candidates[-1] if candidates else None
 
 
 def _check_json(json_path: Path | None, expected: int) -> tuple[bool, list[str]]:

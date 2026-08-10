@@ -9,11 +9,12 @@
 真似ではなく、条件分岐まで写している（写した箇所は各関数に出典を書いた）。
 
     python3 solution/tools/check_validation_suite.py \\
-        --csv work/VAL_TASKS.csv --libero-plus work/LIBERO-plus
+        --csv work/VAL_TASKS.csv --libero-plus work/LIBERO-plus \\
+        --kit-dir /workspace
 
-`--patched` を付けると、`COLAB_EVAL.md` のセル H が当てるパッチ後の挙動で
-確かめる（`parse_obj_of_interest` が `_view_` を切る）。**付けない場合は
-配布キットそのままの挙動**なので、どこで落ちるかが分かる。
+**パッチが当たっているかは `--kit-dir` の実物を見て決める。** 旗で受け取ると
+「当てたつもりで当たっていない」状態を信じてしまい、この道具の存在意義
+（82 分の評価を無駄にしないこと）が消える。
 
 Reads:
   - <csv>（make_validation_suite.py が書き出したもの）
@@ -28,8 +29,19 @@ from __future__ import annotations
 import argparse
 import collections
 import csv
+import re
 import sys
 from pathlib import Path
+
+# 隣に置かれた patch_kit_for_variants.py を読む。Colab では `/content/`、
+# Docker では `/host/tools/` に 2 つとも並ぶが、**呼び出し元の作業ディレクトリは
+# どちらでもない**ため、自分の場所を sys.path に入れてから import する。
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from patch_kit_for_variants import is_applied  # noqa: E402
+
+# 配布キットの `compe/t1/register.py` が持つ接尾辞除去。**写しである。**
+# パッチを当てていない状態を再現するためだけに使う。
+_KIT_SUFFIX_RE = re.compile(r"_light_[^.]*|_table_\d+")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -38,10 +50,14 @@ def _parse_args() -> argparse.Namespace:
                         help="検証用スイートの CSV")
     parser.add_argument("--libero-plus", type=Path, required=True,
                         help="LIBERO-plus の clone 先")
-    parser.add_argument("--patched", action="store_true",
-                        help="セル H のパッチを当てた状態で確かめる")
+    parser.add_argument("--kit-dir", type=Path, required=True,
+                        help="配布キットの場所。**パッチが当たっているかを実物で見る**")
     parser.add_argument("--max-tasks", type=int, default=None,
                         help="先頭この件数だけ見る（--max-tasks と同じ意味）")
+    parser.add_argument("--bddl-root", type=Path, default=None,
+                        help="bddl の置き場。省略時は --libero-plus から組み立てる")
+    parser.add_argument("--init-states-root", type=Path, default=None,
+                        help="初期状態の置き場。省略時は --libero-plus から組み立てる")
     return parser.parse_args()
 
 
@@ -83,45 +99,50 @@ def _bddl_path_for_collision(bddl_path: Path, patched: bool) -> Path:
     return bddl_path
 
 
-def _init_states_path(row: dict, init_root: Path) -> Path:
+def _init_states_path(row: dict, init_root: Path, patched: bool) -> Path:
     """初期状態ファイルのパスを返す。
 
-    出典: セル H のパッチ後の `register.py`。CSV の `init_states_file` 列を
-    そのまま使う（列が無ければ従来どおり `<task_id>.pruned_init`）。
+    出典: `compe/t1/register.py` の `_init_states_for`。
+    パッチ後は CSV の `init_states_file` 列をそのまま使う。**パッチ前は
+    `<task_id>.pruned_init` から `_SUFFIX_RE` で接尾辞を剥がすので、
+    `_view_` を含む変種では存在しない名前になる。** ここを patched と
+    無関係に CSV 列で計算してしまうと、「未パッチの世界」を再現できない。
     """
-    name = row.get("init_states_file") or f"{row['task_id']}.pruned_init"
-    return init_root / row["suite"] / name
+    if patched:
+        name = row.get("init_states_file") or f"{row['task_id']}.pruned_init"
+        return init_root / row["suite"] / name
+    stripped = _KIT_SUFFIX_RE.sub("", row["task_id"])
+    return init_root / row["suite"] / f"{stripped}.pruned_init"
 
 
 def _check_row(
     row: dict, bddl_root: Path, init_root: Path, patched: bool
 ) -> list[str]:
     """1 行について、開けないパスの理由を並べて返す。空なら通る。"""
-    problems: list[str] = []
     declared = _bddl_path_from_register(row, bddl_root)
+    return [
+        f"{label}が無い: {path.name}"
+        for label, path in (
+            ("環境生成の bddl", _bddl_path_for_env(declared)),
+            ("衝突判定の bddl", _bddl_path_for_collision(declared, patched)),
+            ("初期状態", _init_states_path(row, init_root, patched)),
+        )
+        if not path.is_file()
+    ]
 
-    for label, path in (
-        ("環境生成の bddl", _bddl_path_for_env(declared)),
-        ("衝突判定の bddl", _bddl_path_for_collision(declared, patched)),
-        ("初期状態", _init_states_path(row, init_root)),
-    ):
-        if not path.is_file():
-            problems.append(f"{label}が無い: {path.name}")
-    return problems
 
-
-def _report(rows: list[dict], failures: list[tuple[dict, list[str]]]) -> None:
+def _report(
+    row_count: int, failures: list[tuple[int, dict, list[str]]]
+) -> None:
     """結果をまとめて見せる。**落ちる最初の行を必ず名指しする。**"""
-    print(f"\n確かめた行: {len(rows)}  /  落ちる行: {len(failures)}")
+    print(f"\n確かめた行: {row_count}  /  落ちる行: {len(failures)}")
 
     if not failures:
         print("\n**全部開ける。** この CSV なら評価は最後まで走る。")
         return
 
-    first_index = next(
-        index for index, row in enumerate(rows, start=1)
-        if any(row is failed for failed, _ in failures)
-    )
+    # failures は行の順に積んであるので、先頭が最初に落ちる行である。
+    first_index = failures[0][0]
     print(
         f"\n**最初に落ちるのは {first_index} 行目。**"
         f" 例外はトラック全体を止めるので、**{first_index - 1} タスクだけ走って終わる。**"
@@ -131,14 +152,14 @@ def _report(rows: list[dict], failures: list[tuple[dict, list[str]]]) -> None:
     # 丸める前に数えると全部 1 件になり、どこが多いのか分からない。
     grouped = collections.Counter(
         (row["category"], reason.split(":")[0])
-        for row, reasons in failures for reason in reasons
+        for _, row, reasons in failures for reason in reasons
     )
     print("\nカテゴリ × 理由")
     for (category, reason), count in sorted(grouped.items(), key=lambda p: -p[1]):
         print(f"  {count:4d}  {category:22s} {reason}")
 
     print("\n例:")
-    for row, reasons in failures[:3]:
+    for _, row, reasons in failures[:3]:
         print(f"  {row['category']:22s} {row['task_id'][-52:]}")
         for reason in reasons:
             print(f"      {reason}")
@@ -146,8 +167,11 @@ def _report(rows: list[dict], failures: list[tuple[dict, list[str]]]) -> None:
 
 def main() -> None:
     args = _parse_args()
-    bddl_root = args.libero_plus / "libero/libero/bddl_files"
-    init_root = args.libero_plus / "libero/libero/init_files"
+    # **make_validation_suite.py と同じ置き場を見る。** 食い違うと、検査は
+    # 通るのに評価が落ちるという最悪の形になる。あちらは libero の設定
+    # （`~/.libero/config.yaml`）に従うので、明示指定を受け取れるようにしてある。
+    bddl_root = args.bddl_root or args.libero_plus / "libero/libero/bddl_files"
+    init_root = args.init_states_root or args.libero_plus / "libero/libero/init_files"
     for root in (bddl_root, init_root):
         if not root.is_dir():
             raise FileNotFoundError(f"置き場が見つかりません: {root}")
@@ -157,16 +181,20 @@ def main() -> None:
     if args.max_tasks is not None:
         rows = rows[: args.max_tasks]
 
-    state = "セル H のパッチ後" if args.patched else "配布キットのまま"
+    # **旗で受け取らない。** キットの実物を見てどちらの世界かを決める。
+    # 「当てたつもりで当たっていない」を検査側が信じると、この道具の
+    # 存在意義（82 分を無駄にしないこと）が消える。
+    patched = is_applied(args.kit_dir)
     print(f"[check] {args.csv}  ({len(rows)} 行)")
-    print(f"[check] 前提: {state}")
+    print(f"[check] キット: {args.kit_dir}")
+    print(f"[check] パッチ: {'当たっている' if patched else '**当たっていない**'}")
 
     failures = [
-        (row, problems)
-        for row in rows
-        if (problems := _check_row(row, bddl_root, init_root, args.patched))
+        (index, row, problems)
+        for index, row in enumerate(rows, start=1)
+        if (problems := _check_row(row, bddl_root, init_root, patched))
     ]
-    _report(rows, failures)
+    _report(len(rows), failures)
     raise SystemExit(1 if failures else 0)
 
 

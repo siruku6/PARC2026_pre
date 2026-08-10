@@ -1409,8 +1409,12 @@ print(f"  ... 計 {len(rows)} 件")
 # 配布キットと LIBERO-plus の実際のコードと同じ手順でパスを組み立てて、
 # 開けない行をここで名指しする。落ちたらこのセルで止まるので、
 # E-3 へ進む前に気づける。
+#
+# `--kit-dir` を渡すのは、**パッチが当たっているかを実物で見る**ため。
+# 「当てたつもり」で当たっていない状態を見逃さない。
 run(f'{KIT_DIR}/venv/bin/python /content/check_validation_suite.py '
-    f'--csv /content/VAL_TASKS.csv --libero-plus {KIT_DIR}/LIBERO-plus --patched',
+    f'--csv /content/VAL_TASKS.csv --libero-plus {KIT_DIR}/LIBERO-plus '
+    f'--kit-dir {KIT_DIR}',
     tail=30, log="val_check.log")
 ```
 
