@@ -45,7 +45,15 @@ LIBERO-plus は 7 種類（物体配置・カメラ視点・ロボット初期�
   [compe/t1/register.py](../../compe/t1/register.py#L15) の接尾辞除去の正規表現には
   `_tb_<数字>` の分岐が抜けており、該当タスクは手元では初期状態ファイルを開けずに落ちる。
   **本番の実装は修正済み**で、Background Textures の出題が偏ることはない。
-  手元で `_tb_N` を検証したい場合は、正規表現を `_light_[^.]*|_(?:table|tb)_\d+` に直す必要がある。
+
+  > **正規表現を足す方向で直そうとしないこと。** 摂動の付け方はカテゴリごとに違い
+  > （`_table_7`・`_tb_3`・`_light_15`・`_noise_2`・`_language_25`・`_add_13`・
+  > `view_0_0_100_0_0_initstate_1`）、列挙では必ず取りこぼす。
+  > **初期状態ファイルは元タスク分しか存在しない**ので
+  > （`init_files/libero_spatial/` は 10 件のみ）、
+  > **実在するファイル名との最長前方一致で決めるほうが確実である。**
+  > [make_validation_suite.py](../../solution/tools/make_validation_suite.py) はこの方式で、
+  > 結果を CSV の `init_states_file` 列に書き出す。
 - **タスク数と 1 タスクあたりの試行数は非公開**（Q&A No.3）。
   PDF p.11 の「予選において N は 1 となります」は**運営が誤りと認めた記述**である。
 

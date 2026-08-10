@@ -161,6 +161,21 @@ actionable finding for strategy. `register.py` strips `_light_*` / `_table_N` su
 (`_SUFFIX_RE`) when resolving the `.pruned_init` init-states file, i.e. perturbation variants share
 the base task's init states.
 
+**Do not extend `_SUFFIX_RE` to cover more categories — enumeration always misses some.**
+Observed suffix forms differ per category: `_table_7`, `_tb_3`, `_light_15`, `_noise_2`,
+`_language_25`, `_add_13`, `view_0_0_100_0_0_initstate_1`. Since init-states files exist
+**only for base tasks** (`init_files/libero_spatial/` holds 10), resolve by **longest-prefix
+match against the filenames that actually exist**. `solution/tools/make_validation_suite.py`
+does this and emits the result in the CSV's `init_states_file` column; the H cell of
+`docs/solution/COLAB_EVAL.md` patches `register.py` to honour that column.
+
+**`task_classification.json` is a dict keyed by suite name**, whose values are lists of
+variant records `{"id", "name", "category", "difficulty_level"}`. **Variant records carry no
+`suite` key** — the suite exists only as the outer key. Reading it as
+`list(raw.values())` yields lists, not records, and silently produces
+`{"name": <the whole record>, "category": <suite name>}`, so every category filter matches
+nothing. This bug cost one Colab run.
+
 ---
 
 ## 4. Traps when running things in this repo

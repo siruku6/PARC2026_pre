@@ -1286,25 +1286,53 @@ Light Conditions しか含まないが、それは 4 サンプルにすぎない
 `/content/` へアップロードしておく。セル D-2 で `collect_colab_files.py` の出した
 フォルダをまとめて上げていれば、**もう置かれている。**
 
+### 初期状態ファイルの決め方（8/10 に作り直した）
+
+**正規表現で接尾辞を剥がす方式は捨てた。** 摂動の付け方はカテゴリごとに違う。
+
+| カテゴリ | 変種名の末尾 |
+|---|---|
+| Background Textures | `_table_7` / **`_tb_3`** |
+| Light Conditions | `_light_15` |
+| Sensor Noise | `_noise_2` |
+| Language Instructions | `_language_25` |
+| Objects Layout | `_add_13` |
+| Camera Viewpoints | `_view_0_0_100_0_0` |
+| Robot Initial States | `view_0_0_100_0_0_initstate_1` |
+
+正規表現に分岐を足していく形では**必ず取りこぼす。**
+
+**一方、初期状態ファイルは元タスク分しか存在しない**（`init_files/libero_spatial/` は
+10 件のみ）。**実在するファイル名との最長前方一致で決めれば取りこぼしようがない。**
+
+`make_validation_suite.py` がこの方式で決めた結果を CSV の `init_states_file` 列へ
+書き出し、下のセルが `register.py` にその列を読ませる。
+**example の 4 件（列が無い CSV）でも従来どおり動く。**
+
 ```python
 # === H. 検証用スイートへ差し替える ===
 import shutil
 
-# --- 1. 接尾辞の除去を広げる ---
-# register.py は `_light_*` と `_table_N` しか剥がさないため、他のカテゴリでは
-# 初期状態ファイルを見つけられない。運営 Q&A によれば**本番の実装は `_tb_` も
-# 剥がす**ので、こちらを広く取る。
+# --- 1. 初期状態ファイルの決め方を、CSV 指定へ切り替える ---
+# register.py は変種名から正規表現で接尾辞を剥がして初期状態ファイルを探すが、
+# **摂動の付け方はカテゴリごとに違う**（`_table_7`・`_tb_3`・`_light_15`・
+# `_noise_2`・`_language_25`・`_add_13`・`view_0_0_100_0_0_initstate_1`）。
+# 正規表現を足していく形では必ず取りこぼす。
+#
+# **make_validation_suite.py が実在ファイルとの最長前方一致で決めた結果を
+# CSV の init_states_file 列に書いてある**ので、register.py はそれを使う。
+# 列が無い CSV（example の 4 件）でも従来どおり動くようにしておく。
 target = KIT_DIR / "compe" / "t1" / "register.py"
 source = target.read_text()
-old = '_SUFFIX_RE = re.compile(r"_light_[^.]*|_table_\\d+")'
-new = ('_SUFFIX_RE = re.compile(r"_light_[^.]*|_table_\\d+|_tb_\\d+'
-       '|_noise_\\d+|_initstate_\\d+|_add_\\d+")')
+old = '            init_states_file=f"{r[\'task_id\']}.pruned_init",'
+new = ('            init_states_file=r.get("init_states_file")\n'
+       '            or f"{r[\'task_id\']}.pruned_init",')
 if new in source:
-    print("接尾辞の拡張: 適用済み")
+    print("初期状態ファイルの指定: 適用済み")
 else:
     assert old in source, "アンカーが見つかりません。キットの版を確認してください"
     target.write_text(source.replace(old, new, 1))
-    print("接尾辞の拡張: 適用した")
+    print("初期状態ファイルの指定: 適用した")
 
 # --- 2. CSV を作る ---
 run(f'PYTHONPATH="{KIT_DIR}/LIBERO-plus:{KIT_DIR}:{KIT_DIR}/compe" '
@@ -1312,7 +1340,7 @@ run(f'PYTHONPATH="{KIT_DIR}/LIBERO-plus:{KIT_DIR}:{KIT_DIR}/compe" '
     f'--libero-plus {KIT_DIR}/LIBERO-plus '
     f'--exclude {KIT_DIR}/compe/t1/T1_TASKS.csv '
     f'--output /content/VAL_TASKS.csv --per-cell 3',
-    tail=40, log="val_suite.log")
+    tail=60, log="val_suite.log")
 
 # --- 3. example と差し替える ---
 # **元の CSV は退避する。** 比較のために example へ戻すことがある。
