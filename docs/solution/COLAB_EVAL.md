@@ -585,6 +585,12 @@ N_EPISODES = 20
 MAX_STEPS = 300
 PORT = 8000
 
+# **疎通確認のときだけ 5 を入れる。** 84 件を 45 分かけて回す前に、
+# 5 件だけ流して最後まで行くか見る。**None なら全部回す。**
+# **E-3 のセルを書き換えないこと** —— 消し忘れると 84 件のはずが 5 件のまま
+# 走り、前の回と比べられなくなる（45 分は戻らない）。
+MAX_TASKS = None            # 疎通確認は 5、本番は None
+
 # 推論時のつまみ。**空にするのが正しい既定である。**
 # policy_server.py の既定は **n_action_steps=5 / ema_alpha=0.3** で、
 # **これが 3 回目の提出（0.1409）と 4 回目、および 8/11 の 84 件の評価の構成**である。
@@ -642,6 +648,8 @@ for name in ("KIT_DIR", "LEROBOT_SRC", "SUBMISSION_DIR", "SERVER", "WEIGHTS_DIR"
     assert name in globals(), f"{name} が未定義です。セル A〜D を順に実行してください"
 
 print(f"設定: {N_EPISODES} エピソード/タスク, 後処理 {POLICY_ENV or '既定'}")
+print(f"  タスク数: {MAX_TASKS if MAX_TASKS else '全部（84 件）'}"
+      + ("  ← **疎通確認。終わったら None に戻す**" if MAX_TASKS else ""))
 print(f"  サーバー: {SERVER}")
 print(f"  キット  : {KIT_DIR}")
 print(f"  録画    : {RECORD_DIR or '（撮らない）'}"
@@ -926,6 +934,9 @@ try:
          "--track", "track1",
          "--n-episodes", str(N_EPISODES),
          "--max-steps", str(MAX_STEPS),
+         # **疎通確認は E-1 の MAX_TASKS で切り替える。** ここを手で
+         # 書き換えると消し忘れる（84 件のはずが 5 件のまま走る）。
+         *(["--max-tasks", str(MAX_TASKS)] if MAX_TASKS else []),
          "--output-dir", "/content/results"],
         # --verbose は付けない。root logger が DEBUG になり、urllib3 が
         # /act 1 回ごとに 1 行出すため数万行になる。エピソードごとの結果は
@@ -1509,13 +1520,11 @@ run(f'{KIT_DIR}/venv/bin/python /content/check_validation_suite.py '
 **84 件を 82 分かけて回す前に、これをやる。** 8/10 は 3 タスクで止まったのに
 終了コード 0 で終わり、**画面上は正常に見えた。**
 
-E-1 → E-3 の前に、E-3 のセルの `subprocess.Popen` の引数へ
-`"--max-tasks", "5"` を 1 行足して流す。
+**E-1 の `MAX_TASKS` を `5` にして、E-1 → E-3 を流す。**
+E-3 のセルは触らない（手で書き換えると消し忘れる）。
 
-```
-         "--max-steps", str(MAX_STEPS),
-         "--max-tasks", "5",          # ← 疎通確認のときだけ足す
-         "--output-dir", "/content/results"],
+```python
+MAX_TASKS = 5               # 疎通確認。**終わったら None に戻す**
 ```
 
 **見るのはスコアではなく次の 3 点である。**
@@ -1526,7 +1535,7 @@ E-1 → E-3 の前に、E-3 のセルの `subprocess.Popen` の引数へ
 | 所要時間 | 4〜6 分 | **極端に短い**（3 分未満）|
 | F の出力 | 成功率と 95%CI が出る | 「評価が例外で落ちている」 |
 
-**5 本そろったら `--max-tasks` の行を消して 84 件を回す。**
+**5 本そろったら `MAX_TASKS = None` に戻して、E-1 → E-3 を流し直す。**
 
 ### エピソード数の決め方
 
