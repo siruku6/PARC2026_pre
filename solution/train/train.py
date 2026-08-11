@@ -245,6 +245,73 @@ def _find_resume_checkpoint(output_dir: Path) -> Path | None:
     return checkpoints[-1] if checkpoints else None
 
 
+def _download_base_model() -> Path:
+    """初期重みをこの環境のキャッシュへ取り、その場所を返す。
+
+    revision を commit で固定しているので、同じ場所に既にあれば取り直さない。
+    評価用の重み（`eval/`）は学習に要らないので除く。
+    """
+    return Path(snapshot_download(
+        _BASE_MODEL_REPO, revision=_BASE_MODEL_REVISION,
+        ignore_patterns=["eval/*", "eval/**"],
+    ))
+
+
+def _repair_base_model_path(resume_from: Path) -> None:
+    """チェックポイントに焼き付いた初期重みの場所を、この環境の場所へ直す。
+
+    LoRA のアダプタは「どの重みへの差分か」を**絶対パスで**覚えている。Colab で
+    作ったチェックポイントには Colab の `HF_HOME`（`/content/hf_cache/...`）が
+    入っており、コンテナ側の `HF_HOME`（`/root/.cache/huggingface`）では
+    存在しない場所になる。
+
+    LeRobot はこの値を初期重みの指定としてそのまま使い（policies/factory.py の
+    `make_policy()`）、`from_pretrained()` は `os.path.isdir()` が偽なら
+    **HF のリポジトリ名として解釈する。** 結果こう落ちる。
+
+        HFValidationError: Repo id must be in the form 'repo_name' or
+        'namespace/repo_name': '/content/hf_cache/hub/models--...'
+
+    revision を指定して重みを取り直し、その場所へ書き換える。**モデルは同じもので、
+    変わるのは場所の文字列だけである。**
+
+    `config.json` と `train_config.json` にも同じパスが入っているが、再開時は
+    `_resolve_resume_checkpoint()`（configs/train.py）が `policy.pretrained_path`
+    をチェックポイント自身のパスへ代入するため読まれない。**実際に読まれる
+    `adapter_config.json` だけを直す。**
+
+    Parameters
+    ----------
+    resume_from : Path
+        再開に使うチェックポイント（`<step>` のディレクトリ）。
+    """
+    config_path = resume_from / "pretrained_model" / "adapter_config.json"
+    if not config_path.is_file():
+        return
+
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    recorded = config.get("base_model_name_or_path") or ""
+    if Path(recorded).is_dir():
+        return
+
+    # 別のモデルを指していたら書き換えない。ここは「同じ重みの置き場所が
+    # 違うだけ」を直す処理であって、モデルを差し替える処理ではない。
+    # HF のキャッシュのパスには必ず models--<repo> が入るので、それで見分ける。
+    marker = _BASE_MODEL_REPO.replace("/", "--")
+    if marker not in recorded:
+        raise RuntimeError(
+            f"初期重みの場所が {_BASE_MODEL_REPO} 以外を指しています: {recorded!r}\n"
+            "自動では直せないので、adapter_config.json を手で直すこと。"
+        )
+
+    base_model = str(_download_base_model())
+    config["base_model_name_or_path"] = base_model
+    config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    print(f"[train] 初期重みの場所を書き換えた（{config_path.name}）")
+    print(f"[train]   前: {recorded}")
+    print(f"[train]   後: {base_model}")
+
+
 def _build_resume_command(
     args: argparse.Namespace, output_dir: Path, resume_from: Path
 ) -> list[str]:
@@ -361,14 +428,12 @@ def main() -> None:
         # 再開時は学習条件をチェックポイントから復元する。エピソードの選び直しも
         # 初期重みの取得も要らない。ステップ数は training_state から読まれる。
         print(f"[train] 再開: {resume_from.name}（step は training_state から復元される）")
+        _repair_base_model_path(resume_from)
         command = _build_resume_command(args, output_dir, resume_from)
         print(f"[train] 学習を再開（batch {args.batch_size}）")
     else:
         print("[train] 初期重みを取得")
-        base_model = Path(snapshot_download(
-            _BASE_MODEL_REPO, revision=_BASE_MODEL_REVISION,
-            ignore_patterns=["eval/*", "eval/**"],
-        ))
+        base_model = _download_base_model()
 
         # **0 なら選ばない。** 出発点の重みも `episodes: None`（全部）で作られている。
         # 選ぶ処理を通すと 14,347 個の番号がコマンド 1 行に並ぶので、旗ごと省く。
