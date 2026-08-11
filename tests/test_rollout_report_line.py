@@ -18,6 +18,8 @@
 import importlib.util
 import sys
 from pathlib import Path
+from types import ModuleType
+from typing import Any
 
 import pytest
 
@@ -27,11 +29,17 @@ sys.path.insert(0, str(_ROOT / "solution" / "tools"))
 import rollout_recorder as recorder  # noqa: E402
 
 
-def _load_summarizer() -> object:
-    """`summarize_gpu_eval.py` を読み込む。**`-` を含まないが実行形式なので直接読む。**"""
+def _load_summarizer() -> Any:
+    """`summarize_gpu_eval.py` を読み込む。**`-` を含まないが実行形式なので直接読む。**
+
+    戻り値の型を `Any` にしてある。`ModuleType` だと、型検査器が
+    **`_parse_log` などの private な名前をすべて「無い」と言う**
+    （動的に読んだモジュールの中身は静的には見えない）。
+    """
     path = _ROOT / "solution" / "tools" / "summarize_gpu_eval.py"
     spec = importlib.util.spec_from_file_location("summarize_gpu_eval", path)
-    module = importlib.util.module_from_spec(spec)
+    assert spec is not None and spec.loader is not None, f"読み込めない: {path}"
+    module: ModuleType = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
@@ -181,3 +189,100 @@ def test_csv_wins_over_the_name() -> None:
     name = "turn_on_the_stove_view_0_0_100_2_352_initstate_1"
     known = {name: "Language Instructions"}
     assert summarize._category_of(name, known) == "Language Instructions"
+
+
+# ------------------------------------------------- 衝突の切り分け（環境 / 方策）
+
+def _episode(task: str, offenders: dict[str, float], **extra: object) -> dict:
+    """`_parse_log` が返す形の 1 件を組み立てる。"""
+    return {"task": task, "episode": 0, "outcome": "衝突", "steps": 300,
+            "offenders": offenders, **extra}
+
+
+def test_the_same_displacement_three_times_is_blamed_on_the_environment() -> None:
+    """**3 回そろって初めて環境由来と見る。** 2 回では偶然がありうる。
+
+    実例は 2026-08-10 の `ketchup_1=544.6mm` が 6 回そろった回である。
+    摂動が違う回で変位が 0.1mm も違わないのは方策の振る舞いではない。
+    """
+    twice = [_episode(f"t{i}", {"ketchup_1": 544.6}) for i in range(2)]
+    assert summarize._environment_offenders(twice) == set()
+
+    thrice = [_episode(f"t{i}", {"ketchup_1": 544.6}) for i in range(3)]
+    assert summarize._environment_offenders(thrice) == {("ketchup_1", "544.6")}
+
+
+def test_a_slightly_different_displacement_stays_the_policys_fault() -> None:
+    """**0.1mm でも違えば別扱い。** 方策がぶつけると同じ値にはならない。"""
+    episodes = [
+        _episode("t0", {"bowl_1": 8.5}),
+        _episode("t1", {"bowl_1": 10.5}),
+        _episode("t2", {"bowl_1": 9.5}),
+    ]
+    assert summarize._environment_offenders(episodes) == set()
+
+
+def test_one_unique_offender_makes_the_episode_the_policys_fault() -> None:
+    """環境由来と方策由来が同じ回に混ざったら、**方策由来として数える。**
+
+    衝突対策で拾える回を取りこぼさないため、判定は「1 つでも方策由来が
+    あるか」で行う。
+    """
+    episodes = [_episode(f"t{i}", {"ketchup_1": 544.6}) for i in range(3)]
+    episodes.append(_episode("t3", {"ketchup_1": 544.6, "bowl_1": 12.3}))
+    environment = summarize._environment_offenders(episodes)
+
+    assert summarize._policy_offenders(episodes[0], environment) == {}
+    assert summarize._policy_offenders(episodes[3], environment) == {"bowl_1": 12.3}
+
+
+def test_collision_source_report_splits_the_two_rates() -> None:
+    """報告に「方策の衝突率」と「環境を含む衝突率」の両方が出る。"""
+    episodes = [_episode(f"t{i}", {"ketchup_1": 544.6}) for i in range(3)]
+    episodes.append(_episode("t3", {"bowl_1": 12.3}))
+    episodes.append(_episode("t4", {}, outcome="成功"))
+    lines: list[str] = []
+    summarize._report_collision_source(lines, episodes)
+    report = "\n".join(lines)
+
+    # **方策の衝突率だけを強調してある**（対策の効き目を測る数字なので）。
+    assert "方策の衝突率      0.200**  (1/5)" in report
+    assert "環境を含む衝突率    0.800  (4/5)" in report
+    assert "ketchup_1=544.6mm" in report
+    # 環境由来だけの回は 3 件（ケチャップの 3 本）、方策由来は 1 件。
+    assert "環境由来だけ               3" in report
+    assert "方策由来を含む           1**" in report
+
+
+# --------------------------------------------------------- 並べて比べる
+
+def test_comparison_names_the_rows_it_could_not_show() -> None:
+    """**出せなかった行を黙って落とさない。**
+
+    行が無いのを「差が無い」と読み違えるのが、いちばん危ない誤読である。
+    滑らかさの指標は本番の悪化 8.8 倍のうち 4.4 倍を占めていた。
+    """
+    mine = {"n": 8, "success": 0.5, "jerk": 3.7, "by_category": {}}
+    theirs = {"n": 8, "success": 0.25, "by_category": {}}   # jerk が無い
+    lines: list[str] = []
+    summarize._report_comparison(lines, mine, theirs, "相手")
+    report = "\n".join(lines)
+
+    assert "平均ジャーク" in report            # 出せなかった項目として名前が出る
+    assert "**「差が無い」ではない。**" in report
+    assert "+0.250" in report                  # 成功率の差は出ている
+
+
+def test_comparison_says_which_direction_is_better() -> None:
+    """**衝突率は下がるほうが良い。** 差の符号だけでは判断できない。"""
+    assert "良くなった" in summarize._format_delta(0.1, 0.3, higher_is_better=False)
+    assert "悪くなった" in summarize._format_delta(0.3, 0.1, higher_is_better=False)
+    assert "良くなった" in summarize._format_delta(0.7, 0.5, higher_is_better=True)
+    assert "同じ" in summarize._format_delta(0.5, 0.5, higher_is_better=True)
+
+
+def test_padding_counts_full_width_characters_as_two() -> None:
+    """表がずれないこと。`f"{'項目':<28}"` は文字数で詰めるので合わない。"""
+    assert len(summarize._pad("項目", 28)) == 2 + 24      # 全角 2 文字 = 4 桁
+    assert len(summarize._pad("abc", 28)) == 3 + 25
+    assert summarize._pad("とても長い見出しなので詰められない", 4).endswith("い")

@@ -4,24 +4,35 @@
 **Colab の F セルがやっていたことを、マシン上で完結させる。**
 Drive へ退避する必要がないので、退避漏れで結果を失う経路そのものが無い。
 
-出すのは 7 つ。**どれも「次に何をするか」が変わる情報である。**
+出すのは 8 つ。**どれも「次に何をするか」が変わる情報である。**
 
 - **84 件そろったか** — 途中で落ちると終了コード 0 のまま件数だけ減る
 - 結末の内訳（成功 / 衝突 / 未完了）と、**ゴールに着いてから衝突で落ちた本数**
 - **ゴール到達率と成功率の差** — ここが開いていれば衝突対策、閉じていれば到達の話
 - **動きの内訳（静止 / 往復）** — 全件について。**1 件も動いていなければ最初に警告する**
 - **摂動カテゴリ別の成功率**（背景テクスチャは `table` / `tb` に分ける） — 学習の的を決める表
+- **衝突を「方策由来」と「環境由来」に割る** — 衝突対策に手を入れるかを決める
 - ぶつけた物体の偏りと、**初めて 1mm を超えた歩**
-- **同じ変位が繰り返し出ていないか** — 環境側で物が動いている印
+- **2 回の評価を並べた差** — `--compare` を渡したとき
 
     solution/tools/summarize_gpu_eval.py --output-dir work/gpu_eval/0811_...
+
+    # 素の重みと学習後を並べる
+    solution/tools/summarize_gpu_eval.py \
+        --output-dir work/gpu_eval/0811_..._lora --compare work/gpu_eval/0811_..._base
 
 **古いログでも動く。** ゴール到達・動き・初衝突は 2026-08-11 のパッチから
 出るようになったもので、無ければその節を飛ばす（黙って 0 と読まない）。
 
+**本番のスコアは手元で計算できない。** 配点は `total_score_config.json` と
+`normalization_config.json` にあるが、**どちらも配布されていない**
+（`pipeline/total_score.py` の内蔵既定は `weights` も `references` も空）。
+キットの `overall_score` は成功率そのものである（`pipeline/scorer.py`）。
+**だから比べられるのは成功率と滑らかさの指標までで、順位の予測はできない。**
+
 Reads:
   - <output-dir>/eval.log
-  - <output-dir>/server_8000.json
+  - <output-dir>/<submission_id>.json（タスク単位の指標。jerk / SPARC）
   - <output-dir>/../../compe/val/VAL_TASKS.csv（あればカテゴリを引く）
 Generates:
   - <output-dir>/summary.txt（画面と同じ内容）
@@ -36,6 +47,7 @@ import csv
 import json
 import math
 import re
+import unicodedata
 from pathlib import Path
 
 # `[結果] <タスク> ep<N>: <結末> <歩数> steps  ゴール 到達  経路 1.12m …
@@ -85,6 +97,27 @@ _CATEGORY_MARKERS: tuple[tuple[str, str], ...] = (
     ("_level", "Objects Layout"),
 )
 
+# 環境側で最初から動いている物体を見分ける回数。
+#
+# **同じ物体が同じ変位で 3 回以上出たら環境由来と見る。** 摂動が違う回で
+# 変位が 0.1mm も違わないのは方策の振る舞いではない（2026-08-10 に
+# `ketchup_1=544.6mm` が 6 回そろって出た）。
+#
+# 原因は採点ハーネス側にある。`pipeline/rollout.py` は初期位置を捉える前に
+# **10 歩しか落ち着かせない**ため、**まだ落下中の物体は空中の位置が
+# 「初期位置」として記録される。** 残りの落下がそのまま変位に化ける。
+# 映像でも、ケチャップの瓶が 3 本すべて **4 歩目**に画面の上から入ってきた。
+#
+# **3 回にした理由。** 2 回では偶然の一致がありうる（変位を 0.1mm に丸めて
+# 比べているため）。4 回以上にすると、6 回出た実例のような明らかな組しか
+# 拾えなくなる。**手元の 84 件では 1 タスクあたり最大 3 本しか回らない**
+# （`--per-cell 3`）ので、3 回は「同じタスクの全エピソードで揃った」に当たる。
+_ENVIRONMENT_REPEAT_MINIMUM = 3
+
+# 早すぎる衝突を疑う歩数。**判定には使わず、報告だけする。**
+# 方策が本当に早く衝突することもあるので、これだけでは決められない。
+_EARLY_COLLISION_STEPS = 20
+
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -92,7 +125,30 @@ def _parse_args() -> argparse.Namespace:
                         help="run_gpu_eval.sh の出力先")
     parser.add_argument("--csv", type=Path, default=None,
                         help="検証用スイートの CSV。カテゴリを引くのに使う")
+    parser.add_argument("--compare", type=Path, default=None,
+                        help="**もう 1 つの出力先。並べて差を出す**"
+                             "（素の重みと学習後を比べるときに使う）")
     return parser.parse_args()
+
+
+def _pad(text: str, width: int) -> str:
+    """表示桁をそろえて左詰めする。**全角の文字を 2 桁で数える。**
+
+    `f"{text:<28}"` は文字数で詰めるため、日本語の見出しを混ぜると表がずれる。
+    「項目」は 2 文字だが端末では 4 桁を占める。
+
+    Parameters
+    ----------
+    text : str
+        詰める文字列。
+    width : int
+        そろえたい表示桁数。足りていればそのまま返す。
+    """
+    used = sum(
+        2 if unicodedata.east_asian_width(character) in "WF" else 1
+        for character in text
+    )
+    return text + " " * max(0, width - used)
 
 
 def _wilson_interval(successes: int, total: int) -> tuple[float, float]:
@@ -411,7 +467,7 @@ def _report_categories(lines: list[str], episodes: list[dict],
     for rate, category, successes, total, group in sorted(rows):
         breakdown = collections.Counter(e["outcome"] for e in group)
         detail = " ".join(f"{k} {v}" for k, v in breakdown.most_common())
-        lines.append(f"  {category:<26} {rate:.2f}  ({total:>3} 本)  {detail}")
+        lines.append(f"  {_pad(category, 26)} {rate:.2f}  ({total:>3} 本)  {detail}")
 
     # **見た目の摂動は接尾辞まで割る。** `table` と `tb` はどちらも
     # Background Textures だが、`tb` のほうが明るさの振れ幅が大きい。
@@ -436,6 +492,119 @@ def _report_categories(lines: list[str], episodes: list[dict],
             )
 
 
+def _environment_offenders(episodes: list[dict]) -> set[tuple[str, str]]:
+    """環境側で最初から動いている疑いのある (物体名, 変位) を集める。
+
+    **判定は「同じ変位が何度も出たか」だけで行う。** 物体の名前では決めない
+    ——同じ物体でも、方策がぶつける回と環境が落とす回があるからである。
+
+    Parameters
+    ----------
+    episodes : list[dict]
+        `_parse_log` が返したエピソードの列。
+
+    Returns
+    -------
+    suspicious : set[tuple[str, str]]
+        (物体名, 0.1mm へ丸めた変位) の組。`_policy_offenders` が使う。
+    """
+    counts = collections.Counter(
+        (name, f"{millimetres:.1f}")
+        for episode in episodes
+        for name, millimetres in episode["offenders"].items()
+    )
+    return {
+        key for key, times in counts.items()
+        if times >= _ENVIRONMENT_REPEAT_MINIMUM
+    }
+
+
+def _policy_offenders(
+    episode: dict, environment: set[tuple[str, str]]
+) -> dict[str, float]:
+    """その回にぶつけた物体から、環境由来を除いたものを返す。
+
+    Parameters
+    ----------
+    episode : dict
+        1 エピソードの記録。
+    environment : set[tuple[str, str]]
+        `_environment_offenders` の結果。
+
+    Returns
+    -------
+    offenders : dict[str, float]
+        物体名 → 変位 (mm)。**空なら「方策はぶつけていない」**。
+    """
+    return {
+        name: millimetres
+        for name, millimetres in episode["offenders"].items()
+        if (name, f"{millimetres:.1f}") not in environment
+    }
+
+
+def _report_collision_source(lines: list[str], episodes: list[dict]) -> None:
+    """衝突を「方策由来」と「環境由来」に割る。**衝突対策に手を入れるかを決める。**
+
+    **本番のスコアには環境由来の分も乗る。** 落ち着かせる 10 歩は採点側の
+    コードなので、こちらでは直せない。**だからここで出す「方策の衝突率」は
+    スコアの予測ではなく、対策の効き目を測るための数字である。**
+
+    この区別が無いと、**衝突対策を入れても数字が動かず「効かなかった」と
+    読んでしまう**（環境由来の分が下限として残るため）。
+    """
+    collided = [episode for episode in episodes if episode["offenders"]]
+    lines.append("")
+    lines.append("=== 衝突の切り分け ===")
+    if not collided:
+        lines.append("  衝突が 1 件も無い")
+        return
+
+    environment = _environment_offenders(episodes)
+    by_policy = [
+        episode for episode in collided
+        if _policy_offenders(episode, environment)
+    ]
+    by_environment_only = len(collided) - len(by_policy)
+    total = len(episodes)
+
+    lines.append(f"  衝突した回 {len(collided)} 件 / 全 {total} 件")
+    lines.append(f"  ├ 環境由来だけ            {by_environment_only:>4}"
+                 "  （同じ変位が繰り返し出ている物体しか動いていない）")
+    lines.append(f"  └ **方策由来を含む        {len(by_policy):>4}**"
+                 "  ← 衝突対策で拾えるのはこの分")
+    lines.append("")
+    lines.append(f"  **方策の衝突率      {len(by_policy) / total:.3f}**"
+                 f"  ({len(by_policy)}/{total})  ← 対策の効き目はこれで測る")
+    lines.append(f"  環境を含む衝突率    {len(collided) / total:.3f}"
+                 f"  ({len(collided)}/{total})  ← **本番のスコアに乗るのはこちら**")
+
+    if environment:
+        lines.append("")
+        lines.append("  環境由来と見た物体（同じ変位が "
+                     f"{_ENVIRONMENT_REPEAT_MINIMUM} 回以上）:")
+        for name, value in sorted(environment):
+            lines.append(f"    {name}={value}mm")
+        lines.append("  → 原因は `pipeline/rollout.py` が初期位置を捉える前に")
+        lines.append("    **10 歩しか落ち着かせない**ことである（採点側のコード）")
+
+    # **早すぎる衝突は補強材料である。判定には使っていない。**
+    # 環境由来なら方策が届く前にぶつかるので、初衝突の歩が小さく出る。
+    firsts = [
+        (episode["first_collision_step"], episode["task"])
+        for episode in collided if "first_collision_step" in episode
+    ]
+    early = [step for step, _ in firsts if step <= _EARLY_COLLISION_STEPS]
+    if firsts:
+        lines.append("")
+        lines.append(
+            f"  初衝突が {_EARLY_COLLISION_STEPS} 歩以内  {len(early)}/{len(firsts)} 件"
+        )
+        if early and by_environment_only == 0:
+            lines.append("    **早い衝突があるのに環境由来と判定された回が無い。**")
+            lines.append("    変位が毎回わずかに違うと上の判定は当たらない。映像で確かめること")
+
+
 def _report_exposure(lines: list[str], episodes: list[dict],
                      exposures: dict[str, int]) -> None:
     """衝突しうる相手がいる回だけで衝突率を出し直す。
@@ -443,20 +612,25 @@ def _report_exposure(lines: list[str], episodes: list[dict],
     **衝突率はタスク構成に左右される。** 操作対象以外の物体が 0 個のタスクは
     衝突では落ちないので、分母に入れると衝突率が薄まる。逆に 5 個あるタスクは
     同じ方策でも失格の機会が多い。**方策を比べるときは、相手がいる回だけを見る。**
+
+    **数えるのは方策由来の衝突だけである**（環境由来は `_report_collision_source`
+    が除く）。この節の目的は方策を比べることなので、**どの方策でも同じだけ
+    出る分を混ぜると差が薄まる。**
     """
     known = [e for e in episodes if e["task"] in exposures]
     if not known:
         return
 
+    environment = _environment_offenders(episodes)
     exposed = [e for e in known if exposures[e["task"]] > 0]
     lines.append("")
-    lines.append("=== 衝突しうる相手の数で割る ===")
+    lines.append("=== 衝突しうる相手の数で割る（方策由来だけ）===")
     lines.append(
         f"  相手がいない回 {len(known) - len(exposed)} 件"
         "（**衝突では落ちない**）は下の分母から外す"
     )
     if exposed:
-        collided = sum(1 for e in exposed if e["offenders"])
+        collided = sum(1 for e in exposed if _policy_offenders(e, environment))
         lines.append(
             f"  相手がいる回の衝突率 {collided / len(exposed):.3f}  "
             f"({collided}/{len(exposed)})"
@@ -469,7 +643,7 @@ def _report_exposure(lines: list[str], episodes: list[dict],
         ]
         if not group:
             continue
-        collided = sum(1 for e in group if e["offenders"])
+        collided = sum(1 for e in group if _policy_offenders(e, environment))
         successes = sum(1 for e in group if e["outcome"] == "成功")
         lines.append(
             f"  {label:<8} 衝突 {collided / len(group):.2f}  "
@@ -500,20 +674,23 @@ def _report_offenders(lines: list[str], episodes: list[dict]) -> None:
         lines.append(f"  {count:>4}  {name}")
 
     # **同じ変位が何度も出るのは方策の振る舞いではない。** 摂動が違う回で
-    # 変位が 1 mm も違わないなら、環境側で最初から動いていると考えるべきである
+    # 変位が 0.1mm も違わないなら、環境側で最初から動いていると考えるべきである
     # （8/10 に `ketchup_1=544.6mm` が 6 回そろって出た）。
+    #
+    # **切り分けの結果は `_report_collision_source` に出す。** ここでは
+    # 何回ずつ出たかだけを示す（判定の材料が見えるようにするため）。
     suspicious = [
         (name, value, times)
         for name, values in displacements.items()
         for value, times in values.items()
-        if times >= 3
+        if times >= _ENVIRONMENT_REPEAT_MINIMUM
     ]
     if suspicious:
         lines.append("")
         lines.append("  **同じ変位が繰り返し出ている。環境側で動いている疑いがある：**")
         for name, value, times in sorted(suspicious, key=lambda row: -row[2]):
             lines.append(f"    {name}={value} が {times} 回")
-        lines.append("  → この物体を含むタスクは、方策の性能を表していない可能性がある")
+        lines.append("  → 切り分けた本数は「衝突の切り分け」の節に出る")
 
 
 def _report_json(lines: list[str], output_dir: Path) -> None:
@@ -544,6 +721,175 @@ def _report_json(lines: list[str], output_dir: Path) -> None:
     ):
         if key in metrics:
             lines.append(f"  {key:<32} {metrics[key]}")
+
+
+def _overall_metrics(output_dir: Path) -> dict[str, float]:
+    """パイプラインの JSON から全体の指標を読む。読めなければ空。"""
+    for candidate in sorted(output_dir.glob("*.json"), reverse=True):
+        try:
+            payload = json.loads(candidate.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        tracks = payload.get("tracks") or []
+        if not tracks:
+            continue
+        metrics = tracks[0].get("overall_metrics", {})
+        if metrics and not metrics.get("error"):
+            return metrics
+    return {}
+
+
+def _key_figures(output_dir: Path, known: dict[str, str]) -> dict[str, object]:
+    """1 回の評価から、比べるのに使う数字だけを取り出す。
+
+    **報告文をそのまま並べても差は読めない。** 84 件の内訳が数十行あるので、
+    2 つ見比べると見落とす。**判断が変わる数字だけを抜く。**
+
+    Parameters
+    ----------
+    output_dir : Path
+        `run_docker_eval.sh` の出力先。
+    known : dict[str, str]
+        タスク名 → 摂動カテゴリ。CSV から読んだもの。
+
+    Returns
+    -------
+    figures : dict[str, object]
+        `n` / `success` / `goal` / `policy_collision` / `any_collision` /
+        `timeout` / `stalled` / `jerk` / `sparc` / `by_category`。
+        **読めなかった項目は入れない**（None を入れて 0 と混同させない）。
+    """
+    episodes, _, _ = _parse_log(output_dir / "eval.log")
+    if not episodes:
+        return {"n": 0}
+
+    total = len(episodes)
+    cap = max(episode["steps"] for episode in episodes)
+    environment = _environment_offenders(episodes)
+    metrics = _overall_metrics(output_dir)
+
+    figures: dict[str, object] = {
+        "n": total,
+        "success": sum(1 for e in episodes if e["outcome"] == "成功") / total,
+        "goal": sum(1 for e in episodes if _goal_reached(e, cap)) / total,
+        "policy_collision": sum(
+            1 for e in episodes if _policy_offenders(e, environment)
+        ) / total,
+        "any_collision": sum(1 for e in episodes if e["offenders"]) / total,
+        "timeout": sum(1 for e in episodes if e["steps"] >= cap) / total,
+    }
+    motions = [e["motion"] for e in episodes if "motion" in e]
+    if motions:
+        figures["stalled"] = motions.count("静止") / total
+        figures["wandering"] = motions.count("往復") / total
+    for key, source in (("jerk", "mean_avg_cartesian_jerk"), ("sparc", "mean_sparc")):
+        if source in metrics:
+            figures[key] = float(metrics[source])
+
+    by_category: dict[str, float] = {}
+    grouped: dict[str, list[dict]] = collections.defaultdict(list)
+    for episode in episodes:
+        grouped[_category_of(episode["task"], known)].append(episode)
+    for category, group in grouped.items():
+        by_category[category] = (
+            sum(1 for e in group if e["outcome"] == "成功") / len(group)
+        )
+    figures["by_category"] = by_category
+    return figures
+
+
+def _format_delta(mine: float, theirs: float, higher_is_better: bool) -> str:
+    """差を、どちらが良いか分かる形で書く。"""
+    delta = mine - theirs
+    if abs(delta) < 5e-4:
+        return f"{delta:+.3f}  同じ"
+    improved = delta > 0 if higher_is_better else delta < 0
+    return f"{delta:+.3f}  {'良くなった' if improved else '**悪くなった**'}"
+
+
+# 比べる項目。(鍵, 表示名, 大きいほうが良いか)
+_COMPARISON_ROWS: tuple[tuple[str, str, bool], ...] = (
+    ("success", "成功率", True),
+    ("goal", "ゴール到達率", True),
+    ("policy_collision", "方策の衝突率", False),
+    ("any_collision", "環境を含む衝突率", False),
+    ("timeout", "打ち切りに張り付いた率", False),
+    ("stalled", "静止した率", False),
+    ("wandering", "往復した率", False),
+    ("jerk", "平均ジャーク", False),
+    ("sparc", "SPARC（0 に近いほど滑らか）", True),
+)
+
+
+def _report_comparison(lines: list[str], mine: dict[str, object],
+                       theirs: dict[str, object], label: str) -> None:
+    """2 回の評価を並べる。**どちらが良いかを毎行に書く。**
+
+    **滑らかさの指標を必ず並べる。** 本番では 3 回目から 4 回目で
+    成功率が 2 分の 1 になったのに、**スコアは 8.8 分の 1 まで落ちた。**
+    残る 4.4 倍は滑らかさと時間の配点で削られた分である。
+    **成功率だけを見ると「同じくらい」と読み違える。**
+
+    Parameters
+    ----------
+    mine, theirs : dict[str, object]
+        `_key_figures` の結果。`mine` が `--output-dir` の側。
+    label : str
+        比較相手の名前。画面に出す。
+    """
+    lines.append("")
+    lines.append("=== 並べて比べる ===")
+    lines.append(f"  こちら: --output-dir  (n={mine.get('n')})")
+    lines.append(f"  あちら: {label}  (n={theirs.get('n')})")
+    if mine.get("n") != theirs.get("n"):
+        lines.append("  **件数が違う。** どちらかが途中で落ちている。差を読む前に確かめること")
+
+    lines.append("")
+    # **見出しは `>9` では合わない。** 書式指定は文字数で詰めるため、
+    # 全角 3 文字は 9 桁ではなく 6 桁に見える。数値の欄（9 桁）に合わせて
+    # 空白を自分で置く。
+    lines.append(f"  {_pad('項目', 28)}    こちら    あちら   差")
+    missing: list[str] = []
+    for key, name, higher_is_better in _COMPARISON_ROWS:
+        if key not in mine or key not in theirs:
+            missing.append(name)
+            continue
+        left, right = float(mine[key]), float(theirs[key])  # type: ignore[arg-type]
+        lines.append(
+            f"  {_pad(name, 28)} {left:>9.3f} {right:>9.3f}   "
+            f"{_format_delta(left, right, higher_is_better)}"
+        )
+
+    # **出せなかった行を黙って落とさない。** 行が無いのを「差が無い」と
+    # 読み違えるのが、いちばん危ない誤読である。とくに滑らかさの指標は
+    # 本番の悪化 8.8 倍のうち 4.4 倍を占めていた。
+    if missing:
+        lines.append("")
+        lines.append(f"  **出せなかった項目: {' / '.join(missing)}**")
+        lines.append("    どちらかの回に記録が無い（古いログ、または JSON が残っていない）")
+        lines.append("    **「差が無い」ではない。**")
+
+    left_categories = mine.get("by_category") or {}
+    right_categories = theirs.get("by_category") or {}
+    shared = sorted(set(left_categories) & set(right_categories))  # type: ignore[arg-type]
+    if shared:
+        lines.append("")
+        lines.append("  摂動カテゴリ別の成功率（差の大きい順）")
+        rows = [
+            (left_categories[c] - right_categories[c], c,  # type: ignore[index]
+             left_categories[c], right_categories[c])      # type: ignore[index]
+            for c in shared
+        ]
+        for delta, category, left, right in sorted(rows, key=lambda row: row[0]):
+            mark = " **悪くなった**" if delta < -0.05 else (
+                " 良くなった" if delta > 0.05 else "")
+            lines.append(
+                f"    {_pad(category, 26)} {left:>5.2f} {right:>5.2f}  {delta:+.2f}{mark}"
+            )
+
+    lines.append("")
+    lines.append("  **本番のスコアはここから計算できない。** 配点の設定ファイルが")
+    lines.append("  配布されていないため、比べられるのは上の指標までである")
 
 
 def _guess_csv(output_dir: Path) -> Path | None:
@@ -606,10 +952,26 @@ def main() -> None:
     _report_outcomes(lines, episodes)
     _report_motion(lines, episodes)
     _report_categories(lines, episodes, categories)
+    _report_collision_source(lines, episodes)
     _report_exposure(lines, episodes, _load_nontarget_counts(csv_path))
     _report_offenders(lines, episodes)
     _report_json(lines, output_dir)
     _report_videos(lines, output_dir)
+
+    # **比較は最後に出す。** 上の内訳を読んだあとで差を見るほうが、
+    # どこが動いたのかを追いやすい。
+    if args.compare is not None:
+        other = args.compare.resolve()
+        if not (other / "eval.log").is_file():
+            lines.append("")
+            lines.append(f"=== 並べて比べる ===\n  **比較相手に eval.log が無い: {other}**")
+        else:
+            _report_comparison(
+                lines,
+                _key_figures(output_dir, categories),
+                _key_figures(other, categories),
+                str(other),
+            )
 
     report = "\n".join(lines)
     print(report)
