@@ -44,12 +44,13 @@ revision を固定して取り直せば同じものが手に入る。
 # 素の重み（0.1409 の構成）を取り寄せる。869 MB
 bash solution/tools/fetch_base_weights.sh
 
-# 素の重みで測る
-WEIGHTS=work/artifacts/model_weights_base LABEL=base \
+# 素の重みで測る（2〜3 時間）
+MUJOCO_GL=osmesa WEIGHTS=work/artifacts/model_weights_base LABEL=base \
     bash solution/tools/run_docker_eval.sh --detach
 
-# 学習後の重みで測る（終わってから）
-LABEL=lora15k bash solution/tools/run_docker_eval.sh --detach
+# 学習後の重みで測る（終わってから。さらに 2〜3 時間）
+MUJOCO_GL=osmesa LABEL=lora15k \
+    bash solution/tools/run_docker_eval.sh --detach
 ```
 
 **出力先の名前に `LABEL` が入る**ので、どちらの回か後から取り違えない。
