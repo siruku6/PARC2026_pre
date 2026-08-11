@@ -63,8 +63,22 @@ _TASK_TOTAL_RE = re.compile(r"=== タスク \d+/(\d+):")
 _GOAL_RE = re.compile(r"ゴール (到達|未達)")
 _PATH_RE = re.compile(r"経路 ([\d.]+)m")
 _DISPLACEMENT_RE = re.compile(r"変位 ([\d.]+)m")
-_MOTION_RE = re.compile(r"\s(静止|往復)(?:\s|$)")
+# **`固まった` を必ず入れる。** 8/11 に入れ忘れていて、`eval.log` に 8 件
+# あったラベルを「ラベル無し」に数えていた。**打ち切りの中身を読む唯一の
+# ラベルなので、落とすと未完了 22 件の正体が分からなくなる。**
+_MOTION_RE = re.compile(r"\s(静止|往復|固まった)(?:\s|$)")
 _FIRST_COLLISION_RE = re.compile(r"初衝突 (\d+) 歩")
+
+# 終盤 50 歩の経路長。**全体の変位では「動いてから固まった」を捉えられない。**
+_TAIL_PATH_RE = re.compile(r"終盤\d+歩 ([\d.]+)m")
+
+# グリッパを何回開閉したか。**本番の悪化を検知できた唯一の指標である。**
+# 素の重み 11/84 (13%) 対 lora20k 23/84 (27%) で、20 回以上だった 34 件の
+# うち成功は 2 件（0.06）だった。成功した回の中央は 2 回である。
+_GRIP_RE = re.compile(r"握り x(\d+)")
+
+# これ以上開閉していたら「掴み直しで空回りしている」と数える。
+_GRIP_CHATTER_THRESHOLD = 20
 
 # 変種名の**末尾**の接尾辞 → 摂動カテゴリ。CSV が読めればそちらを使う。
 #
@@ -402,8 +416,9 @@ def _parse_log(log_path: Path) -> tuple[list[dict], list[tuple[str, str]], int |
     episodes : list[dict]
         `task` / `episode` / `outcome` / `steps` / `offenders` を持つ辞書の列。
         2026-08-11 以降のログはさらに `goal`（bool）・`path_m`・
-        `displacement_m`・`motion`・`first_collision_step` を持つ。
-        **古いログでは鍵そのものが無い**（None を入れない）。
+        `displacement_m`・`motion`・`first_collision_step`・
+        **`tail_path_m`（終盤 50 歩の経路長）・`grip_toggles`（グリッパの開閉数）**
+        を持つ。**古いログでは鍵そのものが無い**（None を入れない）。
     exceptions : list[tuple[str, str]]
         (タスク名, 例外の内容)。パッチが例外を握った回。
     declared_total : int | None
@@ -442,6 +457,12 @@ def _parse_log(log_path: Path) -> tuple[list[dict], list[tuple[str, str]], int |
         first_collision = _FIRST_COLLISION_RE.search(detail)
         if first_collision:
             record["first_collision_step"] = int(first_collision.group(1))
+        tail_path = _TAIL_PATH_RE.search(detail)
+        if tail_path:
+            record["tail_path_m"] = float(tail_path.group(1))
+        grip = _GRIP_RE.search(detail)
+        if grip:
+            record["grip_toggles"] = int(grip.group(1))
 
         episodes.append(record)
 
@@ -583,6 +604,9 @@ def _report_motion(lines: list[str], episodes: list[dict]) -> None:
     for note, count in notes.most_common():
         lines.append(f"  {note:<8} {count:>4}  ({count / len(measured):>5.1%})")
 
+    _report_grip(lines, episodes)
+    _report_timeout_kinds(lines, episodes)
+
     # **腕が動いていないなら、ここから先の表を読む意味が無い。**
     stalled = notes.get("静止", 0)
     if stalled >= len(measured) * 0.8:
@@ -592,6 +616,77 @@ def _report_motion(lines: list[str], episodes: list[dict]) -> None:
         )
         lines.append("  重み・行動の非正規化・グリッパの符号・画像の向きを先に確かめること")
         lines.append("  （docs/plan/01_failure_accounting.md の「動いていないときに見る順」）")
+
+
+def _report_grip(lines: list[str], episodes: list[dict]) -> None:
+    """グリッパの開閉回数を結末ごとに出す。**本番の悪化を検知できた指標である。**
+
+    84 件の検証用データでは、素の重みと lora20k の成功率に差が無かった
+    （0.476 対 0.500、1 件ずつ対にして 9 拾い 7 失い、符号検定 p=0.80）。
+    **差が出たのはここだけだった。**
+
+    | | 素の重み | lora20k |
+    |---|---|---|
+    | 開閉 20 回以上の割合 | 11/84 (13%) | **23/84 (27%)** |
+
+    **開閉が 20 回以上だった 34 件（両方の回の合計）のうち成功は 2 件（0.06）**
+    で、ほぼ完全な失敗の目印である。成功した回の中央は 2 回しかない。
+    掴み直しを繰り返すとジャークも悪化するため、本番の配点に直接効く。
+    """
+    measured = [e for e in episodes if "grip_toggles" in e]
+    if not measured:
+        return
+
+    chatter = [e for e in measured if e["grip_toggles"] >= _GRIP_CHATTER_THRESHOLD]
+    lines.append("")
+    lines.append("=== グリッパの開閉 ===")
+    for outcome in ("成功", "衝突", "未完了"):
+        group = sorted(e["grip_toggles"] for e in measured if e["outcome"] == outcome)
+        if group:
+            lines.append(
+                f"  {outcome:<4} 中央 {group[len(group) // 2]:>3} 回 "
+                f"(最小 {group[0]} / 最大 {group[-1]}, n={len(group)})"
+            )
+    ratio = len(chatter) / len(measured)
+    lines.append(
+        f"  **{_GRIP_CHATTER_THRESHOLD} 回以上（掴み直しで空回り） "
+        f"{len(chatter)}/{len(measured)} = {ratio:.1%}**"
+    )
+    if chatter:
+        succeeded = sum(1 for e in chatter if e["outcome"] == "成功")
+        lines.append(
+            f"    そのうち成功 {succeeded} 件（{succeeded / len(chatter):.2f}）"
+            "  ← **失敗の目印。素の重みは 0.13 だった**"
+        )
+
+
+def _report_timeout_kinds(lines: list[str], episodes: list[dict]) -> None:
+    """未完了を「固まった」と「空回り」に割る。**打つ手が正反対である。**
+
+    終盤 50 歩の経路長で分ける。**全体の変位では「動いてから固まった」回を
+    取りこぼす**（前半で 0.31m 動いてから 200 歩固まった回を実際に見逃した）。
+    """
+    timeouts = [e for e in episodes if e["outcome"] == "未完了" and "tail_path_m" in e]
+    if not timeouts:
+        return
+
+    lines.append("")
+    lines.append("=== 未完了の内訳（終盤 50 歩の移動量で割る）===")
+    bands = (
+        (0.0, 0.03, "**固まっている**（<0.03m）"),
+        (0.03, 0.10, "わずかに動く（0.03〜0.10m）"),
+        (0.10, float("inf"), "**動き続けている**（>0.10m）"),
+    )
+    for low, high, label in bands:
+        group = [e for e in timeouts if low <= e["tail_path_m"] < high]
+        if not group:
+            continue
+        grips = sorted(e["grip_toggles"] for e in group if "grip_toggles" in e)
+        note = f"  グリッパ開閉 中央 {grips[len(grips) // 2]} 回" if grips else ""
+        lines.append(f"  {len(group):>3} 件  {label}{note}")
+    lines.append(
+        "  **固まっている回は引き直し（項目 9）、空回りは掴み方の学習が的である**"
+    )
 
 
 def _report_categories(lines: list[str], episodes: list[dict],
@@ -935,6 +1030,19 @@ def _key_figures(output_dir: Path, known: dict[str, str],
     if motions:
         figures["stalled"] = motions.count("静止") / total
         figures["wandering"] = motions.count("往復") / total
+
+    # **`固まった` は録画側が新しい版でないと 1 件も出ない。**
+    # 古いログで 0 を入れると「固まった回が無かった」と読めてしまう。
+    # 終盤の記録があるかどうかで、版を見分ける。
+    if any("tail_path_m" in e for e in episodes):
+        figures["froze"] = motions.count("固まった") / total
+
+    # **これが本番の悪化を検知できた唯一の指標である**（`_report_grip`）。
+    gripped = [e["grip_toggles"] for e in episodes if "grip_toggles" in e]
+    if gripped:
+        figures["grip_chatter"] = (
+            sum(1 for value in gripped if value >= _GRIP_CHATTER_THRESHOLD) / len(gripped)
+        )
     for key, source in (("jerk", "mean_avg_cartesian_jerk"), ("sparc", "mean_sparc")):
         if source in metrics:
             figures[key] = float(metrics[source])
@@ -967,7 +1075,11 @@ _COMPARISON_ROWS: tuple[tuple[str, str, bool], ...] = (
     ("policy_collision", "方策の衝突率", False),
     ("any_collision", "環境を含む衝突率", False),
     ("timeout", "打ち切りに張り付いた率", False),
+    # **グリッパは成功率より鋭い。** 本番で 8.8 倍悪化したとき、手元で
+    # 動いたのはこの行とジャークだけだった。
+    ("grip_chatter", "グリッパ 20 回以上の率", False),
     ("stalled", "静止した率", False),
+    ("froze", "固まった率", False),
     ("wandering", "往復した率", False),
     ("jerk", "平均ジャーク", False),
     ("sparc", "SPARC（0 に近いほど滑らか）", True),
