@@ -196,6 +196,24 @@ torch 2.11.0+cu128 / torchcodec 0.11.1 / torchvision 0.26.0+cu128 整合
 > | `cpu` | あり | **無い（0.13.0 から）** |
 > | `cu128` | あり | あり |
 > | `cu130` | あり | あり |
+>
+> ### 足りないのは版だけではない。NPP を別に入れる（2026-08-11 に踏んだ）
+>
+> 版が正しく揃っていても、これで止まる。
+>
+> ```
+> OSError: libnppicc.so.12: cannot open shared object file
+> ```
+>
+> torchcodec のコアの `.so` は **CUDA の NPP**（画像の色空間変換をするライブラリ）
+> に直接つながっている。GPU で動画をほどく気が無くても、import した時点で読まれる。
+> ところが torch の cu128 wheel が連れてくる `nvidia-*-cu12` に NPP は入っていない
+> （torch 自身は NPP を使わないため）。torchcodec もこれを依存として書いていない。
+>
+> **`pip install nvidia-npp-cu12` だけでは足りない。** torch が起動時に読み込む
+> CUDA ライブラリの一覧は決め打ちで、そこに NPP は載っていない。`.so` を置いた
+> だけでは OS 側が探す場所に入らないので、`ldconfig` に置き場所を教える必要がある。
+> Dockerfile はこの 2 つをまとめてやり、**登録できたかをビルド中に確かめている。**
 
 ## A-2. 学習する
 
@@ -491,6 +509,7 @@ python3 solution/tools/verify_merge.py work/train/smolvla_lora_all_suites/merged
 
 | 症状 | 原因 | 対処 |
 |---|---|---|
+| **ビルド中に** `libnppicc.so.12: cannot open shared object file` で落ちる | torchcodec が要求する CUDA の NPP が入っていない。**古い Dockerfile を使っている** | 新しい Dockerfile で A-1 をやり直す（`nvidia-npp-cu12` を入れて `ldconfig` へ登録する行が入っている） |
 | データを落としきったあと `undefined symbol` で落ちる | torch と torchcodec の版が対になっていない | A-1 のイメージを作り直す。それでも駄目なら `--video-backend pyav` |
 | `RuntimeError: operator torchvision::nms does not exist` | torch と torchvision の版が対になっていない | A-1 のイメージを作り直す（Dockerfile で torchvision を torch と同じ index から固定済み） |
 | `--resume` したのに step 0 から始まる | `--policy.path` を渡している | A-3 の表のとおり、最小限の引数だけにする |
