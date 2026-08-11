@@ -217,6 +217,31 @@ torch 2.11.0+cu128 / torchcodec 0.11.1 / torchvision 0.26.0+cu128 整合
 
 ## A-2. 学習する
 
+### 先に：`train.py` を直したらイメージを作り直す
+
+**`train.py` はイメージの中に焼き込まれている**（`COPY train.py merge.py /workspace/`）。
+**ホストのファイルを直しても、コンテナは古いものを実行する。**
+
+```bash
+git pull                                      # 新しい train.py を取る
+docker build -t parc2026-train solution/train # COPY は最後の層なので数秒
+```
+
+**やらないと、足したはずの旗で argparse が落ちる。**
+
+```
+error: unrecognized arguments: --emphasize-tasks ...
+```
+
+> **`--rm -d` の組み合わせだと、このエラーが読めない。**
+> 終了と同時にコンテナが消えるので `docker logs` は「そんなコンテナは無い」になり、
+> **画面にもファイルにも何も残らない。** 8/11 に 1 度これで詰まった。
+> **下の A-2-1 のように、まず前面で短く流すこと。**
+
+### A-2-1. まず `--steps 1` で前面で流す（数分）
+
+**20,000 歩を仕掛ける前に、引数が通って選び方が意図どおりかを見る。**
+
 ```bash
 mkdir -p work/train
 
@@ -224,8 +249,25 @@ docker run --gpus all --rm -it \
     -v "$PWD/work/train:/out" \
     -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
     parc2026-train \
-    python /workspace/train.py
+    python /workspace/train.py --steps 1 --run-name dryrun
 ```
+
+**`-it` で前面。落ちればその場でエラーが読める。**
+
+### A-2-2. 本番は `-d` で流し、ログをホストへ出す
+
+```bash
+docker run --gpus all -d --name parc-train \
+    -v "$PWD/work/train:/out" \
+    -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
+    parc2026-train \
+    python /workspace/train.py
+
+docker logs -f parc-train                     # 端末を閉じてよい
+```
+
+> **`--rm` を付けない。** 落ちたときにログを読めるようにしておく。
+> 終わったら `docker rm parc-train` で消す。
 
 **引数は要らない。既定値が「出発点の重みと同じ条件」になっている**（下の表）。
 
@@ -518,4 +560,6 @@ python3 solution/tools/verify_merge.py work/train/smolvla_lora_all_suites/merged
 | 毎回 6.4 GB を落とし直す | HF キャッシュをマウントしていない | `-v "$HOME/.cache/huggingface:/root/.cache/huggingface"` |
 | 学習は終わったのに推論で使えない | マージしていない | A-5 を実行する |
 | `can't open file '/workspace/merge.py'` | イメージが `train.py` しか持っていない古いもの | A-1 でイメージを作り直す（`COPY train.py merge.py` に修正済み。`COPY` は最後の行なのでキャッシュが効いて数秒で終わる） |
+| **`error: unrecognized arguments: --…`** | **`train.py` を直したのにイメージを作り直していない**（`train.py` はイメージへ焼き込まれる） | `git pull && docker build -t parc2026-train solution/train`（A-2 の先頭） |
+| **何のログも残らず即座に落ちる** | **`--rm -d` で流した。**終了と同時にコンテナが消えるので `docker logs` が読めない | **`--rm` を外す**か、まず `-it` で前面に流す（A-2-1） |
 | `merged_model/` を読もうとして `PermissionError` | コンテナの root が書いたファイルの持ち主がホストのユーザーと違う | A-5 の `chown` を実行する |
