@@ -35,6 +35,13 @@ Colab と違い、出力はホストのディレクトリに残るため Drive �
     python train.py --episodes-per-task 5    # 少ないデータで試す（**悪化の再現**）
     python train.py --resume                 # 直近のチェックポイントから
 
+    # 苦手タスクの割合を 3 倍にし、300 歩を超える手本を落とす（8/11 の本命）
+    python train.py --run-name weak3x_max300 --max-demo-steps 300 \
+        --emphasize-tasks \
+          "put the bowl on top of the cabinet" \
+          "put both the alphabet soup and the cream cheese box in the basket" \
+          "pick up the black bowl next to the ramekin and place it on the plate"
+
 Reads:
   - lerobot/smolvla_libero_plus（HF、初期重み）
   - lerobot/libero_plus（HF、学習データ。**全部使うと 16 GB 前後**）
@@ -83,6 +90,23 @@ def _parse_args() -> argparse.Namespace:
                         help="1 タスクあたりのエピソード数。**0 なら全 14,347 本を使う**"
                              "（出発点がそうである）。転送量は本数に比例しない —— "
                              "動画が共有ファイルに詰まっているため、200 本でも 6.4 GB 落ちる")
+    # **苦手タスクの割合を上げる。** 84 件の検証用データで切り分けたら、
+    # 落としているのは摂動ではなく特定のタスクだった（照明 +0.21・背景 +0.16 で
+    # 見た目の摂動は「易しい側」）。**苦手タスクにも 370〜445 本あり、
+    # 1 コマ 0.29 回しか引いていないので 7 割は一度も見られていない。**
+    parser.add_argument("--emphasize-tasks", type=str, nargs="*", default=None,
+                        metavar="INSTRUCTION",
+                        help="割合を上げるタスクの指示文（**完全一致**）。"
+                             "例: --emphasize-tasks \"put the bowl on top of the cabinet\"")
+    parser.add_argument("--emphasis-multiplier", type=float, default=3.0,
+                        help="--emphasize-tasks の割合を何倍にするか（既定 3 倍）。"
+                             "**得意タスクを間引いて実現する** —— LeRobot は"
+                             "エピソード番号を集合として扱うため、重複させても効かない")
+    parser.add_argument("--max-demo-steps", type=int, default=0,
+                        help="手本がこの歩数を超えるエピソードを使わない。**0 なら落とさない。**"
+                             "300 を渡すと 401 本（フレームの 6.3%）が落ちる —— "
+                             "**上限 300 歩の採点では再現できないことが証明済み**である"
+                             "（成功した回は手本の 0.95 倍の歩数で終わっている）")
     parser.add_argument("--save-freq", type=int, default=500)
     parser.add_argument("--num-workers", type=int, default=2,
                         help="データ供給のプロセス数。**CPU のコア数に合わせる。**"
@@ -225,6 +249,120 @@ def _select_episodes(dataset_root: Path, episodes_per_task: int) -> list[int]:
           f"= {len(selected)} エピソード")
     print(f"[train]   選んだ分の明るさ {min(chosen):.3f} 〜 {max(chosen):.3f}")
     print(f"[train]   データセット全体 {min(whole):.3f} 〜 {max(whole):.3f}")
+    return selected
+
+
+def _check_task_names(frame: pd.DataFrame, names: list[str]) -> None:
+    """渡したタスク名がデータセットに実在することを確かめる。
+
+    **綴りが 1 文字違うと、黙って 1 本も選ばれない。** 指示文は 40 種類しか
+    ないので、外れていれば候補を出して止める。
+    """
+    known = set(frame["task"])
+    missing = [name for name in names if name not in known]
+    if not missing:
+        return
+
+    lines = [f"データセットに無いタスク名がある: {missing}"]
+    for name in missing:
+        head = name.split()[0] if name.split() else name
+        similar = sorted(task for task in known if head and head in task)
+        if similar:
+            lines.append(f"  「{name}」に近いもの: {similar[:3]}")
+    lines.append(f"  指示文は全部で {len(known)} 種類しかない（完全一致で渡すこと）")
+    raise SystemExit("\n".join(lines))
+
+
+def _select_emphasized_episodes(
+    dataset_root: Path, emphasize: list[str], multiplier: float,
+    max_demo_steps: int, draws: int,
+) -> list[int]:
+    """苦手タスクの割合を上げ、長すぎる手本を落としてエピソードを選ぶ。
+
+    **引ける回数が足りないのであって、データは足りていない。**
+    20,000 歩 × バッチ 32 = 640,000 回しか引けず、全体は約 219 万フレームなので
+    **1 コマあたり 0.29 回**しか見られない。**苦手タスクにも 370〜445 本あり、
+    その 7 割は一度も見られていない。** だから「苦手タスクの、まだ見ていない
+    コマ」を増やすのは筋が通る。
+
+    **エピソード番号を重複させて重みを付ける道は使えない。** LeRobot は
+    `episode_index.isin(episodes)` で**集合として**扱う（`datasets/io_utils.py`）。
+    **だから得意タスクを間引いて割合を上げる。**
+
+    `max_demo_steps` を超える手本は落とす。**上限 300 歩の採点では再現できない
+    ことが証明済み**で（成功した回は手本の 0.95 倍の歩数で終わっている）、
+    学習枠を使う意味がないうえ、遅い動きを教えてしまう。
+
+    Parameters
+    ----------
+    dataset_root : Path
+        メタデータを取得済みのデータセットのルート。
+    emphasize : list[str]
+        割合を上げるタスクの指示文。**完全一致で渡す。**
+    multiplier : float
+        そのタスクの割合を何倍にするか。
+    max_demo_steps : int
+        手本の歩数の上限。**0 なら落とさない。**
+    draws : int
+        学習で引く回数（歩数 × バッチ）。1 コマを何回見るかの表示に使う。
+
+    Returns
+    -------
+    episode_indices : list[int]
+        選んだエピソード番号の昇順リスト。
+    """
+    frame = _load_episode_metadata(dataset_root)
+    _check_task_names(frame, emphasize)
+
+    total_before = len(frame)
+    if max_demo_steps > 0:
+        dropped = frame[frame["length"] > max_demo_steps]
+        frame = frame[frame["length"] <= max_demo_steps]
+        gone = sorted(set(dropped["task"]) - set(frame["task"]))
+        print(f"[train] 手本が {max_demo_steps} 歩を超える {len(dropped)} 本を落とした"
+              f"（全 {total_before} 本の {len(dropped) / total_before:.1%}）")
+        if gone:
+            print(f"[train]   丸ごと落ちたタスク {len(gone)} 種: {gone}")
+
+    brightness = dict(zip(frame["episode_index"].astype(int), frame["brightness"]))
+    length = dict(zip(frame["episode_index"].astype(int), frame["length"].astype(int)))
+
+    wanted = set(emphasize)
+    strong = frame[~frame["task"].isin(wanted)]
+    weak_indices = sorted(frame[frame["task"].isin(wanted)]["episode_index"].astype(int))
+
+    weak_frames = sum(length[index] for index in weak_indices)
+    strong_frames = int(strong["length"].sum())
+    share_now = weak_frames / (weak_frames + strong_frames)
+    share_target = min(multiplier * share_now, 0.9)
+    if share_target != multiplier * share_now:
+        print(f"[train] **倍率が高すぎるので {share_target / share_now:.1f} 倍で打ち切った**")
+
+    # 目標の割合になるよう、得意タスクを残す比率を解く。
+    keep_ratio = weak_frames * (1.0 - share_target) / (share_target * strong_frames)
+    keep_ratio = min(keep_ratio, 1.0)
+
+    selected = list(weak_indices)
+    for _, group in strong.groupby("task"):
+        indices = group["episode_index"].astype(int).tolist()
+        count = max(1, round(len(indices) * keep_ratio))
+        selected.extend(_choose_spread_by_value(indices, count, brightness))
+
+    selected = sorted(selected)
+    chosen_frames = sum(length[index] for index in selected)
+    chosen_brightness = [brightness[index] for index in selected]
+    whole_brightness = list(brightness.values())
+
+    print(f"[train] 苦手 {len(wanted)} タスクを {multiplier:g} 倍にする"
+          f"（割合 {share_now:.1%} → {weak_frames / chosen_frames:.1%}）")
+    print(f"[train]   得意タスクは {keep_ratio:.0%} に間引いた")
+    print(f"[train]   選んだのは {len(selected):,} 本 / {chosen_frames:,} フレーム")
+    print(f"[train]   **1 コマを見る回数 {draws / chosen_frames:.2f} 回**"
+          "（4 回目の提出は 5.1 回で本番 8.8 倍悪化）")
+    print(f"[train]   選んだ分の明るさ {min(chosen_brightness):.3f} 〜 "
+          f"{max(chosen_brightness):.3f}")
+    print(f"[train]   落とす前の全体   {min(whole_brightness):.3f} 〜 "
+          f"{max(whole_brightness):.3f}")
     return selected
 
 
@@ -438,7 +576,8 @@ def main() -> None:
         # **0 なら選ばない。** 出発点の重みも `episodes: None`（全部）で作られている。
         # 選ぶ処理を通すと 14,347 個の番号がコマンド 1 行に並ぶので、旗ごと省く。
         record: dict[str, Any]
-        if args.episodes_per_task <= 0:
+        selects_by_task = bool(args.emphasize_tasks) or args.max_demo_steps > 0
+        if args.episodes_per_task <= 0 and not selects_by_task:
             episode_indices = None
             record = {"episodes": "all", "per_task": None}
             print("[train] **全エピソードを使う**（出発点の重みと同じ条件）")
@@ -448,8 +587,24 @@ def main() -> None:
                 _DATASET_REPO, revision=_DATASET_REVISION, repo_type="dataset",
                 allow_patterns=["meta/**"],
             ))
-            episode_indices = _select_episodes(dataset_root, args.episodes_per_task)
-            record = {"episodes": episode_indices, "per_task": args.episodes_per_task}
+            if selects_by_task:
+                episode_indices = _select_emphasized_episodes(
+                    dataset_root, list(args.emphasize_tasks or []),
+                    args.emphasis_multiplier, args.max_demo_steps,
+                    args.steps * args.batch_size,
+                )
+                record = {
+                    "episodes": episode_indices,
+                    "per_task": None,
+                    "emphasize_tasks": list(args.emphasize_tasks or []),
+                    "emphasis_multiplier": args.emphasis_multiplier,
+                    "max_demo_steps": args.max_demo_steps,
+                }
+            else:
+                episode_indices = _select_episodes(dataset_root, args.episodes_per_task)
+                record = {
+                    "episodes": episode_indices, "per_task": args.episodes_per_task
+                }
 
         # **レポートの申告項目になるので必ず残す**（タスク数・エピソード数）。
         # マージの出力に `train_config.json` は入らないため、ここが唯一の記録になる。
