@@ -61,6 +61,23 @@ if per_frame_ms > 8.0:
     print("  --gpus all と NVIDIA_DRIVER_CAPABILITIES に graphics が要る。")
     raise SystemExit(1)
 print("  GPU 描画で動いている")
+
+# **後片付けの音を消す。** これをやらないと、python が終わるときに
+# mujoco の Renderer と GLContext が EGL の同じものを 2 度手放そうとして、
+#   OpenGL.raw.EGL._errors.EGLError: <exception str() failed>
+# が 2 度出る。**無害だが失敗と見分けが付かない。**
+# ここで先に手放し、片付け役を外しておく。
+# **どれも失敗しても構わない。** 目的は音を消すことだけで、
+# ここで例外を出したら本末転倒である（`set -e` で評価ごと止まる）。
+try:
+    renderer.close()
+except Exception:
+    pass
+for target in (renderer, getattr(renderer, "_gl_context", None)):
+    try:
+        type(target).__del__ = lambda self: None
+    except Exception:
+        pass
 PY
 
 # ---------------------------------------------------------------- 準備

@@ -216,9 +216,13 @@ docker run --rm --gpus all --network "$NETWORK" \
     -v "$OUTPUT_DIR:/out" \
     "$KIT_IMAGE" bash /host/tools/docker_eval_inside.sh
 
-# 評価側コンテナは root で走る（キットへパッチを当てるため、中の
-# `/workspace` に書けなければならない）。そのぶん `/out` の中身も root の
-# ものになり、**ホストから消せない 900 MB が残る。** 持ち主を戻しておく。
+# **評価側のコンテナだけは root のまま走らせている。**
+# 中にある配布キット（`/workspace` に置かれた `pipeline/` や `compe/`）へ
+# パッチを当てる必要があり、そこは root のものだからである。
+#
+# その結果、結果の置き場（ホストの `work/gpu_eval/<回>/` を、コンテナには
+# `/out` という名前で見せている）に書かれたファイルも root のものになる。
+# **そのままだと `ubuntu` では消せない 900 MB が残る。** 持ち主を戻しておく。
 docker run --rm -v "$OUTPUT_DIR:/out" --entrypoint chown "$KIT_IMAGE" \
     -R "$(id -u):$(id -g)" /out || \
     echo "  持ち主を戻せなかった。消すときは sudo が要る"
