@@ -121,7 +121,7 @@ RUN pip install --no-cache-dir "fastapi>=0.68" "uvicorn>=0.15" "msgpack>=1.0"
 > ただし**差は 3 パッケージしかない**ので、いまは派生で足りている。
 > 分けるなら [open_items.md](../talk/open_items.md) の 19 として置いた。
 
-## 描画は osmesa を使う（このマシンでは EGL が動かない）
+## 描画は osmesa を使う（このマシンで EGL は原理的に使えない）
 
 **このマシン（H100-20C）では EGL で止まる。** 8/11 に確かめた。
 
@@ -130,8 +130,17 @@ RUN pip install --no-cache-dir "fastapi>=0.68" "uvicorn>=0.15" "msgpack>=1.0"
 | **`osmesa`（CPU）** | 0.8 ms | **動く** | **384 ms** | **2〜3 時間** |
 | `egl`（GPU） | 0.2 ms | **最初の数歩で止まる** | — | — |
 
-**`H100-20C` は vGPU である。** 構成によって描画（graphics）が許可されておらず、
-**球 1 個の場面は描けるのに、本当の場面で止まる。**
+**原因が判明した。この vGPU は計算専用の製品である。**
+
+```
+$ nvidia-smi -q | grep -iA3 -e virtualization -e vgpu
+    Virtualization Mode  : VGPU
+    Product Name         : NVIDIA Virtual Compute Server
+```
+
+**`NVIDIA Virtual Compute Server`（vCS）は OpenGL / Vulkan に対応しない。**
+描画が使えるのは vWS（Virtual Workstation）系だけである。
+**こちら側では直せない。** `osmesa` を使う。
 
 ```bash
 MUJOCO_GL=osmesa bash solution/tools/run_docker_eval.sh --check
@@ -140,7 +149,8 @@ MUJOCO_GL=osmesa bash solution/tools/run_docker_eval.sh --check
 > **速さの測定を「動く証拠」にしてはいけない。**
 > 最初はこう書いていた ——「描画を 50 枚測り、8 ms を超えたら止める」。
 > **EGL はその測定を 0.2 ms で通ったうえで、実際の場面で止まった。**
-> 空の場面を描けることは、本当の場面を描けることを意味しない。
+> **いまなら 0.2 ms 自体が不自然だと分かる**（GPU 描画でも速すぎる）。
+> あれは描けていたのではなく、実質何も描いていなかった。
 >
 > しかも `os.environ.setdefault("MUJOCO_GL", "egl")` と書いていたため、
 > **osmesa を指定した回にも「GPU 描画で動いている」と表示していた。**
@@ -149,8 +159,16 @@ MUJOCO_GL=osmesa bash solution/tools/run_docker_eval.sh --check
 **推論は GPU のままである。** 遅いのは描画だけで、1 歩 384 ms のうち
 170 ms ほどが推論（`850 ms / n=5`）、残りが描画である。
 
-**2〜3 時間は `--detach` で放っておける範囲**なので、
-EGL を直すのは後回しでよい（[open_items.md](../talk/open_items.md) の 23）。
+**速くする手はスイートを絞ることだけになった。**
+1 タスクが 300 歩 × 384 ms = 約 2 分なので、件数がそのまま時間になる。
+
+| スイート | 件数 | 時間 |
+|---|---|---|
+| 7 カテゴリ | 84 | 2.7 時間 |
+| 本命 2 カテゴリ | **36** | **1.2 時間** |
+
+**`MAX_STEPS` は 300 のまま動かさないこと**（本番と同じ値である）。
+詳しくは [open_items.md](../talk/open_items.md) の 29。
 
 ## 集計が出すもの
 
