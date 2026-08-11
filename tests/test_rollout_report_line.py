@@ -143,6 +143,66 @@ def test_motion_label_survives_the_round_trip(tmp_path: Path) -> None:
     assert episode["offenders"] == {}
 
 
+def test_froze_label_is_counted(tmp_path: Path) -> None:
+    """`固まった` が数えられる。**8/11 に正規表現から漏れていた。**
+
+    lora20k の `eval.log` には 8 件あったのに、集計は `静止|往復` しか見て
+    おらず「ラベル無し」に数えていた。**打ち切りの中身を読む唯一のラベル**
+    なので、落とすと未完了 22 件の正体が分からなくなる。
+    """
+    # 前半で動いてから、終盤 50 歩だけ止まる軌跡。全体の変位では捕まらない。
+    track = [(0.30 * index / 250, 0.0, 0.0) for index in range(251)]
+    track += [(0.30, 0.0, 0.0)] * 50
+    line = recorder.format_result_line(
+        "task_light_1", 0, 300, False, track, [-1.0] * 301, None, {},
+    )
+    log = tmp_path / "eval.log"
+    log.write_text("INFO:  " + line + "\n", encoding="utf-8")
+
+    episode = summarize._parse_log(log)[0][0]
+
+    assert episode["motion"] == "固まった"
+    assert episode["tail_path_m"] == pytest.approx(0.0, abs=0.005)
+
+
+def test_grip_toggles_are_read_back(tmp_path: Path) -> None:
+    """`握り xN` が読み戻せる。**本番の悪化を検知できた唯一の指標である。**
+
+    84 件の検証用データでは成功率に差が出なかった（0.476 対 0.500）のに、
+    **グリッパを 20 回以上開閉した回は 13% から 27% へ増えていた。**
+    """
+    grips = [1.0 if index % 2 else -1.0 for index in range(56)]
+    line = recorder.format_result_line(
+        "task_tb_6", 0, 55, False, _straight(55, 0.58), grips, None, {},
+    )
+    log = tmp_path / "eval.log"
+    log.write_text("INFO:  " + line + "\n", encoding="utf-8")
+
+    episode = summarize._parse_log(log)[0][0]
+
+    assert episode["grip_toggles"] == 55
+    # **20 回以上なので「掴み直しで空回り」に数えられる側である。**
+    assert episode["grip_toggles"] >= summarize._GRIP_CHATTER_THRESHOLD
+
+
+def test_froze_is_absent_for_old_logs(tmp_path: Path) -> None:
+    """終盤の記録が無いログでは `固まった率` を出さない。
+
+    **0 を入れると「固まった回が無かった」と読めてしまう。**
+    素の重みの回（8/11 午前）は録画側が古く、ラベル自体が存在しない。
+    """
+    log = tmp_path / "eval.log"
+    log.write_text(
+        "INFO:  [結果] task_light_1 ep0: 未完了 300 steps  ゴール 未達  "
+        "経路 1.10m  変位 0.25m  握り x3\n",
+        encoding="utf-8",
+    )
+    episodes = summarize._parse_log(log)[0]
+
+    assert "tail_path_m" not in episodes[0]
+    assert episodes[0]["grip_toggles"] == 3
+
+
 def test_old_log_has_no_new_keys(tmp_path: Path) -> None:
     """2026-08-11 より前の行も読める。**無い項目は鍵ごと無い。**"""
     log = tmp_path / "eval.log"
