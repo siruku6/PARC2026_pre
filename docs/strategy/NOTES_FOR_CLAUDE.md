@@ -401,3 +401,78 @@ evaluation on the kit side.
   install.
 - The PDF's page numbers cited throughout the strategy docs refer to PDF pages (1-indexed), which
   match slide order 1:1 (no N-up).
+
+---
+
+## 8. Session handoff — 2026-08-11 (deadline 8/14)
+
+### 8.1 Repository state
+
+Branch **`submission/v1-base-weights`** at `b234fea`. Working tree clean.
+
+| Fact | Detail |
+|---|---|
+| **Push to `github` is PENDING** | `github/submission/v1-base-weights` is at `2981978`. Fast-forward, **no force needed** |
+| Today's 9 commits were squashed to 5 | Contiguous groups only, no reordering. Tree hash verified identical at each step |
+| Backup tag | `backup/before-tidy-20260811` → `27de31b` (pre-squash tip) |
+| `submission/v2-tuned-weights` | **Fully merged in** (`87e0dfc`, two parents). Obsolete as a working branch |
+| `github/gpu/v2-snapshot` | The GPU server's rebased v2 (3 commits). **Fully absorbed** — `28b9eb6` cherry-picked as `b234fea`; the other two were content-identical to `f2eae39`/`e4edc39`. Safe to delete on the remote |
+| `docs/reference/03_chunk_params.md` | Renamed to **`07_`** (collided with `03_report_values.md`) |
+
+**The GPU server must `git pull` before any training run.** Its `train.py` defaults were the old
+ones (batch 8 / lr 3e-4 / 200 episodes) that produced the 8.8× regression.
+
+### 8.2 In flight on the GPU server
+
+- **lora20k 84-task eval**, started 2026-08-11 05:23 UTC, ~2.7 h. Weights
+  `work/artifacts/model_weights_lora20k` (`sha256 2cd9faab…`, identical to the 4th submission's
+  checkpoint). `verify_merge.py` confirms 37 changed tensors.
+- **Purpose: validate the local suite as a proxy.** Production separated base (0.1409) from
+  lora20k (0.016) by 8.8×. If the 84-task suite cannot separate them, no training result can be
+  judged locally. This gates everything downstream.
+- **The base 84-task result lives on the GPU server** at
+  `outputs/0811_101824_base_n5_ep1_max300` — **not yet transferred here.** Needed for item 1.
+
+### 8.3 Priority order agreed with the user
+
+`0` push + GPU sync → `5a` lora20k eval (running) → `1` analyse the base 84-task run →
+`6` (answered) → `5b` training run A (base recipe, all data, no augmentation) →
+`2` design training run B → `3` (answered) → `4` model write-up, folded into the report (item 16).
+
+Full item list with rationale: [../talk/open_items.md](../talk/open_items.md).
+
+### 8.4 Corrections made today — do not re-derive these
+
+| Claim that was wrong | What is actually true |
+|---|---|
+| "Unfreezing the vision encoder is the biggest lever" | **No-op under LoRA.** `_get_default_peft_targets` in `policies/smolvla/modeling_smolvla.py` targets only `lm_expert` q/v projections + 5 projection layers (32 + 5 = the 37 tensors `verify_merge` counts). `freeze_vision_encoder` / `train_expert_only` change no trainable weight |
+| "Track 1 evaluates exactly 2 perturbation categories" | Organizers said only **"not all 7"** plus the criterion text. They named no category. `Sensor Noise` (1,601, the largest) plausibly qualifies. See [../reference/05_perturbation_categories.md](../reference/05_perturbation_categories.md) |
+| "EGL can be fixed on this machine" | **vGPU product is `NVIDIA Virtual Compute Server`** — compute-only, no OpenGL. Not fixable from our side. The "sphere renders in 0.2 ms" observation was not evidence of GPU rendering |
+| "EGL would save about an hour" | Measured EGL is **38.6 ms/step** vs osmesa 384 ms. Would have been 2.7 h → 40 min. Moot now |
+| "Filtering the training data to visual-perturbation categories gives 4.5× density" | **Impossible and not worth it.** No variant name in any metadata column; ordering is fully mixed (window brightness spread 0.028); only 40 instruction strings so `Language Instructions` variants are absent. And appearance-shifted episodes are already **53.5%**, so filtering buys 1.9× while halving the data. See [../reference/06_training_data_composition.md](../reference/06_training_data_composition.md) |
+| "The summariser does not report jerk" | It always did (`mean_avg_cartesian_jerk` etc.). A parallel session added `--compare` instead |
+
+### 8.5 Weak evidence to shore up
+
+**The eval-side appearance spread (`light` 0.287 / `table`,`tb` 0.405, range 0.212–0.689) comes
+from a third party's EDA over 15 initial frames, not from our own measurement.** The conclusion
+"the augmentation range ×0.8–1.2 does not cover the eval side (×0.71–1.70)" rests on it.
+
+It is now measurable in-house: the finished 84-task runs contain the initial frames. Doing so
+requires no policy inference.
+
+### 8.6 Sandbox quirks hit this session
+
+- `mktemp -d` → `Operation not permitted`. Use `mkdir -p "$TMPDIR/<name>"`.
+- No `pandas` / `pyarrow` in any host interpreter, and `work/venv310` has no `pip`.
+  Workaround used: `python3 -m venv "$TMPDIR/pq" && "$TMPDIR/pq/bin/python" -m pip install pyarrow`
+  (pypi.org is reachable). The `local-uv_env:latest` Docker image has pandas 2.3.3 + pyarrow 25,
+  but **`docker run` was denied by the permission layer** — prefer the venv.
+- `git branch -D` failed with `could not lock config file .git/config`; the branch deletion itself
+  still took effect.
+- `diff <(...)` process substitution is denied; write to `$TMPDIR` and use `git diff --no-index`.
+- **Working directory persists between Bash calls.** A `cd docs` in one call broke later relative
+  paths. Use absolute paths or re-`cd` to the repo root.
+- Parallel Claude sessions edit the same files. `open_items.md` changed under us twice, and the
+  checked-out branch changed once. Re-read before editing; verify `git branch --show-current`
+  before any git operation.
