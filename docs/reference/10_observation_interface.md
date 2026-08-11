@@ -26,9 +26,11 @@
 出発点の側は `config.json` と `train_config.json` の両方が同じことを言っているので、
 **宣言どおりの形で学習された**と読める。
 
-## 食い違う理由は学習スクリプトの 3 行
+## 食い違う理由は、配布ノートブックがそう渡しているから
 
-[../../solution/train/train.py:519-521](../../solution/train/train.py#L519-L521) が毎回これを渡す。
+**この 3 行は運営が配ったノートブックのものである。**
+[../../examples/smolvla_libero_spatial_lora.ipynb](../../examples/smolvla_libero_spatial_lora.ipynb)
+の `lerobot-train` を組む部分（`command = [` で始まるセル）にそのまま入っている。
 
 ```
 --policy.input_features=null
@@ -37,8 +39,11 @@
 ```
 
 `input_features=null` にすると、LeRobot は**学習データ側の列名から受け口を組み直す**。
-`lerobot/libero_plus` のカメラは `front` と `wrist` なので、そのまま名前になる。
-**この 3 行は固定文字列なので、今後の学習もすべて同じ受け口になる。**
+ノートブックが使う `lerobot/libero_plus` のカメラは `front` と `wrist` なので、そのまま名前になる。
+
+**つまり受け口が変わるのは、参加者側の細工ではなく配布手順どおりの結果である。**
+[../../solution/train/train.py](../../solution/train/train.py) も同じ 3 行を渡しているため、
+今後の学習もすべて同じ受け口になる。
 
 ## それでも推論では打ち消される
 
@@ -140,7 +145,7 @@ for num_empty_cameras in range(len(missing_img_keys)):
 | 状態を 8 次元に組む場所 | 同梱 LeRobot `processor/env_processor.py` の `LiberoProcessorStep` |
 | 埋める枠数の決まり方 | 同梱 LeRobot `policies/smolvla/modeling_smolvla.py` の `prepare_images` |
 | 埋めた枠が注意から外れること | 同上 `embed_prefix` と `sample_actions` の `prefix_position_ids` |
-| 受け口を組み直している 3 行 | [../../solution/train/train.py:519-521](../../solution/train/train.py#L519-L521) |
+| 受け口を組み直している 3 行 | **配布ノートブック** [../../examples/smolvla_libero_spatial_lora.ipynb](../../examples/smolvla_libero_spatial_lora.ipynb)（`lerobot-train` を組むセル） |
 
 ```bash
 # 宣言の食い違いを並べて見る
