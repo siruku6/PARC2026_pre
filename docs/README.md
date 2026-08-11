@@ -7,6 +7,7 @@
 | **今なにをやるべきか** | [talk/open_items.md](talk/open_items.md) |
 | **手を動かす手順** | [howto/](howto/) |
 | **測った数字** | [strategy/05_実測結果.md](strategy/05_実測結果.md) |
+| **これから作るものの設計** | [plan/](plan/) |
 | **提出物のしくみ** | [solution/README.md](solution/README.md) |
 | **次のコンペに持ち越すこと** | [talk/lessons_learned.md](talk/lessons_learned.md) |
 | **レポートに書く値** | [reference/03_report_values.md](reference/03_report_values.md) |
@@ -19,7 +20,8 @@
 | [howto/](howto/) | 手順書。上から順にやれば終わる形で書いてある |
 | [solution/](solution/) | 提出物と Colab の説明。コード本体は `../solution/` |
 | [strategy/](strategy/) | 何を狙うか、なぜそうするか。判断の材料 |
-| [reference/](reference/) | 調べて分かった事実（モデル・評価データ） |
+| [reference/](reference/) | 調べて分かった事実（モデル・評価データ・出題の母集団） |
+| [plan/](plan/) | **個別の施策の設計。** 何を測り、出た数字で何を決めるか |
 | [prod_eval_results/](../outputs/prod_eval_results/) | 本番採点の生ログと読み解き |
 
 ## よく開くファイル
@@ -34,6 +36,8 @@
 | [solution/COLAB_EVAL.md](solution/COLAB_EVAL.md) | 評価を回すとき（Colab。GPU マシンが無いとき） |
 | [solution/COLAB.md](solution/COLAB.md) | Colab で学習を回すとき |
 | [strategy/05_実測結果.md](strategy/05_実測結果.md) | 判断する前。数字はすべてここ |
+| [plan/01_failure_accounting.md](plan/01_failure_accounting.md) | 評価の結果を読むとき。**ゴール到達と衝突の読み分け方** |
+| [reference/04_track1_population.md](reference/04_track1_population.md) | 出題の母集団を確かめるとき |
 
 ## 説明とコードの分け方
 

@@ -37,9 +37,18 @@ fi
 mkdir -p "$OUTPUT"
 echo "[fetch] lerobot/smolvla_libero_plus@${REVISION:0:8} を取り寄せる（869 MB）"
 
-docker run --rm \
+# **`-i` が要る。** これが無いと `python -` は空の標準入力を読んで
+# **何もせず終了コード 0 で終わる**（2026-08-11 に踏んだ。ディレクトリだけが
+# 作られ、`snapshot_download` は 1 度も走らなかった）。
+# **ホストの利用者として書く。** root で書くと、あとで `rm -rf` も
+# `build_submission.py` の入れ替えもできない 869 MB が残る。
+#
+# `HF_HOME` は出力先の中へ置く。ホストの `~/.cache/huggingface` を貸すと、
+# 学習時に root が作った中身と持ち主が食い違って書けないことがある。
+docker run --rm -i \
+    --user "$(id -u):$(id -g)" \
     -v "$OUTPUT:/out" \
-    -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
+    -e "HF_HOME=/out/.hf" \
     -e "REVISION=$REVISION" \
     "$IMAGE" python - <<'PY'
 import os
@@ -64,6 +73,20 @@ snapshot_download(
 )
 print("取り寄せた")
 PY
+
+# **本当に置けたかを確かめてから成功と言う。** 上の docker run が黙って
+# 何もしなくても、ディレクトリは作られているので見分けが付かない。
+for required in model.safetensors config.json vlm/tokenizer.json; do
+    if [ ! -f "$OUTPUT/$required" ]; then
+        echo "エラー: 取り寄せに失敗した。$OUTPUT/$required が無い" >&2
+        echo "  中身:" >&2
+        ls -la "$OUTPUT" >&2
+        exit 1
+    fi
+done
+
+# etag の控えは残しても使わない。**869 MB のほかに置いておく理由が無い。**
+rm -rf "$OUTPUT/.hf"
 
 echo
 echo "[fetch] 置いた: $OUTPUT"

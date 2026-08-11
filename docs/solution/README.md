@@ -30,9 +30,9 @@
 | `tools/docker_eval_inside.sh` | 上が評価側コンテナの中で走らせる本体 |
 | `tools/fetch_base_weights.sh` | **素の重み（0.1409 の構成）を revision 固定で取り寄せる** |
 | `tools/run_gpu_eval.sh` | 同じことをホスト直で。**LeRobot 入りの venv がある場合だけ** |
-| `tools/summarize_gpu_eval.py` | 上の結果を集計する。件数・結末・カテゴリ別・衝突の偏り |
+| `tools/summarize_gpu_eval.py` | 上の結果を集計する。件数・結末・**ゴール到達と衝突の内訳**・動き・カテゴリ別・衝突の偏り |
 | `tools/patch_kit_for_variants.py` | 配布キットを、変種で測れて結末と映像が残る状態に書き換える |
-| `tools/rollout_recorder.py` | ロールアウトを mp4 に撮る。**上のパッチがキットへ複製して使う** |
+| `tools/rollout_recorder.py` | ロールアウトを mp4 に撮り、`[結果]` 行を組み立てる。**上のパッチがキットへ複製して使う** |
 | `tools/summarize_rollout_videos.py` | 撮れた mp4 を、見るべき順に並べてコマ並べ画像にする |
 
 `tools/` の Python スクリプトは**どのディレクトリから実行してもよい**。入出力は
@@ -289,7 +289,7 @@ PARC_BLEND_STEPS=3 bash solution/tools/run_local_eval.sh
 ```mermaid
 flowchart LR
     R["tools/rollout_recorder.py"] -->|"patch_kit_for_variants.py が複製"| K["キット<br/>pipeline/rollout_recorder.py"]
-    P["patch_kit_for_variants.py"] -->|"3 か所へ呼び出しを差し込む"| Q["キット<br/>pipeline/rollout.py"]
+    P["patch_kit_for_variants.py"] -->|"呼び出しを差し込む"| Q["キット<br/>pipeline/rollout.py"]
     Q --> M["*.mp4（失敗した回だけ）"]
     M -->|"summarize_rollout_videos.py"| S["一覧＋コマ並べ画像"]
 ```

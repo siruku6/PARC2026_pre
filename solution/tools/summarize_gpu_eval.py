@@ -4,15 +4,20 @@
 **Colab の F セルがやっていたことを、マシン上で完結させる。**
 Drive へ退避する必要がないので、退避漏れで結果を失う経路そのものが無い。
 
-出すのは 5 つ。**どれも「次に何をするか」が変わる情報である。**
+出すのは 7 つ。**どれも「次に何をするか」が変わる情報である。**
 
 - **84 件そろったか** — 途中で落ちると終了コード 0 のまま件数だけ減る
-- 結末の内訳（成功 / 衝突 / 未完了）と、**ゴール到達後に衝突で落ちた本数**
-- **摂動カテゴリ別の成功率** — 学習の的を決めるのはこの表
-- ぶつけた物体の偏り
+- 結末の内訳（成功 / 衝突 / 未完了）と、**ゴールに着いてから衝突で落ちた本数**
+- **ゴール到達率と成功率の差** — ここが開いていれば衝突対策、閉じていれば到達の話
+- **動きの内訳（静止 / 往復）** — 全件について。**1 件も動いていなければ最初に警告する**
+- **摂動カテゴリ別の成功率**（背景テクスチャは `table` / `tb` に分ける） — 学習の的を決める表
+- ぶつけた物体の偏りと、**初めて 1mm を超えた歩**
 - **同じ変位が繰り返し出ていないか** — 環境側で物が動いている印
 
     solution/tools/summarize_gpu_eval.py --output-dir work/gpu_eval/0811_...
+
+**古いログでも動く。** ゴール到達・動き・初衝突は 2026-08-11 のパッチから
+出るようになったもので、無ければその節を飛ばす（黙って 0 と読まない）。
 
 Reads:
   - <output-dir>/eval.log
@@ -33,7 +38,7 @@ import math
 import re
 from pathlib import Path
 
-# `[結果] <タスク> ep<N>: <結末> <歩数> steps  ぶつけた物体: a=1.0mm, b=2.0mm
+# `[結果] <タスク> ep<N>: <結末> <歩数> steps  ゴール 到達  経路 1.12m …
 _RESULT_RE = re.compile(
     r"\[結果\] (?P<task>\S+) ep(?P<episode>\d+): "
     r"(?P<outcome>\S+) (?P<steps>\d+) steps(?P<detail>.*)"
@@ -42,16 +47,42 @@ _OFFENDER_RE = re.compile(r"(\S+?)=([\d.]+)mm")
 _EXCEPTION_RE = re.compile(r"\[結果\] (\S+): 例外で測れず \((.+?)\)")
 _TASK_TOTAL_RE = re.compile(r"=== タスク \d+/(\d+):")
 
-# 摂動カテゴリを変種名から当てる。CSV が読めればそちらを使う。
+# `[結果]` 行の後半にある項目。**無い版のログもあるので、すべて任意とする。**
+_GOAL_RE = re.compile(r"ゴール (到達|未達)")
+_PATH_RE = re.compile(r"経路 ([\d.]+)m")
+_DISPLACEMENT_RE = re.compile(r"変位 ([\d.]+)m")
+_MOTION_RE = re.compile(r"\s(静止|往復)(?:\s|$)")
+_FIRST_COLLISION_RE = re.compile(r"初衝突 (\d+) 歩")
+
+# 変種名の**末尾**の接尾辞 → 摂動カテゴリ。CSV が読めればそちらを使う。
+#
+# **末尾で見る。** `_table_` を含むかどうかで見ると、
+# `pick_up_the_black_bowl_from_table_center_..._tb_1` のような名前を
+# `table` 側に数えてしまう（LIBERO-plus の 2,218 件のうち 23 件が該当し、
+# `table` 613 / `tb` 463 が 636 / 440 にずれる）。
+_TAIL_SUFFIX_RE = re.compile(r"_(light|table|tb|noise|add|initstate)_\d+$")
+_SUFFIX_CATEGORIES: dict[str, str] = {
+    "light": "Light Conditions",
+    "table": "Background Textures",
+    "tb": "Background Textures",
+    "noise": "Sensor Noise",
+    "add": "Objects Layout",
+}
+
+# **名前だけでは分けられない 3 カテゴリ。** 視点・指示文・初期姿勢の摂動は
+# 名前がどれも `..._view_<数値>_initstate_<数値>` の形で、**同じ形のまま
+# 別のカテゴリに属する**（分類表を数えた実測：Camera Viewpoints 1,599 件・
+# Language Instructions 1,537 件・Robot Initial States 1,550 件がすべてこの形）。
+# 指示文の摂動は名前ではなく CSV の instruction 側に出るため、
+# **名前から当てることは原理的にできない。**
+#
+# ここを「とりあえず Camera Viewpoints」と埋めると、**学習の的を決める表が
+# 静かに間違う。** 分からないと言わせる。
+_AMBIGUOUS_CATEGORY = "不明（視点・指示文・初期姿勢のどれか）"
+
+# 末尾に数字が付かない摂動の目印。
 _CATEGORY_MARKERS: tuple[tuple[str, str], ...] = (
-    ("_language", "Language Instructions"),
-    ("_add_", "Objects Layout"),
-    ("level", "Objects Layout"),
-    ("_noise_", "Sensor Noise"),
-    ("_view_", "Camera Viewpoints"),
-    ("_light_", "Light Conditions"),
-    ("_table_", "Background Textures"),
-    ("_tb_", "Background Textures"),
+    ("_level", "Objects Layout"),
 )
 
 
@@ -106,14 +137,57 @@ def _load_categories(csv_path: Path | None) -> dict[str, str]:
         }
 
 
+def _load_nontarget_counts(csv_path: Path | None) -> dict[str, int]:
+    """CSV からタスク名 → 操作対象以外の物体数を読む。無ければ空。
+
+    **衝突率をタスク構成と切り分けるために使う。** 0 個のタスクは衝突では
+    失格しないので、分母に入れると衝突率が薄まる。
+    列は `make_validation_suite.py` が書く（2026-08-11 以降）。
+    """
+    if csv_path is None or not csv_path.is_file():
+        return {}
+    with csv_path.open(newline="", encoding="utf-8") as stream:
+        return {
+            row["task_id"]: int(row["n_nontarget_objects"])
+            for row in csv.DictReader(stream)
+            if (row.get("n_nontarget_objects") or "").isdigit()
+        }
+
+
 def _category_of(task_name: str, known: dict[str, str]) -> str:
-    """摂動カテゴリを決める。CSV を優先し、無ければ変種名から当てる。"""
+    """摂動カテゴリを決める。CSV を優先し、無ければ変種名から当てる。
+
+    **名前からは 7 カテゴリのうち 4 つしか分からない**（上の
+    `_AMBIGUOUS_CATEGORY` の説明）。CSV が読めているかどうかで
+    表の意味が変わるので、呼び出し側はそれを画面に出すこと。
+    """
     if task_name in known:
         return known[task_name]
+
+    found = _TAIL_SUFFIX_RE.search(task_name)
+    if found:
+        if found.group(1) == "initstate":
+            return _AMBIGUOUS_CATEGORY
+        return _SUFFIX_CATEGORIES[found.group(1)]
+
     for marker, category in _CATEGORY_MARKERS:
         if marker in task_name:
             return category
     return "その他"
+
+
+def _appearance_suffix(task_name: str) -> str | None:
+    """見た目の摂動の接尾辞（`light` / `table` / `tb`）を返す。無ければ None。
+
+    **`table` と `tb` を分けて数えるために要る。** どちらも分類表では
+    Background Textures だが、`tb` のほうが明るさの振れ幅が大きい
+    （外部の EDA 報告。`docs/reference/04_track1_population.md`）。
+    12 本の内訳が偏っていれば、カテゴリ別の成功率の読み方が変わる。
+    """
+    found = _TAIL_SUFFIX_RE.search(task_name)
+    if found and found.group(1) in ("light", "table", "tb"):
+        return found.group(1)
+    return None
 
 
 def _parse_log(log_path: Path) -> tuple[list[dict], list[tuple[str, str]], int | None]:
@@ -123,6 +197,9 @@ def _parse_log(log_path: Path) -> tuple[list[dict], list[tuple[str, str]], int |
     -------
     episodes : list[dict]
         `task` / `episode` / `outcome` / `steps` / `offenders` を持つ辞書の列。
+        2026-08-11 以降のログはさらに `goal`（bool）・`path_m`・
+        `displacement_m`・`motion`・`first_collision_step` を持つ。
+        **古いログでは鍵そのものが無い**（None を入れない）。
     exceptions : list[tuple[str, str]]
         (タスク名, 例外の内容)。パッチが例外を握った回。
     declared_total : int | None
@@ -132,17 +209,37 @@ def _parse_log(log_path: Path) -> tuple[list[dict], list[tuple[str, str]], int |
 
     episodes: list[dict] = []
     for found in _RESULT_RE.finditer(text):
-        offenders = {
-            name: float(millimetres)
-            for name, millimetres in _OFFENDER_RE.findall(found.group("detail"))
-        }
-        episodes.append({
+        detail = found.group("detail")
+        record = {
             "task": found.group("task"),
             "episode": int(found.group("episode")),
             "outcome": found.group("outcome"),
             "steps": int(found.group("steps")),
-            "offenders": offenders,
-        })
+            "offenders": {
+                name: float(millimetres)
+                for name, millimetres in _OFFENDER_RE.findall(detail)
+            },
+        }
+
+        # **無い項目は鍵ごと入れない。** 0 を入れると「測ったが 0 だった」と
+        # 見分けが付かず、古いログを混ぜたときに平均が引き下がる。
+        goal = _GOAL_RE.search(detail)
+        if goal:
+            record["goal"] = goal.group(1) == "到達"
+        for key, pattern in (
+            ("path_m", _PATH_RE), ("displacement_m", _DISPLACEMENT_RE),
+        ):
+            number = pattern.search(detail)
+            if number:
+                record[key] = float(number.group(1))
+        motion = _MOTION_RE.search(detail)
+        if motion:
+            record["motion"] = motion.group(1)
+        first_collision = _FIRST_COLLISION_RE.search(detail)
+        if first_collision:
+            record["first_collision_step"] = int(first_collision.group(1))
+
+        episodes.append(record)
 
     exceptions = _EXCEPTION_RE.findall(text)
     totals = _TASK_TOTAL_RE.findall(text)
@@ -173,12 +270,27 @@ def _report_coverage(lines: list[str], episodes: list[dict],
             lines.append(f"    {task_name[:60]}  ({reason})")
 
 
+def _goal_reached(episode: dict, cap: int) -> bool:
+    """ゴール条件を満たしたか。**新しいログは記録があり、古いログは推定する。**
+
+    パッチが `ゴール 到達` を出す前のログでは、打ち切り前に終わったこと
+    （`steps < 上限`）でしか判定できない。ループの抜け道は `done` だけなので
+    （`pipeline/rollout.py` の `if done: break`）、**上限が分かっていれば
+    推定は正確**である。上限は「観測された最大歩数」で置く。決め打ちにすると
+    `MAX_STEPS` を変えた回で静かに壊れる。
+    """
+    if "goal" in episode:
+        return bool(episode["goal"])
+    return episode["steps"] < cap
+
+
 def _report_outcomes(lines: list[str], episodes: list[dict]) -> None:
-    """結末の内訳。**ゴール到達後の衝突を分けて出す。**"""
+    """結末の内訳。**ゴール到達と成功を分けて出す。**"""
     counts = collections.Counter(episode["outcome"] for episode in episodes)
     total = len(episodes)
     successes = counts.get("成功", 0)
     low, high = _wilson_interval(successes, total)
+    cap = max(episode["steps"] for episode in episodes)
 
     lines.append("")
     lines.append("=== 結末 ===")
@@ -187,22 +299,95 @@ def _report_outcomes(lines: list[str], episodes: list[dict]) -> None:
         count = counts.get(outcome, 0)
         lines.append(f"  {outcome:<4} {count:>4}  ({count / total:>5.1%})")
 
-    # **打ち切りに張り付いた回と、ゴールに着いてから落ちた回を分ける。**
-    # 前者は学習の話、後者は衝突対策の話になる。
-    capped = [e for e in episodes if e["outcome"] != "成功" and not e["offenders"]]
-    collided_after_goal = [
-        e for e in episodes if e["outcome"] == "衝突" and e["steps"] < 300
-    ]
-    lines.append(f"  うちゴール到達後に衝突で失格  {len(collided_after_goal)} 件")
-    lines.append(f"  うち打ち切りまで走って未完了  {len(capped)} 件")
+    # **ゴール到達率と成功率の差が、衝突で落としている分である。**
+    # ここが開いていれば軌道の話（近づき方・置き方）、閉じていれば
+    # 到達そのものの話（視覚・掴み）で、**打つ手が正反対になる。**
+    goals = [episode for episode in episodes if _goal_reached(episode, cap)]
+    collided_after_goal = [e for e in goals if e["offenders"]]
+    estimated = "" if all("goal" in e for e in episodes) else \
+        f"（{sum(1 for e in episodes if 'goal' not in e)} 件は歩数から推定）"
+    lines.append("")
+    lines.append(f"  ゴール到達率 {len(goals) / total:.3f}  ({len(goals)}/{total}){estimated}")
+    lines.append(
+        f"  ├ 到達して成功            {len(goals) - len(collided_after_goal):>4}"
+    )
+    lines.append(
+        f"  └ **到達したが衝突で失格  {len(collided_after_goal):>4}**"
+        "  ← 衝突対策で拾える分"
+    )
+    lines.append(
+        f"  未到達                    {total - len(goals):>4}"
+        f"  （うち衝突も {sum(1 for e in episodes if not _goal_reached(e, cap) and e['offenders'])}）"
+    )
+    if goals:
+        lines.append(
+            f"  → ゴールに着いた回のうち {len(collided_after_goal) / len(goals):.1%} を"
+            "衝突で失っている"
+        )
+
+    firsts = [e["first_collision_step"] for e in episodes if "first_collision_step" in e]
+    if firsts:
+        lines.append(
+            f"  初めて 1mm を超えた歩  平均 {sum(firsts) / len(firsts):.1f} / "
+            f"最小 {min(firsts)} / 最大 {max(firsts)}  (n={len(firsts)})"
+        )
 
     successful_steps = sorted(e["steps"] for e in episodes if e["outcome"] == "成功")
     if successful_steps:
         middle = successful_steps[len(successful_steps) // 2]
         lines.append(
             f"  成功した回の歩数  最小 {successful_steps[0]} / "
-            f"中央 {middle} / 最大 {successful_steps[-1]}"
+            f"中央 {middle} / 最大 {successful_steps[-1]}  （上限は {cap}）"
         )
+
+
+def _report_motion(lines: list[str], episodes: list[dict]) -> None:
+    """手先の動きの内訳。**「そもそも動いていない」を最初に捕まえる。**
+
+    他の参加者から「全タスク 0%・卓上物体の最大移動量が常に 0.0mm」という
+    症状の相談が出ている。行動の非正規化・グリッパの符号・画像の向きの
+    いずれかが外れると、**エラーも警告も出ないまま腕が動かない。**
+    こちらは 0.1409 を出しているので今のところ無縁だが、**重みを差し替えた
+    直後に同じ穴へ落ちうる。** 84 件の平均経路長を見れば一目で分かる。
+    """
+    measured = [episode for episode in episodes if "path_m" in episode]
+    if not measured:
+        lines.append("")
+        lines.append("=== 動き ===")
+        lines.append("  記録が無い（2026-08-11 より前のログ）")
+        return
+
+    paths = [episode["path_m"] for episode in measured]
+    displacements = [
+        episode["displacement_m"] for episode in measured if "displacement_m" in episode
+    ]
+    notes = collections.Counter(
+        episode.get("motion", "ラベル無し") for episode in measured
+    )
+
+    lines.append("")
+    lines.append("=== 動き ===")
+    lines.append(
+        f"  経路長 平均 {sum(paths) / len(paths):.2f}m / "
+        f"最小 {min(paths):.2f}m / 最大 {max(paths):.2f}m  (n={len(measured)})"
+    )
+    if displacements:
+        lines.append(
+            f"  変位   平均 {sum(displacements) / len(displacements):.2f}m / "
+            f"最大 {max(displacements):.2f}m"
+        )
+    for note, count in notes.most_common():
+        lines.append(f"  {note:<8} {count:>4}  ({count / len(measured):>5.1%})")
+
+    # **腕が動いていないなら、ここから先の表を読む意味が無い。**
+    stalled = notes.get("静止", 0)
+    if stalled >= len(measured) * 0.8:
+        lines.append("")
+        lines.append(
+            f"  **{stalled}/{len(measured)} 件が「静止」である。方策が動いていない疑いが強い。**"
+        )
+        lines.append("  重み・行動の非正規化・グリッパの符号・画像の向きを先に確かめること")
+        lines.append("  （docs/plan/01_failure_accounting.md の「動いていないときに見る順」）")
 
 
 def _report_categories(lines: list[str], episodes: list[dict],
@@ -214,6 +399,11 @@ def _report_categories(lines: list[str], episodes: list[dict],
 
     lines.append("")
     lines.append("=== 摂動カテゴリ別（弱い順）===")
+    if not known:
+        # **CSV が読めていないと 3 カテゴリが束になる。** この表を学習の的の
+        # 根拠にすると外すので、必ず言う。
+        lines.append("  **CSV が読めていない。** 視点・指示文・初期姿勢は名前から")
+        lines.append("  分けられないため 1 行に束ねてある（--csv で CSV を渡すこと）")
     rows = []
     for category, group in by_category.items():
         successes = sum(1 for e in group if e["outcome"] == "成功")
@@ -221,7 +411,70 @@ def _report_categories(lines: list[str], episodes: list[dict],
     for rate, category, successes, total, group in sorted(rows):
         breakdown = collections.Counter(e["outcome"] for e in group)
         detail = " ".join(f"{k} {v}" for k, v in breakdown.most_common())
-        lines.append(f"  {category:<24} {rate:.2f}  ({total:>3} 本)  {detail}")
+        lines.append(f"  {category:<26} {rate:.2f}  ({total:>3} 本)  {detail}")
+
+    # **見た目の摂動は接尾辞まで割る。** `table` と `tb` はどちらも
+    # Background Textures だが、`tb` のほうが明るさの振れ幅が大きい。
+    # 12 本が `table` に偏っていれば、背景の弱さを過小に見ることになる。
+    by_suffix: dict[str, list[dict]] = collections.defaultdict(list)
+    for episode in episodes:
+        suffix = _appearance_suffix(episode["task"])
+        if suffix:
+            by_suffix[suffix].append(episode)
+    if by_suffix:
+        lines.append("")
+        lines.append("=== 見た目の摂動を接尾辞で割る ===")
+        lines.append("  母集団の比 light 1,142 / table 613 / tb 463（LIBERO-plus 全体）")
+        for suffix in ("light", "table", "tb"):
+            group = by_suffix.get(suffix, [])
+            if not group:
+                lines.append(f"  {suffix:<6} **0 本**  ← この見た目は測れていない")
+                continue
+            successes = sum(1 for e in group if e["outcome"] == "成功")
+            lines.append(
+                f"  {suffix:<6} {successes / len(group):.2f}  ({len(group):>3} 本)"
+            )
+
+
+def _report_exposure(lines: list[str], episodes: list[dict],
+                     exposures: dict[str, int]) -> None:
+    """衝突しうる相手がいる回だけで衝突率を出し直す。
+
+    **衝突率はタスク構成に左右される。** 操作対象以外の物体が 0 個のタスクは
+    衝突では落ちないので、分母に入れると衝突率が薄まる。逆に 5 個あるタスクは
+    同じ方策でも失格の機会が多い。**方策を比べるときは、相手がいる回だけを見る。**
+    """
+    known = [e for e in episodes if e["task"] in exposures]
+    if not known:
+        return
+
+    exposed = [e for e in known if exposures[e["task"]] > 0]
+    lines.append("")
+    lines.append("=== 衝突しうる相手の数で割る ===")
+    lines.append(
+        f"  相手がいない回 {len(known) - len(exposed)} 件"
+        "（**衝突では落ちない**）は下の分母から外す"
+    )
+    if exposed:
+        collided = sum(1 for e in exposed if e["offenders"])
+        lines.append(
+            f"  相手がいる回の衝突率 {collided / len(exposed):.3f}  "
+            f"({collided}/{len(exposed)})"
+        )
+    for threshold, label in ((1, "1〜2 個"), (3, "3〜4 個"), (5, "5 個以上")):
+        group = [
+            e for e in exposed
+            if threshold <= exposures[e["task"]] < threshold + 2
+            or (threshold == 5 and exposures[e["task"]] >= 5)
+        ]
+        if not group:
+            continue
+        collided = sum(1 for e in group if e["offenders"])
+        successes = sum(1 for e in group if e["outcome"] == "成功")
+        lines.append(
+            f"  {label:<8} 衝突 {collided / len(group):.2f}  "
+            f"成功 {successes / len(group):.2f}  ({len(group):>3} 本)"
+        )
 
 
 def _report_offenders(lines: list[str], episodes: list[dict]) -> None:
@@ -293,6 +546,25 @@ def _report_json(lines: list[str], output_dir: Path) -> None:
             lines.append(f"  {key:<32} {metrics[key]}")
 
 
+def _guess_csv(output_dir: Path) -> Path | None:
+    """検証用スイートの CSV を探す。見つからなければ None。
+
+    **`run_gpu_eval.sh` の既定は `<リポジトリ>/work/eval-kit` である。**
+    出力先が `<リポジトリ>/work/gpu_eval/<日時>_<設定>` なので、キットは
+    **1 つ上**（`parents[1]`）にある。ここを 1 段間違えると CSV が見つからず、
+    **摂動カテゴリ別の表が静かに変種名からの推定に落ちる**（視点・指示文・
+    初期姿勢が 1 行に束ねられる）。**気づけないまま学習の的を決めうる。**
+
+    上の階層から順に見て、`KIT_DIR` を変えた場合でも当たるようにする。
+    """
+    for parent in output_dir.parents:
+        for kit in ("eval-kit", "work/eval-kit"):
+            candidate = parent / kit / "compe" / "val" / "VAL_TASKS.csv"
+            if candidate.is_file():
+                return candidate
+    return None
+
+
 def _report_videos(lines: list[str], output_dir: Path) -> None:
     """撮れた mp4 の本数を出す。**中身の確認は別の道具でやる。**"""
     videos = sorted((output_dir / "videos").glob("*.mp4"))
@@ -321,14 +593,20 @@ def main() -> None:
 
     csv_path = args.csv
     if csv_path is None:
-        # run_gpu_eval.sh が置く場所を既定で探す。
-        guess = output_dir.parents[2] / "eval-kit" / "compe" / "val" / "VAL_TASKS.csv"
-        csv_path = guess if guess.is_file() else None
+        csv_path = _guess_csv(output_dir)
 
-    lines: list[str] = [f"評価ログ  {log_path}", ""]
+    categories = _load_categories(csv_path)
+    lines: list[str] = [f"評価ログ  {log_path}"]
+    lines.append(
+        f"CSV       {csv_path}" if categories
+        else "CSV       **見つからない**（摂動カテゴリは変種名から当てる）"
+    )
+    lines.append("")
     _report_coverage(lines, episodes, exceptions, declared_total)
     _report_outcomes(lines, episodes)
-    _report_categories(lines, episodes, _load_categories(csv_path))
+    _report_motion(lines, episodes)
+    _report_categories(lines, episodes, categories)
+    _report_exposure(lines, episodes, _load_nontarget_counts(csv_path))
     _report_offenders(lines, episodes)
     _report_json(lines, output_dir)
     _report_videos(lines, output_dir)

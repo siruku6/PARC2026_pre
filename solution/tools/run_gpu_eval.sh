@@ -291,4 +291,9 @@ set -e
 
 echo
 echo "===== 判定 ====="
-"$KIT_PYTHON" "$RUN_TOOLS/summarize_gpu_eval.py" --output-dir "$OUTPUT_DIR"
+# **CSV を明示して渡す。** 摂動カテゴリは分類表（CSV の category 列）でしか
+# 分からない。視点・指示文・初期姿勢の摂動は変種名がどれも同じ形なので、
+# CSV を見失うと 3 カテゴリが 1 行に束ねられ、**学習の的を決める表が静かに
+# 意味を失う。** 探させずに渡す。
+"$KIT_PYTHON" "$RUN_TOOLS/summarize_gpu_eval.py" \
+    --output-dir "$OUTPUT_DIR" --csv "$CSV"

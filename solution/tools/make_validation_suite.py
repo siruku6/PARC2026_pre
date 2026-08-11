@@ -64,6 +64,10 @@ _DEFAULT_CATEGORIES = (
 
 _LANGUAGE_RE = re.compile(r"\(:language\s+(.+?)\)", re.S)
 
+# bddl の物体一覧と、操作対象の宣言。**衝突しうる相手を数えるのに使う。**
+_OBJECTS_RE = re.compile(r"\(:objects\s+(.*?)\n\s*\)", re.S)
+_OBJ_OF_INTEREST_RE = re.compile(r"\(:obj_of_interest\s+(.*?)\)", re.S)
+
 # 初期状態ファイルの拡張子。`.init` もあるが、評価側は pruned を読む。
 _INIT_SUFFIX = ".pruned_init"
 
@@ -395,6 +399,43 @@ def _select(
     ]
 
 
+def _count_nontarget_objects(bddl: Path) -> int | None:
+    """操作対象**以外**の物体が bddl にいくつ書かれているかを返す。
+
+    **衝突で失格になりうる相手の数である。** 採点は「操作対象以外の物体が
+    初期位置から 1mm を超えて動いたら失格」なので（`pipeline/rollout.py`）、
+    この数が 0 のタスクは**衝突では落ちない。** 逆に 5 個あるタスクは、
+    同じ方策でも失格の機会がそれだけ多い。**衝突率をタスク構成の差と
+    切り分けるために、CSV へ書いておく。**
+
+    LIBERO-plus の Track 1 候補 2,218 件で数えると平均 3.10 個・最多 5 個で、
+    **55 件は 0 個**である（`docs/reference/04_track1_population.md`）。
+
+    > **採点が見ているものと厳密には一致しない。** ハーネスは観測の
+    > `*_pos` という鍵を数えるので、bddl の物体名とずれることがある
+    > （棚などの什器も含まれる）。**目安として使う。**
+
+    Returns
+    -------
+    count : int | None
+        物体数。bddl を読めない・節が無いときは None。
+    """
+    text = bddl.read_text(encoding="utf-8")
+    objects = _OBJECTS_RE.search(text)
+    targets = _OBJ_OF_INTEREST_RE.search(text)
+    if not objects or not targets:
+        return None
+
+    # `名前1 名前2 - 型` の形で並ぶ。型は数えない。
+    names = [
+        name
+        for line in objects.group(1).splitlines()
+        for name in line.strip().split(" - ")[0].split()
+    ]
+    of_interest = set(targets.group(1).split())
+    return sum(1 for name in names if name not in of_interest)
+
+
 def _instruction_of(entry: dict, bddl: Path) -> str | None:
     """指示文を得る。分類表に無ければ bddl の `:language` を読む。"""
     for key in ("instruction", "language", "goal"):
@@ -473,6 +514,10 @@ def _build_rows(
             # `problem_folder` には畳めない（あちらは bddl の置き場でもある）。
             # それ以外は接尾辞を剥がした元タスク名のファイル名だけを書く。
             "init_states_file": init_states_file,
+            # **衝突で失格になりうる相手の数。** 集計側が衝突率をタスク構成と
+            # 切り分けるのに使う。`register.py` は DictReader で読むので、
+            # 列が増えても評価には影響しない。
+            "n_nontarget_objects": _count_nontarget_objects(bddl),
         })
     return rows, skipped
 
@@ -498,6 +543,18 @@ def _report(rows: list[dict], skipped: list[dict]) -> None:
     counts = collections.Counter((row["suite"], row["category"]) for row in rows)
     for (suite, category), count in sorted(counts.items()):
         print(f"  {suite:16s} {category:22s} {count}")
+
+    # **衝突で落ちうるかどうかは、タスクによって違う。** 0 個のタスクは
+    # 衝突では失格しないので、衝突率を読むときに分母から外して考える。
+    exposures = [
+        row["n_nontarget_objects"] for row in rows
+        if row["n_nontarget_objects"] is not None
+    ]
+    if exposures:
+        print(f"\n操作対象以外の物体（衝突しうる相手）: "
+              f"平均 {sum(exposures) / len(exposures):.2f} / 最多 {max(exposures)}")
+        zeros = exposures.count(0)
+        print(f"  0 個（衝突では落ちない）: {zeros} 件 / {len(exposures)}")
 
     if skipped:
         print(f"\n落としたもの: {len(skipped)} 件（カテゴリ × 理由）")
