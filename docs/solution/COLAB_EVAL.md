@@ -518,11 +518,16 @@ run(check, tail=20)
 **アップロードするファイルは 1 つのフォルダに集められる。** 手元でこれを走らせる。
 
 ```bash
-python3 solution/tools/collect_colab_files.py
+# 前の回と同じ 84 件で比べるなら、その CSV も一緒に集める
+python3 solution/tools/collect_colab_files.py \
+    --val-tasks outputs/0811_101824_base_n5_ep1_max300/VAL_TASKS.csv
 open work/colab_upload
 ```
 
-`policy_server.py` と `make_validation_suite.py`（セル H 用）が入るので、
+`policy_server.py` と、セル B・H が呼ぶ道具 5 つが入る。
+**`--val-tasks` を渡すと `VAL_TASKS.csv` も入り、セル H がそれを使う**
+（作り直さないので、前の回と 1 件ずつ対にして比べられる）。
+
 **中身をまとめて左のファイルペインへドラッグ**する。置き場所は `/content/` の直下
 （下のセルが `policy_server.py` を専用ディレクトリへ移す）。
 

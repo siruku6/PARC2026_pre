@@ -88,6 +88,16 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help="集める先のディレクトリ（既定: <リポジトリ>/work/colab_upload）",
     )
+    # **前の回と比べるなら、検証用スイートの CSV を作り直してはいけない。**
+    # 1 件でも違うタスクが混ざると、1 件ずつ対にした比較（符号検定）が
+    # 成り立たない。前の回の CSV を一緒に上げれば、セル H がそれを使う。
+    parser.add_argument(
+        "--val-tasks",
+        default=None,
+        metavar="PATH",
+        help="前の回の VAL_TASKS.csv。渡すと一緒に集める"
+             "（例: outputs/0811_101824_base_n5_ep1_max300/VAL_TASKS.csv）",
+    )
     return parser.parse_args()
 
 
@@ -137,6 +147,19 @@ def main() -> None:
     except FileNotFoundError as error:
         print(f"エラー: {error}", file=sys.stderr)
         raise SystemExit(1) from error
+
+    if args.val_tasks:
+        source = Path(args.val_tasks).resolve()
+        if not source.is_file():
+            print(f"エラー: {source} が無い", file=sys.stderr)
+            raise SystemExit(1)
+        destination = output_dir / "VAL_TASKS.csv"
+        shutil.copy2(source, destination)
+        copied.append(destination)
+        rows = destination.read_text(encoding="utf-8").count("\n")
+        print(f"検証用スイートの CSV も集めた（{rows - 1} 行）: {source}")
+        print("  **セル H がこれを使う。**同じタスクで前の回と比べられる")
+
     _write_readme(output_dir)
 
     print(f"{output_dir} に {len(copied)} ファイルを集めた。")
