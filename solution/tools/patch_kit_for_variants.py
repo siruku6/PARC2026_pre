@@ -398,8 +398,16 @@ def _refuse_own_repository(kit_dir: Path) -> None:
     追跡されているので、`--kit-dir .` のような打ち間違いで汚れてしまう。
     実際の呼び出し先（Docker の `/workspace`、Colab の clone）は
     使い捨てなので、この制限に当たらない。
+
+    **この台本は `/content/` へ 1 枚だけコピーして使われる**（Colab）。
+    そのとき `parents` は `/content` と `/` の 2 つしかないので、
+    `parents[2]` は `IndexError` になる。**リポジトリの外に置かれている
+    ということは、守るべきリポジトリも無い**ので、その場合は何もしない。
     """
-    repository_root = Path(__file__).resolve().parents[2]
+    parents = Path(__file__).resolve().parents
+    if len(parents) < 3:
+        return                                   # リポジトリの外に置かれている
+    repository_root = parents[2]
     if kit_dir.resolve() == repository_root:
         raise SystemExit(
             f"このリポジトリ自身（{repository_root}）は書き換えません。\n"
