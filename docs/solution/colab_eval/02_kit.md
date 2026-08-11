@@ -86,7 +86,8 @@ run(f"{KIT_DIR}/venv/bin/pip install -q 'setuptools<82'", check=False)
 #
 # **example の 4 タスクで評価するときも 1 は要る。** 2 と 3 は検証用スイートの
 # ときだけ効くが、当てておいて害は無い。
-run(f"{KIT_PYTHON} /content/patch_kit_for_variants.py --kit-dir {KIT_DIR}", tail=10)
+run(f"{KIT_PYTHON} /content/patch_kit_for_variants.py --kit-dir {KIT_DIR}",
+    tail=10, log="patch.log")
 
 # 動作確認。setup.sh 自身の確認は MPLBACKEND のせいで落ちるため、ここでやり直す。
 verify = (
@@ -97,6 +98,22 @@ verify = (
     'print(\'suite 登録 OK / torch\', torch.__version__)"'
 )
 run(verify, tail=20, log="verify.log")
+
+# **確かめたい行を名指しで出す。** run() が出すのは末尾 4 行だけで、そこは
+# robosuite と gym の警告（stderr）で埋まる。**`suite 登録 OK` が押し出されて
+# 見えなくなる。** 例外が出ていなければ成功しているのだが、目で確かめられない。
+verified = [line for line in (LOG_DIR / "verify.log").read_text().splitlines()
+            if "suite 登録 OK" in line]
+print("\n".join(verified) if verified
+      else "**suite 登録 OK が出ていない。** verify.log を見ること")
+
+# **パッチが 6 つとも当たったかを名指しで出す。** これも警告で押し出される。
+applied = [line for line in (LOG_DIR / "patch.log").read_text().splitlines()
+           if line.startswith("  ")] if (LOG_DIR / "patch.log").is_file() else []
+if applied:
+    print(f"パッチ {len(applied)} 件:")
+    print("\n".join(applied))
+
 print("キットのセットアップ完了")
 ```
 
