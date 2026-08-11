@@ -97,6 +97,17 @@ _WANDER_PATH_M = 0.10
 # **8 倍は「行って戻った」を捉えるのに十分**である。
 _WANDER_PATH_RATIO = 8.0
 
+# 終盤の何歩を見るか、そのあいだの経路長がこれ未満なら「固まった」（m）。
+#
+# **全体の変位では「動いてから固まった」を捉えられない。** 8/11 の実測で、
+# 最初の 50 歩で動いて残り 200 歩静止した回が「ラベル無し」になった。
+# 画面の変化量でも 4.03 → 0.2 と落ちて戻らなかった。
+#
+# 50 歩は本番の打ち切り 300 歩の 6 分の 1 で、成功した回が 1 歩あたり
+# 5 mm 前後進んでいることから、**0.02 m は「50 歩でほぼ動いていない」**に当たる。
+_TAIL_STEPS = 50
+_TAIL_STALL_M = 0.02
+
 _TEXT_COLOR = (255, 255, 255)
 _SHADOW_COLOR = (0, 0, 0)
 _OUTCOME_COLORS: dict[str, tuple[int, int, int]] = {
@@ -118,6 +129,7 @@ _OUTCOME_LABELS: dict[str, str] = {
 _MOTION_LABELS: dict[str, str] = {
     "静止": "  stalled",
     "往復": "  wandering",
+    "固まった": "  froze",
 }
 
 
@@ -189,15 +201,35 @@ def measure_motion(
         1 for before, after in zip(grips, grips[1:]) if (before > 0) != (after > 0)
     )
 
+    # **終盤だけの経路長も測る。** 全体の変位で判定すると、
+    # **「動いてから固まった」回を取りこぼす。**
+    # 8/11 の実測がそれだった。指示文を変えた回で、最初の 50 歩で
+    # コンロへ降りてグリッパを閉じ、**残り 200 歩まったく動かなかった**のに、
+    # 出発点からの変位が 0.31 m あるため「ラベル無し」になっていた。
+    # **本番で 300 歩を使い切る 4 本も、これである可能性が高い。**
+    tail_length = min(_TAIL_STEPS, len(eef_positions) - 1)
+    tail_path = sum(
+        _distance(start, end)
+        for start, end in zip(eef_positions[-tail_length - 1:],
+                              eef_positions[-tail_length:])
+    )
+
     note = ""
     if displacement < _STALL_DISPLACEMENT_M:
         note = "往復" if path_length > _WANDER_PATH_M else "静止"
     elif path_length > _WANDER_PATH_RATIO * displacement:
         note = "往復"
+    # **上の 2 つに当てはまらなくても、終盤が止まっていれば「固まった」。**
+    # 途中まで動けているので、打つ手は「計画の引き直し」であって
+    # 「動き出させる」ではない。**区別に意味がある。**
+    if not note and tail_length >= _TAIL_STEPS and tail_path < _TAIL_STALL_M:
+        note = "固まった"
 
     return {
         "path_m": path_length,
         "displacement_m": displacement,
+        "tail_path_m": tail_path,
+        "tail_steps": tail_length,
         "grip_changes": grip_changes,
         "note": note,
     }
@@ -256,6 +288,10 @@ def format_result_line(
     if motion:
         notes.append(f"経路 {motion['path_m']:.2f}m")
         notes.append(f"変位 {motion['displacement_m']:.2f}m")
+        # **終盤だけの経路長を出す。** 「動いてから固まった」かどうかは、
+        # 全体の数字では読めない（8/11 に取りこぼした）。
+        if motion.get("tail_steps"):
+            notes.append(f"終盤{motion['tail_steps']}歩 {motion['tail_path_m']:.2f}m")
         notes.append(f"握り x{motion['grip_changes']}")
         if motion["note"]:
             notes.append(str(motion["note"]))
