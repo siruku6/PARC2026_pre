@@ -7,7 +7,7 @@
 
 | 手順 | | 前の呼び名 |
 |---|---|---|
-| [1](colab_eval/01_gpu_and_egl.md) | GPU と EGL を確認する | セル A |
+| [1](colab_eval/01_gpu_and_egl.md) | **準備**（Drive・ファイルの上げ・GPU と EGL） | セル A ＋ **旧 D-2 のアップロード** |
 | [2](colab_eval/02_kit.md) | 配布キットをセットアップし、パッチを当てる | セル B |
 | [3](colab_eval/03_weights.md) | 評価する重みを用意する | セル C |
 | [4](colab_eval/04_policy_server.md) | 方策サーバーの依存を入れ、配置する | セル D-1・D-2 |

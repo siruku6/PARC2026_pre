@@ -25,8 +25,7 @@ Light Conditions しか含まないが、それは 4 サンプルにすぎない
 **B のあと、手順 6 の前に 1 度だけ実行する。** 元へ戻すには B から流し直す。
 
 まず [make_validation_suite.py](../../../solution/tools/make_validation_suite.py) を
-`/content/` へアップロードしておく。手順 4-2 で `collect_colab_files.py` の出した
-フォルダをまとめて上げていれば、**もう置かれている。**
+`/content/` へアップロードしておく。**手順 1-1 で上げていれば、もう置かれている。**
 
 #### 変種の大半は自分の bddl を持たない（8/10 に判明）
 

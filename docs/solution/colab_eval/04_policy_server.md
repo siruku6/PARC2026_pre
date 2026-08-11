@@ -138,23 +138,8 @@ run(check, tail=20)
 > 禁止事項に含まれないと明言されている。4 つとも**モデル出力と過去の行動しか
 > 参照しない**（タスク名・seed・シミュレータの内部状態は見ない）。
 
-**アップロードするファイルは 1 つのフォルダに集められる。** 手元でこれを走らせる。
-
-```bash
-# 前の回と同じ 84 件で比べるなら、その CSV も一緒に集める
-python3 solution/tools/collect_colab_files.py \
-    --val-tasks outputs/0811_101824_base_n5_ep1_max300/VAL_TASKS.csv
-open work/colab_upload
-```
-
-`policy_server.py` と、手順 2・H が呼ぶ道具 5 つが入る。
-**`--val-tasks` を渡すと `VAL_TASKS.csv` も入り、手順 5-1 がそれを使う**
-（作り直さないので、前の回と 1 件ずつ対にして比べられる）。
-
-**中身をまとめて左のファイルペインへドラッグ**する。置き場所は `/content/` の直下
-（下のセルが `policy_server.py` を専用ディレクトリへ移す）。
-
-毎回コピーを作り直すので、**リポジトリを直したのに古いものを上げてしまう取り違えが起きない。**
+**`policy_server.py` は手順 1-1 で `/content/` へ上げてある。**
+下のセルが、それを専用ディレクトリへ移す。
 
 ```python
 # === policy_server.py を専用ディレクトリへ配置する ===
