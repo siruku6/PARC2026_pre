@@ -159,11 +159,30 @@ RUN pip install --no-cache-dir "fastapi>=0.68" "uvicorn>=0.15" "msgpack>=1.0"
 | 症状 | 見るところ |
 |---|---|
 | `torch か lerobot が入っていない` | **ホストの venv を見ている。** Docker 版（このページ）を使う |
+| **画面が無言のまま進まない** | **50 歩ごとに `[進捗]` が出るようになっている**（8/11 に直した）。それも出ないなら本当に止まっている |
 | `[parc] 行が無い` | 古い `policy_server.py` を見ている。`solution/` が正 |
 | 方策サーバーが落ちた | `docker logs parc-policy`。重みのパスか GPU メモリ |
 | 描画が 8 ms を超える | `--gpus all` と `NVIDIA_DRIVER_CAPABILITIES` |
 | 件数が足りない | `summary.txt` の「例外で測れなかった回」 |
 | 結果が 1 件も無い | `eval.log` の末尾。CSV の差し替えかパッチを疑う |
+
+## 進み具合の見方
+
+**評価中は 50 歩ごとに 1 行出る。** 全文は `eval.log` に残る。
+
+```
+=== タスク 3/84: pick_up_the_ketchup_..._light_49 ===
+[進捗] pick_up_the_ketchup_..._light_49: 50/300 steps (7.4s)
+[結果] pick_up_the_ketchup_..._light_49 ep0: 衝突 137 steps  ...
+```
+
+**画面へ出すのは進み具合・結末・エラーだけ**にしてある。全部流すと
+1 タスクで 300 行を超え、読めなくなる。
+
+> **EGL の行が描画の測定のあとに出ることがある。**
+> python が終わるときの後片付けで出るもので、`--- 描画の測定はここまで ---`
+> より下に現れる。**握りつぶしていない** — この環境に何を足したかは
+> 手元から見えないので、本当の不具合を隠す側を選ばない。
 
 > **ホストで直接回す道**（`run_gpu_eval.sh`）も残してある。
 > LeRobot と GPU torch の入った venv がホストにあるなら、そちらが速い。

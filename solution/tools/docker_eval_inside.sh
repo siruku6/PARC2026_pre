@@ -61,23 +61,10 @@ if per_frame_ms > 8.0:
     print("  --gpus all と NVIDIA_DRIVER_CAPABILITIES に graphics が要る。")
     raise SystemExit(1)
 print("  GPU 描画で動いている")
-
-# **後片付けの音を消す。** これをやらないと、python が終わるときに
-# mujoco の Renderer と GLContext が EGL の同じものを 2 度手放そうとして、
-#   OpenGL.raw.EGL._errors.EGLError: <exception str() failed>
-# が 2 度出る。**無害だが失敗と見分けが付かない。**
-# ここで先に手放し、片付け役を外しておく。
-# **どれも失敗しても構わない。** 目的は音を消すことだけで、
-# ここで例外を出したら本末転倒である（`set -e` で評価ごと止まる）。
-try:
-    renderer.close()
-except Exception:
-    pass
-for target in (renderer, getattr(renderer, "_gl_context", None)):
-    try:
-        type(target).__del__ = lambda self: None
-    except Exception:
-        pass
+# **ここより下に出る EGL の行は、python が終わるときの後片付けである。**
+# 握りつぶさない。この環境に何を足したかはこちらから見えないので、
+# **本当の不具合を隠す side を選ばない。** 見分けが付くように印だけ置く。
+print("  --- 描画の測定はここまで。以降の EGL の行は終了処理のもの ---")
 PY
 
 # ---------------------------------------------------------------- 準備
@@ -128,12 +115,27 @@ else
 fi
 
 cd "$KIT"
+
+# **全部をログへ流し込むと、画面が何時間も無言になる。**
+# 8/11 に「動いていないのでは」と見えた。キットは 50 歩ごとに `[進捗]` を
+# 出しているので、**それを画面へ、全文はログへ**という形にする。
+#
+#   -u          python の出力を溜めない（溜まると数分遅れて出る）
+#   tee         全文を eval.log へ残す
+#   grep        画面には進み具合と結末とエラーだけ
+#   --line-buffered  grep 側も溜めない
+#
+# **終了コードは python のものを使う。** パイプの最後は grep なので、
+# そのままでは「一致が無かった」の 1 と区別できない。
 set +e
-"$PY" -m pipeline \
+"$PY" -u -m pipeline \
     --server-url "$SERVER_URL" --track track1 \
     --n-episodes "$N_EPISODES" --max-steps "$MAX_STEPS" \
-    --output-dir "$OUT_DIR" "${extra_arguments[@]}" \
-    > "$OUT_DIR/eval.log" 2>&1
-echo "  終了コード=$?"
+    --output-dir "$OUT_DIR" "${extra_arguments[@]}" 2>&1 \
+  | tee "$OUT_DIR/eval.log" \
+  | grep --line-buffered -E '=== タスク|\[進捗\]|\[結果\]|\[録画\]|ERROR|Traceback' \
+  | sed -u 's/^[0-9-]* [0-9:]* \[[A-Z]*\] [a-z.]*: *//'
+status=${PIPESTATUS[0]}
 set -e
+echo "  終了コード=$status"
 echo "  [結果] 行: $(grep -c '\[結果\]' "$OUT_DIR/eval.log" || true)"

@@ -275,16 +275,22 @@ else
     echo "  84 件・$N_EPISODES エピソード・$MAX_STEPS 歩（90 分ほど）"
 fi
 
+# **全部をログへ流し込むと、画面が何時間も無言になる。**
+# キットは 50 歩ごとに `[進捗]` を出しているので、
+# **それを画面へ、全文はログへ**という形にする（`-u` と `--line-buffered`
+# が無いと数分ぶん溜まってから出る）。終了コードは python のものを使う。
 set +e
 ( cd "$KIT_DIR" && \
   MUJOCO_GL=egl \
   PYTHONPATH="$KIT_DIR/LIBERO-plus:$KIT_DIR:$KIT_DIR/compe" \
-  "$KIT_PYTHON" -m pipeline \
+  "$KIT_PYTHON" -u -m pipeline \
       --server-url "http://localhost:$PORT" --track track1 \
       --n-episodes "$N_EPISODES" --max-steps "$MAX_STEPS" \
-      --output-dir "$OUTPUT_DIR" "${extra_arguments[@]}" \
-  > "$OUTPUT_DIR/eval.log" 2>&1 )
-echo "  終了コード=$?"
+      --output-dir "$OUTPUT_DIR" "${extra_arguments[@]}" 2>&1 ) \
+  | tee "$OUTPUT_DIR/eval.log" \
+  | grep --line-buffered -E '=== タスク|\[進捗\]|\[結果\]|\[録画\]|ERROR|Traceback' \
+  | sed -u 's/^[0-9-]* [0-9:]* \[[A-Z]*\] [a-z.]*: *//'
+echo "  終了コード=${PIPESTATUS[0]}"
 set -e
 
 # ---------------------------------------------------------------- 判定
