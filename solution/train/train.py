@@ -106,6 +106,14 @@ def _parse_args() -> argparse.Namespace:
                         help="動画のデコーダ。torchcodec が torch と対で壊れたときの逃げ道")
     parser.add_argument("--resume", action="store_true",
                         help="直近のチェックポイントから再開する")
+    # **`--` の後ろは `lerobot-train` へそのまま渡す。**
+    # ここを用意しないと、この台本が旗を持たない設定（拡張の強さなど）に
+    # 手が届かない。旗を 1 つずつ足していくよりも、通し口を 1 つ開けるほうがよい。
+    #
+    #   python train.py --image-transforms -- \
+    #       --dataset.image_transforms.max_num_transforms=6
+    parser.add_argument("extra", nargs="*", metavar="-- ...",
+                        help="`--` の後ろに書いたものを lerobot-train へそのまま渡す")
     return parser.parse_args()
 
 
@@ -267,7 +275,7 @@ def _build_resume_command(
         f"--num_workers={args.num_workers}",
         f"--persistent_workers={'true' if args.num_workers > 0 else 'false'}",
         f"--save_freq={args.save_freq}",
-    ]
+    ] + list(args.extra)
 
 
 def _build_command(
@@ -332,7 +340,9 @@ def _build_command(
     if args.image_transforms:
         command.append("--dataset.image_transforms.enable=true")
 
-    return command
+    # **最後に置く。** 同じ設定を 2 度渡したときは後ろが勝つので、
+    # `--` の後ろに書いたもので上書きできる。
+    return command + list(args.extra)
 
 
 def main() -> None:
@@ -362,6 +372,7 @@ def main() -> None:
 
         # **0 なら選ばない。** 出発点の重みも `episodes: None`（全部）で作られている。
         # 選ぶ処理を通すと 14,347 個の番号がコマンド 1 行に並ぶので、旗ごと省く。
+        record: dict[str, Any]
         if args.episodes_per_task <= 0:
             episode_indices = None
             record = {"episodes": "all", "per_task": None}
