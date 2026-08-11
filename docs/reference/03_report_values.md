@@ -51,16 +51,22 @@ cat work/submission.sha256
 | バッチサイズ | **8** | `--batch-size 8`（**素の重みは 32**） |
 | 使用データ | `lerobot/libero_plus`（LIBERO-plus の成功軌道） | 配布ノートブックの `DATASET_REPO` |
 | データの revision | `f3f49f426d75030177b18778374005bc12ccd588` | 同上 |
-| タスク数 | **40**（`libero_plus` の全タスク） | `--episodes-per-task` の既定 5 で選ぶ |
+| タスク数 | **40**（`libero_plus` の全タスク） | `--episodes-per-task 5` で選んだ |
 | エピソード数 | **200**（40 × 5） | `episodes.json` に実際の一覧がある |
-| 画像拡張 | **有効** | `--no-image-transforms` を付けていない（既定が有効） |
+| 画像拡張 | **有効** | 当時の既定が有効だった |
 | 独自収集・生成データ | **無し。** 配布データセットのみ | — |
 
-実行したコマンドは 1 行である。**残りはすべて `train.py` の既定値**である。
+実行したコマンドは 1 行である。**残りは当時の `train.py` の既定値**である。
 
 ```bash
 python /workspace/train.py --steps 20000 --batch-size 8
 ```
+
+> **8/11 に `train.py` の既定値を入れ替えた。上の表は 4 回目の提出の記録なので、
+> いまの既定とは違う。** 旗も `--no-image-transforms` から
+> `--image-transforms`（既定は無効）へ変わった。
+> **最終提出で重みを差し替えたら、この表を作り直すこと。**
+> 新しい既定は [../howto/01_retrain.md](../howto/01_retrain.md) の表にある。
 
 > **タスク数 40 とエピソード数 200 は導いた値である。** `lerobot/libero_plus`
 > のタスク数が 40 で（[01_base_model.md](01_base_model.md)）、

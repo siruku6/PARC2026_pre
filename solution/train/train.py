@@ -1,28 +1,46 @@
 #!/usr/bin/env python3
-"""SmolVLA の LoRA 追加学習を、Colab を使わずに回す。
+"""SmolVLA の追加学習を、Colab を使わずに回す。
 
-配布ノートブック（examples/smolvla_libero_spatial_lora.ipynb）と同じ学習を、
-[docs/solution/COLAB.md](../../docs/solution/COLAB.md) の H の変更を適用した状態で実行する。
+**既定値は「出発点の重みが作られた条件」に揃えてある**（2026-08-11 に変更）。
+出発点は `model_weights.bak/train_config.json` を読めば分かり、
+**optimizer と scheduler は LeRobot の既定値そのもの**だった。
 
-| | 変更 | 配布既定 |
-|---|---|---|
-| (a) | 全 40 タスク（4 スイート）を使う | libero_spatial の 10 タスクのみ |
-| (b) | 1 タスク内は明るさで散らして選ぶ | エピソード番号の等間隔 |
-| (c) | 画像拡張を有効にする | 無効 |
+| 設定 | 出発点の重み | いまの既定 | 8/11 までの既定 |
+|---|---|---|---|
+| データ | **全 14,347 本**（`episodes=None`） | **全部** | 200 本（40 タスク × 5） |
+| 歩数 × バッチ | 20,000 × 32 | 20,000 × 32 | 20,000 × **8** |
+| `optimizer_lr` | 1e-4 | 1e-4 | **3e-4** |
+| `scheduler_warmup_steps` | 1,000 | 1,000 | **100** |
+| `scheduler_decay_lr` | 2.5e-6 | 2.5e-6 | **3e-5** |
+| 画像拡張 | **無効** | **無効** | **有効** |
+
+**8/11 までの既定で 20,000 歩まわしたら、本番スコアが 0.1409 から 0.016 へ
+落ちた**（8.8 倍の悪化）。原因は 1 コマを見た回数で、
+**出発点の 0.29 回に対しこちらは 5.1 回**だった（18 倍）。
+経緯は [docs/strategy/05_実測結果.md](../../docs/strategy/05_実測結果.md)。
+
+**LoRA は既定で有効のままにしてある。** LeRobot が LoRA を当てるのは
+action expert の q/v 射影と 5 つの射影層だけで、
+**`freeze_vision_encoder` と `train_expert_only` を変えても学習される重みは
+変わらない**（`modeling_smolvla.py` の `_get_default_peft_targets`）。
+視覚側まで学ばせたいときは `--peft.target_modules` を自分で渡すか、
+LoRA を外して全パラメータ学習にする。
 
 Colab と違い、出力はホストのディレクトリに残るため Drive 同期は要らない。
 中断しても `--resume` で続きから始められる。
 
-    python train.py                      # 最初から
-    python train.py --resume             # 直近のチェックポイントから
-    python train.py --steps 6000         # 短く回す
+    python train.py                          # 出発点と同じ条件で 20,000 歩
+    python train.py --steps 5000             # まず短く回して速さを測る
+    python train.py --batch-size 16          # VRAM が足りないとき
+    python train.py --episodes-per-task 5    # 少ないデータで試す（**悪化の再現**）
+    python train.py --resume                 # 直近のチェックポイントから
 
 Reads:
   - lerobot/smolvla_libero_plus（HF、初期重み）
-  - lerobot/libero_plus（HF、学習データ）
+  - lerobot/libero_plus（HF、学習データ。**全部使うと 16 GB 前後**）
 Generates:
   - $OUTPUT_ROOT/<run-name>/checkpoints/**（チェックポイント）
-  - $OUTPUT_ROOT/<run-name>/episodes.json（選んだエピソードの記録）
+  - $OUTPUT_ROOT/<run-name>/episodes.json（使ったエピソードの記録）
 """
 
 from __future__ import annotations
@@ -58,21 +76,31 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--run-name", type=str, default="smolvla_lora_all_suites",
                         help="実行の名前。再開時は同じ名前を指定する")
     parser.add_argument("--steps", type=int, default=20000,
-                        help="学習ステップ数。学習率はこの値をかけて減衰する")
-    parser.add_argument("--batch-size", type=int, default=8)
-    parser.add_argument("--episodes-per-task", type=int, default=5,
-                        help="1 タスクあたりのエピソード数。5 を超えると転送量が跳ねる")
+                        help="学習ステップ数。学習率はこの値をかけて減衰する（出発点も 20,000）")
+    parser.add_argument("--batch-size", type=int, default=32,
+                        help="出発点と同じ 32。VRAM が足りなければ 16 へ下げる")
+    parser.add_argument("--episodes-per-task", type=int, default=0,
+                        help="1 タスクあたりのエピソード数。**0 なら全 14,347 本を使う**"
+                             "（出発点がそうである）。転送量は本数に比例しない —— "
+                             "動画が共有ファイルに詰まっているため、200 本でも 6.4 GB 落ちる")
     parser.add_argument("--save-freq", type=int, default=500)
-    parser.add_argument("--num-workers", type=int, default=4,
-                        help="データ供給のプロセス数。動画デコードが律速なら増やす")
-    parser.add_argument("--learning-rate", type=float, default=3e-4)
-    parser.add_argument("--final-learning-rate", type=float, default=3e-5)
-    parser.add_argument("--warmup-steps", type=int, default=100)
+    parser.add_argument("--num-workers", type=int, default=2,
+                        help="データ供給のプロセス数。**CPU のコア数に合わせる。**"
+                             "多すぎると取り合いになる（評価マシンは 2 コア）")
+    parser.add_argument("--learning-rate", type=float, default=1e-4,
+                        help="出発点と同じ 1e-4。LeRobot の既定でもある")
+    parser.add_argument("--final-learning-rate", type=float, default=2.5e-6,
+                        help="減衰後の学習率。出発点と同じ 2.5e-6")
+    parser.add_argument("--warmup-steps", type=int, default=1000,
+                        help="出発点と同じ 1,000")
     parser.add_argument("--lora-r", type=int, default=16)
     parser.add_argument("--lora-alpha", type=int, default=16)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--no-image-transforms", action="store_true",
-                        help="画像拡張を無効にする（既定は有効）")
+    parser.add_argument("--image-transforms", action="store_true",
+                        help="画像拡張を有効にする。**既定は無効で、出発点もそうだった。**"
+                             "評価側は見た目の摂動なので効きそうに見えるが、"
+                             "学習データ自体が明るさ 0.086〜0.723 を張っているため"
+                             "**別の回として分けて測る**")
     parser.add_argument("--video-backend", type=str, default="torchcodec",
                         choices=("torchcodec", "pyav"),
                         help="動画のデコーダ。torchcodec が torch と対で壊れたときの逃げ道")
@@ -245,10 +273,21 @@ def _build_resume_command(
 def _build_command(
     args: argparse.Namespace,
     base_model: Path,
-    episode_indices: list[int],
+    episode_indices: list[int] | None,
     output_dir: Path,
 ) -> list[str]:
-    """最初から学習するときの引数を組み立てる。"""
+    """最初から学習するときの引数を組み立てる。
+
+    Parameters
+    ----------
+    episode_indices : list[int] | None
+        使うエピソード番号。**None なら `--dataset.episodes` を渡さない。**
+        LeRobot はそのとき全エピソードを使う（出発点の `train_config.json` も
+        `episodes: None` である）。
+
+        **全部使うときに番号を並べてはいけない。** 14,347 個の番号を並べると
+        コマンド 1 行が 100 KB を超える。旗を省くのが正しい。
+    """
     command = [
         "lerobot-train",
         f"--policy.path={base_model}",
@@ -266,7 +305,6 @@ def _build_command(
         f"--policy.scheduler_decay_steps={args.steps}",
         f"--dataset.repo_id={_DATASET_REPO}",
         f"--dataset.revision={_DATASET_REVISION}",
-        f"--dataset.episodes=[{','.join(map(str, episode_indices))}]",
         "--dataset.use_imagenet_stats=false",
         f"--dataset.video_backend={args.video_backend}",
         f"--output_dir={output_dir}",
@@ -288,7 +326,10 @@ def _build_command(
         f"--peft.lora_alpha={args.lora_alpha}",
     ]
 
-    if not args.no_image_transforms:
+    if episode_indices is not None:
+        command.append(f"--dataset.episodes=[{','.join(map(str, episode_indices))}]")
+
+    if args.image_transforms:
         command.append("--dataset.image_transforms.enable=true")
 
     return command
@@ -319,20 +360,30 @@ def main() -> None:
             ignore_patterns=["eval/*", "eval/**"],
         ))
 
-        print("[train] データセットのメタデータを取得")
-        dataset_root = Path(snapshot_download(
-            _DATASET_REPO, revision=_DATASET_REVISION, repo_type="dataset",
-            allow_patterns=["meta/**"],
-        ))
+        # **0 なら選ばない。** 出発点の重みも `episodes: None`（全部）で作られている。
+        # 選ぶ処理を通すと 14,347 個の番号がコマンド 1 行に並ぶので、旗ごと省く。
+        if args.episodes_per_task <= 0:
+            episode_indices = None
+            record = {"episodes": "all", "per_task": None}
+            print("[train] **全エピソードを使う**（出発点の重みと同じ条件）")
+        else:
+            print("[train] データセットのメタデータを取得")
+            dataset_root = Path(snapshot_download(
+                _DATASET_REPO, revision=_DATASET_REVISION, repo_type="dataset",
+                allow_patterns=["meta/**"],
+            ))
+            episode_indices = _select_episodes(dataset_root, args.episodes_per_task)
+            record = {"episodes": episode_indices, "per_task": args.episodes_per_task}
 
-        episode_indices = _select_episodes(dataset_root, args.episodes_per_task)
+        # **レポートの申告項目になるので必ず残す**（タスク数・エピソード数）。
+        # マージの出力に `train_config.json` は入らないため、ここが唯一の記録になる。
         (output_dir / "episodes.json").write_text(
-            json.dumps({"episodes": episode_indices, "per_task": args.episodes_per_task}),
-            encoding="utf-8",
-        )
+            json.dumps(record), encoding="utf-8")
 
         command = _build_command(args, base_model, episode_indices, output_dir)
-        print(f"[train] 学習を開始（{args.steps} ステップ、batch {args.batch_size}）")
+        print(f"[train] 学習を開始（{args.steps} ステップ、batch {args.batch_size}、"
+              f"lr {args.learning_rate}、warmup {args.warmup_steps}、"
+              f"画像拡張 {'有効' if args.image_transforms else '無効'}）")
 
     process = subprocess.run(command)
     sys.exit(process.returncode)
