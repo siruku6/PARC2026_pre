@@ -94,7 +94,7 @@ def _bddl_path_for_collision(bddl_path: Path, patched: bool) -> Path:
 
     出典: `pipeline/environment.py` の `parse_obj_of_interest`。
     **配布キットのままだと `_view_` を切らずに開くため、変種名の実体が
-    無ければここで `FileNotFoundError` になる。** セル H のパッチを当てると
+    無ければここで `FileNotFoundError` になる。** 手順 5-1 のパッチを当てると
     `_view_` を切るようになる。
     """
     if not patched:

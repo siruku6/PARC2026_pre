@@ -11,4 +11,4 @@
 | 学習を回したい | [01_retrain.md](../howto/01_retrain.md) |
 | 学習した重みを提出物にしたい | [02_build_submission.md](../howto/02_build_submission.md) |
 | Colab のセルをどう書き換えるか | [COLAB.md](COLAB.md) |
-| 評価を回したい | [COLAB_EVAL.md](COLAB_EVAL.md) |
+| 評価を回したい | [colab_eval/](colab_eval/README.md) |

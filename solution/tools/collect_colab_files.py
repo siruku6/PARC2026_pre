@@ -36,19 +36,19 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 _UPLOAD_FILES: tuple[tuple[str, str], ...] = (
     (
         "solution/policy_server.py",
-        "評価に使う推論サーバ。COLAB_EVAL.md のセル D-2 が /content/ から拾う。",
+        "評価に使う推論サーバ。colab_eval/04_policy_server.md が /content/ から拾う。",
     ),
     (
         "solution/tools/make_validation_suite.py",
-        "検証用スイートを作る。COLAB_EVAL.md のセル H だけで使う。",
+        "検証用スイートを作る。colab_eval/05_suite.md だけで使う。",
     ),
     (
         "solution/tools/check_validation_suite.py",
-        "作った CSV が本当に開けるかを、評価を回す前に確かめる。セル H が呼ぶ。",
+        "作った CSV が本当に開けるかを、評価を回す前に確かめる。手順 5-1 が呼ぶ。",
     ),
     (
         "solution/tools/patch_kit_for_variants.py",
-        "配布キットへのパッチ。セル B と セル H が呼ぶ。**これが無いと B で落ちる。**",
+        "配布キットへのパッチ。手順 2 と 5-1 が呼ぶ。**これが無いと手順 2 で落ちる。**",
     ),
     (
         "solution/tools/rollout_recorder.py",
@@ -57,7 +57,7 @@ _UPLOAD_FILES: tuple[tuple[str, str], ...] = (
     ),
     (
         "solution/tools/summarize_rollout_videos.py",
-        "撮れた mp4 を見るべき順に並べ、コマ並べ画像にする。セル F が呼ぶ。",
+        "撮れた mp4 を見るべき順に並べ、コマ並べ画像にする。手順 9 が呼ぶ。",
     ),
 )
 
@@ -70,13 +70,13 @@ _READ_ME = """\
 {descriptions}
 
 置いたあとにやること:
-  - policy_server.py … セル D-2 を実行すると提出用ディレクトリへ移る。
-    セル E-3 の出力に "[parc] policy_server <版>" が出れば差し替え成功。
-  - make_validation_suite.py … セル H を、セル B のあと・セル E-1 の前に実行する。
-    このときセル E-1 の N_EPISODES は 1 にすること（タスク数が 4 件から
+  - policy_server.py … 手順 4-2 を実行すると提出用ディレクトリへ移る。
+    手順 8 の出力に "[parc] policy_server <版>" が出れば差し替え成功。
+  - make_validation_suite.py … 手順 5-1 を、手順 2 のあと・手順 6 の前に実行する。
+    このとき手順 6 の N_EPISODES は 1 にすること（タスク数が 4 件から
     56〜84 件へ増えるため、20 のままだと 27 時間かかる）。
 
-手順の本体: docs/solution/COLAB_EVAL.md
+手順の本体: docs/solution/colab_eval/README.md
 """
 
 
@@ -90,7 +90,7 @@ def _parse_args() -> argparse.Namespace:
     )
     # **前の回と比べるなら、検証用スイートの CSV を作り直してはいけない。**
     # 1 件でも違うタスクが混ざると、1 件ずつ対にした比較（符号検定）が
-    # 成り立たない。前の回の CSV を一緒に上げれば、セル H がそれを使う。
+    # 成り立たない。前の回の CSV を一緒に上げれば、手順 5-1 がそれを使う。
     parser.add_argument(
         "--val-tasks",
         default=None,
@@ -158,7 +158,7 @@ def main() -> None:
         copied.append(destination)
         rows = destination.read_text(encoding="utf-8").count("\n")
         print(f"検証用スイートの CSV も集めた（{rows - 1} 行）: {source}")
-        print("  **セル H がこれを使う。**同じタスクで前の回と比べられる")
+        print("  **手順 5-1 がこれを使う。**同じタスクで前の回と比べられる")
 
     _write_readme(output_dir)
 
