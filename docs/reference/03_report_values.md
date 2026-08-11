@@ -45,24 +45,31 @@ cat work/submission.sha256
 | 学習方法 | **LoRA**（`peft.method_type=LORA`） | [train.py](../../solution/train/train.py) |
 | Full FT・LoRA・adapter の区分 | **LoRA** | 同上 |
 | 学習対象パラメータ | `lm_expert` の attention 射影（`q_proj` / `v_proj`） | **実測。** 素の重みと比べて変化した 37 テンソルのうち 32 個が該当 |
-| **ステップ数** | **15,000** | 学習を回したときの `--steps` |
+| **ステップ数** | **20,000** | `--steps 20000`（素の重みと同数） |
 | LoRA の階数 / スケール | `r=16` / `alpha=16` | [train.py](../../solution/train/train.py) の既定 |
 | 学習率 | `3e-4` → `3e-5`（コサイン減衰、warmup 100 歩） | 同上 |
-| バッチサイズ | ? | **GPU マシンで指定した値。既定は 8** |
+| バッチサイズ | **8** | `--batch-size 8`（**素の重みは 32**） |
 | 使用データ | `lerobot/libero_plus`（LIBERO-plus の成功軌道） | 配布ノートブックの `DATASET_REPO` |
 | データの revision | `f3f49f426d75030177b18778374005bc12ccd588` | 同上 |
-| タスク数 | ? | **`--episodes-per-task` と選んだタスク数から決まる** |
-| エピソード数 | ? | 同上。`$OUTPUT_ROOT/<run-name>/episodes.json` に残っている |
-| 画像拡張 | ? | `--no-image-transforms` を付けたかどうか（既定は**有効**） |
+| タスク数 | **40**（`libero_plus` の全タスク） | `--episodes-per-task` の既定 5 で選ぶ |
+| エピソード数 | **200**（40 × 5） | `episodes.json` に実際の一覧がある |
+| 画像拡張 | **有効** | `--no-image-transforms` を付けていない（既定が有効） |
 | 独自収集・生成データ | **無し。** 配布データセットのみ | — |
 
-**`?` は GPU マシン側に記録が残っている。** 実行に使ったコマンドと、
-`$OUTPUT_ROOT/smolvla_lora_all_suites/episodes.json` を見れば埋まる。
+実行したコマンドは 1 行である。**残りはすべて `train.py` の既定値**である。
 
 ```bash
-# GPU マシンで
-cat work/train/smolvla_lora_all_suites/episodes.json | head -20
+python /workspace/train.py --steps 20000 --batch-size 8
 ```
+
+> **タスク数 40 とエピソード数 200 は導いた値である。** `lerobot/libero_plus`
+> のタスク数が 40 で（[01_base_model.md](01_base_model.md)）、
+> `--episodes-per-task` の既定が 5 だからである。
+> **提出前に実物で確かめること。**
+>
+> ```bash
+> head -20 work/train/smolvla_lora_all_suites/episodes.json
+> ```
 
 > **`merged_model/` に `train_config.json` が入っていない。**
 > 素の重みには付いてくる（`model_weights.bak/train_config.json`）が、
@@ -87,7 +94,7 @@ cat work/train/smolvla_lora_all_suites/episodes.json | head -20
 | 0.1.0 | 素 | n=50 | `f80abc7b…` | 0.05832 |
 | 0.2.0 | 素 | n=10 | `8ed91671…` | 0.096 |
 | **0.3.0** | **素** | **n=5 ＋ EMA 0.3** | `c1685507…` | **0.1409 ← 最良** |
-| 0.3.0（版を上げる前） | LoRA 15,000 歩 | 0.3.0 と同じ | `80e8711e…` | **0.016** |
+| 0.3.0（版を上げる前） | LoRA 20,000 歩 | 0.3.0 と同じ | `80e8711e…` | **0.016** |
 | 1.0.0 | 同じ重み ＋ 版の行 | 同上 | `420aff5d…` | 未提出 |
 
 **推論の設定を揃えて重みだけを変えたので、0.1409 → 0.016 は学習の効果である。**
