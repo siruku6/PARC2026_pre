@@ -149,9 +149,9 @@ GPU マシンへ 900 MB を運ぶ必要も無い。
 bash solution/tools/fetch_base_weights.sh          # 素の重みを取り寄せる（869 MB）
 
 WEIGHTS=work/artifacts/model_weights_base LABEL=base \
-    bash solution/tools/run_docker_eval.sh --detach     # 素の重みで測る
+    bash solution/tools/run_docker_eval.sh --detach     # 素の重みで評価する
 
-LABEL=lora15k bash solution/tools/run_docker_eval.sh --detach   # 学習後で測る
+LABEL=lora15k bash solution/tools/run_docker_eval.sh --detach   # 学習後の重みで評価する
 ```
 
 **手元にも 1 つある** — Mac の `work/artifacts/model_weights.bak/`。
@@ -172,7 +172,7 @@ LABEL=lora15k bash solution/tools/run_docker_eval.sh --detach   # 学習後で�
 ### 17-1. 素の重みの結果 — **見立てが 3 つ外れた（8/11）**
 
 **数字と再現手順は [05_実測結果.md](../strategy/05_実測結果.md) の
-「素の重みを 84 件で測った」にある。ここには「だから何を変えるか」だけを書く。**
+「素の重みを 84 件の検証用データで評価した」にある。ここには「だから何を変えるか」だけを書く。**
 
 **成功率 0.476（40/84、95%CI [0.373, 0.582]）。**
 **床でも天井でもないので、手元のスイートが代理指標として初めて使える範囲に入った。**
@@ -1073,10 +1073,10 @@ RECORD=1 bash solution/tools/smoke_test_suite.sh   # 5 タスク・20 歩
 **全 14,347 本を出発点と同じ濃さで当て直し、変える軸は画像拡張だけにする。**
 **以下の 7・22・8・9・21 は、その判断の根拠と、下げたものの理由である。**
 
-### ~~7. 背景テクスチャに的を絞る~~ — **閉じた（8/11）。84 件で測ったら逆だった**
+### ~~7. 背景テクスチャに的を絞る~~ — **閉じた（8/11）。84 件の検証用データで評価したら逆だった**
 
 **80 エピソード（example 4 タスク）では背景 0.60・照明 0.82 で、
-22 ポイントの差があった。84 件で測り直したら差は縮み、順位も変わった。**
+22 ポイントの差があった。84 件の検証用データで評価し直したら差は縮み、順位も変わった。**
 
 | カテゴリ | 80 件（example 4 タスク） | **84 件（7 カテゴリ）** |
 |---|---|---|

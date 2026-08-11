@@ -487,7 +487,7 @@ Colab の GPU は本番の L4 とは別物（T4 が割り当てられること�
 **T4 で収まれば L4 では確実に収まる**。逆に T4 で 10 秒に迫るなら対策が要る。
 
 **マージセル**（`print("Merged model ready.")` で終わるもの）**より後**に新規セルを作る。
-追加学習前の素の重みで測るだけなら、`## 7. 初期重みを準備する` のセルより後ならどこでもよい。
+追加学習前の素の重みで評価するだけなら、`## 7. 初期重みを準備する` のセルより後ならどこでもよい。
 
 ```python
 # === 推論 1 チャンクの所要時間を測る ===
@@ -504,7 +504,7 @@ from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
 from lerobot.processor import PolicyProcessorPipeline
 from lerobot.processor.env_processor import LiberoProcessorStep
 
-# 追加学習後を測るなら MERGED_MODEL_DIR、素の初期重みなら BASE_MODEL_LOCAL
+# 追加学習後の重みで評価するなら MERGED_MODEL_DIR、素の初期重みなら BASE_MODEL_LOCAL
 WEIGHTS = MERGED_MODEL_DIR if MERGED_MODEL_DIR.exists() else BASE_MODEL_LOCAL
 DEVICE = "cuda"
 EVAL_CAMERA = 128   # 採点パイプラインが渡してくる解像度
