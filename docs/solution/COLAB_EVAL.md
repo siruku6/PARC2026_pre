@@ -580,12 +580,15 @@ N_EPISODES = 20
 MAX_STEPS = 300
 PORT = 8000
 
-# 推論時のつまみ。**空でも素の挙動にはならない**（n_action_steps の既定は 10）。
-# 4 つあり、書かなかったものは policy_server.py の既定値になる。
-# 意味と既定値は下の表を参照。比べるときはここだけを書き換える。
+# 推論時のつまみ。**空にするのが正しい既定である。**
+# policy_server.py の既定は **n_action_steps=5 / ema_alpha=0.3** で、
+# **これが 3 回目の提出（0.1409）と 4 回目、および 8/11 の 84 件の評価の構成**である。
+# 書かなければその値になる。**重みを比べるときは空にすること** ——
+# ここに値を書くと「重み」と「つまみ」を同時に変えることになり、
+# 1 件ずつ対にした比較が成り立たない。
 POLICY_ENV = {
-    # "PARC_N_ACTION_STEPS": "10",   # 既定 10。1 回の推論で実行するステップ数
-    # "PARC_EMA_ALPHA": "0.3",       # 既定 0（無効）。直前の行動を混ぜる割合
+    # "PARC_N_ACTION_STEPS": "2",    # **既定 5。** 1 回の推論で実行するステップ数
+    # "PARC_EMA_ALPHA": "0.15",      # **既定 0.3。** 直前の行動を混ぜる割合
     # "PARC_BLEND_STEPS": "3",       # 既定 0（無効）。継ぎ目を均すステップ数
     # "PARC_SAMPLES": "3",           # 既定 1（無効）。chunk を引く本数
 }
@@ -1300,7 +1303,11 @@ except Exception as error:
 | 設定 | 成功率 | 衝突率 |
 |---|---|---|
 | `PARC_N_ACTION_STEPS=50`（チェックポイントの値） | 0.0625 | 0.3375 |
-| **`PARC_N_ACTION_STEPS=10`（現在の既定）** | **0.875** | **0.087** |
+| `PARC_N_ACTION_STEPS=10` | **0.875** | **0.087** |
+| **`PARC_N_ACTION_STEPS=5`（現在の既定）** | 本番 **0.1409**（3 回目） | — |
+
+> **example 4 件の 0.875 は本番を表していなかった**（同じ構成の本番は 0.096）。
+> **84 件の検証用データへ移したのはこのためである**（セル H）。
 
 **残る損失の 7 割は衝突である**（失敗 10 本のうち 7 本）。以降はここを削る。
 
@@ -1437,19 +1444,28 @@ def parse_obj_of_interest(bddl_file):
 ```python
 # === H. 検証用スイートへ差し替える ===
 import shutil
+from pathlib import Path
 
 # --- 1. キットにパッチを当てる（セル B で当てていれば「適用済み」と出る） ---
 # **中身は patch_kit_for_variants.py にある。** Docker でもこれを使うので、
 # 手元で確かめたものとまったく同じコードが当たる。
 run(f"{KIT_PYTHON} /content/patch_kit_for_variants.py --kit-dir {KIT_DIR}", tail=10)
 
-# --- 2. CSV を作る ---
-run(f'PYTHONPATH="{KIT_DIR}/LIBERO-plus:{KIT_DIR}:{KIT_DIR}/compe" '
-    f'{KIT_DIR}/venv/bin/python /content/make_validation_suite.py '
-    f'--libero-plus {KIT_DIR}/LIBERO-plus '
-    f'--exclude {KIT_DIR}/compe/t1/T1_TASKS.csv '
-    f'--output /content/VAL_TASKS.csv --per-cell 3',
-    tail=60, log="val_suite.log")
+# --- 2. CSV を用意する ---
+# **前の回と比べるなら、作り直さずに前の回の CSV を使う。**
+# 1 件でも違うタスクが混ざると、1 件ずつ対にした比較（符号検定）が成り立たない。
+# 8/11 の 84 件はこれである:
+#   outputs/0811_101824_base_n5_ep1_max300/VAL_TASKS.csv
+# これを /content/VAL_TASKS.csv へ上げておけば、下の生成は飛ばせる。
+if Path("/content/VAL_TASKS.csv").is_file():
+    print("既にある /content/VAL_TASKS.csv を使う（前の回と同じ 84 件で比べられる）")
+else:
+    run(f'PYTHONPATH="{KIT_DIR}/LIBERO-plus:{KIT_DIR}:{KIT_DIR}/compe" '
+        f'{KIT_DIR}/venv/bin/python /content/make_validation_suite.py '
+        f'--libero-plus {KIT_DIR}/LIBERO-plus '
+        f'--exclude {KIT_DIR}/compe/t1/T1_TASKS.csv '
+        f'--output /content/VAL_TASKS.csv --per-cell 3',
+        tail=60, log="val_suite.log")
 
 # --- 3. example と差し替える ---
 # **元の CSV は退避する。** 比較のために example へ戻すことがある。
