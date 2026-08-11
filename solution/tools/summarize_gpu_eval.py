@@ -128,6 +128,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--compare", type=Path, default=None,
                         help="**もう 1 つの出力先。並べて差を出す**"
                              "（素の重みと学習後を比べるときに使う）")
+    parser.add_argument("--only-categories", type=str, nargs="*", default=None,
+                        metavar="CATEGORY",
+                        help="**この摂動カテゴリだけで集計し直す。**"
+                             '例: --only-categories "Light Conditions" "Background Textures"'
+                             "（出題の見込みに近い 24 件だけで比べるときに使う）")
     return parser.parse_args()
 
 
@@ -244,6 +249,149 @@ def _appearance_suffix(task_name: str) -> str | None:
     if found and found.group(1) in ("light", "table", "tb"):
         return found.group(1)
     return None
+
+
+def _filter_by_categories(
+    episodes: list[dict], known: dict[str, str], wanted: list[str] | None
+) -> list[dict]:
+    """指定した摂動カテゴリの回だけを残す。指定が無ければそのまま返す。
+
+    **84 件の平均は本番より低く出る。** 出題の見込みに近いのは
+    `Light Conditions` と `Background Textures` の 24 件で、そこだけなら 0.708
+    だった（`docs/strategy/05_実測結果.md`）。**判定はその 24 件で行う**ため、
+    集計全体を絞れる口を用意する。
+
+    Parameters
+    ----------
+    episodes : list[dict]
+        `_parse_log` の結果。
+    known : dict[str, str]
+        タスク名 → 摂動カテゴリ。CSV から読んだもの。
+    wanted : list[str] | None
+        残すカテゴリ名。`None` または空なら絞らない。
+
+    Returns
+    -------
+    kept : list[dict]
+        指定したカテゴリに属する回だけ。
+    """
+    if not wanted:
+        return episodes
+    targets = set(wanted)
+    return [e for e in episodes if _category_of(e["task"], known) in targets]
+
+
+def _sign_test_probability(wins: int, losses: int) -> float:
+    """勝ち負けの偏りが偶然で説明できるかを、符号検定の両側 p 値で返す。
+
+    **ハーネスは決定的なので、2 回の評価は 1 件ずつ対になっている。**
+    対の内訳（片方だけ成功した件数）だけを使う両側の二項検定である。
+    引き分け（両方成功・両方失敗）は情報を持たないので数えない。
+
+    Parameters
+    ----------
+    wins : int
+        こちらだけが成功した件数。
+    losses : int
+        あちらだけが成功した件数。
+
+    Returns
+    -------
+    probability : float
+        両側 p 値。対が 0 件なら 1.0。
+    """
+    discordant = wins + losses
+    if discordant == 0:
+        return 1.0
+    smaller = min(wins, losses)
+    tail = sum(math.comb(discordant, i) for i in range(smaller + 1))
+    return min(1.0, 2.0 * tail / (2 ** discordant))
+
+
+def _report_pairing(lines: list[str], mine: list[dict], theirs: list[dict],
+                    known: dict[str, str]) -> None:
+    """同じ 84 件を 1 件ずつ突き合わせ、入れ替わった数を出す。
+
+    **平均を見比べるだけでは、ほぼ何も判定できない。** 84 件での成功率の
+    95%CI は ±0.10 あり、24 件なら ±0.19 になる。
+    **一方でハーネスは完全に決定的である**（同じ初期状態・同じ乱数）。
+    **対にして数えれば、平均の差より桁違いに鋭い。**
+
+    平均が同じでも中身が入れ替わっていれば別物であり、
+    **「拾えた回」と「失った回」のカテゴリを見れば学習の的が決まる。**
+
+    Parameters
+    ----------
+    lines : list[str]
+        報告文の行。ここへ追記する。
+    mine, theirs : list[dict]
+        `_parse_log` の結果。`mine` が `--output-dir` の側。
+    known : dict[str, str]
+        タスク名 → 摂動カテゴリ。
+    """
+    mine_by_key = {(e["task"], e["episode"]): e for e in mine}
+    theirs_by_key = {(e["task"], e["episode"]): e for e in theirs}
+    shared = sorted(set(mine_by_key) & set(theirs_by_key))
+
+    lines.append("")
+    lines.append("=== 1 件ずつ突き合わせる ===")
+    if not shared:
+        lines.append("  **対になる回が 1 つも無い。** 別のスイートを測っている")
+        return
+
+    only_mine: list[tuple[str, str]] = []
+    only_theirs: list[tuple[str, str]] = []
+    both, neither = 0, 0
+    for key in shared:
+        left = mine_by_key[key]["outcome"] == "成功"
+        right = theirs_by_key[key]["outcome"] == "成功"
+        if left and right:
+            both += 1
+        elif left:
+            only_mine.append((key[0], _category_of(key[0], known)))
+        elif right:
+            only_theirs.append((key[0], _category_of(key[0], known)))
+        else:
+            neither += 1
+
+    lines.append(f"  対になった回 {len(shared)} 件")
+    if len(shared) != len(mine) or len(shared) != len(theirs):
+        lines.append(
+            f"  **片方にしか無い回がある**（こちら {len(mine)} / あちら {len(theirs)}）"
+        )
+    lines.append(f"  **こちらだけ成功  {len(only_mine):3d}**  ← 学習で拾えた分")
+    lines.append(f"  **あちらだけ成功  {len(only_theirs):3d}**  ← 学習で失った分")
+    lines.append(f"  両方成功        {both:3d}")
+    lines.append(f"  両方失敗        {neither:3d}")
+
+    probability = _sign_test_probability(len(only_mine), len(only_theirs))
+    lines.append("")
+    lines.append(
+        f"  差 {len(only_mine) - len(only_theirs):+d} 件"
+        f"（入れ替わった {len(only_mine) + len(only_theirs)} 件のうち）"
+        f"  符号検定 p = {probability:.3f}"
+    )
+    if probability >= 0.05:
+        lines.append("  **偶然の範囲である。** この 2 つに差があるとは言えない")
+    else:
+        lines.append("  **偶然では説明しにくい。** 差があると読んでよい")
+
+    for label, flipped in (("拾えた", only_mine), ("失った", only_theirs)):
+        if not flipped:
+            continue
+        counted = collections.Counter(category for _, category in flipped)
+        breakdown = " / ".join(
+            f"{category} {count}" for category, count in counted.most_common()
+        )
+        lines.append(f"  {label} {len(flipped)} 件のカテゴリ: {breakdown}")
+
+    # **名前を出す。** どのタスクが入れ替わったかが分からないと、
+    # 録画を見に行けない（失敗した回だけが残っているため）。
+    for label, flipped in (("拾えた", only_mine), ("失った", only_theirs)):
+        for task, category in flipped[:10]:
+            lines.append(f"    {label}  {category:22s} {task}")
+        if len(flipped) > 10:
+            lines.append(f"    （{label} は残り {len(flipped) - 10} 件を省略）")
 
 
 def _parse_log(log_path: Path) -> tuple[list[dict], list[tuple[str, str]], int | None]:
@@ -739,7 +887,8 @@ def _overall_metrics(output_dir: Path) -> dict[str, float]:
     return {}
 
 
-def _key_figures(output_dir: Path, known: dict[str, str]) -> dict[str, object]:
+def _key_figures(output_dir: Path, known: dict[str, str],
+                 only: list[str] | None = None) -> dict[str, object]:
     """1 回の評価から、比べるのに使う数字だけを取り出す。
 
     **報告文をそのまま並べても差は読めない。** 84 件の内訳が数十行あるので、
@@ -751,6 +900,9 @@ def _key_figures(output_dir: Path, known: dict[str, str]) -> dict[str, object]:
         `run_docker_eval.sh` の出力先。
     known : dict[str, str]
         タスク名 → 摂動カテゴリ。CSV から読んだもの。
+    only : list[str] | None
+        この摂動カテゴリだけで数え直す。`None` なら全件。
+        **`jerk` と `sparc` には効かない**（JSON が全体の平均しか持たない）。
 
     Returns
     -------
@@ -760,6 +912,7 @@ def _key_figures(output_dir: Path, known: dict[str, str]) -> dict[str, object]:
         **読めなかった項目は入れない**（None を入れて 0 と混同させない）。
     """
     episodes, _, _ = _parse_log(output_dir / "eval.log")
+    episodes = _filter_by_categories(episodes, known, only)
     if not episodes:
         return {"n": 0}
 
@@ -947,8 +1100,32 @@ def main() -> None:
         f"CSV       {csv_path}" if categories
         else "CSV       **見つからない**（摂動カテゴリは変種名から当てる）"
     )
+
+    # **件数の確認は絞り込む前の全件で行う。** 「最後まで走ったか」は
+    # 走り全体の性質であり、絞った件数と突き合わせると偽の警告が出る。
+    all_episodes = episodes
+    only: list[str] | None = args.only_categories
+    if only:
+        if not categories:
+            raise SystemExit(
+                "**--only-categories は CSV が無いと使えない。**"
+                "変種名からは 7 カテゴリのうち 4 つしか分からないため、"
+                "絞った結果が静かに間違う。--csv で渡すこと"
+            )
+        episodes = _filter_by_categories(all_episodes, categories, only)
+        if not episodes:
+            raise SystemExit(
+                f"**指定したカテゴリの回が 1 つも無い: {', '.join(only)}**"
+                "（名前は CSV の category 列と同じ綴りで渡すこと）"
+            )
+        lines.append(
+            f"絞り込み  {' / '.join(only)}  → {len(episodes)} 件 / 全 {len(all_episodes)} 件"
+        )
+        lines.append("  **ジャークと SPARC は絞り込みが効かない**"
+                     "（パイプラインの JSON が全体の平均しか持たないため）")
+
     lines.append("")
-    _report_coverage(lines, episodes, exceptions, declared_total)
+    _report_coverage(lines, all_episodes, exceptions, declared_total)
     _report_outcomes(lines, episodes)
     _report_motion(lines, episodes)
     _report_categories(lines, episodes, categories)
@@ -966,17 +1143,29 @@ def main() -> None:
             lines.append("")
             lines.append(f"=== 並べて比べる ===\n  **比較相手に eval.log が無い: {other}**")
         else:
+            other_episodes, _, _ = _parse_log(other / "eval.log")
             _report_comparison(
                 lines,
-                _key_figures(output_dir, categories),
-                _key_figures(other, categories),
+                _key_figures(output_dir, categories, only),
+                _key_figures(other, categories, only),
                 str(other),
+            )
+            _report_pairing(
+                lines, episodes,
+                _filter_by_categories(other_episodes, categories, only),
+                categories,
             )
 
     report = "\n".join(lines)
     print(report)
-    (output_dir / "summary.txt").write_text(report + "\n", encoding="utf-8")
-    print(f"\n（同じ内容を {output_dir / 'summary.txt'} に書いた）")
+
+    # **絞り込みや比較のときは summary.txt を上書きしない。**
+    # あれは「その回そのもの」の記録で、あとから読み返す唯一の材料である。
+    name = "summary.txt"
+    if only or args.compare is not None:
+        name = "summary_" + ("compare" if args.compare is not None else "subset") + ".txt"
+    (output_dir / name).write_text(report + "\n", encoding="utf-8")
+    print(f"\n（同じ内容を {output_dir / name} に書いた）")
 
 
 if __name__ == "__main__":
