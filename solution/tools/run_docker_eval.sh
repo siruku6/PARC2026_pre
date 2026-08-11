@@ -196,7 +196,14 @@ echo
 echo "===== 2/5 評価側を起動する（$KIT_IMAGE）====="
 
 kit_environment=(
-    -e "MUJOCO_GL=egl"
+    # **描画のやり方。`osmesa` に落とせるようにしてある。**
+    # `egl` は GPU で描くので速い（1 歩 39 ms 対 300 ms）が、vGPU の一部の
+    # 構成では描画が許可されておらず、**単純な図形は描けても実際の場面で
+    # 止まることがある。** 進まないときは MUJOCO_GL=osmesa で切り分ける。
+    -e "MUJOCO_GL=${MUJOCO_GL:-egl}"
+    # 止まった場所を後から知れるようにする。`docker exec <名前> kill -ABRT 1`
+    # で python の居場所が出る。**これが無いと当て推量になる。**
+    -e "PYTHONFAULTHANDLER=1"
     # **これを渡さないと EGL が使えない。** nvidia-container-runtime は
     # 既定で compute,utility しか通さず、描画（graphics）を落とす。
     # そのままだと Mesa のソフトウェア実装に落ち、**1 歩 300 ms になる**
