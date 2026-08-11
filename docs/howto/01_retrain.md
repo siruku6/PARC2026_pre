@@ -238,6 +238,29 @@ error: unrecognized arguments: --emphasize-tasks ...
 > **画面にもファイルにも何も残らない。** 8/11 に 1 度これで詰まった。
 > **下の A-2-1 のように、まず前面で短く流すこと。**
 
+### A-2-0. 流す前に 4 つ確かめる（1 分）
+
+**4 時間の実行を仕掛ける前に、ここで落ちる条件を全部潰す。**
+
+```bash
+nvidia-smi -q | grep -A2 "License Status"     # ① 期限が実行時間をまたがないか
+docker images parc2026-train                  # ② イメージが build 済みか
+ls work/train                                 # ③ 同じ --run-name が残っていないか
+df -h .                                       # ④ 空きが 20 GB 以上あるか
+```
+
+| 見るところ | 通っている | 外れていると |
+|---|---|---|
+| ① `License Status` の `Expiry` | 実行の終わりより後 | **途中で CUDA が止まる**（vGPU のライセンス。項目 23） |
+| ② イメージの `CREATED` | `train.py` を直した時刻より後 | **`unrecognized arguments` で即落ち**（上） |
+| ③ `work/train/<run-name>` | **無い** | **`FileExistsError` で学習が始まらない**（下） |
+| ④ 空き | 20 GB 以上 | チェックポイント 40 個 ＋ データで詰まる |
+
+> **③ が一番踏みやすい。** LeRobot は
+> **空のディレクトリでも既存として拒否する**（`configs/train.py` の `validate` が
+> `not resume and output_dir.is_dir()` で `FileExistsError`）。
+> `train.py` は直し方を示して止めるので、**`--run-name` を変えるか `rm -rf` する。**
+
 ### A-2-1. まず `--steps 1` で前面で流す（数分）
 
 **20,000 歩を仕掛ける前に、引数が通って選び方が意図どおりかを見る。**
@@ -253,8 +276,41 @@ docker run --gpus all --rm -it \
 ```
 
 **`-it` で前面。落ちればその場でエラーが読める。**
+**旗を足すときは、その旗も一緒に付けて流すこと**（旗の解釈で落ちるのがここだから）。
 
-### A-2-2. 本番は `-d` で流し、ログをホストへ出す
+#### 何を見るか
+
+**`[train]` の行と、LeRobot が出す 3 行を見る。**
+
+```
+[train] 手本が 300 歩を超える 401 本を落とした（全 14347 本の 2.8%）
+[train]   丸ごと落ちたタスク 1 種: ['put both moka pots on the stove']
+[train] 苦手 3 タスクを 3 倍にする（割合 8.7% → 26.1%）
+[train]   得意タスクは 27% に間引いた
+[train]   選んだのは 4,609 本 / 699,411 フレーム
+[train]   引く回数 32 回 / 699,411 フレーム = **1 コマを見る回数 0.00 回**
+[train]   選んだ分の明るさ 0.086 〜 0.723
+[train]   落とす前の全体   0.086 〜 0.723
+...
+INFO  dataset.num_frames=699411 (699K)
+INFO  dataset.num_episodes=4609
+INFO  num_learnable_params=742656 (743K)
+```
+
+| 見るところ | 通っている | 外れていると |
+|---|---|---|
+| `選んだのは N 本 / M フレーム` | **`dataset.num_frames` と一致** | 選択が渡っていない |
+| **`1 コマを見る回数`** | **`--steps 1` なら 0.00 回でよい**（分子が 32 だから） | — |
+| **`num_learnable_params`** | **74 万前後**（451M のうち LoRA だけ） | **4.5 億なら LoRA が当たっていない** |
+| `選んだ分の明るさ` と `全体` | **ほぼ一致** | 間引きが偏って見た目の幅が狭まった |
+| `Training: 100%` | 出る | データの読み出しで落ちている |
+
+> **`1 コマを見る回数` は下見では 0.00 回になる。** 分子が「歩数 × バッチ」なので、
+> 1 歩なら 32 回でしかない。**本番の 20,000 歩では 0.92 回**と出る。
+> **この行が 1 回を大きく超えていたら、そこで止める**（4 回目の提出は 5.1 回で
+> 本番スコアが 8.8 倍悪化した）。
+
+### A-2-2. 本番は `-d` で流し、ログを追う
 
 ```bash
 docker run --gpus all -d --name parc-train \
@@ -263,11 +319,52 @@ docker run --gpus all -d --name parc-train \
     parc2026-train \
     python /workspace/train.py
 
-docker logs -f parc-train                     # 端末を閉じてよい
+docker logs -f parc-train                     # 端末を閉じてよい。Ctrl-C で追うのをやめるだけ
 ```
 
 > **`--rm` を付けない。** 落ちたときにログを読めるようにしておく。
+> **`--rm -d` にすると終了と同時にコンテナが消え、`docker logs` が
+> 「そんなコンテナは無い」になる**（8/11 に 1 度これで原因が追えなくなった）。
 > 終わったら `docker rm parc-train` で消す。
+
+#### 5 分後に速さを見る
+
+**チェックポイントの時刻の差が、そのまま 500 歩ぶんの時間である**（`--save-freq 500`）。
+
+```bash
+ls -l --time-style=+%H:%M:%S work/train/<run-name>/checkpoints/
+```
+
+| 500 歩ぶん | 20,000 歩ぶん | 判断 |
+|---|---|---|
+| **5〜6 分** | **約 3.7 時間** | **見込みどおり**（バッチ 32 で 1 歩 0.66 秒） |
+| 7〜9 分 | 5〜6 時間 | やや遅い。期限に間に合うなら続ける |
+| **9 分超** | 6 時間超 | **止めてデータを減らす**（`--emphasis-multiplier 2` か `--episodes-per-task`） |
+
+> **1.4 分という基準は古い。** あれは**バッチ 8・200 エピソード**での実測で、
+> **バッチ 32 は 1 歩あたり 4 倍のサンプルを流す。**
+
+#### 途中の様子を見る
+
+```bash
+docker logs --tail 20 parc-train              # 直近だけ
+docker logs parc-train 2>&1 | grep -c 'Checkpoint policy'   # 何回保存したか
+docker stats --no-stream parc-train           # GPU ではなく CPU/メモリの詰まりを見る
+nvidia-smi                                    # 使用率。低ければデータ供給が律速
+```
+
+**`nvidia-smi` の使用率が低いまま遅いなら、原因は動画のデコードである**
+（CPU コア数に対して `--num-workers` が多すぎる／少なすぎる）。
+
+#### 終わったか確かめる
+
+```bash
+docker ps -a --filter name=parc-train         # STATUS が Exited (0) なら正常終了
+ls work/train/<run-name>/checkpoints/ | tail -3
+cat work/train/<run-name>_episodes.json | head -c 200   # 使ったエピソードの記録
+```
+
+**`Exited (0)` 以外なら `docker logs parc-train 2>&1 | tail -40` を読む。**
 
 **引数は要らない。既定値が「出発点の重みと同じ条件」になっている**（下の表）。
 
@@ -285,6 +382,9 @@ docker logs -f parc-train                     # 端末を閉じてよい
 | `--steps` | `20000` | 20,000 | 学習率はこの値をかけて減衰する。途中で止めると焼き鈍しが効かない |
 | `--batch-size` | **`32`** | 32 | **VRAM が足りなければ 16 へ。** LoRA なら 32 でも収まる |
 | `--episodes-per-task` | **`0`** | 全部 | **0 は「全 14,347 本」。** 数を指定すると 1 タスクあたりの本数になる |
+| **`--emphasize-tasks`** | なし | — | **割合を上げるタスクの指示文**（完全一致・複数）。A-2-3 |
+| **`--emphasis-multiplier`** | `3.0` | — | **上の割合を何倍にするか。** 得意タスクを間引いて実現する |
+| **`--max-demo-steps`** | **`0`** | 0 | **手本がこの歩数を超えるエピソードを使わない。** 0 なら落とさない |
 | `--learning-rate` | **`1e-4`** | 1e-4 | LeRobot の既定でもある。**3e-4 は続きを学ぶには強すぎた** |
 | `--final-learning-rate` | **`2.5e-6`** | 2.5e-6 | 減衰後の学習率 |
 | `--warmup-steps` | **`1000`** | 1,000 | |
@@ -313,6 +413,41 @@ docker logs -f parc-train                     # 端末を閉じてよい
 ```
 
 **この 2 行が一致していれば、明るさで散らす選び方が効いている。**
+
+### A-2-3. 苦手タスクに寄せて学習する
+
+**84 件の検証用データで切り分けたら、落としているのは摂動ではなく特定のタスクだった。**
+根拠と数字は [../talk/open_items_notes.md](../talk/open_items_notes.md) の 30。
+
+```bash
+docker run --gpus all -d --name parc-train \
+    -v "$PWD/work/train:/out" \
+    -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
+    parc2026-train \
+    python /workspace/train.py --run-name weak3x_max300 \
+      --max-demo-steps 300 \
+      --emphasis-multiplier 3 \
+      --emphasize-tasks \
+        "put the bowl on top of the cabinet" \
+        "put both the alphabet soup and the cream cheese box in the basket" \
+        "pick up the black bowl next to the ramekin and place it on the plate"
+```
+
+**指示文は完全一致である。** 学習データにある 40 種類の綴りをそのまま書く
+（`meta/episodes/*.parquet` の `tasks` 列）。**1 文字違うと 0 本になり、
+「苦手 0 タスクを 3 倍にする」と出る** —— そこで気づける。
+
+| 旗 | なぜこの値か |
+|---|---|
+| `--emphasis-multiplier 3` | **3 倍でも 1 コマ 0.88 回で 1 周に届かない。** 同じコマの繰り返しが起きない |
+| `--max-demo-steps 300` | **上限 300 歩の採点では再現できない手本**を落とす。401 本（2.8%） |
+
+**期待する出力は A-2-1 の「何を見るか」と同じである。**
+`--steps 1` で確かめてから、この形で流す。
+
+> **なぜ「重複させて重みを付ける」ではないのか。** LeRobot は
+> `pa_ds.field("episode_index").isin(episodes)` で**集合として**扱うため、
+> 同じ番号を並べても 1 回になる。**得意タスクを間引いて割合を上げるしかない。**
 
 > **絞るときに摂動カテゴリでは選べない。** LeRobot のメタデータ
 > （`meta/episodes/*.parquet`、62 列）に**変種名が入っていない。**

@@ -170,6 +170,85 @@ snapshot_download('HuggingFaceTB/SmolVLM2-500M-Video-Instruct',
 
 **ここまで来たらケース 1 に合流する。**
 
+## 0-4. 追加学習の効き具合を λ で弱めた重みを提出する
+
+**追加学習が素の重みより悪くなったときの手当てである。**
+`θ = θ素 + λ·Δ` を作る（`Δ` は学習で動いた分）。**学習は要らない。**
+なぜこれを採るのかは
+[../talk/open_items_notes.md](../talk/open_items_notes.md) の 35。
+
+**素の重みそのままは提出できない**（運営 Q&A No.36。独自の学習が必須）。
+**λ を下げれば素に近づくが、選ぶのは検証用データの結果で行う** ——
+「素にどれだけ近いか」で選ぶと要件の潜り抜けになる。
+
+### ① 混ぜる（2 分・GPU 不要）
+
+```bash
+python3 solution/tools/blend_weights.py --lam 0.25 \
+    --base       work/artifacts/model_weights.bak \
+    --finetuned  work/artifacts/model_weights \
+    --output     work/artifacts/model_weights_lam025
+```
+
+**`--base` は素の重み、`--finetuned` は追加学習してマージしたもの。**
+どちらがどちらかを取り違えると λ の意味が逆になるので、
+**先にハッシュで確かめる。**
+
+```bash
+shasum -a 256 work/artifacts/model_weights*/model.safetensors | cut -c1-16
+```
+
+**混ぜ方が壊れていないことを、両端で確かめられる。**
+
+```bash
+# λ=1.0 は --finetuned と、λ=0.0 は --base と 1 バイトも違わないはず
+python3 solution/tools/blend_weights.py --lam 1.0 \
+    --base work/artifacts/model_weights.bak \
+    --finetuned work/artifacts/model_weights --output "$TMPDIR/lam100"
+shasum -a 256 "$TMPDIR/lam100/model.safetensors" \
+              work/artifacts/model_weights/model.safetensors
+```
+
+**BF16 の丸めで壊れやすいので、この確認は省かない。**
+
+### ② 検証用データで評価してから取り込む
+
+**混ぜた重みを 84 件の検証用データで評価する**（Colab なら 45 分。
+[../solution/COLAB_EVAL.md](../solution/COLAB_EVAL.md)）。
+**素の重みの回と 1 件ずつ対にして比べる。**
+
+```bash
+python3 solution/tools/summarize_gpu_eval.py \
+    --output-dir <混ぜた重みの出力先> --csv <その VAL_TASKS.csv> \
+    --compare    <素の重みの出力先>
+```
+
+| 満たすべき条件 | 基準 |
+|---|---|
+| ① 1 件ずつ対にして負けていない | 拾った件数 ≧ 失った件数 |
+| ② **グリッパ開閉 20 回以上の割合** | **素の重み以下**（8/11 は 13%） |
+| ③ 平均ジャーク | **素の重み以下**（8/11 は 4.223） |
+
+**満たさなければ λ を下げて組み直す**（混ぜは 2 分）。
+
+### ③ 取り込んで zip にする
+
+```bash
+# **素の重みを別名で確保してから。** install_weights.py は .bak を上書きする
+cp -r work/artifacts/model_weights.bak work/artifacts/model_weights_base
+
+work/venv310/bin/python solution/tools/install_weights.py \
+    work/artifacts/model_weights_lam025 --destination work/artifacts/model_weights
+work/venv310/bin/python solution/tools/build_submission.py
+work/venv310/bin/python solution/tools/validate_submission.py --static
+```
+
+> **`.py` を 1 行も変えないなら、リハーサルの枠は要らない。**
+> 変わるのが `model.safetensors` の中身だけなら、
+> **本番で通った zip と構造が同じ**である。
+> **逆に `policy_server.py` を触ったら、提出枠 1 つをリハーサルに充てる**
+> （参加者ガイド p.12。最終提出時のエラーに救済措置は無い）。
+
 ---
 
 # 出来上がった zip を確かめる

@@ -6,6 +6,11 @@
 > **作業はチャット欄でなくここに書く。** 終わったもの・落としたものは、同じ項目を書き換える（新しい行を足さない）。
 > **このファイルは「いま何をするか」だけを持つ。** 測定値・理由・閉じた項目の詳細は
 > [open_items_notes.md](open_items_notes.md)（根拠置き場）に項目番号で置く。**板には書かない。**
+>
+> **手順（複数行のコマンド）も板には書かない。** [howto/](../howto/) に節を作り、
+> **板からは節の番号で指す**（「A-2-3」のように）。板に書いてよいのは
+> **1 行で終わるコマンドだけ**である。長い手順を板に貼ると、場所を取るうえに
+> **howto と二重になって片方が古くなる。**
 > 新しい測定・発見が来たら、数字は notes か 05/reference へ入れ、板は「だから何をするか」を 1 行だけ書き換える。
 
 ---
@@ -148,27 +153,17 @@
 
 ### 35. 3 条件を満たす重みを提出する — あなた / 今日の枠
 
-```bash
-# ① Colab で λ=0.25 を 84 件の検証用データで評価する（45 分）
-#    重みは work/artifacts/model_weights_lam025/（912 MB）
+**手順は [howto/02_build_submission.md](../howto/02_build_submission.md) の 0-4。**
+混ぜ方の検算・評価・取り込み・zip までそこにある。
 
-# ② 3 条件で判定する
-python3 solution/tools/summarize_gpu_eval.py \
-    --output-dir <λ=0.25 の出力先> --csv <その VAL_TASKS.csv> \
-    --compare    outputs/0811_101824_base_n5_ep1_max300
+| 順 | やること | 費用 |
+|---|---|---|
+| 1 | λ=0.25 を **84 件の検証用データで評価する**（Colab） | 45 分 |
+| 2 | **3 条件で判定する**（対の突き合わせ・グリッパ 13% 以下・ジャーク 4.223 以下） | 1 分 |
+| 3 | 満たせば取り込んで zip にして提出 | 10 分 |
 
-# ③ 素の重みを別名で確保してから取り込む（install_weights.py は .bak を上書きする）
-cp -r work/artifacts/model_weights.bak work/artifacts/model_weights_base
-work/venv310/bin/python solution/tools/install_weights.py \
-    work/artifacts/model_weights_lam025 --destination work/artifacts/model_weights
-work/venv310/bin/python solution/tools/build_submission.py
-work/venv310/bin/python solution/tools/validate_submission.py --static
-```
-
-**`.py` は 1 行も変えない。** 変わるのは `model.safetensors` の中身だけなので、
-**4 回目に本番で通った zip と構造が同じ**である。だからリハーサルの枠が要らない。
-
-**②③ を満たさなければ λ=0.15 を組み直す**（混ぜは 2 分、Colab で 24 件なら 13 分）。
+**満たさなければ λ=0.15 を組み直す**（混ぜは 2 分、Colab で 24 件なら 13 分）。
+**`.py` は 1 行も変えないので、リハーサルの枠は要らない。**
 
 ### ~~17. 素の重みと学習後を並べて評価する~~ — 済み（8/11）
 
@@ -209,38 +204,18 @@ python3 solution/tools/make_validation_suite.py --libero-plus work/LIBERO-plus \
 
 ### 30. 学習を流す（苦手 3 倍 ＋ 手本 300 歩超を落とす） — あなた
 
-```bash
-git pull                                        # 旗を取り込む
-nvidia-smi -q | grep -A2 "License Status"       # 8/12 08:50 JST が期限
+**手順は [howto/01_retrain.md](../howto/01_retrain.md) の A-2-3。**
+事前確認（A-2-0）・下見（A-2-1）・ログの見方と速さの判定（A-2-2）もそこにある。
 
-mkdir -p work/train2
-docker run --gpus all --rm -d --name parc-train \
-    -v "$PWD/work/train2:/out" -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
-    parc2026-train python /workspace/train.py --run-name weak3x_max300 \
-      --max-demo-steps 300 \
-      --emphasize-tasks \
-        "put the bowl on top of the cabinet" \
-        "put both the alphabet soup and the cream cheese box in the basket" \
-        "pick up the black bowl next to the ramekin and place it on the plate"
-```
+| 決めたこと | なぜ |
+|---|---|
+| **苦手 3 タスクを 3 倍** | 3 倍でも 1 コマ 0.88 回で 1 周に届かない（4 回目の提出は 5.1 回） |
+| **手本 300 歩超を落とす** | 上限 300 歩では再現できない手本。401 本・2.8% |
+| **均等な回 A は落とした** | 1 コマ 0.29 → 0.58 回の周回数しか増えず、落としているタスクに当たらない |
+| **画像拡張も落とした** | タスクの難しさを引くと照明 +0.21・背景 +0.16 で易しい側だった |
 
-**開始直後の行で選択を確かめる。** 手元で確認した値はこうである。
-
-```
-[train] 手本が 300 歩を超える 401 本を落とした（全 14347 本の 2.8%）
-[train]   丸ごと落ちたタスク 1 種: ['put both moka pots on the stove']
-[train] 苦手 3 タスクを 3 倍にする（割合 8.7% → 26.1%）
-[train]   得意タスクは 27% に間引いた
-[train]   選んだのは 4,609 本 / 699,411 フレーム
-[train]   **1 コマを見る回数 0.92 回**（4 回目の提出は 5.1 回で本番 8.8 倍悪化）
-```
-
-**5 分後に速さを見る。500 歩が 5〜6 分なら見込みどおり**（20,000 歩で約 3.7 時間）。
-**9 分を超えたら止めて `--emphasis-multiplier 2` に下げる。**
-1.4 分はバッチ 8 の値で、**バッチ 32 では 4 倍のサンプルを流すので当てはまらない。**
-**均等な回 A は落とした**（1 コマ 0.29 → 0.58 回の周回数しか増えず、落としている
-タスクに当たらない）。**画像拡張も落とした**（タスクの難しさを引くと照明 +0.21・
-背景 +0.16 で易しい側だった）。280 歩まで下げない理由は notes の 30。
+**8/11 の下見で選択は意図どおりだった**（401 本を落とし、8.7% → 26.1%、4,609 本）。
+280 歩まで下げない理由と数え方は notes の 30。
 
 ### ~~34. 苦手タスクを重く学習する口を作る~~ — 済み（8/11）
 
