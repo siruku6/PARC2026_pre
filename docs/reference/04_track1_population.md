@@ -31,6 +31,11 @@
 **Background Textures と Light Conditions の 2 カテゴリだけ**である
 （[02_evaluation_data.md](02_evaluation_data.md)）。
 
+> **8/11 追記。運営はカテゴリ名を 1 つも挙げていない。**
+> 「2 カテゴリだけ」はこちらの推測である。**Sensor Noise（1,601 件・最多）も
+> 「画質の劣化」として基準に当てはまりうる。** 原文と 7 カテゴリの仕分けは
+> [05_perturbation_categories.md](05_perturbation_categories.md) に分けた。
+
 この 2 カテゴリを候補と見て数えると次のようになる。
 
 | 区分 | 件数 |
