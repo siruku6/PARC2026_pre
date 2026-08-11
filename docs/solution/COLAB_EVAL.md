@@ -29,18 +29,26 @@ Colab の GPU（EGL 描画）に移すと桁が変わる。
 | 3 | **C** 重みの用意 | `WEIGHTS_DIR` `USE_FINETUNED` | 2 分 |
 | 4 | **D-1** 方策側の依存 | `LEROBOT_DIR` `LEROBOT_SRC` | 3 分 |
 | 5 | **D-2** `policy_server.py` の配置 | **`SUBMISSION_DIR`** **`SERVER`** | 5 秒 |
-| 6 | **E-1** 設定 | `PORT` `N_EPISODES` `POLICY_ENV` `server_env` `eval_env` | 1 秒 |
-| 7 | **E-2** 遅さの切り分け（初回のみ） | — | 3 分 |
-| 8 | **E-3** 評価の実行（**回すだけ**） | — | 45 分 |
-| 9 | **F** 読み取り・集計・Drive への退避（**出力はすべてここ**） | — | 5 秒 |
+| 6 | **E-0** 84 件を 3 つに割る（初回のみ） | `/content/chunks/VAL_1〜3.csv` | 1 秒 |
+| 7 | **E-1** 設定 | `PORT` `N_EPISODES` `CHUNK` `RESULTS_DIR` `POLICY_ENV` `server_env` `eval_env` | 1 秒 |
+| 8 | **E-2** 遅さの切り分け（初回のみ） | — | 3 分 |
+| 9 | **E-3** 評価の実行（**回すだけ**） | — | **15 分 × 3** |
+| 10 | **F** 読み取り・集計・Drive への退避（**出力はすべてここ**） | — | 5 秒 |
+
+**E-1 → E-3 → F を、`CHUNK` を 1 → 2 → 3 と変えて 3 回まわす。**
+**45 分の 1 本にしないこと** —— Colab は切れる（8/11 に 56 件目で落ちた）。
 
 **セルは 9 つ。役割は 1 つずつに分けてある。**
 特に **E-3 は回すだけ、F は出力だけ**である。以前は退避処理が E-3 と
 手書きのセルに散っており、どれを実行したのか分からなくなって
 **評価ログを失った**（35 分の再実行になった）。
 
-**2 回目以降、設定を変えて比べるときは `E-1` → `E-3` → `F` だけでよい。** `E-1` の `POLICY_ENV` を
-書き換えて流し直す。
+**2 回目以降、設定を変えて比べるときは `E-1` → `E-3` → `F` だけでよい。** `E-1` の `POLICY_ENV` か
+`CHUNK` を書き換えて流し直す。
+
+> **`[結果]` 行は 1 本ごとに Drive へ書いている**（E-3）。
+> **落ちても直前のエピソードまで残る**ので、`F` を待たずに済む。
+> 置き場は `MyDrive/parc2026/eval/live/` である。
 
 > `SUBMISSION_DIR` が未定義というエラーは、**D-2 を実行していない**（または
 > 古い版のままになっている）ことを意味する。`E-1` の末尾に `assert` を入れて
@@ -566,6 +574,54 @@ print("  重み:", sorted(p.name for p in weights_link.iterdir())[:4], "…")
 
 ## E. 評価を回す
 
+### E-0. 84 件を 3 つに割る（1 秒・初回のみ）
+
+**45 分の 1 本は Colab のセッション切断に耐えない。**
+8/11 に **56 件目で落ちて 40 分ぶんを失った。** 画面を触っていても切れる。
+
+**28 件・15 分ずつに割る。** 落ちてもその 15 分だけで済む。
+
+```python
+# === 84 件を 3 つに割る ===
+# **カテゴリは巡回順に並んでいる**（先頭 7 件が 7 カテゴリ）。だから
+# 続きの 28 行を取れば、どの塊にも 7 カテゴリが 4 件ずつ入る。
+import csv
+from pathlib import Path
+
+CHUNKS = 3
+source = Path("/content/VAL_TASKS.csv")
+rows = list(csv.reader(source.open(newline="")))
+header, body = rows[0], rows[1:]
+
+Path("/content/chunks").mkdir(exist_ok=True)
+size = -(-len(body) // CHUNKS)              # 切り上げ
+category = header.index("category")
+for index in range(CHUNKS):
+    part = body[index * size:(index + 1) * size]
+    path = Path(f"/content/chunks/VAL_{index + 1}.csv")
+    with path.open("w", newline="", encoding="utf-8") as sink:
+        writer = csv.writer(sink)
+        writer.writerow(header)
+        writer.writerows(part)
+    kinds = len({row[category] for row in part})
+    print(f"{path.name}: {len(part)} 件 / {kinds} カテゴリ")
+```
+
+**どの塊も 7 カテゴリを含んでいること**を確かめる。1 つでも欠けていたら
+並び順が巡回でなくなっているので、`--per-cell` を変えた CSV を使っていないか見る。
+
+**回し方。** `E-1` の `CHUNK` を **1 → 2 → 3** と変えて、
+毎回 `E-1` → `E-3` → `F` を通す。**`F` は塊ごとに Drive へ退避する。**
+
+| | |
+|---|---|
+| 1 つあたり | **28 件・約 15 分** |
+| 落ちたとき | **その塊だけやり直す** |
+| ジャークと SPARC | **塊ごとに出る。** 3 つの平均を件数で重み付けして使う |
+
+> **`CHUNK = None` なら 84 件を一度に回す。** GPU マシンのように
+> 切断が無い環境ではそちらでよい（ジャークも 1 つの値で出る）。
+
 ### E-1. 設定（先にこれを実行する）
 
 **以降のセルはすべてここで定義した変数を使う。** 診断も本番も、まずこれを流す。
@@ -590,6 +646,14 @@ PORT = 8000
 # **E-3 のセルを書き換えないこと** —— 消し忘れると 84 件のはずが 5 件のまま
 # 走り、前の回と比べられなくなる（45 分は戻らない）。
 MAX_TASKS = None            # 疎通確認は 5、本番は None
+
+# **84 件を 3 つに割って回す。** 45 分の 1 本は Colab のセッション切断に耐えない
+# （8/11 に 56 件目で落ちて 40 分ぶんを失った）。**1 つ 28 件・15 分**なら、
+# 落ちてもその 15 分だけで済む。
+#   E-0 で /content/chunks/VAL_1.csv 〜 VAL_3.csv を作ってから、
+#   CHUNK を 1 → 2 → 3 と変えて E-1 → E-3 → F を 3 回まわす。
+#   **None なら 84 件を一度に回す**（GPU マシンなど、切れない環境向け）。
+CHUNK = 1                   # 1〜3。None なら 84 件を一度に
 
 # 推論時のつまみ。**空にするのが正しい既定である。**
 # policy_server.py の既定は **n_action_steps=5 / ema_alpha=0.3** で、
@@ -643,6 +707,21 @@ if RECORD_DIR:
     eval_env["PARC_RECORD_WHICH"] = RECORD_WHICH
     # 上限。84 件で失敗が多いと本数が伸びるので、既定の 40 より広く取る。
     eval_env["PARC_RECORD_MAX"] = "60"
+
+# --- 小分けの切り替え（CSV とキットと出力先を対で入れ替える）---
+# **3 つが揃っていないと、別の 28 件の結果を同じ場所へ書いてしまう。**
+from pathlib import Path as _Path
+import shutil as _shutil
+
+if CHUNK:
+    chunk_csv = _Path(f"/content/chunks/VAL_{CHUNK}.csv")
+    assert chunk_csv.is_file(), f"{chunk_csv} が無い。E-0 を実行すること"
+    _shutil.copy(chunk_csv, _Path(KIT_DIR) / "compe/t1/T1_TASKS.csv")
+    RESULTS_DIR = f"/content/results/chunk{CHUNK}"
+    rows = sum(1 for _ in chunk_csv.open()) - 1
+    print(f"小分け {CHUNK}: {rows} 件（{chunk_csv}）→ {RESULTS_DIR}")
+else:
+    RESULTS_DIR = "/content/results"
 
 for name in ("KIT_DIR", "LEROBOT_SRC", "SUBMISSION_DIR", "SERVER", "WEIGHTS_DIR"):
     assert name in globals(), f"{name} が未定義です。セル A〜D を順に実行してください"
@@ -923,6 +1002,22 @@ for line in open("/content/server.log"):
 EVAL_LOG = Path(LOG_DIR) / f"eval_{time.strftime('%H%M%S')}.log"
 HEARTBEAT_SEC = 60          # 画面に心拍を出す間隔
 
+# **[結果] 行は 1 本ごとに Drive へ書く。** /content はランタイムが切れると
+# 消える。F の退避を待つと、落ちた回の 40 分ぶんが丸ごと失われる（8/11 に失った）。
+# 1 行ずつ flush するので、**落ちても直前のエピソードまで残る。**
+LIVE_LOG = None
+try:
+    if not Path("/content/drive/MyDrive").is_dir():
+        from google.colab import drive
+        drive.mount("/content/drive")
+    live_dir = Path("/content/drive/MyDrive/parc2026/eval/live")
+    live_dir.mkdir(parents=True, exist_ok=True)
+    LIVE_LOG = (live_dir / f"{time.strftime('%m%d_%H%M%S')}"
+                f"_chunk{CHUNK or 'all'}.results.txt").open("w", encoding="utf-8")
+    print(f"逐次退避: {LIVE_LOG.name}")
+except Exception as error:
+    print(f"**Drive へ逐次退避できない: {error}** 落ちたらこの回は失われる")
+
 started = time.time()
 done = collided = succeeded = 0
 last_beat = started
@@ -937,7 +1032,7 @@ try:
          # **疎通確認は E-1 の MAX_TASKS で切り替える。** ここを手で
          # 書き換えると消し忘れる（84 件のはずが 5 件のまま走る）。
          *(["--max-tasks", str(MAX_TASKS)] if MAX_TASKS else []),
-         "--output-dir", "/content/results"],
+         "--output-dir", RESULTS_DIR],
         # --verbose は付けない。root logger が DEBUG になり、urllib3 が
         # /act 1 回ごとに 1 行出すため数万行になる。エピソードごとの結果は
         # B-2 のパッチが logger.info で出すので、DEBUG に落とす必要が無い。
@@ -956,6 +1051,9 @@ try:
                 done += 1
                 collided += "衝突" in line
                 succeeded += "成功" in line
+                if LIVE_LOG is not None:
+                    LIVE_LOG.write(line)
+                    LIVE_LOG.flush()          # **落ちても直前まで残す**
                 print(f"[{time.time() - started:5.0f}s] {line.rstrip()[-110:]}")
                 last_beat = time.time()
             elif time.time() - last_beat >= HEARTBEAT_SEC:
@@ -966,6 +1064,8 @@ try:
     process.wait()
 finally:
     server.terminate()
+    if LIVE_LOG is not None:
+        LIVE_LOG.close()
 
 print(f"\n所要 {time.time() - started:.0f} 秒  終了コード {process.returncode}")
 
@@ -1078,7 +1178,7 @@ import json, math, re, shutil, time
 from collections import Counter
 from pathlib import Path
 
-RESULT_JSON = Path("/content/results/server_8000.json")
+RESULT_JSON = Path(f"{RESULTS_DIR}/server_8000.json")
 SERVER_LOG = Path("/content/server.log")
 logs = sorted(Path(LOG_DIR).glob("eval_*.log"), key=lambda p: p.stat().st_mtime)
 EVAL_LOG = logs[-1] if logs else None
