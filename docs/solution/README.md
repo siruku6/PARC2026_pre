@@ -26,7 +26,10 @@
 | `tools/collect_colab_files.py` | Colab へ上げるファイルを `work/colab_upload/` に集める |
 | `tools/export_claude_setup.sh` | Claude の方針と skill を別のマシンへ持ち出す（GPU マシン用） |
 | `tools/verify_merge.py` | マージ済みモデルを初期重みと比べ、**学習が反映されたか**を確かめる |
-| `tools/run_gpu_eval.sh` | **GPU マシンで検証用スイートを流す。** 放っておける（`--detach`） |
+| `tools/run_docker_eval.sh` | **GPU マシンで検証用スイートを流す（Docker 2 つ）。** 放っておける |
+| `tools/docker_eval_inside.sh` | 上が評価側コンテナの中で走らせる本体 |
+| `tools/fetch_base_weights.sh` | **素の重み（0.1409 の構成）を revision 固定で取り寄せる** |
+| `tools/run_gpu_eval.sh` | 同じことをホスト直で。**LeRobot 入りの venv がある場合だけ** |
 | `tools/summarize_gpu_eval.py` | 上の結果を集計する。件数・結末・カテゴリ別・衝突の偏り |
 | `tools/patch_kit_for_variants.py` | 配布キットを、変種で測れて結末と映像が残る状態に書き換える |
 | `tools/rollout_recorder.py` | ロールアウトを mp4 に撮る。**上のパッチがキットへ複製して使う** |

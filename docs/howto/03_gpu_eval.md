@@ -7,110 +7,136 @@ Colab には 3 つの困りごとがあった。**GPU マシンなら 3 つと�
 | 困りごと | GPU マシンでは |
 |---|---|
 | 見ていないと切れる（学習は 9,100 歩で切れた） | **切れない。** `--detach` で流して寝てよい |
-| `/content` は消えるので Drive へ逃がす仕掛けが要る | **消えない。** 退避漏れで結果を失う経路そのものが無い |
+| `/content` は消えるので Drive へ逃がす仕掛けが要る | **消えない。** 退避漏れで結果を失う経路が無い |
 | GPU が当たるかどうかが運次第 | 常にある |
-
-**しかも Colab より速い見込みである。** 描画も推論も同じ 1 台の GPU で動くため、
-HTTP は localhost で完結する。
 
 ## 使い方
 
-```bash
-# 1. まず 5 件だけ。5 分ほどで、配線が通っているかが分かる
-bash solution/tools/run_gpu_eval.sh --check
+**イメージを 2 つ並べて使う。どちらも作り直さない。**
 
-# 2. 通ったら 84 件。放っておける形で流す
-bash solution/tools/run_gpu_eval.sh --detach
+```bash
+# 1. まず 5 件だけ。5 分ほどで配線が通っているかが分かる
+bash solution/tools/run_docker_eval.sh --check
+
+# 2. 通ったら全件。放っておける形で流す
+bash solution/tools/run_docker_eval.sh --detach
 tail -f work/gpu_eval/launcher.log
 ```
 
-**初回は `setup.sh` に 10〜20 分かかる**（配布キットの clone とアセットの取得）。
-2 回目以降は作り直さない。
+事前に 2 つのイメージが要る。**学習に使ったものがそのまま使える。**
 
-終わると集計が出る。同じ内容が `summary.txt` に残る。
+```bash
+docker build -t parc2026-train solution/train   # 学習で作ってあるはず
+docker build -t parc2026 .                      # 配布キット
+```
+
+初回だけ `parc2026-train-server` を派生させる（**HTTP サーバーの依存 3 つを足すだけ**。
+下の「なぜ派生させるか」）。2 回目以降はキャッシュが効く。
+
+## 2 つの重みを比べる
+
+**本番スコア 0.1409 を出した重みは、こちらで学習したものではない。**
+`lerobot/smolvla_libero_plus@7bb70aa5` をそのまま使っていた
+（[01_base_model.md](../reference/01_base_model.md)）。**だから失われていない。**
+revision を固定して取り直せば同じものが手に入る。
+
+```bash
+# 素の重み（0.1409 の構成）を取り寄せる。869 MB
+bash solution/tools/fetch_base_weights.sh
+
+# 素の重みで測る
+WEIGHTS=work/artifacts/model_weights_base LABEL=base \
+    bash solution/tools/run_docker_eval.sh --detach
+
+# 学習後の重みで測る（終わってから）
+LABEL=lora15k bash solution/tools/run_docker_eval.sh --detach
+```
+
+**出力先の名前に `LABEL` が入る**ので、どちらの回か後から取り違えない。
 
 ```
-=== 件数 ===
-  結果 84 件 / タスク 84 / 宣言 84
-  **全部そろった。**
-
-=== 摂動カテゴリ別（弱い順）===
-  Background Textures      0.60  ( 12 本)  成功 7 未完了 4 衝突 1
-  ...
+work/gpu_eval/0811_143022_base_n5_ep1_max300/
+work/gpu_eval/0811_161500_lora15k_n5_ep1_max300/
 ```
+
+比べるのは 3 つである。
+
+| 見るもの | どこに出るか |
+|---|---|
+| **摂動カテゴリ別の成功率** | `summary.txt`。**どのカテゴリで負けたかが学習の的になる** |
+| 結末の内訳 | 同じ。**打ち切りに張り付いた本数**が増えていれば届いていない |
+| **失敗した回の映像** | `videos/`。`stalled` か `wandering` かで打つ手が変わる |
+
+```bash
+python3 solution/tools/summarize_rollout_videos.py work/gpu_eval/<回>/videos
+```
+
+> **同時に流さないこと。** どちらも GPU を使い、方策サーバーのコンテナ名が
+> 同じ（`parc-policy`）である。**片方が終わってから次を流す。**
 
 ## 設定
 
 | 変数 | 既定 | 意味 |
 |---|---|---|
-| `POLICY_PYTHON` | `.venv/bin/python` | **学習に使った venv。** GPU torch と LeRobot が要る |
+| `WEIGHTS` | `work/artifacts/model_weights` | **測る重み。** 比べるときはここを変える |
+| `LABEL` | （空） | 出力先の名前に足す語 |
 | `MAX_STEPS` | `300` | 本番と同じ打ち切り |
 | `N_EPISODES` | `1` | **タスクあたり**の本数。84 件あるので 1 のまま |
 | `PER_CELL` | `3` | スイート × カテゴリあたり。全体で 84 件になる |
 | `RECORD` | `1` | ロールアウトを mp4 に撮る。**失敗した回だけ** |
 | `PARC_*` | （空） | 推論のつまみ。空なら `policy_server.py` の既定が効く |
 
-つまみを変えて比べるときは、こう渡す。
+## なぜイメージが 2 つ要るのか
 
-```bash
-PARC_BLEND_STEPS=3 bash solution/tools/run_gpu_eval.sh --detach
+**評価側と方策側は依存が正面衝突する。** 1 つに混ぜられない。
+
+| | 必要なもの | イメージ |
+|---|---|---|
+| 評価パイプライン | `numpy==1.26.4` / `gym==0.25.2` / `robosuite==1.4.0` / CPU torch | `parc2026` |
+| 方策 | LeRobot v0.6.0 / **GPU torch** / transformers | `parc2026-train` |
+
+**本番採点も 2 プロセス構成である。** 同じ形をそのまま使う。
+Docker のネットワークを 1 つ作って繋ぐので、HTTP は
+コンテナ間で完結する。
+
+### なぜ学習イメージから派生させるか
+
+**`parc2026-train` には HTTP サーバーの依存が入っていない。**
+LeRobot が `fastapi` を宣言しているのは `phone` extra（遠隔操作用）だけで、
+`[training,smolvla,peft]` では入らない。`msgpack` と `uvicorn` も同様である。
+
+提出物の `requirements.txt` が 3 つを「必須」に挙げているのはこのためで、
+**採点環境では venv に入るが、学習イメージには無い。**
+
+いまは 1 行の派生で足している。
+
+```dockerfile
+FROM parc2026-train
+RUN pip install --no-cache-dir "fastapi>=0.68" "uvicorn>=0.15" "msgpack>=1.0"
 ```
 
-**出力先の名前は設定から作る**ので、後から見て取り違えない。
+> **学習用と評価用のイメージを分けるのは、それ自体は筋がよい。**
+> 学習イメージは `wandb` や `datasets` を抱えており、推論には要らない。
+> ただし**差は 3 パッケージしかない**ので、いまは派生で足りている。
+> 分けるなら [open_items.md](../talk/open_items.md) の 19 として置いた。
 
-```
-work/gpu_eval/0811_143022_n5_ep1_max300_ema03_blend3/
-├── eval.log          ← [結果] 行。ここから全部読める
-├── server.log        ← [parc] 行で版と実効設定が分かる
-├── server_8000.json  ← 指標の生値
-├── summary.txt       ← 集計（画面と同じ）
-└── videos/*.mp4      ← 失敗した回だけ
-```
+## EGL は当てにしない
 
-## Docker を使わない理由
-
-**配布 Dockerfile は CPU 描画（`MUJOCO_GL=osmesa`）で固定されている。**
-これだと 1 歩 300 ms かかり、**84 件が 16 時間になる。**
+**Colab で踏んだ罠である。** libglvnd は「どのベンダ実装を使うか」を
+`egl_vendor.d` の JSON で決める。NVIDIA の登録が無いと Mesa の
+ソフトウェア実装を掴み、**例外も警告も出さずに 8 倍近く遅くなる。**
 
 | 描画 | 1 歩 | 84 件（300 歩） |
 |---|---|---|
-| osmesa（Docker、CPU） | 300 ms | **16 時間** |
+| ソフトウェア（osmesa / Mesa） | 300 ms | **16 時間** |
 | **EGL（GPU）** | **39 ms** | **90 分** |
 
-ホストで直接回せば EGL が使える。**Docker は「3.10 互換の確認」のために
-残しておき、測定には使わない。**
+**2 つ手当てしている。**
 
-> **EGL が本当に GPU を掴んだかは、当てにしてはいけない。**
-> libglvnd は「どのベンダ実装を使うか」を `egl_vendor.d` の JSON で決める。
-> NVIDIA の登録が無いと Mesa のソフトウェア実装を掴み、
-> **例外も警告も出さずに 11 倍遅くなる**（Colab で実際に踏んだ）。
->
-> スクリプトは描画を 50 枚測り、**8 ms を超えたら警告を出す。**
-> 出たらこれを置いてから流し直すこと。
->
-> ```bash
-> sudo mkdir -p /usr/share/glvnd/egl_vendor.d
-> sudo tee /usr/share/glvnd/egl_vendor.d/10_nvidia.json >/dev/null <<'EOF'
-> {"file_format_version":"1.0.0","ICD":{"library_path":"libEGL_nvidia.so.0"}}
-> EOF
-> ```
-
-## 2 プロセス構成は変わらない
-
-**評価側と方策側は依存が正面衝突する。** これは実行場所に関係なく同じである。
-
-| | 必要なもの |
-|---|---|
-| 評価パイプライン | `numpy==1.26.4` / `gym==0.25.2` / `robosuite==1.4.0` / CPU torch |
-| 方策 | LeRobot v0.6.0 / **GPU torch** / transformers |
-
-キット側は `setup.sh` が作る `venv/`、方策側は学習に使った venv を使う。
-**`POLICY_PYTHON` で後者を指す。** HTTP は localhost で繋ぐので、
-本番と同じ形のまま速い。
-
-**`vendor/` は置かない。** 同梱版の LeRobot を読ませると、GPU torch の
-入った venv より古くなる。測りたいのは推論の中身であって 3.10 互換ではない
-（3.10 の確認は Docker 側で済んでいる）。
+- コンテナへ `NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics` を渡す。
+  **既定は `compute,utility` だけで、描画が落ちる。**
+- 中で**描画を 50 枚測り、8 ms を超えたら止める。**
+  90 分を無駄にしてから気づくことがない
 
 ## 集計が出すもの
 
@@ -118,7 +144,7 @@ work/gpu_eval/0811_143022_n5_ep1_max300_ema03_blend3/
 
 | 見出し | なぜ要るか |
 |---|---|
-| **件数** | **途中で落ちても終了コードは 0 になる。** 84 件そろったかを最初に見る |
+| **件数** | **途中で落ちても終了コードは 0 になる。** 全件そろったかを最初に見る |
 | 結末 | 成功 / 衝突 / 未完了。**ゴール到達後に衝突で落ちた本数**を分けて出す |
 | **摂動カテゴリ別** | **学習の的を決めるのはこの表。** 弱い順に並ぶ |
 | ぶつけた物体 | 偏りが出る。**同じ変位が 3 回以上出たら環境側の疑い**を警告する |
@@ -128,25 +154,17 @@ work/gpu_eval/0811_143022_n5_ep1_max300_ema03_blend3/
 `ketchup_1=544.6mm` が 1 mm も違わずに出ており、**方策の振る舞いではなく
 環境側で最初から動いていた。** 気づかないとカテゴリ別の数字を読み誤る。
 
-## 撮れた動画を見る
-
-```bash
-python3 solution/tools/summarize_rollout_videos.py work/gpu_eval/<回>/videos
-```
-
-**打ち切りに張り付いた回が先頭に来て**、1 本ずつ 8 コマの静止画になる。
-動画を再生する前に静止画で当たりを付けられる。
-
-映像には `stalled`（止まっている）か `wandering`（往復している）が焼かれる。
-**この区別で打つ手が変わる** — 止まっているなら停滞の検知、
-掴めていないなら学習側の話になる。
-
 ## 落ちたときに見る順番
 
 | 症状 | 見るところ |
 |---|---|
-| `[parc] 行が無い` | **古い `policy_server.py` を見ている。** `solution/` が正 |
-| サーバーが落ちた | `server.log` の末尾。重みのパスか GPU メモリ |
-| 描画が 8 ms を超える | `10_nvidia.json` を置く（上を参照） |
-| 件数が 84 に届かない | `summary.txt` の「例外で測れなかった回」 |
+| `torch か lerobot が入っていない` | **ホストの venv を見ている。** Docker 版（このページ）を使う |
+| `[parc] 行が無い` | 古い `policy_server.py` を見ている。`solution/` が正 |
+| 方策サーバーが落ちた | `docker logs parc-policy`。重みのパスか GPU メモリ |
+| 描画が 8 ms を超える | `--gpus all` と `NVIDIA_DRIVER_CAPABILITIES` |
+| 件数が足りない | `summary.txt` の「例外で測れなかった回」 |
 | 結果が 1 件も無い | `eval.log` の末尾。CSV の差し替えかパッチを疑う |
+
+> **ホストで直接回す道**（`run_gpu_eval.sh`）も残してある。
+> LeRobot と GPU torch の入った venv がホストにあるなら、そちらが速い。
+> **学習を Docker でやった場合はホストに venv が無いので、このページを使う。**

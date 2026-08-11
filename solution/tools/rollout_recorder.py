@@ -1,14 +1,24 @@
-"""ロールアウトを mp4 に撮る。**採点ハーネス側に差し込んで使う。**
+"""1 エピソードの動きを、mp4 と 1 行の要約に残す。**採点ハーネス側に差し込んで使う。**
 
 本番の 8 本中 4 本が、2 回とも 300 歩を使い切ってゴールに届いていない。
 **止まっているのか、往復しているのか、掴めずに空振りしているのか——
 成功率と衝突率では区別できない。** それを見るために撮る。
 
-配布キットの `pipeline/rollout.py` の 3 か所へ
+**映像と `[結果]` 行の両方をここで作る。** 動きの判定（`静止` / `往復`）に使う
+閾値が 1 か所で済むからである。映像は既定で失敗した回・最大 40 本までしか
+残らないので、**84 件すべての動きはログでしか分からない。** 2 つに分けて
+書くと、判定の基準が食い違ったまま気づけない。
+
+配布キットの `pipeline/rollout.py` の数か所へ
 [patch_kit_for_variants.py](patch_kit_for_variants.py) が呼び出しを差し込み、
 このファイル自身を `<kit>/pipeline/rollout_recorder.py` へ複製する。
 **提出物（`solution/policy_server.py`）には一切手を入れない。** 採点環境は
 ファイルを返さないので、提出物側に入れても映像は持ち帰れない。
+
+**numpy が無くても読み込める。** `measure_motion` と `format_result_line` は
+標準ライブラリだけで書いてあり、numpy と cv2 は使う関数の中で import する。
+手元（numpy を入れていない環境）でも `[結果]` 行の書式を試験できる
+（[tests/test_rollout_report_line.py](../../tests/test_rollout_report_line.py)）。
 
 環境変数で切り替える。**`PARC_RECORD_DIR` が空なら完全に無効**で、
 `add()` は即座に返る。
@@ -44,16 +54,16 @@ Reads:
   - 採点ハーネスが渡す観測（`agentview_image` / `robot0_eye_in_hand_image`）
 Generates:
   - <PARC_RECORD_DIR>/<結末>_<タスク名>_ep<N>_<歩数>steps.mp4
+  - `[結果]` 行の文字列（書き出しは呼び出し側の logger）
 """
 
 from __future__ import annotations
 
 import logging
+import math
 import os
 from pathlib import Path
 from typing import Any
-
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +121,160 @@ _MOTION_LABELS: dict[str, str] = {
 }
 
 
+def _gripper_command(signal: Any) -> float:
+    """1 歩ぶんの行動から、グリッパへの指令を取り出す。
+
+    **行動ベクトルでも float でも受ける。** 映像側は貯める段で float に
+    してしまっており、`[結果]` 行側は行動ベクトルをそのまま持っている。
+    どちらからも同じ関数を通せるようにしておく。
+
+    LIBERO の行動は 7 次元（並進 3・回転 3・グリッパ 1）で、**グリッパは
+    最後の要素**である。指令は ±1 のバンバン制御なので、符号だけを見る。
+    """
+    try:
+        return float(signal[-1])
+    except (TypeError, IndexError, KeyError):
+        return float(signal)
+
+
+def _distance(start: Any, end: Any) -> float:
+    """3 次元の 2 点間の距離。**numpy を使わない。**"""
+    return math.sqrt(
+        sum((float(end[axis]) - float(start[axis])) ** 2 for axis in range(3))
+    )
+
+
+def measure_motion(
+    eef_positions: list[Any], gripper_signals: list[Any]
+) -> dict[str, Any]:
+    """手先の動きを数え、失敗の型を表すラベルを付ける。
+
+    **経路長と変位を並べると、失敗の型が分かれる。**
+
+    | 経路長 | 変位 | 読み方 | ラベル |
+    |---|---|---|---|
+    | 小 | 小 | その場で止まっている | `静止` |
+    | 大 | 小 | 往復している・空振りしている | `往復` |
+    | 大 | 大 | 動いてはいるが目標に届いていない | なし |
+
+    **「大きく往復」を落とさないため、比も見る。** 変位が上限を超えていても、
+    経路長がその 8 倍以上なら行って戻っただけである（実測で 2.37 m / 0.03 m
+    という回が絶対値の網だけでは漏れた）。
+
+    Parameters
+    ----------
+    eef_positions : list
+        手先の位置の列。要素は長さ 3 で添字が引ければよい（numpy 配列・tuple）。
+    gripper_signals : list
+        各歩の行動ベクトルか、グリッパ指令の float の列。
+
+    Returns
+    -------
+    motion : dict
+        `path_m` / `displacement_m` / `grip_changes` / `note` を持つ辞書。
+        `note` は `静止` `往復` または空文字列。
+        **2 歩未満なら空の辞書**（何も言えないので、呼び出し側で省く）。
+    """
+    if len(eef_positions) < 2:
+        return {}
+
+    path_length = sum(
+        _distance(start, end)
+        for start, end in zip(eef_positions, eef_positions[1:])
+    )
+    displacement = _distance(eef_positions[0], eef_positions[-1])
+
+    grips = [_gripper_command(signal) for signal in gripper_signals]
+    grip_changes = sum(
+        1 for before, after in zip(grips, grips[1:]) if (before > 0) != (after > 0)
+    )
+
+    note = ""
+    if displacement < _STALL_DISPLACEMENT_M:
+        note = "往復" if path_length > _WANDER_PATH_M else "静止"
+    elif path_length > _WANDER_PATH_RATIO * displacement:
+        note = "往復"
+
+    return {
+        "path_m": path_length,
+        "displacement_m": displacement,
+        "grip_changes": grip_changes,
+        "note": note,
+    }
+
+
+def format_result_line(
+    task_name: str,
+    episode_id: int,
+    total_steps: int,
+    goal_reached: bool,
+    eef_positions: list[Any],
+    gripper_signals: list[Any],
+    first_collision_step: int | None,
+    offenders: dict[str, float],
+) -> str:
+    """1 エピソードの結末を 1 行にまとめる。
+
+    **`ゴール` を結末と別に出す。** 採点の成功は「LIBERO の成功条件を
+    満たし、**かつ**対象外の物体を 1 mm 超動かしていない」ことなので
+    （[pipeline/rollout.py](../../pipeline/rollout.py) の `success = bool(done)
+    and not collided`）、成功率だけを見ると
+    **「課題ができない」のと「できたが物にぶつけた」の区別が付かない。**
+    前者は視覚と到達の話、後者は軌道の話で、**打つ手が正反対になる。**
+
+    **経路長と変位も全件に出す。** 映像は既定で失敗した回・最大 40 本までしか
+    残らないので、84 件すべての「止まっているか往復しているか」はここでしか
+    分からない。
+
+    Parameters
+    ----------
+    task_name, episode_id, total_steps
+        そのまま書き出す。
+    goal_reached : bool
+        LIBERO の成功条件を満たしたか（`env.step` の `done`）。
+    eef_positions, gripper_signals
+        `measure_motion` に渡すもの。
+    first_collision_step : int | None
+        初めて 1 mm を超えた歩。衝突していなければ None。
+    offenders : dict[str, float]
+        ぶつけた物体 → 動いた距離（m）。衝突していなければ空。
+
+    Returns
+    -------
+    line : str
+        `[結果] <タスク> ep<N>: <結末> <歩数> steps  ゴール 到達  経路 …` の 1 行。
+        **先頭の書式は変えない。** [summarize_gpu_eval.py](summarize_gpu_eval.py) と
+        [summarize_smoke_test.py](summarize_smoke_test.py) が読む。
+    """
+    outcome = "成功" if (goal_reached and not offenders) else (
+        "衝突" if offenders else "未完了"
+    )
+
+    notes = [f"ゴール {'到達' if goal_reached else '未達'}"]
+
+    motion = measure_motion(eef_positions, gripper_signals)
+    if motion:
+        notes.append(f"経路 {motion['path_m']:.2f}m")
+        notes.append(f"変位 {motion['displacement_m']:.2f}m")
+        notes.append(f"握り x{motion['grip_changes']}")
+        if motion["note"]:
+            notes.append(str(motion["note"]))
+
+    if first_collision_step is not None:
+        notes.append(f"初衝突 {first_collision_step} 歩")
+
+    if offenders:
+        notes.append("ぶつけた物体: " + ", ".join(
+            f"{name}={value * 1000:.1f}mm"
+            for name, value in sorted(offenders.items(), key=lambda pair: -pair[1])
+        ))
+
+    return (
+        f"[結果] {task_name} ep{episode_id}: {outcome} {total_steps} steps  "
+        + "  ".join(notes)
+    )
+
+
 def _is_enabled() -> bool:
     return bool(os.environ.get("PARC_RECORD_DIR", "").strip())
 
@@ -130,29 +294,32 @@ class _Recorder:
         self._task_name = task_name
         self._episode_id = episode_id
         self._output_dir = output_dir
-        self._frames: list[np.ndarray] = []
-        self._eef_positions: list[np.ndarray] = []
+        self._frames: list[Any] = []
+        self._eef_positions: list[tuple[float, ...]] = []
         self._gripper_actions: list[float] = []
         self._camera_labels: list[str] = [label for _key, label in _CAMERAS]
 
-    def add(self, obs: dict[str, np.ndarray], action: np.ndarray) -> None:
+    def add(self, obs: dict[str, Any], action: Any) -> None:
         """1 ステップ分のフレームを貯める。**例外を外へ出さない。**"""
         try:
             self._frames.append(self._compose(obs))
+            position = obs.get("robot0_eef_pos")
             self._eef_positions.append(
-                np.asarray(obs.get("robot0_eef_pos", np.zeros(3)), dtype=np.float64).copy()
+                (0.0, 0.0, 0.0) if position is None
+                else tuple(float(value) for value in position)
             )
-            self._gripper_actions.append(float(np.asarray(action).reshape(-1)[6]))
+            self._gripper_actions.append(_gripper_command(action))
         except Exception as error:                       # noqa: BLE001
             _disable(f"フレームの作成に失敗した: {error}")
 
-    def _compose(self, obs: dict[str, np.ndarray]) -> np.ndarray:
+    def _compose(self, obs: dict[str, Any]) -> Any:
         """2 つのカメラを横に並べ、等倍の 1 フレームを作る。
 
         **拡大も文字入れもここではやらない。** 300 歩ぶんをメモリに持つので、
         貯める段では 128 px のままにしておく。
         """
         import cv2
+        import numpy as np
 
         panels = []
         # **実際に入っていたカメラだけ**を覚える。片方が欠けた観測でも、
@@ -297,37 +464,20 @@ class _Recorder:
         return annotated
 
     def _motion_summary(self) -> str:
-        """手先の動きを 1 行にまとめる。
+        """手先の動きを、映像に焼く 1 行にする。
 
-        **経路長と変位を並べると、失敗の型が分かれる。**
-
-        | 経路長 | 変位 | 読み方 | ラベル |
-        |---|---|---|---|
-        | 小 | 小 | その場で止まっている | `stalled` |
-        | 大 | 小 | 往復している・空振りしている | `wandering` |
-        | 大 | 大 | 動いてはいるが目標に届いていない | なし |
-
-        **「大きく往復」を落とさないため、比も見る。** 変位が上限を超えていても、
-        経路長がその 8 倍以上なら行って戻っただけである（実測で 2.37 m / 0.03 m
-        という回が絶対値の網だけでは漏れた）。
+        **数え方は `measure_motion` に置いてある。** `[結果]` 行と同じ関数を
+        通すことで、映像のラベルとログのラベルが食い違わないようにする。
+        ここでやるのは**日本語のラベルを ASCII に直すこと**だけである
+        （キットが固定している opencv 4.11 の `putText` は日本語を `?` にする）。
         """
-        if len(self._eef_positions) < 2:
+        motion = measure_motion(self._eef_positions, self._gripper_actions)
+        if not motion:
             return ""
-        track = np.asarray(self._eef_positions)
-        path_length = float(np.linalg.norm(np.diff(track, axis=0), axis=1).sum())
-        displacement = float(np.linalg.norm(track[-1] - track[0]))
-        grips = sum(
-            1 for a, b in zip(self._gripper_actions, self._gripper_actions[1:])
-            if (a > 0) != (b > 0)
-        )
-        note = ""
-        if displacement < _STALL_DISPLACEMENT_M:
-            note = "往復" if path_length > _WANDER_PATH_M else "静止"
-        elif path_length > _WANDER_PATH_RATIO * displacement:
-            note = "往復"
         return (
-            f"path {path_length:.2f}m  disp {displacement:.2f}m  grip x{grips}"
-            + _MOTION_LABELS.get(note, "")
+            f"path {motion['path_m']:.2f}m  disp {motion['displacement_m']:.2f}m"
+            f"  grip x{motion['grip_changes']}"
+            + _MOTION_LABELS.get(str(motion["note"]), "")
         )
 
 
