@@ -143,6 +143,31 @@ def test_motion_label_survives_the_round_trip(tmp_path: Path) -> None:
     assert episode["offenders"] == {}
 
 
+def test_file_name_keeps_the_variant_suffix() -> None:
+    """録画のファイル名から変種名が消えない。**8/11 に 23 本が不明になった。**
+
+    以前は前から 70 字で切っていたが、**変種名は末尾に付く**ので長いタスク名では
+    消えていた。見た目の振れ幅を数える材料が 35 本中 12 本しか残らなかった
+    （`docs/reference/08_appearance_spread.md`）。
+    """
+    long_names = (
+        "KITCHEN_SCENE3_turn_on_the_stove_and_put_the_moka_pot_on_it"
+        "_view_0_0_100_6_10_initstate_0",
+        "STUDY_SCENE1_pick_up_the_book_and_place_it_in_the_back_compartment"
+        "_of_the_caddy_tb_2",
+        "LIVING_ROOM_SCENE1_put_both_the_alphabet_soup_and_the_cream_cheese_box"
+        "_in_the_basket_light_9",
+    )
+    for name in long_names:
+        shortened = recorder._shorten_task_name(name)
+        assert len(shortened) <= 70
+        # 末尾の変種名がそのまま残っていること。
+        assert shortened.endswith(name[-12:])
+
+    # 上限より短ければ何もしない。
+    assert recorder._shorten_task_name("task_tb_6") == "task_tb_6"
+
+
 def test_froze_label_is_counted(tmp_path: Path) -> None:
     """`固まった` が数えられる。**8/11 に正規表現から漏れていた。**
 

@@ -311,6 +311,46 @@ def format_result_line(
     )
 
 
+def _shorten_task_name(task_name: str, limit: int = 70) -> str:
+    """ファイル名に使えるよう短くする。**変種名（末尾）は必ず残す。**
+
+    以前は `task_name[:70]` と前から切っていた。**変種名は末尾に付く**ので、
+    長いタスク名では `_light_24` や `_tb_6` が消えてしまう。
+    8/11 の 35 本のうち **23 本が変種不明**になり、
+    見た目の振れ幅を数える材料が 12 本しか残らなかった
+    （`docs/reference/08_appearance_spread.md`）。
+
+    **だから中央を落として両端を残す。** 前半で場面（`KITCHEN_SCENE3` など）、
+    後半で変種（`_view_0_0_100_6_10_initstate_0` など）が読める。
+
+    Parameters
+    ----------
+    task_name : str
+        変種名まで含むタスク名。
+    limit : int
+        使う文字数の上限。
+
+    Returns
+    -------
+    shortened : str
+        `limit` 文字以内。切ったときは中央に `--` が入る。
+
+    Examples
+    --------
+    >>> _shorten_task_name("abc", 70)
+    'abc'
+    >>> _shorten_task_name("A" * 40 + "_light_24", 30)
+    'AAAAAAAAAAAA--AAAA_light_24'
+    """
+    if len(task_name) <= limit:
+        return task_name
+
+    # 末尾を優先して残す。変種名は最長でも 30 字ほど（`_view_0_0_100_6_10_initstate_0`）。
+    tail = (limit - 2) * 2 // 3
+    head = limit - 2 - tail
+    return f"{task_name[:head]}--{task_name[-tail:]}"
+
+
 def _is_enabled() -> bool:
     return bool(os.environ.get("PARC_RECORD_DIR", "").strip())
 
@@ -423,7 +463,7 @@ class _Recorder:
 
         self._output_dir.mkdir(parents=True, exist_ok=True)
         path = self._output_dir / (
-            f"{outcome}_{self._task_name[:70]}"
+            f"{outcome}_{_shorten_task_name(self._task_name)}"
             f"_ep{self._episode_id}_{len(self._frames)}steps.mp4"
         )
 
