@@ -29,7 +29,7 @@ export PYTHONPATH="$KIT/LIBERO-plus:$KIT:$KIT/compe"
 
 # ---------------------------------------------------------------- 描画
 
-echo "[3/5] GPU 描画（EGL）が本当に効いているかを測る"
+echo "[3/5] 描画のやり方と速さを確かめる（MUJOCO_GL=$MUJOCO_GL）"
 # **当てにしてはいけない。** libglvnd は egl_vendor.d の JSON でベンダを選ぶ。
 # NVIDIA の登録が無いと Mesa のソフトウェア実装を掴み、**例外も警告も
 # 出さずに 8 倍近く遅くなる**（Colab で実際に踏んだ）。
@@ -43,7 +43,9 @@ fi
 
 "$PY" - <<'PY'
 import os, time
-os.environ.setdefault("MUJOCO_GL", "egl")
+# **`setdefault` にしない。** 呼び出し側が osmesa を指定しているのに
+# egl だと思い込んで「GPU で動いている」と出していた（8/11 に踏んだ）。
+backend = os.environ.get("MUJOCO_GL", "(未設定)")
 import mujoco
 model = mujoco.MjModel.from_xml_string(
     "<mujoco><worldbody><geom type='sphere' size='.1'/></worldbody></mujoco>"
@@ -55,12 +57,20 @@ start = time.time()
 for _ in range(50):
     renderer.update_scene(data); renderer.render()
 per_frame_ms = (time.time() - start) / 50 * 1000
-print(f"  1 枚 {per_frame_ms:.1f} ms")
-if per_frame_ms > 8.0:
-    print("  **遅い。ソフトウェア描画に落ちている。**")
-    print("  --gpus all と NVIDIA_DRIVER_CAPABILITIES に graphics が要る。")
+print(f"  描画は {backend} / 空の場面を 1 枚 {per_frame_ms:.1f} ms")
+
+# **この測定は「本当の場面が描けること」を保証しない。**
+# 球 1 個の空の場面である。8/11 に egl でここが 0.2 ms を出したのに、
+# LIBERO の場面を描く最初の数歩で止まった（H100-20C は vGPU で、
+# 構成によって描画が許可されていない）。**通ったことを根拠にしない。**
+if backend == "egl":
+    print("  注意: これは球 1 個の場面である。**本当の場面で止まることがある。**")
+    print("        最初のタスクで [進捗] が出なければ MUJOCO_GL=osmesa へ落とす。")
+elif backend == "osmesa":
+    print("  CPU 描画。1 歩あたり 384 ms（実測）。84 件で 2〜3 時間かかる")
+if per_frame_ms > 50.0:
+    print("  **空の場面でこれは遅すぎる。** 描画そのものが壊れている")
     raise SystemExit(1)
-print("  GPU 描画で動いている")
 # **ここより下に出る EGL の行は、python が終わるときの後片付けである。**
 # 握りつぶさない。この環境に何を足したかはこちらから見えないので、
 # **本当の不具合を隠す side を選ばない。** 見分けが付くように印だけ置く。
