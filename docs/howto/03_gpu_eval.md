@@ -44,7 +44,7 @@ revision を固定して取り直せば同じものが手に入る。
 # 素の重み（0.1409 の構成）を取り寄せる。869 MB
 bash solution/tools/fetch_base_weights.sh
 
-# 素の重みで測る（2〜3 時間）
+# 素の重みで評価する（2〜3 時間）
 MUJOCO_GL=osmesa WEIGHTS=work/artifacts/model_weights_base LABEL=base \
     bash solution/tools/run_docker_eval.sh --detach
 
@@ -84,8 +84,34 @@ python3 solution/tools/summarize_rollout_videos.py work/gpu_eval/<回>/videos
 | `MAX_STEPS` | `300` | 本番と同じ打ち切り |
 | `N_EPISODES` | `1` | **タスクあたり**の本数。84 件あるので 1 のまま |
 | `PER_CELL` | `3` | スイート × カテゴリあたり。全体で 84 件になる |
+| `CATEGORIES` | （空） | 測る摂動カテゴリ。**空なら 7 つ全部＝84 件。** 下を見る |
 | `RECORD` | `1` | ロールアウトを mp4 に撮る。**失敗した回だけ** |
 | `PARC_*` | （空） | 推論のつまみ。空なら `policy_server.py` の既定が効く |
+
+### カテゴリを絞って短く回す
+
+**1 カテゴリが 12 件である**（`--per-cell 3` × スイート 4 つ。生成器を回して
+数えた値で、7 つ全部だと 84 件になる）。**件数がそのまま時間になる。**
+
+```bash
+CATEGORIES='Light Conditions,Background Textures' \
+    bash solution/tools/run_docker_eval.sh   # 84 件 2 時間 21 分 → 24 件 39 分
+```
+
+時間はどちらも実測である。**カテゴリごとの内訳**は下の
+「描画は osmesa を使う」の節に表で置いた。
+**絞る組み合わせを変えるときは、そこの分数を足す。**
+
+**区切りは読点である。空白では切れない。** `Light Conditions` のように
+名前そのものに空白が入っているためで、空白で並べると
+「そんなカテゴリは無い」と言ってその場で止まる（黙って件数が減ることはない）。
+
+使える名前は 7 つ。`make_validation_suite.py` の `_DEFAULT_CATEGORIES` にある。
+
+`Background Textures`（机や壁の見た目）・`Camera Viewpoints`（カメラの位置と向き）・
+`Language Instructions`（指示文の言い換え）・`Light Conditions`（照明）・
+`Objects Layout`（物体の配置と種類）・`Robot Initial States`（ロボットの初期姿勢）・
+`Sensor Noise`（観測ノイズ）
 
 ## なぜイメージが 2 つ要るのか
 
@@ -160,15 +186,50 @@ MUJOCO_GL=osmesa bash solution/tools/run_docker_eval.sh --check
 170 ms ほどが推論（`850 ms / n=5`）、残りが描画である。
 
 **速くする手はスイートを絞ることだけになった。**
-1 タスクが 300 歩 × 384 ms = 約 2 分なので、件数がそのまま時間になる。
+**件数がそのまま時間になる。** 下は見積もりではなく、84 件を 1 回流した
+ログから測った値である（下の「かかった時間を自分で測る」でやり方を出す）。
 
-| スイート | 件数 | 時間 |
-|---|---|---|
-| 7 カテゴリ | 84 | 2.7 時間 |
-| 本命 2 カテゴリ | **36** | **1.2 時間** |
+| スイート | 件数 | 実測 | 指定 |
+|---|---|---|---|
+| 7 カテゴリ | 84 | **2 時間 21 分** | `CATEGORIES` を空のまま |
+| 本命 2 カテゴリ | **24** | **39 分** | `CATEGORIES='Light Conditions,Background Textures'` |
+| 先頭 5 件（`--check`） | 5 | 10 分 | `--check` |
+
+**1 件あたり 1.67 分。カテゴリによって 1.2〜2.1 分の幅がある。**
+**打ち切りに当たった回が長い**（84 件のうち 38 件が 300 歩まで走った。
+成功した 40 件は中央 152 歩で終わっている）。絞ったときの時間は下の表で足す。
+
+| カテゴリ | 件数 | 合計 | 1 件 | 歩数の中央 |
+|---|---|---|---|---|
+| `Language Instructions` | 12 | 25.0 分 | 2.09 分 | 300 |
+| `Light Conditions` | 12 | 22.6 分 | 1.88 分 | 140 |
+| `Robot Initial States` | 12 | 20.9 分 | 1.74 分 | 300 |
+| `Objects Layout` | 12 | 20.6 分 | 1.71 分 | 300 |
+| `Sensor Noise` | 12 | 19.1 分 | 1.59 分 | 208 |
+| `Background Textures` | 12 | 16.5 分 | 1.38 分 | 200 |
+| `Camera Viewpoints` | 12 | 14.6 分 | 1.22 分 | 157 |
+
+> **出典は `outputs/0811_101824_base_n5_ep1_max300/` の `eval.log`**
+> （素の重み・84 件・`MAX_STEPS=300`）。`=== タスク` 行と `[結果]` 行の
+> 時刻の差を取り、隣の `VAL_TASKS.csv` の `category` 列で束ねた。
+> **重みが変われば時間も変わる**（打ち切りに当たる本数が変わるため）。
+>
+> **件数は生成器を回して数えた**（`--per-cell 3` で 1 カテゴリ 12 件）。
+> **前に「2 カテゴリ＝36 件」と書いてあったのは誤りである。**
 
 **`MAX_STEPS` は 300 のまま動かさないこと**（本番と同じ値である）。
 詳しくは [open_items.md](../talk/open_items.md) の 29。
+
+### かかった時間を自分で測る
+
+```bash
+run=outputs/0811_101824_base_n5_ep1_max300      # 自分の回に読み替える
+grep '\[結果\]' "$run/eval.log" | sed -n '1p;$p' | cut -c1-19
+```
+
+**最初の `[結果]` ではなく最初の `=== タスク` から数えること。**
+1 件目の所要（約 2 分）が抜け落ちる。**方策サーバーが重みを読む 1〜2 分は
+この外側である**（`server.log` を見る）。
 
 ## 集計が出すもの
 
