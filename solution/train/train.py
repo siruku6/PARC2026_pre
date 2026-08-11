@@ -47,7 +47,12 @@ Reads:
   - lerobot/libero_plus（HF、学習データ。**全部使うと 16 GB 前後**）
 Generates:
   - $OUTPUT_ROOT/<run-name>/checkpoints/**（チェックポイント）
-  - $OUTPUT_ROOT/<run-name>/episodes.json（使ったエピソードの記録）
+  - $OUTPUT_ROOT/<run-name>_episodes.json（使ったエピソードの記録）
+  - $OUTPUT_ROOT/<run-name>/episodes.json（学習が始まったあとに上の複製を置く）
+
+**記録を出力先の外へ先に書くのは、LeRobot が既存のディレクトリを拒否するためである**
+（`configs/train.py` の `validate` が `not resume and output_dir.is_dir()` で
+`FileExistsError` を投げる。**空でも拒否する。**）
 """
 
 from __future__ import annotations
@@ -55,6 +60,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -357,7 +363,10 @@ def _select_emphasized_episodes(
           f"（割合 {share_now:.1%} → {weak_frames / chosen_frames:.1%}）")
     print(f"[train]   得意タスクは {keep_ratio:.0%} に間引いた")
     print(f"[train]   選んだのは {len(selected):,} 本 / {chosen_frames:,} フレーム")
-    print(f"[train]   **1 コマを見る回数 {draws / chosen_frames:.2f} 回**"
+    # **引く回数も出す。** `--steps 1` の下見だと 0.00 回になり、
+    # 「選び方が壊れている」と読み違える。分子を見せれば理由が分かる。
+    print(f"[train]   引く回数 {draws:,} 回 / {chosen_frames:,} フレーム"
+          f" = **1 コマを見る回数 {draws / chosen_frames:.2f} 回**"
           "（4 回目の提出は 5.1 回で本番 8.8 倍悪化）")
     print(f"[train]   選んだ分の明るさ {min(chosen_brightness):.3f} 〜 "
           f"{max(chosen_brightness):.3f}")
@@ -553,7 +562,21 @@ def _build_command(
 def main() -> None:
     args = _parse_args()
     output_dir: Path = (args.output_root / args.run_name).resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # **出発点から作るときは、出力先を先に作ってはいけない。**
+    # LeRobot は `not resume and output_dir.is_dir()` で FileExistsError を投げる
+    # （`configs/train.py` の `validate`）。**空のディレクトリでも拒否する。**
+    # 記録（`episodes.json`）は隣へ書き、学習が始まってから中へ写す。
+    if args.resume:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    elif output_dir.is_dir():
+        raise SystemExit(
+            f"[train] 出力先が既にある: {output_dir}\n"
+            "  LeRobot は既存のディレクトリへ上書きしない。次のどれかを選ぶこと:\n"
+            f"    --run-name を変える / rm -rf {output_dir} / --resume で続ける"
+        )
+    else:
+        output_dir.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"[train] GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'なし'}")
     _patch_dtype_for_gpu()
@@ -608,8 +631,12 @@ def main() -> None:
 
         # **レポートの申告項目になるので必ず残す**（タスク数・エピソード数）。
         # マージの出力に `train_config.json` は入らないため、ここが唯一の記録になる。
-        (output_dir / "episodes.json").write_text(
-            json.dumps(record), encoding="utf-8")
+        #
+        # **出力先の中へは書けない。** 存在すると LeRobot が学習を始めない。
+        # だから隣へ書き、学習が始まって出力先ができてから写す（下）。
+        record_path = output_dir.with_name(output_dir.name + "_episodes.json")
+        record_path.write_text(json.dumps(record), encoding="utf-8")
+        print(f"[train] 使うエピソードの記録: {record_path}")
 
         command = _build_command(args, base_model, episode_indices, output_dir)
         print(f"[train] 学習を開始（{args.steps} ステップ、batch {args.batch_size}、"
@@ -617,6 +644,14 @@ def main() -> None:
               f"画像拡張 {'有効' if args.image_transforms else '無効'}）")
 
     process = subprocess.run(command)
+
+    # **記録を出力先の中へ写す。** 隣に置いたままだと、チェックポイントを
+    # 別のマシンへ運んだときに一緒に付いてこない。
+    if not args.resume:
+        record_path = output_dir.with_name(output_dir.name + "_episodes.json")
+        if record_path.is_file() and output_dir.is_dir():
+            shutil.copy2(record_path, output_dir / "episodes.json")
+
     sys.exit(process.returncode)
 
 
