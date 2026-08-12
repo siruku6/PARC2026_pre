@@ -1,0 +1,282 @@
+{
+  "open the middle drawer of the cabinet": {
+    "episodes": 370,
+    "max": 196,
+    "mean": 139.5,
+    "median": 138,
+    "p90": 158
+  },
+  "open the top drawer and put the bowl inside": {
+    "episodes": 200,
+    "max": 299,
+    "mean": 206.6,
+    "median": 198,
+    "p90": 284
+  },
+  "pick up the alphabet soup and place it in the basket": {
+    "episodes": 380,
+    "max": 195,
+    "mean": 155.6,
+    "median": 153,
+    "p90": 176
+  },
+  "pick up the bbq sauce and place it in the basket": {
+    "episodes": 405,
+    "max": 221,
+    "mean": 145.2,
+    "median": 135,
+    "p90": 170
+  },
+  "pick up the black bowl between the plate and the ramekin and place it on the plate": {
+    "episodes": 375,
+    "max": 151,
+    "mean": 98.3,
+    "median": 92,
+    "p90": 127
+  },
+  "pick up the black bowl from table center and place it on the plate": {
+    "episodes": 385,
+    "max": 143,
+    "mean": 116.5,
+    "median": 115,
+    "p90": 131
+  },
+  "pick up the black bowl in the top drawer of the wooden cabinet and place it on the plate": {
+    "episodes": 390,
+    "max": 190,
+    "mean": 150.8,
+    "median": 150,
+    "p90": 170
+  },
+  "pick up the black bowl next to the cookie box and place it on the plate": {
+    "episodes": 445,
+    "max": 157,
+    "mean": 125.3,
+    "median": 124,
+    "p90": 141
+  },
+  "pick up the black bowl next to the plate and place it on the plate": {
+    "episodes": 445,
+    "max": 173,
+    "mean": 118.0,
+    "median": 114,
+    "p90": 140
+  },
+  "pick up the black bowl next to the ramekin and place it on the plate": {
+    "episodes": 380,
+    "max": 189,
+    "mean": 131.6,
+    "median": 129,
+    "p90": 152
+  },
+  "pick up the black bowl on the cookie box and place it on the plate": {
+    "episodes": 385,
+    "max": 129,
+    "mean": 100.2,
+    "median": 98,
+    "p90": 113
+  },
+  "pick up the black bowl on the ramekin and place it on the plate": {
+    "episodes": 295,
+    "max": 154,
+    "mean": 115.2,
+    "median": 116,
+    "p90": 137
+  },
+  "pick up the black bowl on the stove and place it on the plate": {
+    "episodes": 255,
+    "max": 191,
+    "mean": 137.8,
+    "median": 136,
+    "p90": 148
+  },
+  "pick up the black bowl on the wooden cabinet and place it on the plate": {
+    "episodes": 395,
+    "max": 193,
+    "mean": 139.1,
+    "median": 136,
+    "p90": 164
+  },
+  "pick up the book and place it in the back compartment of the caddy": {
+    "episodes": 255,
+    "max": 259,
+    "mean": 187.8,
+    "median": 182,
+    "p90": 216
+  },
+  "pick up the butter and place it in the basket": {
+    "episodes": 405,
+    "max": 207,
+    "mean": 157.8,
+    "median": 154,
+    "p90": 173
+  },
+  "pick up the chocolate pudding and place it in the basket": {
+    "episodes": 500,
+    "max": 224,
+    "mean": 159.3,
+    "median": 158,
+    "p90": 168
+  },
+  "pick up the cream cheese and place it in the basket": {
+    "episodes": 400,
+    "max": 187,
+    "mean": 141.7,
+    "median": 138,
+    "p90": 171
+  },
+  "pick up the ketchup and place it in the basket": {
+    "episodes": 405,
+    "max": 219,
+    "mean": 154.1,
+    "median": 150,
+    "p90": 164
+  },
+  "pick up the milk and place it in the basket": {
+    "episodes": 395,
+    "max": 196,
+    "mean": 143.8,
+    "median": 141,
+    "p90": 168
+  },
+  "pick up the orange juice and place it in the basket": {
+    "episodes": 405,
+    "max": 254,
+    "mean": 139.6,
+    "median": 134,
+    "p90": 166
+  },
+  "pick up the salad dressing and place it in the basket": {
+    "episodes": 440,
+    "max": 216,
+    "mean": 132.4,
+    "median": 128,
+    "p90": 149
+  },
+  "pick up the tomato sauce and place it in the basket": {
+    "episodes": 350,
+    "max": 183,
+    "mean": 145.2,
+    "median": 140,
+    "p90": 175
+  },
+  "push the plate to the front of the stove": {
+    "episodes": 241,
+    "max": 220,
+    "mean": 150.4,
+    "median": 145,
+    "p90": 181
+  },
+  "put both moka pots on the stove": {
+    "episodes": 146,
+    "max": 505,
+    "mean": 406.3,
+    "median": 396,
+    "p90": 458
+  },
+  "put both the alphabet soup and the cream cheese box in the basket": {
+    "episodes": 370,
+    "max": 323,
+    "mean": 267.6,
+    "median": 267,
+    "p90": 292
+  },
+  "put both the alphabet soup and the tomato sauce in the basket": {
+    "episodes": 240,
+    "max": 367,
+    "mean": 291.0,
+    "median": 282,
+    "p90": 340
+  },
+  "put both the cream cheese box and the butter in the basket": {
+    "episodes": 480,
+    "max": 322,
+    "mean": 259.4,
+    "median": 254,
+    "p90": 288
+  },
+  "put the black bowl in the bottom drawer of the cabinet and close it": {
+    "episodes": 245,
+    "max": 287,
+    "mean": 241.6,
+    "median": 237,
+    "p90": 263
+  },
+  "put the bowl on the plate": {
+    "episodes": 480,
+    "max": 126,
+    "mean": 93.2,
+    "median": 92,
+    "p90": 106
+  },
+  "put the bowl on the stove": {
+    "episodes": 460,
+    "max": 123,
+    "mean": 100.8,
+    "median": 99,
+    "p90": 114
+  },
+  "put the bowl on top of the cabinet": {
+    "episodes": 445,
+    "max": 142,
+    "mean": 100.4,
+    "median": 99,
+    "p90": 110
+  },
+  "put the cream cheese in the bowl": {
+    "episodes": 315,
+    "max": 147,
+    "mean": 104.9,
+    "median": 103,
+    "p90": 113
+  },
+  "put the white mug on the left plate and put the yellow and white mug on the right plate": {
+    "episodes": 275,
+    "max": 330,
+    "mean": 260.4,
+    "median": 264,
+    "p90": 292
+  },
+  "put the white mug on the plate and put the chocolate pudding to the right of the plate": {
+    "episodes": 230,
+    "max": 301,
+    "mean": 246.8,
+    "median": 243,
+    "p90": 284
+  },
+  "put the wine bottle on the rack": {
+    "episodes": 265,
+    "max": 216,
+    "mean": 171.4,
+    "median": 170,
+    "p90": 199
+  },
+  "put the wine bottle on top of the cabinet": {
+    "episodes": 445,
+    "max": 146,
+    "mean": 107.0,
+    "median": 104,
+    "p90": 128
+  },
+  "put the yellow and white mug in the microwave and close it": {
+    "episodes": 160,
+    "max": 449,
+    "mean": 291.3,
+    "median": 287,
+    "p90": 343
+  },
+  "turn on the stove": {
+    "episodes": 500,
+    "max": 119,
+    "mean": 89.1,
+    "median": 89,
+    "p90": 97
+  },
+  "turn on the stove and put the moka pot on it": {
+    "episodes": 390,
+    "max": 323,
+    "mean": 265,
+    "median": 265,
+    "p90": 307
+  }
+}

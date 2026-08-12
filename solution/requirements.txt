@@ -1,0 +1,34 @@
+# ポリシーサーバーの依存（必須、削除しないでください）
+fastapi>=0.68
+uvicorn>=0.15
+msgpack>=1.0
+numpy>=1.19
+
+# --- 同梱した LeRobot v0.6.0（vendor/lerobot）を動かすための追加分 ---
+#
+# 採点イメージにプリインストールされているものは意図的に書かない。書かなければ
+# イメージの版がそのまま使われ、CUDA 13 と整合した torch 2.11.0+cu130 を利用できる。
+#   書かない: torch / numpy / einops / Pillow / huggingface_hub /
+#             opencv-python-headless / packaging / termcolor / tqdm /
+#             requests / scipy / typing_extensions
+#
+# LeRobot は numpy>=2.0.0 を宣言しているが、SmolVLA の推論経路は numpy 1.26.4 で
+# 動作することを確認済みのため上書きしない（上書きすると採点イメージ側の torch との
+# 組み合わせを別途検証する必要が生じる）。
+safetensors>=0.4.3,<1.0.0
+draccus==0.10.0
+transformers>=5.4.0,<5.6.0
+num2words>=0.5.14,<0.6.0
+accelerate>=1.7.0,<2.0.0
+gymnasium>=1.1.1,<2.0.0
+
+# torchvision は採点イメージに入っていないため必須。
+# PyPI の既定 wheel は CUDA 13 ビルド（libcudart.so.13 / libtorch_cuda.so にリンク）で、
+# 採点イメージの torch 2.11.0+cu130 および nvidia-cuda-runtime 13.0.96 と整合する。
+# ローカルの CPU torch で検証する場合のみ、別途 PyTorch の cpu インデックスから
+# 入れ直すこと（--index-url は提出物では禁止されているため、ここには書かない）。
+torchvision>=0.22.0,<0.27.0
+
+# 明示しておく（イメージに 4.16.0 が入っているが、イメージ更新に備える）。
+# 同梱した LeRobot の 3.10 バックポートが typing_extensions.Unpack を使う。
+typing_extensions>=4.5
