@@ -680,17 +680,18 @@ python3 solution/tools/verify_merge.py work/train2/<run_name>/merged_model \
 `model.safetensors` を取り直す（手元の `work/artifacts/model_weights_base` は
 それと同じもので、`lora20k` を測ると記録どおり 37 テンソルの変化になる）。
 
-通ればこう出る。
+通ればこう出る（8/12 の `text_lora32_40k` の実物）。
 
 ```
-変化したテンソル 2 個のうち、大きい順に 2 件
+変化したテンソル 68 個のうち、大きい順に 10 件
         相対変化         最大絶対差  テンソル名
-    1.29e-03      3.00e-03  model.layers.0.self_attn.q_proj.weight
-    4.44e-04      1.00e-03  model.layers.0.self_attn.v_proj.weight
+    3.88e-01      2.58e-02  model.vlm_with_expert.lm_expert.layers.14.self_attn.q_proj.weight
+    2.32e-01      1.54e-02  model.vlm_with_expert.lm_expert.layers.12.self_attn.q_proj.weight
+    …
 
 判定
-  変化したテンソル      2 個（LoRA の対象 2 / 対象外 0）
-  いちばん大きい相対変化 1.29e-03
+  変化したテンソル      68 個（LoRA の対象 63 / 対象外 5）
+  いちばん大きい相対変化 3.88e-01
 
   正常。学習の成果が入っており、壊れてもいない。
 ```
@@ -707,21 +708,32 @@ python3 solution/tools/verify_merge.py work/train2/<run_name>/merged_model \
 **変化するテンソルの数は当て先で決まる。** 出発点の重みのキーと突き合わせて数えた
 （8/12）。ここと違う数が出たら、当て先の指定が効いていない。
 
-| 当て先 | 変化するテンソル | うち「LoRA の対象」と数えられる | 対象外 |
-|---|---|---|---|
-| `--peft-scope expert`（従来） | **37** | 32 | 5 |
-| `--peft-scope text`（今回） | **69** | 64 | 5 |
+| 当て先 | LoRA を当てた層 | 変化するテンソル | 「対象」と数えられる | 対象外 |
+|---|---|---|---|---|
+| `--peft-scope expert`（従来） | 37 | **37** | 32 | 5 |
+| `--peft-scope text` | 69 | **68** | 63 | 5 |
 
 **対象外の 5 個は当て先を広げても増えない。** 中身は
 `state_proj` `action_in_proj` `action_out_proj` `action_time_mlp_in`
 `action_time_mlp_out` で、**名前に `q_proj` などが入らないので「対象外」に
 数えられるだけである。** これは正常で、判定も止まらない。
 
-> **「相対 1 超」は余裕がない。** 実測で `lora20k`（当て先 expert・r=16・20,000 歩）は
-> **0.816** まで来ていた（`weak3x` は 0.165）。今回は r を 32、歩数を 2 倍にしたので、
-> **1 を超えて「壊れている可能性」と言われることがありうる。**
-> この指標は「1 要素の最大の変化 ÷ 元の重みの最大値」なので、
-> **1 を超えても壊れている証拠にはならない。** 出たら数字を見て判断する。
+> ### `text` で 69 当てて 68 しか動かないのは正常である
+>
+> **動かないのは 1 つだけで、場所も決まっている** ——
+> `vlm.model.text_model.layers.15.self_attn.q_proj`、**言語側のいちばん最後の層の
+> `q_proj`** である（8/12 に実測。`layers.0`〜`14` の `q_proj` と、
+> `layers.15` の `v_proj` はどれも動いている）。
+>
+> **理由は、最後の層の出力が誰にも読まれないことである。** 言語側は
+> 「行動を出す側（action expert）へ渡す鍵と値」を作るために 1 度流れる。
+> このとき各層の `key` と `value` は保管されるが、**最後の層が出した状態そのものは
+> 捨てられる**（`past_key_values` だけが次に渡る）。
+>
+> - `v_proj` …… 保管される値を作る → **使われる → 勾配が来る → 動く**
+> - `q_proj` …… その層の出力を作るためだけに要る → **捨てられる → 勾配が 0 → 動かない**
+>
+> **学習の失敗ではない。** 4.5 億個のうち 65,536 個が余っているだけである。
 
 あわせて `config.json` の `use_peft` `pretrained_path` `load_vlm_weights` も見る。
 **`pretrained_path` が残っていると、提出物の側では解決できないパスになる。**
@@ -729,7 +741,41 @@ python3 solution/tools/verify_merge.py work/train2/<run_name>/merged_model \
 初期重みは HuggingFace から取る（`model.safetensors` だけなので通信は 1 ファイル）。
 手元にあるなら `--base-model <ディレクトリ>` で渡せば通信しない。
 
-**ここまで来たら [02_build_submission.md](02_build_submission.md) へ進む。**
+## A-7. この先は 2 つに分かれる
+
+**`merged_model/` はそのままでは評価にも提出にも使えない。**
+**`vlm/`（SmolVLM の設定とトークナイザ）が入っていないからである。**
+`merge.py` はこれを出さないので、別に足す。**足し方が 2 通りある。**
+
+### 測るだけなら —— 名前を付けて置き、`WEIGHTS` で指す
+
+```bash
+cp -r work/train2/<run_name>/merged_model work/artifacts/model_weights_<label>
+cp -r work/artifacts/model_weights_base/vlm work/artifacts/model_weights_<label>/vlm
+
+MUJOCO_GL=osmesa WEIGHTS=work/artifacts/model_weights_<label> LABEL=<label> \
+    bash solution/tools/run_docker_eval.sh --detach
+```
+
+**回ごとに別の名前にする。** そうすれば前の回を消さずに並べて測れる
+（`model_weights_base` `model_weights_lora20k` `model_weights_weak3x` が既にある）。
+続きは [03_gpu_eval.md](03_gpu_eval.md)。
+
+### 提出物に載せるなら —— `install_weights.py` で取り込む
+
+```bash
+work/venv310/bin/python solution/tools/install_weights.py \
+    work/train2/<run_name>/merged_model --dry-run
+```
+
+**こちらは置き場所が 1 つに決まっている**（`work/artifacts/model_weights/`）。
+`vlm/` は**いまそこにあるものを引き継ぐ**ので、上のコピーは要らない。
+取り込む前に 4 つ検査し、1 つでも外れれば書き換えずに止まる。
+続きは [02_build_submission.md](02_build_submission.md) のケース 2。
+
+> **`install_weights.py` は提出物を作るマシンで使うものである。**
+> GPU マシンには `work/artifacts/model_weights/` を置いていない（回ごとの名前で
+> 並べてある）。**測るだけの段階では上の `WEIGHTS` を使う。**
 
 ---
 

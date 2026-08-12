@@ -315,7 +315,12 @@ def main() -> None:
         raise SystemExit(1)
 
     print("\n  正常。学習の成果が入っており、壊れてもいない。")
-    print("\n次に: python3 solution/tools/install_weights.py "
+    # **`vlm/` を足すまで、評価にも提出にも使えない。** 足し方は用途で分かれる
+    # （測るだけなら名前を付けて WEIGHTS で指す／提出物なら install_weights.py）。
+    # 分岐そのものは手順書が持っているので、ここでは節番号で案内する。
+    print("\n次に: vlm/ を足す。docs/howto/01_retrain.md の A-7")
+    print("  測るだけ → 名前を付けて置き、WEIGHTS で指す（03_gpu_eval.md）")
+    print("  提出物   → solution/tools/install_weights.py "
           f"{merged_dir} --dry-run")
 
 
