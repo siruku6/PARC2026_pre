@@ -49,7 +49,14 @@
 #   3.2.0  weak3x のまま samples を 1 → 3（n は 5 に戻す＝3.0.0 から 1 変数）。
 #          3 本引いて姿勢 6 次元の medoid を選ぶ。外れ chunk を捨て、滑らかさの
 #          係数（3.0.0 で 0.384）を上げる向き。成功本数は動きにくい。時間は約 700 秒。
-__version__ = "3.2.0"
+#          → **未提出。** n=2（3.1.0）が n=5 に勝ったため、n=5 の上で samples を
+#            測る価値が下がった。samples は勝った n の上で測り直す。
+#   3.1.0  → **本番 0.166。** weak3x 0.144 を上回り、資格ありの最高。天井の 1 本
+#            （ep3）を 300→202 に解いた。n の 50→10→5→2 が単調改善の続き。
+#   3.3.0  weak3x のまま n_action_steps を 1（3.1.0 からさらに 1 段。samples=1）。
+#          毎ステップ再計画。単調改善（…→5→2）の次の点。EMA 0.3 でガタつきを抑える。
+#          時間は約 1,040 秒（上限の 29%）。ここで反転すれば n=2 が谷底と分かる。
+__version__ = "3.3.0"
 
 import argparse
 from abc import ABC, abstractmethod
@@ -182,7 +189,8 @@ class MyPolicy(BasePolicy):
         #
         # 小さくしすぎると、毎ステップ独立に flow matching の乱数を引くため
         # 軌道がガタつく恐れがある。`PARC_EMA_ALPHA` がそれを打ち消す。
-        config.n_action_steps = int(os.environ.get("PARC_N_ACTION_STEPS", "5"))
+        # 版 3.3.0 で既定を 1 に（n の単調改善の続き。詳細は先頭のコメント）。
+        config.n_action_steps = int(os.environ.get("PARC_N_ACTION_STEPS", "1"))
 
         self._policy = SmolVLAPolicy.from_pretrained(weights, config=config)
         self._policy.to(self._device)
@@ -213,9 +221,8 @@ class MyPolicy(BasePolicy):
         self._ema_alpha = float(os.environ.get("PARC_EMA_ALPHA", "0.3"))
         self._n_action_steps = int(self._policy.config.n_action_steps)
 
-        # chunk を何回引くか。1 なら素の挙動。版 3.2.0 で既定を 3 にした
-        # （3 本引いて姿勢 6 次元の medoid を選ぶ。詳細は先頭のコメント）。
-        self._samples = int(os.environ.get("PARC_SAMPLES", "3"))
+        # chunk を何回引くか。1 なら素の挙動。
+        self._samples = int(os.environ.get("PARC_SAMPLES", "1"))
         if self._samples > 1:
             self._install_chunk_sampler()
 
