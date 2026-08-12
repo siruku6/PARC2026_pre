@@ -60,19 +60,96 @@
 **バッチ数とデータ量が分からないと、「学習しすぎたのか」は判定できない。**
 ここは埋めるべき穴である。
 
-## 次に学習するときに決めておくこと
+## 次に学習するとき、どこをどう直すか
 
-**学習率と歩数は、どちらかの出典に揃える。混ぜない。**
+### 結論：学習率まわりは直す必要がない。すでに揃っている
 
-| 選び方 | 学習率 / warmup / 最後 | 歩数 | 根拠 |
+**学習中のチェックポイントの `config.json` と出発点の `config.json` を
+全項目突き合わせた結果、次の値は完全に一致していた。**
+
+| 項目 | 値 |
+|---|---|
+| `optimizer_lr` | 1e-4 |
+| `scheduler_warmup_steps` | 1,000 |
+| `scheduler_decay_lr` | 2.5e-6 |
+| `scheduler_decay_steps` | 20,000 |
+| `optimizer_betas` / `eps` / `weight_decay` / `grad_clip_norm` | `[0.9, 0.95]` / 1e-8 / 1e-10 / 10.0 |
+| `max_state_dim` / `max_action_dim` | 32 / 32 |
+| `chunk_size` / `num_steps` | 50 / 10 |
+| `resize_imgs_with_padding` | `[512, 512]` |
+| `attention_mode` / `num_vlm_layers` | `cross_attn` / 16 |
+
+**差が出たのは `empty_cameras`・`input_features`（推論では打ち消される。
+[10_observation_interface.md](10_observation_interface.md)）と、
+学習時だけ効く `freeze_vision_encoder`・`train_expert_only`・`use_peft`、
+それに覚え書き（`pretrained_path`・`repo_id`・`push_to_hub`）だけである。**
+
+**8/11 に崩壊した組み合わせ（3e-4 / warmup 100 / 20,000 歩）は再現していない。**
+`train.py` は開始時にその組み合わせを検出して警告を出す。
+
+`--resume` で続けるときも壊れない。`_build_resume_command` は
+`--config_path` でチェックポイントの `train_config.json` を読ませ、
+`--policy.*` や `--steps` を重ねて渡さないため、**スケジュールが途中で
+別物にならない。**
+
+### 直すべきは 3 つ。いずれも `train.py` の既定値ではない
+
+| # | 直すところ | どう直すか | なぜ |
 |---|---|---|---|
-| **出発点の続きを学ぶ** | 1e-4 / 1,000 / 2.5e-6 | 20,000 | `train_config.json`。**長く回すならこちら** |
-| ノートブックをなぞる | 3e-4 / 100 / 3e-5 | 3,000 | ノートブック cell 8。**短く回すならこちら** |
+| **1** | **1 回の学習を 2 台に分けない** | 最後まで同じ GPU で通す。20,000 歩で約 55 分なので分ける理由が無い | `_patch_dtype_for_gpu` は bf16 非対応の GPU で VLM を fp16 へ書き換える（配布ノートブックと同じ置換）。**途中で機種が変わると、前半と後半で数値の型が違う重みになる。** 8/11 の回は 0〜9,000 歩が Colab T4（fp16）、9,500〜20,000 歩が H100（bf16）だった |
+| **2** | **合否を判定する道具** | 84 件を「壊れていないかの確認」に限る。本番に寄せた小さい集合を用意する | **本番は 8 エピソードで、84 件とは別の母集団である**（[12_production_scale.md](12_production_scale.md)）。84 件で 0.500 と 0.476 が並んでも 8 本の結果は言い当てられない。**ここを直さないと、次の学習が良くなったかどうかを提出前に判断できない** |
+| 3 | 学習の条件を持ち出す | 対応済み。`merge.py` が `train_config.json` を `merged_model/` へ同梱する（**`dataset.episodes` もそこに入る**ので使ったエピソードも分かる） | 8/11 の回は `merged_model/` だけを持ち帰ったため、バッチ数とエピソード本数が失われた |
 
-**バッチ数とエピソード本数は、次の学習では必ず記録に残す。**
-`--dataset.episodes` を渡したかどうかも含めて、学習の出力先に
-LeRobot が書く `train_config.json` を捨てないこと。**今回それが無いために、
-悪化の原因を数字で確かめられない。**
+### 決めるべき判断：LoRA が当たる範囲を広げるか
+
+**これは事実ではなく判断である。** 前提となる事実は原本で確認した。
+
+`_get_default_peft_targets`（同梱 LeRobot `policies/smolvla/modeling_smolvla.py:496-505`）が
+返す対象は次の 2 つだけである。
+
+```
+model.vlm_with_expert.lm_expert.*.(q|v)_proj
+model.(state_proj|action_in_proj|action_out_proj|action_time_mlp_in|action_time_mlp_out)
+```
+
+**視覚を読む側と VLM 本体は 1 つも含まれない。**
+したがって **`freeze_vision_encoder` や `train_expert_only` を切り替えても、
+LoRA を使う限り学習される重みは変わらない。**
+
+一方、出発点の重みは `use_peft=false` / `freeze_vision_encoder=false` /
+`train_expert_only=false` で、**画像を読む側まで含めて全パラメータ**が
+20,000 歩学習されている（`train_config.json`）。
+
+**つまりこちらの学習は、すでに全部学習済みのモデルに対して、行動を出す側の
+一部だけを動かしている。** 効き幅を変えるなら選択肢は 3 つある。
+
+| 選び方 | 変え方 | 引き受けるもの |
+|---|---|---|
+| **いまのまま（LoRA・expert だけ）** | 何もしない | **崩れにくい。** ただし動かせる幅が狭い |
+| LoRA の対象を広げる | `--peft.target_modules` に VLM 側を渡す | 視覚と行動の対応を学び直せるが、**出発点が積み上げたものを崩しうる** |
+| LoRA を外して全パラメータ | `--peft.method_type` を渡さない | 出発点と同じ形。**VRAM と時間が増え、崩れる幅も最大** |
+
+**8 エピソードしか観測できない以上、崩れる幅が大きい選び方は割に合わない**
+と見ている。判断材料は [12_production_scale.md](12_production_scale.md) にある。
+
+### 数えておくこと
+
+**1 コマを何回見るかは、出発点と同じ濃さに揃える。**
+20,000 歩 × バッチ 32 は 640,000 コマ分の引き出しにあたる。
+出発点はこれを 2,238,036 コマのデータに当てて 0.29 回だった。
+**こちらのデータのコマ数は未確認である。**
+
+```bash
+curl -s https://huggingface.co/datasets/lerobot/libero_plus/raw/main/meta/info.json \
+  | python3 -c "
+import json, sys
+c = json.load(sys.stdin)
+frames = c['total_frames']
+print(f\"コマ数 {frames:,}  1 コマあたり {20000 * 32 / frames:.2f} 回\")
+"
+```
+
+**0.3 回前後なら出発点と同じ濃さである。** 大きく超えるならバッチか歩数を下げる。
 
 ## いま回っている学習について確かめること
 
