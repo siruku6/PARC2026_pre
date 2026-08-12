@@ -1,5 +1,5 @@
 {
- "record": "outputs/train2/episodes.json",
+ "record": "outputs/train2/weak3x_max300/episodes.json",
  "used_episodes": 4609,
  "per_task": 1,
  "offset": 0,

@@ -65,9 +65,13 @@ _PRODUCTION_CATEGORIES = ("Background Textures", "Light Conditions")
 # 約 94 通りに分かれる**（中央 385 本）。粗くすると別の場面を同じと見なす。
 _BRIGHTNESS_RESOLUTION = 3
 
-# `T1_TASKS.csv` と同じ列。`compe/t1/register.py` が読む。
-_COLUMNS = ("task_num", "task_id", "instruction", "libero_plus_id",
-            "suite", "category", "difficulty_level")
+# **CSV の列は `make_validation_suite` に作らせる。**
+# `T1_TASKS.csv` の列だけでは足りない。`init_states_file` が無いと、
+# 評価側が接尾辞を正規表現で剥がして初期状態を探すことになり、
+# **`_tb_N` のように剥がせない摂動で「ファイルが無い」と落ちる**
+# （`compe/t1/register.py` の `_SUFFIX_RE` は `_light_*` と `_table_\d+` だけ）。
+# 物体が増える摂動は変種名そのものの初期状態を持つため、相対パスも要る。
+# **置き場の解決は 1 か所に置く。** ここで作り直すと必ず食い違う。
 
 
 def _parse_args() -> argparse.Namespace:
@@ -92,6 +96,13 @@ def _parse_args() -> argparse.Namespace:
                              "**採点は 300 歩で打ち切るため**")
     parser.add_argument("--output", type=Path,
                         default=_REPO_ROOT / "compe/val/EVAL_TASKS.csv")
+    # **置き場は libero の設定（`~/.libero/config.yaml`）から決まる。**
+    # 評価パイプラインが読むのと同じ場所を見ないと、CSV は作れたのに
+    # 評価の開始直後に落ちる。`make_validation_suite.py` と同じ引数にしてある。
+    parser.add_argument("--bddl-root", type=Path, default=None,
+                        help="bddl の置き場。省略すると libero の設定に従う")
+    parser.add_argument("--init-states-root", type=Path, default=None,
+                        help="初期状態の置き場。省略すると libero の設定に従う")
     parser.add_argument("--dry-run", action="store_true",
                         help="書かずに内容だけ出す")
     return parser.parse_args()
@@ -285,23 +296,36 @@ def main() -> None:
     if dropped:
         print(f"[eval]   未使用に未知の見た目が無い指示文 {len(dropped)} 種は外した")
 
-    rows = []
-    for name in eligible:
-        for item in _pick(variants[name], args.per_task, args.offset):
-            rows.append({
-                "task_num": len(rows) + 1,
-                "task_id": item["name"],
-                "instruction": name,
-                "libero_plus_id": item["id"],
-                "suite": item["suite"],
-                "category": item["category"],
-                "difficulty_level": (
-                    f"L{item['difficulty_level']}"
-                    if item["difficulty_level"] is not None else ""
-                ),
-            })
+    selected = [
+        item for name in eligible
+        for item in _pick(variants[name], args.per_task, args.offset)
+    ]
+    print(f"[eval] 選んだ変種 {len(selected)} 件")
 
-    print(f"[eval] 選んだ変種 {len(rows)} 件")
+    # **行の組み立ては `make_validation_suite` に任せる。**
+    # bddl と初期状態が実際に在る置き場を探し、`init_states_file` を決めきる。
+    # **実体が無い変種はここで落ちる。** 黙って減らさず、下で名指しする。
+    from make_validation_suite import (
+        _build_rows, _index_init_state_stems, _report, _resolve_libero_path,
+    )
+
+    init_states_root = _resolve_libero_path(args.init_states_root, "init_states")
+    bddl_root = _resolve_libero_path(args.bddl_root, "bddl_files")
+    for root in (init_states_root, bddl_root):
+        if not root.is_dir():
+            raise SystemExit(f"[eval] 置き場が見つかりません: {root}")
+    print(f"[eval] bddl {bddl_root} / 初期状態 {init_states_root}")
+
+    rows, skipped = _build_rows(
+        selected, bddl_root, init_states_root,
+        _index_init_state_stems(init_states_root),
+    )
+    _report(rows, skipped)
+    if len(rows) < len(selected):
+        print(f"[eval] **実体が無くて落ちた変種 {len(selected) - len(rows)} 件。**")
+        print("[eval]   `--offset` をずらして別の変種にすると埋まることがある")
+    if not rows:
+        raise SystemExit("[eval] 1 件も載せられませんでした。上の理由を読むこと")
     counts: dict[str, int] = defaultdict(int)
     for row in rows:
         counts[row["category"]] += 1
@@ -319,10 +343,12 @@ def main() -> None:
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", newline="", encoding="utf-8") as stream:
-        writer = csv.DictWriter(stream, fieldnames=_COLUMNS)
+        # **列は `_build_rows` が決めたものをそのまま使う。**
+        # `register.py` は `DictReader` で読むので列が増えても困らない。
+        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
-    print(f"[eval] 書いた: {args.output}")
+    print(f"[eval] 書いた: {args.output}（{len(rows)} 件）")
 
     meta_path = args.output.with_suffix(".meta.json")
     meta_path.write_text(json.dumps({
