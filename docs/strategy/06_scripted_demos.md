@@ -78,7 +78,7 @@ flowchart LR
     M["measure<br/>寸法を測る"] --> W["台本を書く<br/>中継点を並べる"]
     W --> V["verify<br/>50 通りで数える<br/>1 本 2.4 秒"]
     V -->|"通らない"| W
-    V -->|"通る"| R["record<br/>画像つきで書き出す<br/>描画するので GPU"]
+    V -->|"通る"| R["record<br/>画像つきで書き出す<br/>CPU 描画・並列で"]
     R --> Z["visualize<br/>元の手本と並べる"]
 ```
 
