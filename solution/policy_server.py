@@ -42,7 +42,11 @@
 #            もう直った」、0.016 付近なら「重みのずれ自体が毒（滑らかさは無関係）」。
 #          → **本番 0.144（成功 3/8・係数 0.384）。** 素 0.1409 と同水準で H1 を裏づけ。
 #            学習を含む（＝資格を満たす）重みが初めて素の水準に乗った。8/14 の土台。
-__version__ = "3.0.0"
+#   3.1.0  weak3x のまま n_action_steps を 5 → 2 に下げる（重みは 3.0.0 と同じ）。
+#          n の 50→10→5 が 0.058→0.096→0.1409 と単調改善だった延長。再計画が
+#          2.5 倍の頻度になり、300 歩で終われない 4 本のどれかを崩せる見込み。
+#          推論のみの変更＝minor。時間は n=2 でも約 585 秒（上限の 16%）。
+__version__ = "3.1.0"
 
 import argparse
 from abc import ABC, abstractmethod
@@ -175,7 +179,8 @@ class MyPolicy(BasePolicy):
         #
         # 小さくしすぎると、毎ステップ独立に flow matching の乱数を引くため
         # 軌道がガタつく恐れがある。`PARC_EMA_ALPHA` がそれを打ち消す。
-        config.n_action_steps = int(os.environ.get("PARC_N_ACTION_STEPS", "5"))
+        # 版 3.1.0 で既定を 2 に下げた（n の単調改善の延長。詳細は先頭のコメント）。
+        config.n_action_steps = int(os.environ.get("PARC_N_ACTION_STEPS", "2"))
 
         self._policy = SmolVLAPolicy.from_pretrained(weights, config=config)
         self._policy.to(self._device)
