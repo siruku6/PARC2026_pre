@@ -13,8 +13,16 @@
 途中で打ち切った場合は、学習率がどこまで落ちているかを確認してから選ぶこと
 （[docs/solution/COLAB.md](../../docs/solution/COLAB.md) の「途中のチェックポイントで打ち切るとき」）。
 
+**学習の条件も一緒に入れる。** バッチ数と使ったエピソードは重みの `config.json` に
+残らないため、これを持ち出さないと**後から悪化の原因を数字で確かめられない**。
+実際に 8/11 の 20,000 歩では `merged_model/` だけを持ち帰ったせいで、
+バッチ数とエピソード本数を一次情報で確かめられなくなった
+（[docs/reference/11_training_schedule.md](../../docs/reference/11_training_schedule.md)）。
+出発点の重みも `train_config.json` を同梱しており、推論では読まれない。
+
 Reads:
   - $OUTPUT_ROOT/<run-name>/checkpoints/<step>/pretrained_model/**
+  - $OUTPUT_ROOT/<run-name>/train_config.json（LeRobot が書く学習条件。`dataset.episodes` も入る）
   - lerobot/smolvla_libero_plus（HF、初期重み）
 Generates:
   - $OUTPUT_ROOT/<run-name>/merged_model/**
@@ -144,6 +152,37 @@ def _merge(checkpoint: Path, base_model: Path, destination: Path) -> None:
     gc.collect()
 
 
+def _carry_conditions(output_dir: Path, destination: Path) -> None:
+    """学習の条件を書いたファイルを、マージ結果の隣へ複製する。
+
+    重みの `config.json` に残るのは学習率・warmup・`scheduler_decay_steps`
+    までで、**バッチ数と使ったエピソードは残らない。** 学習マシンから
+    `merged_model/` だけを持ち帰ると、その 2 つが永久に分からなくなる。
+
+    Parameters
+    ----------
+    output_dir : Path
+        実行ごとの出力ディレクトリ。
+    destination : Path
+        マージ結果の置き場所。
+
+    """
+    # **`train_config.json` だけでよい。** LeRobot はここに `dataset.episodes` も
+    # 書くので、隣の `episodes.json` は同じ内容の写しである。
+    # 提出物の zip は `model_weights/` を丸ごと取り込むため、
+    # **同じ番号の列を 2 度入れない。**
+    name = "train_config.json"
+    source = output_dir / name
+    if not source.is_file():
+        print(
+            f"[merge] 注意: {name} が見つかりません（{output_dir}）。"
+            "**バッチ数と使ったエピソードを後から確かめられなくなります。**"
+        )
+        return
+    shutil.copy2(source, destination / name)
+    print(f"[merge] 学習の条件を同梱: {name}")
+
+
 def main() -> None:
     args = _parse_args()
     output_dir: Path = (args.output_root / args.run_name).resolve()
@@ -163,6 +202,8 @@ def main() -> None:
     remaining = sorted(name for name in keys if "lora_" in name.lower())
     if remaining:
         raise RuntimeError(f"LoRA が残っています: {remaining[:3]} …")
+
+    _carry_conditions(output_dir, destination)
 
     produced = sorted(path.name for path in destination.iterdir())
     total = sum(path.stat().st_size for path in destination.rglob("*") if path.is_file())
