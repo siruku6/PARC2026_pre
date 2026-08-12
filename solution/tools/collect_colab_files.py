@@ -35,20 +35,31 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 # (リポジトリ内の場所, Colab で何に使うか)
 _UPLOAD_FILES: tuple[tuple[str, str], ...] = (
     (
+        "solution/tools/colab_eval.py",
+        "**ノートブックが呼ぶ本体。**手順 1〜9 が関数になっている。"
+        "セルに貼るのは import と 6 行の呼び出しだけ。",
+    ),
+    (
+        "solution/tools/colab_eval_config.py",
+        "**編集するのはこのファイルだけ。**重みの場所・塊の数・つまみ・録画。"
+        "書き換えたらこれだけ上げ直せば効く（colab_eval.py が毎回読み直す）。",
+    ),
+    (
         "solution/policy_server.py",
-        "評価に使う推論サーバ。colab_eval/04_policy_server.md が /content/ から拾う。",
+        "評価に使う推論サーバ。colab_eval.setup_policy() が /content/ から拾う。",
     ),
     (
         "solution/tools/make_validation_suite.py",
-        "検証用スイートを作る。colab_eval/05_suite.md だけで使う。",
+        "検証用スイートを作る。build_suite() だけで使う。",
     ),
     (
         "solution/tools/check_validation_suite.py",
-        "作った CSV が本当に開けるかを、評価を回す前に確かめる。手順 5-1 が呼ぶ。",
+        "作った CSV が本当に開けるかを、評価を回す前に確かめる。build_suite() が呼ぶ。",
     ),
     (
         "solution/tools/patch_kit_for_variants.py",
-        "配布キットへのパッチ。手順 2 と 5-1 が呼ぶ。**これが無いと手順 2 で落ちる。**",
+        "配布キットへのパッチ。setup_kit() と build_suite() が呼ぶ。"
+        "**これが無いと setup_kit() で落ちる。**",
     ),
     (
         "solution/tools/rollout_recorder.py",
@@ -57,7 +68,7 @@ _UPLOAD_FILES: tuple[tuple[str, str], ...] = (
     ),
     (
         "solution/tools/summarize_rollout_videos.py",
-        "撮れた mp4 を見るべき順に並べ、コマ並べ画像にする。手順 9 が呼ぶ。",
+        "撮れた mp4 を見るべき順に並べ、コマ並べ画像にする。run() が呼ぶ。",
     ),
 )
 
@@ -69,14 +80,27 @@ _READ_ME = """\
 
 {descriptions}
 
-置いたあとにやること:
-  - policy_server.py … 手順 4-2 を実行すると提出用ディレクトリへ移る。
-    手順 8 の出力に "[parc] policy_server <版>" が出れば差し替え成功。
-  - make_validation_suite.py … 手順 5-1 を、手順 2 のあと・手順 6 の前に実行する。
-    このとき手順 6 の N_EPISODES は 1 にすること（タスク数が 4 件から
-    56〜84 件へ増えるため、20 のままだと 27 時間かかる）。
+置いたあと、ノートブックに貼るのはこれだけ:
 
-手順の本体: docs/solution/colab_eval/README.md
+    import importlib, sys
+    sys.path.insert(0, "/content")
+    import colab_eval as ce
+    importlib.reload(ce)          # 上げ直したときのため
+
+    ce.prepare()                  # Drive・上がっているかの確認・EGL
+    ce.setup_kit()                # clone・setup.sh・パッチ（5〜10 分）
+    ce.prepare_weights()          # 重みを用意し、ハッシュで名指しする
+    ce.setup_policy()             # 方策サーバーの依存と配置
+    ce.build_suite()              # 検証用スイートへ差し替え、塊に割る
+    ce.run(chunk=1)               # 評価 → 集計 → Drive へ退避（51 分）
+    ce.run(chunk=2)
+    ce.run(chunk=3)
+
+  - 疎通確認は ce.run(chunk=1, max_tasks=5)（5 分）。**戻し忘れが起きない。**
+  - 途中で切れたら ce.status() で、どの塊が終わっているか分かる。
+  - colab_eval.py を上げ直したら importlib.reload(ce) を通す。**版が画面に出る。**
+
+手順の説明: docs/solution/colab_eval/README.md
 """
 
 

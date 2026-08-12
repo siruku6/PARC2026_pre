@@ -1,5 +1,15 @@
 # 6. 評価の設定（毎回ここから）
 
+> **このセルは無くなった。** 設定は 2 か所に分かれている。
+>
+> | 値 | いまどこにあるか |
+> |---|---|
+> | `CHUNK` | **`ce.run(chunk=3)` の引数。** CSV と出力先と名前を同時に決める |
+> | `MAX_TASKS` | **`ce.run(chunk=1, max_tasks=5)` の引数。** 設定に残らないので戻し忘れない |
+> | `N_EPISODES` `MAX_STEPS` `POLICY_ENV` `RECORD_*` | [colab_eval_config.py](../../../solution/tools/colab_eval_config.py) |
+>
+> **`ce.run()` は使う値を全部画面に出す。** このページは**なぜその既定値なのか**を残す。
+
 **以降のセルはすべてここで定義した変数を使う。** 診断も本番も、まずこれを流す。
 
 ```python
@@ -77,31 +87,54 @@ eval_env.update({
     "LIBERO_ROOT": f"{KIT_DIR}/LIBERO-plus",
 })
 
+# --- 小分けの切り替え（CSV とキットと出力先を対で入れ替える）---
+# **3 つが揃っていないと、別の 28 件の結果を同じ場所へ書いてしまう。**
+# **録画より先に決める。** 動画の置き場も塊ごとに分けるため。
+from pathlib import Path as _Path
+import shutil as _shutil
+
+kit_csv = _Path(KIT_DIR) / "compe/t1/T1_TASKS.csv"
+if CHUNK:
+    chunk_csv = _Path(f"/content/chunks/VAL_{CHUNK}.csv")
+    assert chunk_csv.is_file(), f"{chunk_csv} が無い。手順 5-2 を実行すること"
+    _shutil.copy(chunk_csv, kit_csv)
+    RESULTS_DIR = f"/content/results/chunk{CHUNK}"
+    rows = sum(1 for _ in chunk_csv.open()) - 1
+    print(f"小分け {CHUNK}: {rows} 件（{chunk_csv}）→ {RESULTS_DIR}")
+else:
+    # **CHUNK を None に戻したら、キットも 84 件へ戻す。**
+    # 戻さないと、1〜3 を回したあとに None にしたとき **VAL_1.csv の 28 件が
+    # そのまま残り、「84 件を一度に」のつもりで 28 件しか走らない。**
+    # 画面もログも正常に見えるので、集計を見比べるまで気づけない。
+    RESULTS_DIR = "/content/results"
+    val_csv = _Path("/content/VAL_TASKS.csv")
+    if val_csv.is_file():
+        _shutil.copy(val_csv, kit_csv)
+        rows = sum(1 for _ in val_csv.open()) - 1
+        print(f"小分けなし: {rows} 件を一度に（{val_csv}）→ {RESULTS_DIR}")
+    else:
+        # 検証用スイートを作っていない場合（例題 4 件を測るとき）はそのまま。
+        rows = sum(1 for _ in kit_csv.open()) - 1
+        print(f"小分けなし: キットの {rows} 件をそのまま → {RESULTS_DIR}")
+
 # --- 録画（評価パイプライン側に渡す）---
 if RECORD_DIR:
+    # **塊ごとに置き場を分ける。** 1 つのディレクトリに溜めると、手順 9 が
+    # 塊ごとに退避するときに前の塊の動画も一緒に写り、どの 28 件で撮れたのか
+    # 分からなくなる。RECORD_DIR はこのセルの先頭で毎回入れ直されるので、
+    # 何度実行しても chunk1/chunk2 と重なっていくことはない。
+    if CHUNK:
+        RECORD_DIR = f"{RECORD_DIR}/chunk{CHUNK}"
     eval_env["PARC_RECORD_DIR"] = RECORD_DIR
     eval_env["PARC_RECORD_WHICH"] = RECORD_WHICH
     # 上限。84 件で失敗が多いと本数が伸びるので、既定の 40 より広く取る。
     eval_env["PARC_RECORD_MAX"] = "60"
 
-# --- 小分けの切り替え（CSV とキットと出力先を対で入れ替える）---
-# **3 つが揃っていないと、別の 28 件の結果を同じ場所へ書いてしまう。**
-from pathlib import Path as _Path
-import shutil as _shutil
-
-if CHUNK:
-    chunk_csv = _Path(f"/content/chunks/VAL_{CHUNK}.csv")
-    assert chunk_csv.is_file(), f"{chunk_csv} が無い。手順 5-2 を実行すること"
-    _shutil.copy(chunk_csv, _Path(KIT_DIR) / "compe/t1/T1_TASKS.csv")
-    RESULTS_DIR = f"/content/results/chunk{CHUNK}"
-    rows = sum(1 for _ in chunk_csv.open()) - 1
-    print(f"小分け {CHUNK}: {rows} 件（{chunk_csv}）→ {RESULTS_DIR}")
-else:
-    RESULTS_DIR = "/content/results"
-
 for name in ("KIT_DIR", "LEROBOT_SRC", "SUBMISSION_DIR", "SERVER", "WEIGHTS_DIR"):
     assert name in globals(), f"{name} が未定義です。手順 1〜4 を順に実行してください"
 
+# 版の印。**この行が出ないなら古いセルを実行している。**
+print(f"[6] 版 2   CHUNK={CHUNK or 'なし'}")
 print(f"設定: {N_EPISODES} エピソード/タスク, 後処理 {POLICY_ENV or '既定'}")
 print(f"  タスク数: {MAX_TASKS if MAX_TASKS else '全部（84 件）'}"
       + ("  ← **疎通確認。終わったら None に戻す**" if MAX_TASKS else ""))

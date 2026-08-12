@@ -1,5 +1,12 @@
 # 3. 評価する重みを用意する
 
+> **いまは [`ce.prepare_weights()`](../../../solution/tools/colab_eval.py) が全部やる。**
+> どちらを評価するかは
+> [colab_eval_config.py](../../../solution/tools/colab_eval_config.py) の
+> `USE_FINETUNED` / `DRIVE_WEIGHTS_DIR` / **`EXPECT_DIGEST`** で決める。
+> **`EXPECT_DIGEST` と実物が違えば、読み込む前に止まる。**
+> このページは**何が起きているかと、その理由**を残す。
+
 **素の重み**と**手元で作った重み**のどちらを評価するかで分岐する。
 まず素の重みで基準を取り、そのあと比べるのが順序である。
 

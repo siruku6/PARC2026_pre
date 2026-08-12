@@ -1,5 +1,11 @@
 # 9. 結果を読む・集計する・退避する
 
+> **いまは [`ce.run(chunk=N)`](../../../solution/tools/colab_eval.py) が、
+> 評価に続けてここまで通す。** 別の呼び出しではないので、
+> **「手順 8 を飛ばして手順 9 を実行し、前の塊の結果を新しい名前で退避する」
+> 事故が起きない。** このページは**読む順序**と**退避先の名前の付け方**を残す。
+> どこまで進んだかは `ce.status()`。
+
 **出力に関わる処理はすべてこのセルにある。** 手順 8 は評価を回すだけで、
 読み取りも集計も Drive への退避もここでやる。
 
@@ -9,10 +15,10 @@
 
 ```python
 # === 9. 結果を読む・集計する・退避する ===
-# 版 3。**この行が出ないなら古いセルを実行している。**
+# 版 4。**この行が出ないなら古いセルを実行している。**
 # 貼り替えたつもりで古いままだと、直したはずのエラーがそのまま再現し、
 # 原因を別の場所に探しに行くことになる（実際に起きた）。
-print("[F] 版 3")
+print(f"[9] 版 4   CHUNK={CHUNK or 'なし'}")
 
 import json, math, re, shutil, time
 from collections import Counter
@@ -25,6 +31,14 @@ EVAL_LOG = logs[-1] if logs else None
 
 print(f"評価ログ  {EVAL_LOG or '（無い。手順 8 を実行していない）'}")
 print(f"JSON      {RESULT_JSON if RESULT_JSON.exists() else '（無い。評価が完走していない）'}")
+# **いまの CHUNK の評価ログか。** 拾うのは LOG_DIR の最新ログであって、
+# 塊とは結びついていない。手順 6 を流したあと手順 8 を飛ばしてここへ来ると、
+# **前の塊の結果をいまの塊の名前で退避してしまう。** 手順 6 が T1_TASKS.csv を
+# 上書きした時刻より古いログなら、それは前の塊のものである。
+if EVAL_LOG and EVAL_LOG.stat().st_mtime < (KIT_DIR / "compe/t1/T1_TASKS.csv").stat().st_mtime:
+    print("\n**このログは手順 6 より古い。前の塊の結果である。**")
+    print("**手順 8 を実行していない。ここで止めて手順 8 から流すこと。**")
+    raise SystemExit
 # JSON は完走時にしか書かれない。落ちた回では**前回の結果が残っている**ため、
 # 気づかずに古い数字を読むことがある。時刻で検出する。
 if RESULT_JSON.exists() and EVAL_LOG and RESULT_JSON.stat().st_mtime < EVAL_LOG.stat().st_mtime - 60:
@@ -176,7 +190,13 @@ elif RECORD_DIR:
 # 退避に失敗しても集計はもう出ているので、例外で止めない。
 def run_label() -> str:
     """設定から、取り違えようのないディレクトリ名を作る。"""
-    parts = [f"n{POLICY_ENV.get('PARC_N_ACTION_STEPS', '10')}", f"ep{N_EPISODES}"]
+    # **既定値は policy_server.py と一致させる。** ここが 10 のままだったので、
+    # つまみを空にして回した回（実際は n=5）が `n10` と名付けられていた。
+    # 名前が実際と食い違うと、後から見て取り違える。
+    parts = [f"n{POLICY_ENV.get('PARC_N_ACTION_STEPS', '5')}", f"ep{N_EPISODES}"]
+    # **塊の番号を入れる。** 3 つ回すと退避先が 3 つ並ぶが、名前が同じだと
+    # どれがどの 28 件か、中の結果行を開くまで分からない。
+    parts.append(f"chunk{CHUNK}" if CHUNK else "all")
     for key, value in sorted(POLICY_ENV.items()):
         if key != "PARC_N_ACTION_STEPS":
             parts.append(f"{key.replace('PARC_', '').lower()}{value}".replace(".", ""))
@@ -224,13 +244,21 @@ except Exception as error:
 
 ```
 /content/drive/MyDrive/parc2026/eval/
-├── 0810_091203_n10_ep20/                    … つまみ無し
-├── 0810_101500_n10_ep20_ema_alpha03/        … EMA 0.3
-└── 0810_113000_n10_ep20_blend_steps3/       … 境界ブレンド 3
+├── live/                                    … [結果] 行を 1 本ごとに（手順 8 が書く）
+│   ├── 0812_034512_chunk1.results.txt
+│   ├── 0812_044003_chunk2.results.txt
+│   └── 0812_053455_chunk3.results.txt
+├── 0812_042900_n5_ep1_chunk1/               … 塊 1（つまみ無し・既定の n=5）
+├── 0812_052100_n5_ep1_chunk2/               … 塊 2
+├── 0812_061500_n5_ep1_chunk3/               … 塊 3
+└── 0810_101500_n5_ep20_all_ema_alpha03/     … 84 件を一度に・EMA 0.3
 ```
 
-**どの重みを評価した回なのかが後から分かる。** 手で名前を付けていると、
+**どの重みの、どの塊を評価した回なのかが後から分かる。** 手で名前を付けていると、
 付け忘れと取り違えが必ず起きる。
+
+**時刻は Colab の既定の UTC で付く。** 日本時間より 9 時間前になるので、
+名前だけ見ると古いファイルに見える。`live/` と退避先の対応は時刻順で読む。
 
 ## 読む順序
 

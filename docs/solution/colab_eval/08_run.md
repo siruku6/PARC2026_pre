@@ -1,5 +1,10 @@
 # 8. 評価を実行する
 
+> **いまは [`ce.run(chunk=N)`](../../../solution/tools/colab_eval.py) が、
+> ここと手順 9 を 1 回の呼び出しで通す。** このページは
+> **なぜ画面へ出さずログへ書くのか**、**なぜ `--verbose` を付けないのか**、
+> **落ちたときにどこを見るか**を残す。
+
 **手順 6 を実行済みであること。** サーバーを起動し、キットのパイプラインを当てる。
 
 > **画面には出さない。ログファイルへ書く。**
@@ -20,6 +25,21 @@
 # === 評価の実行 ===
 # 設定は 手順 6 で決めている。条件を変えて比べるときは 手順 6 の POLICY_ENV だけを変えて、
 # 手順 6 → 8 の順に流し直す。
+# 版 2。**この行が出ないなら古いセルを実行している**（逐次退避は 8/11 22:50 に入れた）。
+print(f"[8] 版 2   CHUNK={CHUNK or 'なし'}  →  {RESULTS_DIR}")
+
+# **手順 6 を流さずに CHUNK を書き換えただけなら、ここで止まる。**
+# それに気づかないと、同じ 28 件をもう一度 51 分かけて回すことになる
+# （画面上は何も変わらないので、集計を見比べるまで分からない）。
+kit_csv = Path(KIT_DIR) / "compe/t1/T1_TASKS.csv"
+kit_text = kit_csv.read_text()
+if CHUNK:
+    want = Path(f"/content/chunks/VAL_{CHUNK}.csv")
+    assert want.read_text() == kit_text, (
+        f"キットが指しているのは VAL_{CHUNK}.csv ではない。**手順 6 を実行すること**"
+    )
+print(f"    タスク {len(kit_text.splitlines()) - 1} 件  録画 {RECORD_DIR or '（撮らない）'}")
+
 log = open("/content/server.log", "w")
 server = subprocess.Popen(
     [sys.executable, str(SERVER), "--port", str(PORT)],
