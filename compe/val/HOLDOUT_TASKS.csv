@@ -1,0 +1,9 @@
+instruction,suite,category,source
+pick up the black bowl in the top drawer of the wooden cabinet and place it on the plate,libero_spatial,Background Textures,t1
+pick up the tomato sauce and place it in the basket,libero_object,Background Textures,t1
+pick up the milk and place it in the basket,libero_object,Light Conditions,t1
+put the bowl on the stove,libero_goal,Light Conditions,t1
+pick up the book and place it in the back compartment of the caddy,libero_10,Background Textures/Light Conditions,extra
+open the middle drawer of the cabinet,libero_goal,Background Textures/Light Conditions,extra
+pick up the alphabet soup and place it in the basket,libero_object,Background Textures/Light Conditions,extra
+pick up the black bowl between the plate and the ramekin and place it on the plate,libero_spatial,Background Textures/Light Conditions,extra

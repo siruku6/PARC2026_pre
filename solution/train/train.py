@@ -15,9 +15,18 @@
 | 画像拡張 | **無効** | **無効** | **有効** |
 
 **8/11 までの既定で 20,000 歩まわしたら、本番スコアが 0.1409 から 0.016 へ
-落ちた**（8.8 倍の悪化）。原因は 1 コマを見た回数で、
-**出発点の 0.29 回に対しこちらは 5.1 回**だった（18 倍）。
-経緯は [docs/strategy/05_実測結果.md](../../docs/strategy/05_実測結果.md)。
+落ちた**（8.8 倍の悪化）。
+
+**上の表のうち、一次情報で裏が取れるのは学習率・warmup・最後の学習率・歩数だけである。**
+それらは重みの `config.json` に残る（`optimizer_lr=3e-4`、
+`scheduler_warmup_steps=100`、`scheduler_decay_steps=20000`）。
+**データの本数とバッチ数は残らない。** あの回は学習マシンから `merged_model/` だけを
+持ち帰ったため、`train_config.json` が失われており、
+**「1 コマを 5.1 回見た」という数字は確かめられない。**
+一次情報だけで言えることは
+[docs/reference/11_training_schedule.md](../../docs/reference/11_training_schedule.md)
+に分けて置いた。**この docstring より、そちらを信用すること。**
+（`merge.py` は 8/11 以降、学習の条件を `merged_model/` へ同梱する。）
 
 **LoRA は既定で有効のままにしてある。** LeRobot が LoRA を当てるのは
 action expert の q/v 射影と 5 つの射影層だけで、
@@ -58,6 +67,7 @@ Generates:
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import shutil
@@ -110,9 +120,18 @@ def _parse_args() -> argparse.Namespace:
                              "エピソード番号を集合として扱うため、重複させても効かない")
     parser.add_argument("--max-demo-steps", type=int, default=0,
                         help="手本がこの歩数を超えるエピソードを使わない。**0 なら落とさない。**"
-                             "300 を渡すと 401 本（フレームの 6.3%）が落ちる —— "
+                             "300 を渡すと 401 本（フレームの 6.3%%）が落ちる —— "
                              "**上限 300 歩の採点では再現できないことが証明済み**である"
                              "（成功した回は手本の 0.95 倍の歩数で終わっている）")
+    # **検証専用にするタスクを学習から外す。** 摂動版は元のタスクの実演を
+    # 共有するため、変種の id を抜いても同じ指示文の別の変種が学習に残る。
+    # **指示文で丸ごと外さないと、手元の検証は「覚えた度合い」を測ってしまう。**
+    # 一覧は solution/tools/make_holdout_split.py が作り、
+    # **検証集合も同じ CSV を読む**（docs/howto/04_proxy_eval.md）。
+    parser.add_argument("--holdout-tasks", type=Path, default=None,
+                        metavar="CSV",
+                        help="このCSVの instruction 列にあるタスクを学習から外す。"
+                             "**データセットに無い指示文があればその場で止める**")
     parser.add_argument("--save-freq", type=int, default=500)
     parser.add_argument("--num-workers", type=int, default=2,
                         help="データ供給のプロセス数。**CPU のコア数に合わせる。**"
@@ -224,7 +243,8 @@ def _choose_spread_by_value(
     return [ordered[position] for position in positions]
 
 
-def _select_episodes(dataset_root: Path, episodes_per_task: int) -> list[int]:
+def _select_episodes(dataset_root: Path, episodes_per_task: int,
+                     holdout: list[str]) -> list[int]:
     """全 40 タスクから、明るさで散らしてエピソードを選ぶ。
 
     Parameters
@@ -234,12 +254,15 @@ def _select_episodes(dataset_root: Path, episodes_per_task: int) -> list[int]:
     episodes_per_task : int
         1 タスクあたりの本数。
 
+    holdout : list[str]
+        検証専用にするタスクの指示文。空なら何も外さない。
     Returns
     -------
     episode_indices : list[int]
         選んだエピソード番号の昇順リスト。
     """
     frame = _load_episode_metadata(dataset_root)
+    frame = _drop_holdout(frame, holdout)
     brightness = dict(zip(frame["episode_index"].astype(int), frame["brightness"]))
 
     selected: list[int] = []
@@ -281,7 +304,7 @@ def _check_task_names(frame: pd.DataFrame, names: list[str]) -> None:
 
 def _select_emphasized_episodes(
     dataset_root: Path, emphasize: list[str], multiplier: float,
-    max_demo_steps: int, draws: int,
+    max_demo_steps: int, draws: int, holdout: list[str],
 ) -> list[int]:
     """苦手タスクの割合を上げ、長すぎる手本を落としてエピソードを選ぶ。
 
@@ -312,12 +335,15 @@ def _select_emphasized_episodes(
     draws : int
         学習で引く回数（歩数 × バッチ）。1 コマを何回見るかの表示に使う。
 
+    holdout : list[str]
+        検証専用にするタスクの指示文。空なら何も外さない。
     Returns
     -------
     episode_indices : list[int]
         選んだエピソード番号の昇順リスト。
     """
     frame = _load_episode_metadata(dataset_root)
+    frame = _drop_holdout(frame, holdout)
     _check_task_names(frame, emphasize)
 
     total_before = len(frame)
@@ -559,6 +585,185 @@ def _build_command(
     return command + list(args.extra)
 
 
+def _load_holdout(path: Path) -> list[str]:
+    """検証専用にするタスクの指示文を読む。
+
+    **摂動版の id ではなく指示文で外す。** 摂動版は元のタスクの実演データを
+    共有するため、変種の id を抜いても同じ指示文の別の変種が学習に残り、
+    中身は見たままになる。
+
+    一覧は `solution/tools/make_holdout_split.py` が作る。
+    **検証集合も同じ CSV を読む**ので、片方だけ古くなることがない。
+
+    **読み取りを `make_validation_suite.py` と共有していないのは、
+    学習イメージが `train.py` と `merge.py` だけを COPY するためである**
+    （`solution/train/Dockerfile`）。`solution/tools/` は学習側に存在しない。
+
+    Parameters
+    ----------
+    path : Path
+        `instruction` 列を持つ CSV。
+
+    Returns
+    -------
+    instructions : list[str]
+        外す指示文。重複は落とす。
+    """
+    if not path.is_file():
+        raise SystemExit(f"[train] 除外リストが見つかりません: {path}")
+
+    with path.open(newline="") as stream:
+        reader = csv.DictReader(stream)
+        # **見出しと中身を別々に確かめる。** どちらが欠けたのかで直し方が違う。
+        if reader.fieldnames is None or "instruction" not in reader.fieldnames:
+            raise SystemExit(
+                f"[train] 除外リストに instruction 列がありません: {path}"
+                f"（見出し: {reader.fieldnames}）"
+            )
+        rows = list(reader)
+
+    seen: dict[str, None] = {}
+    for row in rows:
+        instruction = row["instruction"].strip()
+        if instruction:
+            seen.setdefault(instruction, None)
+    if not seen:
+        raise SystemExit(f"[train] 除外リストが空です: {path}")
+    return list(seen)
+
+
+def _download_metadata() -> Path:
+    """学習データのメタデータだけを取り寄せる。
+
+    **動画は落とさない。** エピソードの選び方を決めるのに要るのは
+    `meta/**` だけで、そこに 1 本ごとのタスク名・長さ・統計量が入っている。
+
+    Returns
+    -------
+    dataset_root : Path
+        `meta/episodes/*.parquet` があるディレクトリ。
+    """
+    print("[train] データセットのメタデータを取得")
+    return Path(snapshot_download(
+        _DATASET_REPO, revision=_DATASET_REVISION, repo_type="dataset",
+        allow_patterns=["meta/**"],
+    ))
+
+
+def _drop_holdout(frame: pd.DataFrame, holdout: list[str]) -> pd.DataFrame:
+    """検証専用のタスクをメタデータから落とす。
+
+    **外したい指示文がデータセットに 1 つも無ければ、その場で止める。**
+    黙って 0 件だけ外した学習を走らせると、**検証集合が汚れていることに
+    気付かないまま結果を信じてしまう。** LIBERO-plus の名前とデータセットの
+    `task` 列は書き方が違う場合があるため、ここで必ず突き合わせる。
+
+    Parameters
+    ----------
+    frame : pd.DataFrame
+        `_load_episode_metadata` が返したもの。
+    holdout : list[str]
+        外す指示文。空なら何もしない。
+
+    Returns
+    -------
+    kept : pd.DataFrame
+        外した後のメタデータ。
+    """
+    if not holdout:
+        return frame
+
+    # `task` 列は `_load_episode_metadata` が文字列で作るので変換は要らない。
+    available = set(frame["task"])
+    missing = [name for name in holdout if name not in available]
+    if missing:
+        sample = sorted(available)[:8]
+        raise SystemExit(
+            "[train] 除外リストの指示文がデータセットに見つかりません:\n"
+            + "".join(f"    {name}\n" for name in missing)
+            + f"  データセット側の書き方の例（全 {len(available)} 種）:\n"
+            + "".join(f"    {name}\n" for name in sample)
+            + "  **make_holdout_split.py の導出が LIBERO-plus の版と"
+              "合っていない可能性がある。**"
+        )
+
+    kept = frame[~frame["task"].isin(holdout)]
+    kept_tasks = kept["task"].nunique()
+    print(f"[train] 除外: {len(available) - kept_tasks} タスク / "
+          f"{len(frame) - len(kept):,} エピソードを学習から外した")
+    print(f"[train]   残り {len(kept):,} エピソード / {kept_tasks} タスク")
+    return kept
+
+
+def _select_without_holdout(dataset_root: Path, holdout: list[str]) -> list[int]:
+    """外すタスクを除いた全エピソードの番号を返す。
+
+    Parameters
+    ----------
+    dataset_root : Path
+        `meta/episodes/*.parquet` があるディレクトリ。
+    holdout : list[str]
+        外す指示文。
+
+    Returns
+    -------
+    episode_indices : list[int]
+        学習に使うエピソード番号。
+    """
+    kept = _drop_holdout(_load_episode_metadata(dataset_root), holdout)
+    indices = sorted(int(value) for value in kept["episode_index"])
+    # **番号がコマンド 1 行に並ぶ。** 全部使う場合は旗を省けるが、
+    # 外すときは並べるしかない。長さを出しておく。
+    # `_build_command` はカンマ区切りで繋ぐので、その形で数える
+    # （`str(list)` は空白も入るため 1 割ほど多く見える）。
+    width = len(indices) - 1 + sum(len(str(value)) for value in indices)
+    print(f"[train]   `--dataset.episodes` の長さ 約 {width / 1024:.0f} KB")
+    return indices
+
+
+def _warn_if_schedule_mixed(args: argparse.Namespace) -> None:
+    """学習率と歩数が、信用できる 2 つの条件のどちらにも当てはまらないなら言う。
+
+    一次情報で分かっている条件は 2 つだけである。
+
+    | 出典 | 学習率 / warmup / 最後 | 歩数 |
+    |---|---|---|
+    | 出発点の重みの `train_config.json` | 1e-4 / 1,000 / 2.5e-6 | 20,000 |
+    | 配布ノートブック（`examples/` の LoRA ノート） | 3e-4 / 100 / 3e-5 | 3,000 |
+
+    **8/11 に本番 0.1409 → 0.016 と 8.8 倍悪化した回は、後者の学習率で
+    前者の歩数を回していた**（重みの `config.json` に `optimizer_lr=3e-4`、
+    `scheduler_warmup_steps=100`、`scheduler_decay_steps=20000` が残っている）。
+    **この組み合わせを認めている出典は無い。**
+    経緯は `docs/reference/11_training_schedule.md`。
+
+    止めはしない。**歩数を減らして試す使い方は正しい**ので、
+    判断は渡す側に残す。
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        解析済みの引数。
+    """
+    notebook_lr = 3e-4
+    notebook_steps = 3000
+
+    if args.learning_rate >= notebook_lr and args.steps > notebook_steps:
+        print(
+            f"[train] **注意: 学習率 {args.learning_rate:g} は配布ノートブックの値で、"
+            f"{notebook_steps:,} 歩を想定したものです。**"
+            f" いま {args.steps:,} 歩を指定しています。"
+        )
+        print(
+            "[train]   これは本番スコアを 0.1409 から 0.016 へ落とした回と"
+            "同じ組み合わせです（docs/reference/11_training_schedule.md）。"
+        )
+        print(
+            "[train]   長く回すなら出発点と同じ --learning-rate 1e-4"
+            " --warmup-steps 1000 --final-learning-rate 2.5e-6 に揃えてください。"
+        )
+
+
 def main() -> None:
     args = _parse_args()
     output_dir: Path = (args.output_root / args.run_name).resolve()
@@ -600,21 +805,30 @@ def main() -> None:
         # 選ぶ処理を通すと 14,347 個の番号がコマンド 1 行に並ぶので、旗ごと省く。
         record: dict[str, Any]
         selects_by_task = bool(args.emphasize_tasks) or args.max_demo_steps > 0
-        if args.episodes_per_task <= 0 and not selects_by_task:
+        holdout = _load_holdout(args.holdout_tasks) if args.holdout_tasks else []
+        if args.episodes_per_task <= 0 and not selects_by_task and not holdout:
             episode_indices = None
             record = {"episodes": "all", "per_task": None}
             print("[train] **全エピソードを使う**（出発点の重みと同じ条件）")
+        elif args.episodes_per_task <= 0 and not selects_by_task:
+            # **除外だけを指定した場合。** 外した分以外は全部使うが、
+            # 「全部」を旗の省略で表せないので番号を並べる。
+            print(f"[train] 除外リストを読む: {args.holdout_tasks}")
+            dataset_root = _download_metadata()
+            episode_indices = _select_without_holdout(dataset_root, holdout)
+            record = {
+                "episodes": episode_indices,
+                "per_task": None,
+                "holdout_tasks": holdout,
+                "holdout_source": str(args.holdout_tasks),
+            }
         else:
-            print("[train] データセットのメタデータを取得")
-            dataset_root = Path(snapshot_download(
-                _DATASET_REPO, revision=_DATASET_REVISION, repo_type="dataset",
-                allow_patterns=["meta/**"],
-            ))
+            dataset_root = _download_metadata()
             if selects_by_task:
                 episode_indices = _select_emphasized_episodes(
                     dataset_root, list(args.emphasize_tasks or []),
                     args.emphasis_multiplier, args.max_demo_steps,
-                    args.steps * args.batch_size,
+                    args.steps * args.batch_size, holdout=holdout,
                 )
                 record = {
                     "episodes": episode_indices,
@@ -624,7 +838,9 @@ def main() -> None:
                     "max_demo_steps": args.max_demo_steps,
                 }
             else:
-                episode_indices = _select_episodes(dataset_root, args.episodes_per_task)
+                episode_indices = _select_episodes(
+                    dataset_root, args.episodes_per_task, holdout=holdout
+                )
                 record = {
                     "episodes": episode_indices, "per_task": args.episodes_per_task
                 }
@@ -642,6 +858,7 @@ def main() -> None:
         print(f"[train] 学習を開始（{args.steps} ステップ、batch {args.batch_size}、"
               f"lr {args.learning_rate}、warmup {args.warmup_steps}、"
               f"画像拡張 {'有効' if args.image_transforms else '無効'}）")
+        _warn_if_schedule_mixed(args)
 
     process = subprocess.run(command)
 

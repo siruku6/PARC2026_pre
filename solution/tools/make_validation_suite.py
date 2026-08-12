@@ -50,6 +50,12 @@ import re
 import sys
 from pathlib import Path
 
+# 素のタスク名の取り出しは `make_holdout_split` と共通にする。
+# **同じ正規表現を 2 か所に置くと必ず片方が古くなる。**
+# 兄弟の台本を読む書き方は `check_validation_suite.py` と同じである。
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from make_holdout_split import base_task, instruction  # noqa: E402
+
 # LIBERO-plus の摂動カテゴリ 7 つ。**既定では全部使う。**
 # どれが本番に出るかは非公開であり、絞ると外れたときに何も見えなくなる。
 _DEFAULT_CATEGORIES = (
@@ -86,6 +92,13 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--exclude", type=Path,
                         default=Path("compe/t1/T1_TASKS.csv"),
                         help="除外する example の CSV")
+    # **検証集合を「学習から外したタスク」だけに絞る。**
+    # 摂動版は元のタスクの実演を共有するため、学習に使ったタスクの摂動版で
+    # 測ると「覚えた度合い」になる。**学習側と同じ CSV を読むことで、
+    # 片方だけ古くなる事故を防ぐ**（docs/howto/04_proxy_eval.md）。
+    parser.add_argument("--holdout", type=Path, default=None, metavar="CSV",
+                        help="make_holdout_split.py が作った CSV。"
+                             "**この instruction 列にあるタスクだけを検証に使う**")
     parser.add_argument("--output", type=Path,
                         default=Path("compe/val/VAL_TASKS.csv"),
                         help="出力する CSV")
@@ -326,6 +339,54 @@ def _place_variant(
         if stem is not None:
             return folder, bddl, f"{stem}{_INIT_SUFFIX}"
     return None
+
+
+def _keep_holdout_only(entries: list[dict], path: Path) -> list[dict]:
+    """学習から外したタスクの摂動版だけを残す。
+
+    Parameters
+    ----------
+    entries : list[dict]
+        分類表の全件。
+    path : Path
+        `instruction` 列を持つ CSV。
+
+    Returns
+    -------
+    kept : list[dict]
+        指示文が一致した件だけ。
+
+    Raises
+    ------
+    SystemExit
+        CSV が読めないとき、または 1 件も残らなかったとき。
+        **黙って 0 件を返すと、空の検証集合で学習の可否を決めてしまう。**
+    """
+    if not path.is_file():
+        raise SystemExit(f"[val] 除外リストが見つかりません: {path}")
+    with path.open(newline="") as stream:
+        reader = csv.DictReader(stream)
+        if reader.fieldnames is None or "instruction" not in reader.fieldnames:
+            raise SystemExit(
+                f"[val] 除外リストに instruction 列がありません: {path}"
+                f"（見出し: {reader.fieldnames}）"
+            )
+        wanted = {row["instruction"].strip() for row in reader if row["instruction"].strip()}
+    if not wanted:
+        raise SystemExit(f"[val] 除外リストが空です: {path}")
+
+    kept = [
+        entry for entry in entries
+        if instruction(base_task(entry["name"])) in wanted
+    ]
+    print(f"[val] 検証に使うのは外した {len(wanted)} タスクの摂動版だけ: "
+          f"{len(entries)} 件 -> {len(kept)} 件")
+    if not kept:
+        raise SystemExit(
+            f"[val] 外したタスクの摂動版が 1 件も見つかりません: {path}\n"
+            "  **make_holdout_split.py の導出と分類表の版が合っていない。**"
+        )
+    return kept
 
 
 def _load_excluded(path: Path) -> set[str]:
@@ -614,6 +675,9 @@ def main() -> None:
 
     entries = _load_classification(args.libero_plus)
     print(f"[val] 分類表: {len(entries)} 件")
+
+    if args.holdout:
+        entries = _keep_holdout_only(entries, args.holdout)
 
     excluded = _load_excluded(args.exclude)
     print(f"[val] 除外する example: {len(excluded)} 件")
