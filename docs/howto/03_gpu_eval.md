@@ -10,6 +10,28 @@ Colab には 3 つの困りごとがあった。**GPU マシンなら 3 つと�
 | `/content` は消えるので Drive へ逃がす仕掛けが要る | **消えない。** 退避漏れで結果を失う経路が無い |
 | GPU が当たるかどうかが運次第 | 常にある |
 
+## 何を測るのか（既定が 36 件に変わった）
+
+**既定で測るのは 36 件である。** [compe/val/EVAL_TASKS.csv](../../compe/val/EVAL_TASKS.csv)
+に入っており、**学習が 1 度も引かなかった実演がある指示文だけ**で作ってある。
+
+**以前の 84 件は使わない。** 84 件は学習に使ったタスクを検証にも使っていたため、
+**手元の順序が採点環境と逆になった。**
+
+| 重み | 84 件の成功率 | 採点環境の総合スコア |
+|---|---|---|
+| 素 | 0.476 | **0.1409** |
+| LoRA 20,000 歩 | **0.500**（素より上に見えた） | **0.016** |
+
+理由と作り方は [04_proxy_eval.md](04_proxy_eval.md) にある。
+一覧を作り直すのは `solution/tools/make_eval_split.py` である。
+
+| | 件数 | 所要 | いつ使うか |
+|---|---|---|---|
+| **`EVAL_TASKS.csv`（既定）** | **36** | **約 1 時間** | **重みの採否を判断するとき** |
+| 84 件を生成 | 84 | 2 時間 21 分 | **壊れていないかの確認だけ。** `EVAL_CSV=` と空にすると戻る |
+| `--check` | 5 | 10 分 | 配線が通っているかを見るとき |
+
 ## 使い方
 
 **イメージを 2 つ並べて使う。どちらも作り直さない。**
@@ -18,9 +40,17 @@ Colab には 3 つの困りごとがあった。**GPU マシンなら 3 つと�
 # 1. まず 5 件だけ。5 分ほどで配線が通っているかが分かる
 bash solution/tools/run_docker_eval.sh --check
 
-# 2. 通ったら全件。放っておける形で流す
+# 2. 通ったら 36 件。放っておける形で流す
 bash solution/tools/run_docker_eval.sh --detach
 tail -f work/gpu_eval/launcher.log
+```
+
+**一覧が無いと、その場で止まる。** 黙って 84 件に落ちることはない。
+
+```
+  **測るタスクの一覧がない: .../compe/val/EVAL_TASKS.csv**
+  作る: python3 solution/tools/make_eval_split.py --record <episodes.json>
+  84 件を生成する道に戻す: EVAL_CSV= bash solution/tools/run_docker_eval.sh
 ```
 
 事前に 2 つのイメージが要る。**学習に使ったものがそのまま使える。**
@@ -44,14 +74,39 @@ revision を固定して取り直せば同じものが手に入る。
 # 素の重み（0.1409 の構成）を取り寄せる。869 MB
 bash solution/tools/fetch_base_weights.sh
 
-# 素の重みで評価する（2〜3 時間）
+# 素の重みで評価する（36 件で約 1 時間）
 MUJOCO_GL=osmesa WEIGHTS=work/artifacts/model_weights_base LABEL=base \
     bash solution/tools/run_docker_eval.sh --detach
 
-# 学習後の重みで測る（終わってから。さらに 2〜3 時間）
-MUJOCO_GL=osmesa LABEL=lora15k \
+# 学習後の重みで測る（終わってから。さらに約 1 時間）
+MUJOCO_GL=osmesa LABEL=lora20k \
     bash solution/tools/run_docker_eval.sh --detach
 ```
+
+> **同時に流さないこと**（下の警告と同じ理由）。
+
+### 36 件が判断に使えるかを先に検定する
+
+**この 36 件を信じてよいかは、答えの分かっている重みで確かめる。**
+採点環境の結果が 3 つある。
+
+| 重み | 置き場所 | 採点環境の総合スコア |
+|---|---|---|
+| 素 | `work/artifacts/model_weights_base` | **0.1409** |
+| λ=0.25 のブレンド | `work/artifacts/model_weights_lam025` | 0.095 |
+| LoRA 20,000 歩 | `outputs/train2/weak3x_max300/merged_model` ほか | **0.016** |
+
+**素と LoRA 20,000 歩の 2 つで足りる。** この 2 つは採点環境で段が分かれており、
+λ=0.25 は素との差が 1 本ぶん（0.046）しかないので判定に使わない。
+
+```bash
+python3 solution/tools/compare_with_production.py \
+    --pair "work/gpu_eval/<base の回>=outputs/prod_eval_results/260810_評価結果_ema=0.3あり.md" \
+    --pair "work/gpu_eval/<lora20k の回>=outputs/prod_eval_results/260811_評価結果_ema=0.3あり_初回学習後.md"
+```
+
+**順序が食い違ったら、この 36 件も判断に使えない。** 読み方は
+[04_proxy_eval.md](04_proxy_eval.md) にある。
 
 **出力先の名前に `LABEL` が入る**ので、どちらの回か後から取り違えない。
 
@@ -72,6 +127,23 @@ work/gpu_eval/0811_161500_lora15k_n5_ep1_max300/
 python3 solution/tools/summarize_rollout_videos.py work/gpu_eval/<回>/videos
 ```
 
+> **Mac では直接動かない。`parc2026` の Docker で回す。**
+> mp4 を読むには `cv2` と `numpy` が要るが、**Mac 側のどの python にも入っていない**
+> （`work/venv*` も homebrew の python も。`pip` すら無い venv がある）。
+> **`parc2026` イメージには両方入っている**
+> （`setup.sh` が `opencv-python-headless==4.11.0.86` と `numpy==1.26.4` を入れる）。
+> **`ffmpeg` コマンドは要らない** —— opencv の wheel が FFmpeg を同梱している。
+>
+> ```bash
+> docker run --rm -v "$PWD:/w" -w /w parc2026 \
+>     python3 solution/tools/summarize_rollout_videos.py outputs/local_eval/<回>/videos
+> ```
+>
+> **`videos/sheets/<動画名>.png` が 1 本 8 コマで出る。** 動画を再生しなくても、
+> **歩数・グリッパの開閉回数・結末・衝突した物体**がコマに焼かれているので読める。
+> 8/13 にこれで「言い換えの回は掴む物を間違えている」ことを確かめた
+> （[../talk/260812_briefing.md](../talk/260812_briefing.md) の 5-3 節）。
+
 > **同時に流さないこと。** どちらも GPU を使い、方策サーバーのコンテナ名が
 > 同じ（`parc-policy`）である。**片方が終わってから次を流す。**
 
@@ -81,20 +153,37 @@ python3 solution/tools/summarize_rollout_videos.py work/gpu_eval/<回>/videos
 |---|---|---|
 | `WEIGHTS` | `work/artifacts/model_weights` | **測る重み。** 比べるときはここを変える |
 | `LABEL` | （空） | 出力先の名前に足す語 |
+| **`EVAL_CSV`** | **`compe/val/EVAL_TASKS.csv`** | **測るタスクの一覧（36 件）。** 空にすると 84 件を生成する道に戻る |
 | `MAX_STEPS` | `300` | 本番と同じ打ち切り |
-| `N_EPISODES` | `1` | **タスクあたり**の本数。84 件あるので 1 のまま |
-| `PER_CELL` | `3` | スイート × カテゴリあたり。全体で 84 件になる |
-| `CATEGORIES` | （空） | 測る摂動カテゴリ。**空なら 7 つ全部＝84 件。** 下を見る |
+| `N_EPISODES` | `1` | **タスクあたり**の本数。36 件あるので 1 のまま |
+| `PER_CELL` | `3` | 84 件を生成するときのスイート × カテゴリあたりの本数。**`EVAL_CSV` を空にしたときだけ効く** |
+| `CATEGORIES` | （空） | 同上。生成するときだけ効く。下を見る |
 | `RECORD` | `1` | ロールアウトを mp4 に撮る。**失敗した回だけ** |
 | `PARC_*` | （空） | 推論のつまみ。空なら `policy_server.py` の既定が効く |
 
-### カテゴリを絞って短く回す
+**一覧を別のものに差し替えるときは `EVAL_CSV` を渡す。**
+
+```bash
+# 指示文ごとに 2 件へ増やした一覧で測る
+python3 solution/tools/make_eval_split.py --record outputs/train2/episodes.json \
+    --per-task 2 --output compe/val/EVAL_TASKS_x2.csv
+EVAL_CSV=compe/val/EVAL_TASKS_x2.csv \
+    bash solution/tools/run_docker_eval.sh --detach
+```
+
+### カテゴリを絞って短く回す（84 件を生成する道でだけ効く）
+
+> **`EVAL_CSV` を空にしたときだけの話である。** 既定の 36 件は
+> すでに Background Textures と Light Conditions の 2 カテゴリだけで作ってあり
+> （採点環境の摂動がそれだと運営 Q&A No.21 が答えている）、
+> **`CATEGORIES` を渡しても効かない。** 36 件から絞るなら
+> `make_eval_split.py --categories` で一覧を作り直す。
 
 **1 カテゴリが 12 件である**（`--per-cell 3` × スイート 4 つ。生成器を回して
 数えた値で、7 つ全部だと 84 件になる）。**件数がそのまま時間になる。**
 
 ```bash
-CATEGORIES='Light Conditions,Background Textures' \
+EVAL_CSV= CATEGORIES='Light Conditions,Background Textures' \
     bash solution/tools/run_docker_eval.sh   # 84 件 2 時間 21 分 → 24 件 39 分
 ```
 
@@ -151,10 +240,12 @@ RUN pip install --no-cache-dir "fastapi>=0.68" "uvicorn>=0.15" "msgpack>=1.0"
 
 **このマシン（H100-20C）では EGL で止まる。** 8/11 に確かめた。
 
-| 描画 | 空の場面 1 枚 | LIBERO の場面 | 1 歩 | 84 件 |
+| 描画 | 空の場面 1 枚 | LIBERO の場面 | 1 歩 | 84 件を流したとき |
 |---|---|---|---|---|
 | **`osmesa`（CPU）** | 0.8 ms | **動く** | **384 ms** | **2〜3 時間** |
 | `egl`（GPU） | 0.2 ms | **最初の数歩で止まる** | — | — |
+
+**右端は 84 件で測ったときの値である**（既定の 36 件なら約 1 時間）。
 
 **原因が判明した。この vGPU は計算専用の製品である。**
 
@@ -191,9 +282,13 @@ MUJOCO_GL=osmesa bash solution/tools/run_docker_eval.sh --check
 
 | スイート | 件数 | 実測 | 指定 |
 |---|---|---|---|
-| 7 カテゴリ | 84 | **2 時間 21 分** | `CATEGORIES` を空のまま |
-| 本命 2 カテゴリ | **24** | **39 分** | `CATEGORIES='Light Conditions,Background Textures'` |
+| **`EVAL_TASKS.csv`（既定）** | **36** | **約 1 時間**（1 件 1.67 分から算出） | 何も渡さない |
+| 7 カテゴリを生成 | 84 | **2 時間 21 分** | `EVAL_CSV=` |
+| 本命 2 カテゴリを生成 | **24** | **39 分** | `EVAL_CSV= CATEGORIES='Light Conditions,Background Textures'` |
 | 先頭 5 件（`--check`） | 5 | 10 分 | `--check` |
+
+**36 件の「約 1 時間」だけは実測ではない。** 1 件 1.67 分（84 件の実測から）を
+かけた値である。**1 回流したら実測に書き換えること。**
 
 **1 件あたり 1.67 分。カテゴリによって 1.2〜2.1 分の幅がある。**
 **打ち切りに当たった回が長い**（84 件のうち 38 件が 300 歩まで走った。
