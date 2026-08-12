@@ -28,9 +28,17 @@ Colab には 3 つの困りごとがあった。**GPU マシンなら 3 つと�
 
 | | 件数 | 所要 | いつ使うか |
 |---|---|---|---|
-| **`EVAL_TASKS.csv`（既定）** | **36** | **約 1 時間** | **重みの採否を判断するとき** |
+| **`EVAL_TASKS.csv`（既定）** | **36** | **約 72 分**（1 件 2 分・8/13 実測） | **重みの採否を判断するとき** |
 | 84 件を生成 | 84 | 2 時間 21 分 | **壊れていないかの確認だけ。** `EVAL_CSV=` と空にすると戻る |
 | `--check` | 5 | 10 分 | 配線が通っているかを見るとき |
+
+**この 36 件がどういう根拠で選ばれたか**は
+[../reference/13_holdout_episodes.md](../reference/13_holdout_episodes.md) にある。
+**「選んだ変種そのものが学習に入っていない」とは言えない**点もそこに書いた。
+
+> **一覧は「どの学習に対して未使用か」で決まる。** いまのものは
+> `outputs/train2/weak3x_max300/episodes.json`（weak3x の回）を根拠にしている。
+> **別の学習の重みを測るなら作り直す**（根拠は `EVAL_TASKS.meta.json` の `record`）。
 
 ## 使い方
 
@@ -108,6 +116,39 @@ python3 solution/tools/compare_with_production.py \
 **順序が食い違ったら、この 36 件も判断に使えない。** 読み方は
 [04_proxy_eval.md](04_proxy_eval.md) にある。
 
+### 1 本目が終わった時点で見る数字
+
+**成功件数だけで、この集合に判別力があるか分かる。**
+
+| 成功件数 | 意味 | 次 |
+|---|---|---|
+| **10〜25 件** | 天井も床もない | **2 本目（LoRA 20k）へ進む** |
+| 0〜2 件 | 難しすぎて全方策が 0 に張り付く | `make_eval_split.py --offset 1` で別の変種にして作り直す |
+| 34〜36 件 | 易しすぎて悪化を検出できない | 同じく作り直す |
+
+`summary.txt` の「結末」で**打ち切り 300 歩に張り付いた本数**も見る。
+そこが大半なら、成功件数が中間でも判別力は低い。
+
+> **8/13 の進み具合。** 素の重み（`a67a056a`・`n=5` `ema 0.3` `samples=1`）で
+> 36 件を回した回が `work/gpu_eval/0813_085045_base_n5_n5_ep1_max300_ema03_s1/` にある。
+> **次は同じつまみで LoRA 20k を回し、`compare_with_production.py` にかける。**
+
+### つまみは採点時に合わせる
+
+**既定は版 3.4.0 で `n=2` `samples=3` に変わっている。**
+比較する採点結果 2 本はどちらも `n=5` `ema 0.3` `samples=1`（`policy_server 0.3.0`）
+なので、**明示的に渡さないと重み以外が 2 つ違ってしまう。**
+
+```bash
+PARC_N_ACTION_STEPS=5 PARC_SAMPLES=1 PARC_EMA_ALPHA=0.3 …
+```
+
+**流し始めたら `server.log` の先頭 1 行を必ず読む。** 値が違えばその回は捨てる。
+
+**重みの取り違えも機械的に潰す。** 素の重みは
+`shasum -a 256 work/artifacts/model_weights_base/model.safetensors` が
+`a67a056ab0761afa5f5efef8edd45065cef4494735231b7eeeb8328e71fcfb72` である。
+
 **出力先の名前に `LABEL` が入る**ので、どちらの回か後から取り違えない。
 
 ```
@@ -146,6 +187,27 @@ python3 solution/tools/summarize_rollout_videos.py work/gpu_eval/<回>/videos
 
 > **同時に流さないこと。** どちらも GPU を使い、方策サーバーのコンテナ名が
 > 同じ（`parc-policy`）である。**片方が終わってから次を流す。**
+
+## 指示文の正規化の精度を測る（意味で寄せる道）
+
+**語の重なりで寄せる分は手元で測れる**（torch が要らない。
+[02_build_submission.md](02_build_submission.md) の「指示文の正規化を測る」）。
+**測れないのは「意味で寄せる道」だけである** —— 同梱の SmolVLM の言語側を
+実際に動かすので、torch と重みが要る。
+
+```bash
+docker run --rm --gpus all -v "$PWD:/w" -w /w parc2026-train-server \
+    python3 solution/tools/check_instruction_normalization.py --embed --sweep
+```
+
+**`parc2026` では動かない。** あのイメージに torch はあるが transformers が無い。
+**方策サーバーが動くイメージ（`parc2026-train-server`）で回す**
+（下の「なぜイメージが 2 つ要るのか」）。**重みを読むので 1〜2 分かかる。**
+
+**見るのは 1 つだけ。** 「本番の 2 カテゴリで誤って寄せた数」が **0 のまま**で、
+**言い換えを寄せた数が 468 種から増える**なら、
+`policy_server.py` の `_USE_EMBEDDING` を `True` にする価値がある。
+**誤りが増えるなら入れない**（いま解けている回を壊しうる）。
 
 ## 設定
 
@@ -376,13 +438,16 @@ python3 solution/tools/summarize_gpu_eval.py \
 
 | 症状 | 見るところ |
 |---|---|
+| **`84 タスクを読み込み` と出る** | **このマシンのリポジトリが古い。** `git pull` する。8/13 に踏んだ ——「渡された一覧を使う」が出ない版だと黙って 84 件を生成する。タスク名に `_view_`・`_language_`・`_noise_`・`_add_` が現れるのも同じ合図（36 件は `_table_`・`_tb_`・`_light_` だけ） |
+| **`確かめた行: 36 / 落ちる行: 36 —— 初期状態が無い`** | **CSV に `init_states_file` 列が無い。** `make_eval_split.py` を新しくして作り直す。8/13 に踏んだ ——`register.py` の `_SUFFIX_RE` は `_light_*` と `_table_\d+` しか剥がさないので、**`_tb_N` は必ず落ちる** |
+| **方策サーバーが消えた** | **台本が途中で終わった症状である**（`trap cleanup EXIT`）。原因は `launcher.log` にある。**止めるときも評価側のコンテナを止める** ——`parc-policy` を先に落とすとパイプラインが例外を握って終了コード 0 で終わり、中途の結果が残る |
 | `torch か lerobot が入っていない` | **ホストの venv を見ている。** Docker 版（このページ）を使う |
 | **画面が無言のまま進まない** | **50 歩ごとに `[進捗]` が出るようになっている**（8/11 に直した）。それも出ないなら本当に止まっている |
 | `[parc] 行が無い` | 古い `policy_server.py` を見ている。`solution/` が正 |
-| 方策サーバーが落ちた | `docker logs parc-policy`。重みのパスか GPU メモリ |
 | 描画が 8 ms を超える | `--gpus all` と `NVIDIA_DRIVER_CAPABILITIES` |
 | 件数が足りない | `summary.txt` の「例外で測れなかった回」 |
 | 結果が 1 件も無い | `eval.log` の末尾。CSV の差し替えかパッチを疑う |
+| 出力先のファイルが消せない | **持ち主が root になっている。** 台本の最後の `chown` まで進んでいない。`sudo rm -rf` か、`docker run --rm -v "$PWD/work/gpu_eval:/g" --entrypoint chown parc2026 -R "$(id -u):$(id -g)" /g` |
 
 ## 進み具合の見方
 
