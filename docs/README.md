@@ -33,6 +33,7 @@
 | [howto/01_retrain.md](howto/01_retrain.md) | 追加学習を回すとき |
 | [howto/02_build_submission.md](howto/02_build_submission.md) | zip を作って出すとき |
 | **[howto/03_gpu_eval.md](howto/03_gpu_eval.md)** | **評価を回すとき（GPU マシン。放っておける）** |
+| **[howto/05_scripted_demos.md](howto/05_scripted_demos.md)** | **手本を台本で作るとき（GPU マシン。EGL の設定と詰まる場所）** |
 | **[solution/colab_eval/](solution/colab_eval/README.md)** | **評価を回すとき（Colab。貼るのは `colab_eval.py` の呼び出し 8 行）** |
 | [solution/COLAB.md](solution/COLAB.md) | Colab で学習を回すとき |
 | [strategy/05_実測結果.md](strategy/05_実測結果.md) | 判断する前。数字はすべてここ |
