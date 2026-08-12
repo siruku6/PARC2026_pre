@@ -54,9 +54,17 @@
 #   3.1.0  → **本番 0.166。** weak3x 0.144 を上回り、資格ありの最高。天井の 1 本
 #            （ep3）を 300→202 に解いた。n の 50→10→5→2 が単調改善の続き。
 #   3.3.0  weak3x のまま n_action_steps を 1（3.1.0 からさらに 1 段。samples=1）。
-#          毎ステップ再計画。単調改善（…→5→2）の次の点。EMA 0.3 でガタつきを抑える。
-#          時間は約 1,040 秒（上限の 29%）。ここで反転すれば n=2 が谷底と分かる。
-__version__ = "3.3.0"
+#          → **本番 0.080。悪化した。n=2 が谷底と確定。**
+#            早く終わった回が 4 → 3 本に減り、係数も落ちた（0.443 → 0.32 前後）。
+#            **第 7 回 講義資料part1.pdf p.10 が機構を説明している** ——「k が短すぎる
+#            （k=2）／チャンク境界のたびに分布から別のモードをサンプルしうる →
+#            mode-jumping・jerky な動き」。n=1 は毎歩がその境界になる。
+#   3.4.0  n を 2（勝った値）に戻し、samples を 1 → 3。**3.1.0 から 1 変数。**
+#          EMA（出したあとにならす）は既に効いていたのに n=1 が崩れたので、
+#          **「跳んだモードを引かない」側**から攻める。3 本引いて姿勢 6 次元の
+#          medoid を選ぶので、外れたモードを掴んだ回を捨てられる。
+#          時間は約 1,500 秒（環境 129 秒 ＋ 推論 911/2×3。上限 3,600 秒の 42%）。
+__version__ = "3.4.0"
 
 import argparse
 from abc import ABC, abstractmethod
@@ -189,8 +197,8 @@ class MyPolicy(BasePolicy):
         #
         # 小さくしすぎると、毎ステップ独立に flow matching の乱数を引くため
         # 軌道がガタつく恐れがある。`PARC_EMA_ALPHA` がそれを打ち消す。
-        # 版 3.3.0 で既定を 1 に（n の単調改善の続き。詳細は先頭のコメント）。
-        config.n_action_steps = int(os.environ.get("PARC_N_ACTION_STEPS", "1"))
+        # 版 3.4.0 で 2 に戻した（n=2 が本番で最良。n=1 は 0.080 で悪化）。
+        config.n_action_steps = int(os.environ.get("PARC_N_ACTION_STEPS", "2"))
 
         self._policy = SmolVLAPolicy.from_pretrained(weights, config=config)
         self._policy.to(self._device)
@@ -222,7 +230,8 @@ class MyPolicy(BasePolicy):
         self._n_action_steps = int(self._policy.config.n_action_steps)
 
         # chunk を何回引くか。1 なら素の挙動。
-        self._samples = int(os.environ.get("PARC_SAMPLES", "1"))
+        # 版 3.4.0 で既定を 3 に（境界でモードが跳ぶのを引かないため。先頭のコメント）。
+        self._samples = int(os.environ.get("PARC_SAMPLES", "3"))
         if self._samples > 1:
             self._install_chunk_sampler()
 
