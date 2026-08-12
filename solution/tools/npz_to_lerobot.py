@@ -197,7 +197,7 @@ def command_build(args: argparse.Namespace) -> None:
         root=args.output, robot_type=ROBOT_TYPE, use_videos=True,
     )
 
-    total_frames = 0
+    total_frames, written = 0, 0
     for path in paths:
         episode = SavedEpisode(path)
         # **画像に触る前に成否を見る。** 捨てる回のために 118 MB を
@@ -219,11 +219,15 @@ def command_build(args: argparse.Namespace) -> None:
             })
         dataset.save_episode()
         total_frames += len(state)
+        written += 1
         print(f"  {path.name}: {len(state)} コマ  「{episode.instruction}」")
 
     dataset.finalize()
-    print(f"\n{len(dataset.meta.episodes)} 本 / {total_frames} コマ "
-          f"→ {args.output}")
+    # **本数は自分で数えた値を出す。** `meta.episodes` は読み出しのときだけ
+    # 遅延で読み込まれる欄で、書き込みモードでは `None` のままである
+    # （`len(None)` で落ちた）。確定した宣言は `_print_summary` が
+    # 書き出された `meta/info.json` から読む。
+    print(f"\n{written} 本 / {total_frames} コマ → {args.output}")
     _print_summary(args.output)
 
 
@@ -255,8 +259,15 @@ def command_merge(args: argparse.Namespace) -> None:
 
 
 def _print_summary(root: Path) -> None:
-    """出来上がりの宣言を印字する。**混ぜる前に目視で突き合わせる。**"""
+    """書き出されたものの宣言を印字する。**混ぜる前に目視で突き合わせる。**
+
+    数えるのは `meta/info.json` である。**書き出しが本当に終わったかは、
+    残ったファイルから読むのが確実**で、生きているオブジェクトの欄には
+    書き込みモードでは入っていないものがある。
+    """
     info = json.loads((root / "meta" / "info.json").read_text())
+    print(f"  {info['total_episodes']} 本 / {info['total_frames']} コマ / "
+          f"{info['total_tasks']} タスク が書けている")
     print(f"  codebase_version {info['codebase_version']}  fps {info['fps']}  "
           f"robot_type {info.get('robot_type')}")
     for name, feature in info["features"].items():
