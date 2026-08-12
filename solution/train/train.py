@@ -44,6 +44,10 @@ Colab と違い、出力はホストのディレクトリに残るため Drive �
     python train.py --episodes-per-task 5    # 少ないデータで試す（**悪化の再現**）
     python train.py --resume                 # 直近のチェックポイントから
 
+    # LoRA を VLM の q/v まで広げ、歩数を 3 倍にする（8/12 の本命）
+    python train.py --run-name vlm_lora32_60k --peft-scope vlm \
+        --lora-r 32 --lora-alpha 32 --steps 60000
+
     # 苦手タスクの割合を 3 倍にし、300 歩を超える手本を落とす（8/11 の本命）
     python train.py --run-name weak3x_max300 --max-demo-steps 300 \
         --emphasize-tasks \
@@ -89,6 +93,54 @@ _DATASET_REVISION = "f3f49f426d75030177b18778374005bc12ccd588"
 
 _LEROBOT_DIR = Path(os.environ.get("LEROBOT_DIR", "/opt/lerobot"))
 _BRIGHTNESS_COLUMN = "stats/observation.images.front/mean"
+
+# **`--peft-scope vlm` のときに LoRA を当てる先。**
+#
+# LeRobot の既定（`_get_default_peft_targets`）は `lm_expert` の q/v と下の 5 射影
+# だけで、**VLM 350M（全体の 77.8%）に 1 つも当たらない。** 当て先を `lm_expert`
+# から `(lm_expert|vlm)` へ広げると、次の 3 か所すべてに当たる。
+#
+#   model.vlm_with_expert.lm_expert.layers.N.self_attn.(q|v)_proj              16 層 ×2
+#   model.vlm_with_expert.vlm.model.text_model.layers.N.self_attn.(q|v)_proj   16 層 ×2  ← 言語
+#   model.vlm_with_expert.vlm.model.vision_model.encoder.layers.N.…            12 層 ×2  ← 視覚
+#
+# 学習される重みは 37 層 742,656 個（0.17%）から **93 層 4,303,360 個（r=32 で
+# 0.96%）** になる。**この数は起動直後の `num_learnable_params=` で確かめられる。**
+#
+# 根拠は 2 つ。π0 で当て先を切り分けた研究（arXiv:2607.10172）は VLM を凍結すると
+# 成功率 0.76 → 0.15、視覚エンコーダの凍結で 0.14 まで落ちるとし、「r=16〜32 を
+# VLM と action expert に均等に当てよ」を推奨している。LIBERO-plus で測った
+# VLA-GSE（arXiv:2605.06175）は逆に全パラメータ学習が忘却で PEFT に負ける
+# （74.9%）とし、**2.51% を学習する帯**を良しとしている。0.17% はどちらの
+# 推奨帯よりも小さい。
+#
+# **視覚エンコーダを LoRA でなく全学習させたいときは `--peft.full_training_modules`**
+# を `--` の後ろから渡す（研究では 0.43 → 0.74 と、ここがいちばん大きく動く）。
+_PEFT_COMMON_PROJECTIONS = (
+    "state_proj|action_in_proj|action_out_proj|action_time_mlp_in|action_time_mlp_out"
+)
+_PEFT_TARGETS_VLM = (
+    rf"(model\.vlm_with_expert\.(lm_expert|vlm)\..*\.(q|v)_proj"
+    rf"|model\.({_PEFT_COMMON_PROJECTIONS}))"
+)
+
+# **視覚エンコーダを外した版。** 20 GB では上の `vlm` が入らなかった（8/12、
+# 1 歩も進まず OutOfMemory）。**入らない理由は当て先の数ではなく、順番である。**
+#
+#   視覚エンコーダ ──→ 言語（VLM の 16 層）──→ action expert ──→ 損失
+#
+# **学習する層から損失までの経路にある中間結果は、全部持ち続けることになる。**
+# 視覚を当て先にすると、そこへ勾配を返すために言語の 16 層も通るので、
+# **言語を外しても減らない。** 逆に視覚を外すと、逆伝播は言語の入り口で止まり、
+# 視覚エンコーダの中間結果を丸ごと捨てられる。
+#
+# 量の差も大きい。バッチ 32 のとき、視覚は 512×512 の画像 2 台ぶんを 1,024
+# トークンずつ 12 層通す（65,536 トークン位置 × 12）のに対し、言語は連結後
+# 178 トークンを 16 層通すだけ（5,696 × 16）で、**視覚は言語の 8.6 倍**にあたる。
+_PEFT_TARGETS_TEXT = (
+    rf"(model\.vlm_with_expert\.(lm_expert|vlm\.model\.text_model)\..*\.(q|v)_proj"
+    rf"|model\.({_PEFT_COMMON_PROJECTIONS}))"
+)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -144,6 +196,17 @@ def _parse_args() -> argparse.Namespace:
                         help="出発点と同じ 1,000")
     parser.add_argument("--lora-r", type=int, default=16)
     parser.add_argument("--lora-alpha", type=int, default=16)
+    # **LoRA をどこに当てるか。rank より当て先のほうが効く。**
+    # LeRobot の既定（`expert`）は action expert の q/v と 5 つの射影だけで、
+    # **450,046,176 個のうち 742,656 個＝ 0.17% しか学ばない。**
+    # 出発点の重みは逆に 450M を全部学習して作られている
+    # （`train_config.json` が `use_peft: false` `freeze_vision_encoder: false`）。
+    parser.add_argument("--peft-scope", choices=("expert", "text", "vlm"),
+                        default="expert",
+                        help="LoRA の当て先。**expert は action expert だけ**"
+                             "（LeRobot の既定、0.17%）。**text は言語も当てる**"
+                             "（r=32 で 0.69%）。**vlm は視覚も当てる**（0.96%。"
+                             "ただし 20 GB では入らなかった）")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--image-transforms", action="store_true",
                         help="画像拡張を有効にする。**既定は無効で、出発点もそうだった。**"
@@ -573,6 +636,13 @@ def _build_command(
         f"--peft.r={args.lora_r}",
         f"--peft.lora_alpha={args.lora_alpha}",
     ]
+
+    # **`expert` のときは旗を渡さず、LeRobot の既定に任せる。**
+    # `--peft.target_modules=null` のような打ち消しを渡すより、そもそも書かない
+    # ほうが取り違えが起きない。
+    targets = {"text": _PEFT_TARGETS_TEXT, "vlm": _PEFT_TARGETS_VLM}.get(args.peft_scope)
+    if targets is not None:
+        command.append(f"--peft.target_modules={targets}")
 
     if episode_indices is not None:
         command.append(f"--dataset.episodes=[{','.join(map(str, episode_indices))}]")
