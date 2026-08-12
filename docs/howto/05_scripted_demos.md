@@ -102,8 +102,8 @@ docker logs -f rec0
 
 | | 直列 | 8 並列 |
 |---|---|---|
-| 50 本 | **83 分** | **約 11 分** |
-| 変種 4 種で 200 本 | 5.5 時間 | **約 45 分** |
+| 50 本 | **約 92 分** | **約 12 分** |
+| 変種 4 種で 200 本 | 6.2 時間 | **約 46 分** |
 
 メモリは 1 本あたり画像の置き場 118 MB ＋ 実行時 0.5 GB 程度。8 並列で 5 GB。
 
@@ -116,7 +116,6 @@ docker logs -f rec0
 
 ```bash
 docker run --rm -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/data" \
-    -e PYTHONPATH=/host/tools:/workspace:/workspace/LIBERO-plus:/workspace/compe \
     parc2026 python /host/tools/npz_to_lerobot.py check --npz-dir /data/base
 ```
 
@@ -180,11 +179,12 @@ docker run --gpus all --rm \
 | 段 | 手元の Mac | GPU マシン（直列） | GPU マシン（8 並列） |
 |---|---|---|---|
 | `verify` 50 通り | 153 秒 | 同程度 | — |
-| `record` 1 本 | **100 秒** | 実測して埋める | 同じ |
-| `record` 50 本 | 83 分 | 同程度 | **約 11 分** |
+| `record` 1 本 | 100 秒 | **111 秒**（実測・233 歩） | 同じ |
+| `record` 50 本 | 83 分 | **約 92 分** | **約 12 分** |
+| `record` 変種 4 種で 200 本 | 5.5 時間 | 6.2 時間 | **約 46 分** |
 
-**`record` の中身は描画が支配的である**（1 歩あたり物理 39 ms ＋ 描画
-256×256 を 2 枚）。**GPU では描けないので、速くする手は並列しかない。**
+**`record` の中身は描画が支配的である。** 実測 111 秒 / 233 歩 = 1 歩 476 ms で、
+うち物理は 39 ms しかない。**GPU では描けないので、速くする手は並列しかない。**
 
 > **npz は圧縮していない。** 動画に再エンコードするだけの中継物で、画像
 > 118 MB を deflate しても 1.7 倍しか縮まないのに 1 本 4.3 秒かかる。
