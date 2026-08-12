@@ -1,0 +1,491 @@
+{
+ "record": "outputs/train2/episodes.json",
+ "used_episodes": 4609,
+ "per_task": 1,
+ "offset": 0,
+ "categories": [
+  "Background Textures",
+  "Light Conditions"
+ ],
+ "max_demo_steps": 300,
+ "brightness_resolution": 3,
+ "selected": 36,
+ "instructions_eligible": 36,
+ "instructions_dropped": [
+  "pick up the black bowl next to the ramekin and place it on the plate",
+  "put both moka pots on the stove",
+  "put both the alphabet soup and the cream cheese box in the basket",
+  "put the bowl on top of the cabinet"
+ ],
+ "instructions_without_variants": [],
+ "by_instruction": {
+  "open the middle drawer of the cabinet": {
+   "novel": 53,
+   "used": 100,
+   "unused": 270,
+   "seen_brightness": [
+    0.161,
+    0.53
+   ],
+   "novel_brightness": [
+    0.17,
+    0.515
+   ]
+  },
+  "open the top drawer and put the bowl inside": {
+   "novel": 40,
+   "used": 54,
+   "unused": 146,
+   "seen_brightness": [
+    0.163,
+    0.544
+   ],
+   "novel_brightness": [
+    0.173,
+    0.543
+   ]
+  },
+  "pick up the alphabet soup and place it in the basket": {
+   "novel": 66,
+   "used": 102,
+   "unused": 278,
+   "seen_brightness": [
+    0.086,
+    0.658
+   ],
+   "novel_brightness": [
+    0.087,
+    0.639
+   ]
+  },
+  "pick up the bbq sauce and place it in the basket": {
+   "novel": 49,
+   "used": 109,
+   "unused": 296,
+   "seen_brightness": [
+    0.109,
+    0.638
+   ],
+   "novel_brightness": [
+    0.192,
+    0.634
+   ]
+  },
+  "pick up the black bowl between the plate and the ramekin and place it on the plate": {
+   "novel": 51,
+   "used": 101,
+   "unused": 274,
+   "seen_brightness": [
+    0.156,
+    0.513
+   ],
+   "novel_brightness": [
+    0.16,
+    0.508
+   ]
+  },
+  "pick up the black bowl from table center and place it on the plate": {
+   "novel": 52,
+   "used": 104,
+   "unused": 281,
+   "seen_brightness": [
+    0.159,
+    0.527
+   ],
+   "novel_brightness": [
+    0.206,
+    0.518
+   ]
+  },
+  "pick up the black bowl in the top drawer of the wooden cabinet and place it on the plate": {
+   "novel": 59,
+   "used": 105,
+   "unused": 285,
+   "seen_brightness": [
+    0.174,
+    0.51
+   ],
+   "novel_brightness": [
+    0.185,
+    0.508
+   ]
+  },
+  "pick up the black bowl next to the cookie box and place it on the plate": {
+   "novel": 62,
+   "used": 120,
+   "unused": 325,
+   "seen_brightness": [
+    0.166,
+    0.563
+   ],
+   "novel_brightness": [
+    0.176,
+    0.553
+   ]
+  },
+  "pick up the black bowl next to the plate and place it on the plate": {
+   "novel": 62,
+   "used": 120,
+   "unused": 325,
+   "seen_brightness": [
+    0.15,
+    0.556
+   ],
+   "novel_brightness": [
+    0.191,
+    0.536
+   ]
+  },
+  "pick up the black bowl on the cookie box and place it on the plate": {
+   "novel": 62,
+   "used": 104,
+   "unused": 281,
+   "seen_brightness": [
+    0.151,
+    0.573
+   ],
+   "novel_brightness": [
+    0.156,
+    0.57
+   ]
+  },
+  "pick up the black bowl on the ramekin and place it on the plate": {
+   "novel": 59,
+   "used": 80,
+   "unused": 215,
+   "seen_brightness": [
+    0.146,
+    0.581
+   ],
+   "novel_brightness": [
+    0.157,
+    0.535
+   ]
+  },
+  "pick up the black bowl on the stove and place it on the plate": {
+   "novel": 67,
+   "used": 69,
+   "unused": 186,
+   "seen_brightness": [
+    0.117,
+    0.55
+   ],
+   "novel_brightness": [
+    0.138,
+    0.532
+   ]
+  },
+  "pick up the black bowl on the wooden cabinet and place it on the plate": {
+   "novel": 69,
+   "used": 107,
+   "unused": 288,
+   "seen_brightness": [
+    0.146,
+    0.553
+   ],
+   "novel_brightness": [
+    0.166,
+    0.532
+   ]
+  },
+  "pick up the book and place it in the back compartment of the caddy": {
+   "novel": 54,
+   "used": 69,
+   "unused": 186,
+   "seen_brightness": [
+    0.124,
+    0.454
+   ],
+   "novel_brightness": [
+    0.155,
+    0.453
+   ]
+  },
+  "pick up the butter and place it in the basket": {
+   "novel": 58,
+   "used": 109,
+   "unused": 296,
+   "seen_brightness": [
+    0.117,
+    0.671
+   ],
+   "novel_brightness": [
+    0.123,
+    0.666
+   ]
+  },
+  "pick up the chocolate pudding and place it in the basket": {
+   "novel": 74,
+   "used": 135,
+   "unused": 365,
+   "seen_brightness": [
+    0.1,
+    0.676
+   ],
+   "novel_brightness": [
+    0.115,
+    0.664
+   ]
+  },
+  "pick up the cream cheese and place it in the basket": {
+   "novel": 65,
+   "used": 108,
+   "unused": 292,
+   "seen_brightness": [
+    0.124,
+    0.71
+   ],
+   "novel_brightness": [
+    0.15,
+    0.701
+   ]
+  },
+  "pick up the ketchup and place it in the basket": {
+   "novel": 70,
+   "used": 109,
+   "unused": 296,
+   "seen_brightness": [
+    0.097,
+    0.687
+   ],
+   "novel_brightness": [
+    0.206,
+    0.635
+   ]
+  },
+  "pick up the milk and place it in the basket": {
+   "novel": 68,
+   "used": 107,
+   "unused": 288,
+   "seen_brightness": [
+    0.176,
+    0.666
+   ],
+   "novel_brightness": [
+    0.184,
+    0.659
+   ]
+  },
+  "pick up the orange juice and place it in the basket": {
+   "novel": 63,
+   "used": 109,
+   "unused": 296,
+   "seen_brightness": [
+    0.118,
+    0.675
+   ],
+   "novel_brightness": [
+    0.164,
+    0.672
+   ]
+  },
+  "pick up the salad dressing and place it in the basket": {
+   "novel": 59,
+   "used": 119,
+   "unused": 321,
+   "seen_brightness": [
+    0.106,
+    0.668
+   ],
+   "novel_brightness": [
+    0.116,
+    0.638
+   ]
+  },
+  "pick up the tomato sauce and place it in the basket": {
+   "novel": 57,
+   "used": 94,
+   "unused": 256,
+   "seen_brightness": [
+    0.187,
+    0.693
+   ],
+   "novel_brightness": [
+    0.214,
+    0.691
+   ]
+  },
+  "push the plate to the front of the stove": {
+   "novel": 54,
+   "used": 65,
+   "unused": 176,
+   "seen_brightness": [
+    0.147,
+    0.565
+   ],
+   "novel_brightness": [
+    0.16,
+    0.533
+   ]
+  },
+  "put both the alphabet soup and the tomato sauce in the basket": {
+   "novel": 43,
+   "used": 46,
+   "unused": 194,
+   "seen_brightness": [
+    0.161,
+    0.46
+   ],
+   "novel_brightness": [
+    0.171,
+    0.458
+   ]
+  },
+  "put both the cream cheese box and the butter in the basket": {
+   "novel": 40,
+   "used": 119,
+   "unused": 361,
+   "seen_brightness": [
+    0.176,
+    0.506
+   ],
+   "novel_brightness": [
+    0.189,
+    0.464
+   ]
+  },
+  "put the black bowl in the bottom drawer of the cabinet and close it": {
+   "novel": 62,
+   "used": 66,
+   "unused": 179,
+   "seen_brightness": [
+    0.233,
+    0.723
+   ],
+   "novel_brightness": [
+    0.237,
+    0.722
+   ]
+  },
+  "put the bowl on the plate": {
+   "novel": 54,
+   "used": 129,
+   "unused": 351,
+   "seen_brightness": [
+    0.151,
+    0.547
+   ],
+   "novel_brightness": [
+    0.19,
+    0.531
+   ]
+  },
+  "put the bowl on the stove": {
+   "novel": 52,
+   "used": 124,
+   "unused": 336,
+   "seen_brightness": [
+    0.169,
+    0.524
+   ],
+   "novel_brightness": [
+    0.171,
+    0.52
+   ]
+  },
+  "put the cream cheese in the bowl": {
+   "novel": 58,
+   "used": 85,
+   "unused": 230,
+   "seen_brightness": [
+    0.165,
+    0.567
+   ],
+   "novel_brightness": [
+    0.174,
+    0.549
+   ]
+  },
+  "put the white mug on the left plate and put the yellow and white mug on the right plate": {
+   "novel": 50,
+   "used": 73,
+   "unused": 202,
+   "seen_brightness": [
+    0.155,
+    0.489
+   ],
+   "novel_brightness": [
+    0.156,
+    0.456
+   ]
+  },
+  "put the white mug on the plate and put the chocolate pudding to the right of the plate": {
+   "novel": 49,
+   "used": 59,
+   "unused": 171,
+   "seen_brightness": [
+    0.163,
+    0.556
+   ],
+   "novel_brightness": [
+    0.168,
+    0.553
+   ]
+  },
+  "put the wine bottle on the rack": {
+   "novel": 57,
+   "used": 71,
+   "unused": 194,
+   "seen_brightness": [
+    0.15,
+    0.541
+   ],
+   "novel_brightness": [
+    0.157,
+    0.527
+   ]
+  },
+  "put the wine bottle on top of the cabinet": {
+   "novel": 39,
+   "used": 120,
+   "unused": 325,
+   "seen_brightness": [
+    0.143,
+    0.522
+   ],
+   "novel_brightness": [
+    0.195,
+    0.516
+   ]
+  },
+  "put the yellow and white mug in the microwave and close it": {
+   "novel": 41,
+   "used": 31,
+   "unused": 129,
+   "seen_brightness": [
+    0.213,
+    0.643
+   ],
+   "novel_brightness": [
+    0.229,
+    0.612
+   ]
+  },
+  "turn on the stove": {
+   "novel": 64,
+   "used": 135,
+   "unused": 365,
+   "seen_brightness": [
+    0.16,
+    0.558
+   ],
+   "novel_brightness": [
+    0.164,
+    0.539
+   ]
+  },
+  "turn on the stove and put the moka pot on it": {
+   "novel": 86,
+   "used": 92,
+   "unused": 298,
+   "seen_brightness": [
+    0.179,
+    0.718
+   ],
+   "novel_brightness": [
+    0.212,
+    0.694
+   ]
+  }
+ }
+}

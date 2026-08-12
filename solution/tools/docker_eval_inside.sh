@@ -83,10 +83,17 @@ echo
 echo "[4/5] 検証用スイートを作り、キットにパッチを当てる"
 
 CSV="$OUT_DIR/VAL_TASKS.csv"
-"$PY" "$TOOLS_DIR/make_validation_suite.py" \
-    --libero-plus "$KIT/LIBERO-plus" \
-    --exclude "$KIT/compe/t1/T1_TASKS.csv" \
-    --output "$CSV" --per-cell "$PER_CELL" 2>&1 | tail -10
+# **呼び出し側が一覧を置いてあれば、それを使う。** `run_docker_eval.sh` が
+# `EVAL_CSV` を `/out/VAL_TASKS.csv` へ写してから起動する。
+# **生成し直すと、学習が引かなかった指示文で絞った集合が上書きされてしまう。**
+if [ -f "$CSV" ]; then
+    echo "  渡された一覧を使う（$(( $(wc -l < "$CSV") - 1 )) 件）。生成はしない"
+else
+    "$PY" "$TOOLS_DIR/make_validation_suite.py" \
+        --libero-plus "$KIT/LIBERO-plus" \
+        --exclude "$KIT/compe/t1/T1_TASKS.csv" \
+        --output "$CSV" --per-cell "$PER_CELL" 2>&1 | tail -10
+fi
 
 "$PY" "$TOOLS_DIR/patch_kit_for_variants.py" --kit-dir "$KIT"
 
