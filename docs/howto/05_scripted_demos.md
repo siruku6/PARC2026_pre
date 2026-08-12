@@ -146,6 +146,19 @@ docker run --rm --gpus all \
 
 **`merge` は 16 GB を複製する。** ディスクを先に確認すること。
 
+**書き出したら、学習を流す前に読ませて確かめる。** ファイルが揃っていることと
+学習が読めることは別で、**動画の符号化が壊れていれば読み出しで初めて落ちる**
+（LeRobot の自動フォールバックは torchcodec が「入っているか」しか見ない）。
+
+```bash
+docker run --rm \
+    -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/data" \
+    parc2026-train python /host/tools/npz_to_lerobot.py inspect \
+    --root /data/lerobot --repo-id local/scripted_moka
+```
+
+**1 コマ目を実際に読んで形を出す。** ここが通れば学習も読める。
+
 ## 6. 学習する
 
 `train.py` は `--` の後ろを**最後に**付けるので、データセットの差し替えは
