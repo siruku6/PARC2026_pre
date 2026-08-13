@@ -209,16 +209,18 @@ Python 3.10 では構文エラーになる（`def f[T: X](...)`）。だから n
 間に挟んでいる。**形の食い違いは `check` が持って行く前に見つける**ので、
 学習側へ移してから落ちることはない。
 
-**どちらも Ubuntu の GPU マシンにある。** `solution/train/Dockerfile` が
-`python:3.12-slim` に lerobot v0.6.0 を入れており、**Colab は要らない。**
-手順（コマンド・EGL の設定・詰まる場所）は
+**どちらも手元の Mac の Docker で動く。** `solution/train/Dockerfile` が
+`python:3.12-slim` に lerobot v0.6.0 を入れており、**Colab も GPU マシンも
+要らない**（`record` から `build` まで GPU を使わないため）。手順は
 [../howto/05_scripted_demos.md](../howto/05_scripted_demos.md) にある。
 
-**`record` → `check` → `build` → `inspect` は GPU マシンで通した**（2026-08-13）。
+**`record` → `check` → `build` → `inspect` は手元の Mac の Docker で通した**
+（2026-08-13）。**GPU が要るのは学習だけなので、撮影の裏で GPU マシンを
+学習に使える。**
 
 | 段 | 結果 |
 |---|---|
-| `record`（CPU 描画） | 233 歩・成功・**111 秒** |
+| `record`（CPU 描画） | 233 歩・成功・**111 秒**（1 本だけのとき） |
 | `check` | 形・データ型・コマ数が本物の宣言と一致 |
 | `build` | 233 コマを AV1 に符号化。**1 本 1.4 MB** |
 | `inspect` | 1 コマ目を読めた。`(3, 256, 256)` / `(8,)` / `(7,)` ＋ 付帯 5 列 |
@@ -256,21 +258,26 @@ Python 3.10 では構文エラーになる（`def f[T: X](...)`）。だから n
 | 段 | 状態 |
 |---|---|
 | `measure` / `verify` | ✅ 中央値 230 歩・45〜47/50・平均ジャーク 11.30 |
-| `record` | ✅ GPU マシンで 233 歩・成功・**111 秒**（CPU 描画） |
+| `record` | ✅ 手元の Mac の Docker で 233 歩・成功・**111 秒**（CPU 描画） |
 | `check` | ✅ 形・型・コマ数が元データの宣言と一致 |
 | `build` | ✅ AV1 に符号化・**1 本 1.4 MB** |
 | `inspect` | ✅ 1 コマ目を読めた。列は `lerobot/libero_plus` と完全一致 |
-| **本数を増やす** | **実行中**（50 本・2 並列で約 46 分） |
+| **本数を増やす** | **実行中**（50 本・2 並列で約 72 分） |
 | `merge` | 未実行（16 GB を複製するので、混ぜる比率を決めてから） |
 | 学習して効くか | 未実行（下の 2 つ） |
 
-**回すマシンの制約**（[../howto/05_scripted_demos.md](../howto/05_scripted_demos.md) に手順）
+**撮影と学習は別のマシンで同時に進められる。** 撮影（`record`）は CPU しか
+使わないので手元の Mac の Docker で回し、**GPU マシンは学習に空けておく。**
+データセットは 1 本 1.4 MB なので送るのは一瞬である。
+
+**撮影に使っているマシンの制約**（手元の Mac の Docker。手順は
+[../howto/05_scripted_demos.md](../howto/05_scripted_demos.md)）
 
 | | 値 | 効いてくるところ |
 |---|---|---|
-| コア数 | **2** | 並列は 2 まで。50 本で約 46 分 |
-| メモリ | 9.7 GB | `record` は 1 個 1.25 GB。**3 個以上で swap を叩く** |
-| GPU 描画 | **使えない**（vCS は OpenGL 非対応） | `MUJOCO_GL=osmesa` 固定。速くする手は並列だけ |
+| コア数 | **2**（colima の VM に割り当てた数） | 並列は 2 まで。50 本で約 72 分。**2 並列でも 1.3 倍しか稼げない** |
+| メモリ | 9.69 GiB | `record` は 1 個 1.25 GB。**3 個以上で swap を叩く** |
+| GPU 描画 | **どちらのマシンでも使えない** | Mac の Docker は GPU が見えず、GPU マシンの vCS は OpenGL 非対応。`MUJOCO_GL=osmesa` 固定 |
 
 ## 次の 2 つの実験 — 左が通らなければ右に意味は無い
 
@@ -285,6 +292,13 @@ Python 3.10 では構文エラーになる（`def f[T: X](...)`）。だから n
 短時間で答えが出るので先に潰す。
 
 ### まず 10 歩の試運転（起動するかだけ見る）
+
+**GPU マシンで回す。撮影の終わりを待たなくてよい**（別のマシンなので取り合わない）。
+データセットは撮影側にあるので先に送る。
+
+```bash
+rsync -a work/scripted/lerobot/ <GPU マシン>:~/src/PARC2026_pre/work/scripted/lerobot/
+```
 
 ```bash
 docker run --rm --gpus all \

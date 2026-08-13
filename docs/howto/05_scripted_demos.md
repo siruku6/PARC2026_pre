@@ -1,9 +1,13 @@
-# 05. 手本を台本で作る（GPU マシン）
+# 05. 手本を台本で作る
 
 **Colab は要らない。** 必要な環境は 2 つとも既にある。
 
-> **描画は CPU である。** このマシンでは GPU で描けない（2 節）。
-> GPU を使うのは学習（6 節）だけで、**手本づくりは CPU の並列で速くする**（3 節）。
+> **撮影（`record`）に GPU は要らない。** 物理と描画だけなので、**手元の Mac の
+> Docker で回せる**（8/13 の 50 本はそうやって撮った）。GPU が要るのは学習
+> （6 節）だけで、**撮影と学習は別のマシンで同時に進められる。**
+>
+> **どちらのマシンでも描画は CPU である**（2 節）。GPU マシンの vGPU は
+> OpenGL に対応しない。速くする手は CPU の並列だけ（3 節）。
 
 | イメージ | 中身 | 何を回すか |
 |---|---|---|
@@ -23,8 +27,19 @@ PEP 695 の型構文（`def f[T: X](...)`）を使うので 3.12 が要り、キ
 | ディスク | 学習データ 16 GB ＋ 重み ＋ 生成物（1 本 85 MB） |
 
 **`record` に GPU は要らない。** 物理と描画だけで、方策を動かさないためである。
-そして**このマシンでは描画に GPU が使えない**（下の 2 節）。GPU が要るのは
+そして**どちらのマシンでも描画に GPU が使えない**（下の 2 節）。GPU が要るのは
 学習（6 節）だけである。
+
+| 段 | 回す場所 | なぜ |
+|---|---|---|
+| `record` / `check` | **手元の Mac の Docker でよい** | CPU しか使わない。GPU マシンを空けておける |
+| `build` / `merge` / 学習 | GPU マシン | 学習が GPU を使う。`build` 自体は CPU でもよい |
+
+**データセットは 1 本 1.4 MB しかない**ので、Mac で撮って GPU マシンへ送るのが速い。
+
+```bash
+rsync -a work/scripted/lerobot/ <GPU マシン>:~/src/PARC2026_pre/work/scripted/lerobot/
+```
 
 ## 1. イメージを 2 つ作る
 
@@ -35,10 +50,10 @@ docker build -t parc2026-train solution/train   # 学習側。学習で作って
 
 ## 2. 描画は CPU（osmesa）を使う
 
-**このマシンで EGL（GPU 描画）は原理的に使えない。** vGPU が
-`NVIDIA Virtual Compute Server` で、OpenGL / Vulkan に対応しないためである。
-経緯と `nvidia-smi` の出力は [03_gpu_eval.md](03_gpu_eval.md) の
-「描画は osmesa を使う」にある。
+**どちらのマシンでも EGL（GPU 描画）は使えない。** GPU マシンは vGPU が
+`NVIDIA Virtual Compute Server` で OpenGL / Vulkan に対応せず（経緯と
+`nvidia-smi` の出力は [03_gpu_eval.md](03_gpu_eval.md) の「描画は osmesa を
+使う」）、手元の Mac の Docker は VM の中なので GPU がそもそも見えない。
 
 | 描画 | 空の場面 1 枚 | LIBERO の場面 |
 |---|---|---|
@@ -81,18 +96,24 @@ docker run --rm -v "$PWD/work/scripted:/out" --entrypoint chown parc2026 \
 **評価は並列にできない**（方策サーバーと GPU が 1 台ずつ）。**しかし `record` は
 どちらも要らない**ので、CPU のコア数まで並べられる。
 
-**このマシンは 2 コアしかない。** 「GPU マシンだからコアも多い」は成り立たない。
-**必ず数えてから `N` を決めること。**
+**上限は Docker が見ているコア数である。** 手元の Mac では VM に割り当てた数で
+決まり（colima の既定は **2**）、Mac 本体のコア数は関係ない。GPU マシンでも
+「GPU があるからコアも多い」は成り立たない。**必ず数えてから `N` を決めること。**
 
 ```bash
-docker run --rm parc2026 nproc      # このマシンは 2 だった
+docker run --rm parc2026 nproc                     # 撮影に使う側で数える
+docker info --format 'CPUs={{.NCPU}} Mem={{.MemTotal}}'
+# 手元の Mac（colima）は CPUs=2 / Mem=10405670912（9.69 GiB）だった
 ```
+
+**Mac で撮るなら colima の割り当てを増やすのが一番効く。** `colima stop &&
+colima start --cpu 6 --memory 12` のように取り直せば、そのぶん並列にできる。
 
 コア数より多く並べても総量は増えず、奪い合いとメモリ圧迫で遅くなる。
 **1 個あたり 1.25 GB 使う**（実測。画像の置き場 118 MB ＋ mujoco の描画用
 バッファ ＋ 実行時）ので、メモリからも上限が決まる。
 
-> **2 コア・9.7 GB のマシンで 8 並列にして実際に壊した。** MEM は 8.7 GB
+> **2 コア・9.69 GB の VM（手元の Mac の colima）で 8 並列にして実際に壊した。** MEM は 8.7 GB
 > まで埋まり、**CPU 合計は 200% のうち 78% しか出ず**、1 個あたり
 > **BLOCK I/O が 65 GB**（swap を叩いている印）、1 個は OOM で消えた。
 > **CPU% が上限に届かず BLOCK I/O が異常に多いときは、並べすぎである。**
@@ -116,10 +137,15 @@ docker logs -f rec0
 内部で勝手に複数スレッドを使うので、指定しないとコンテナ同士がコアを
 奪い合って並列の意味が薄れる。
 
-| | 直列 | 2 並列（このマシンの上限） |
+| | 直列 | 2 並列（2 コアでの上限） |
 |---|---|---|
-| 50 本 | 約 92 分 | **約 46 分** |
-| 変種 4 種で 200 本 | 6.2 時間 | **約 3.1 時間** |
+| 1 本 | 111 秒 | **172 秒**（実測） |
+| 50 本 | 約 92 分 | **約 72 分**（実測から） |
+
+**2 コアで 2 並列にしても 1.3 倍しか稼げない**（92 分 → 72 分）。1 本の撮影が
+1 コアを使い切れておらず、並べると 1 本ずつが 1.5 倍遅くなるためである。
+**2 倍を見込んで予定を立てないこと。** 大きく稼ぐならコアを増やす（上の
+`colima start --cpu`）か、撮影と学習を別のマシンに分ける。
 
 メモリは 1 本あたり **1.25 GB**（実測）。**2 並列で 2.5 GB。**
 
@@ -143,16 +169,19 @@ docker run --rm -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/
 **ここから Python 3.12 側。** 道具はイメージに入っていないのでマウントする
 （`solution/train/Dockerfile` は `train.py` と `merge.py` だけを COPY する）。
 
+**`--gpus all` を付けない。** `build` も `merge` も GPU を使わないので、
+**手元の Mac でもそのまま回る**（付けると colima では
+`could not select device driver` で落ちる）。
+
 ```bash
 # 作った分だけで 1 つのデータセットにする
-docker run --rm --gpus all \
+docker run --rm \
     -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/data" \
-    -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
     parc2026-train python /host/tools/npz_to_lerobot.py build \
     --npz-dir /data/base --output /data/lerobot --repo-id local/scripted_moka
 
 # 既存の学習データに混ぜる（提出候補を作るときはこちら）
-docker run --rm --gpus all \
+docker run --rm \
     -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/data" \
     -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
     parc2026-train python /host/tools/npz_to_lerobot.py merge \
@@ -175,10 +204,30 @@ docker run --rm \
 
 **1 コマ目を実際に読んで形を出す。** ここが通れば学習も読める。
 
-## 6. 学習する
+## 6. 学習する（GPU マシン）
 
-`train.py` は `--` の後ろを**最後に**付けるので、データセットの差し替えは
-**コード変更なしで通る**（同じ設定を 2 度渡すと後ろが勝つ）。
+**撮影を待たなくてよい。** 撮影は CPU だけなので、**別のマシンで並行して学習を
+回せる。** データセットを送ってから始める（1 本 1.4 MB）。
+
+```bash
+rsync -a work/scripted/lerobot/ <GPU マシン>:~/src/PARC2026_pre/work/scripted/lerobot/
+```
+
+**まず 10 歩だけ回して、起動するかを見る。** 既定の引数では番号選びを通らない
+ので学習データのメタデータを取りに行かず、要るのは出発点の重み 869 MB だけである
+（一度学習していれば cache にある）。
+
+```bash
+docker run --rm --gpus all \
+    -v "$PWD/work/train:/out" -v "$PWD/work/scripted:/data" \
+    -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
+    parc2026-train python /workspace/train.py \
+    --run-name scripted_smoke --steps 10 --save-freq 10 -- \
+    --dataset.repo_id=local/scripted_moka --dataset.root=/data/lerobot
+```
+
+通ったら本番の歩数で回す。`train.py` は `--` の後ろを**最後に**付けるので、
+データセットの差し替えは**コード変更なしで通る**（同じ設定を 2 度渡すと後ろが勝つ）。
 
 ```bash
 docker run --gpus all --rm \
@@ -205,19 +254,20 @@ docker run --gpus all --rm \
 
 ## 時間の見積もり
 
-| 段 | 手元の Mac | GPU マシン（直列） | GPU マシン（2 並列） |
-|---|---|---|---|
-| `verify` 50 通り | 153 秒 | 同程度 | — |
-| `record` 1 本 | 100 秒 | **111 秒**（実測・233 歩） | 同じ |
-| `record` 50 本 | 83 分 | 約 92 分 | **約 46 分** |
-| `record` 変種 4 種で 200 本 | 5.5 時間 | 6.2 時間 | **約 3.1 時間** |
+**下の実測はすべて手元の Mac の Docker（colima・2 コア / 9.69 GiB）である。**
+GPU マシンで撮る場合は `nproc` から測り直すこと。
 
-> **このマシンは 2 コアである**（`docker run --rm parc2026 nproc`）。
-> H100 の vGPU が付いていてもコアは 2 つで、評価が 1 歩 384 ms かかるのも
-> 同じ理由である。**並列で稼げるのは 2 倍までで、それ以上は望めない。**
+| 段 | 直列 | 2 並列 |
+|---|---|---|
+| `verify` 50 通り（描画なし） | 153 秒 | — |
+| `record` 1 本 | **111 秒**（233 歩） | **172 秒** |
+| `record` 50 本 | 約 92 分 | **約 72 分** |
+| `record` 変種 4 種で 200 本 | 6.2 時間 | **約 4.8 時間** |
 
 **`record` の中身は描画が支配的である。** 実測 111 秒 / 233 歩 = 1 歩 476 ms で、
-うち物理は 39 ms しかない。**GPU では描けないので、速くする手は並列しかない。**
+うち物理は 39 ms しかない。**GPU では描けないので、速くする手は並列だけである。**
+そして**2 コアでの並列は 1.3 倍しか稼げない**（上の 92 分 → 72 分）ので、
+大きく縮めたければコアを増やすしかない。
 
 > **npz は圧縮していない。** 動画に再エンコードするだけの中継物で、画像
 > 118 MB を deflate しても 1.7 倍しか縮まないのに 1 本 4.3 秒かかる。
