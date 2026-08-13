@@ -200,6 +200,7 @@ def command_build(args: argparse.Namespace) -> None:
     paths = sorted(args.npz_dir.glob("*.npz"))
     if not paths:
         raise SystemExit(f"npz が 1 つも無い: {args.npz_dir}")
+    _prepare_output(args.output)
 
     dataset = LeRobotDataset.create(
         repo_id=args.repo_id, fps=FPS, features=FEATURES,
@@ -285,6 +286,33 @@ def command_inspect(args: argparse.Namespace) -> None:
             print(f"  **{name} の形が {got}、宣言は {want}**")
 
 
+def _prepare_output(path: Path) -> None:
+    """書き出し先を空けておく。
+
+    **lerobot は書き出し先が既にあると作らない**（`mkdir(exist_ok=False)`）。
+    ところが `docker run -v "$PWD/work/merged:/merged"` と書くと、**docker が
+    先に作ってしまう**ので必ず `FileExistsError` になる。空なら消して先へ進む。
+
+    消せないときは、その場所が**マウントの取り付け先そのもの**である
+    （コンテナの中からは外せない）。**親を渡して、その下の未作成の名前を
+    書き出し先にする**しかないので、そう伝える。
+    """
+    if not path.exists():
+        return
+    if any(path.iterdir()):
+        raise SystemExit(
+            f"{path} に中身がある。**消すか、別の名前を渡すこと。**")
+    try:
+        path.rmdir()
+    except OSError as error:
+        raise SystemExit(
+            f"{path} は空だが消せない（{error}）。\n"
+            "  **docker の -v がこの場所を直接指している。** 親を渡して、\n"
+            "  書き出し先はその下の未作成の名前にする:\n"
+            '    -v "$PWD/work:/work" … --output /work/merged') from error
+    print(f"  空の {path} を消した（docker が作ったもの）")
+
+
 def _feature_shape(feature: dict[str, Any]) -> tuple:
     """比べるべき中身だけを取り出す。**飾りは見ない。**"""
     return (feature.get("dtype"), tuple(feature.get("shape", ())),
@@ -366,6 +394,7 @@ def command_merge(args: argparse.Namespace) -> None:
     from lerobot.datasets.dataset_tools import merge_datasets
     from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
+    _prepare_output(args.output)
     base = LeRobotDataset(args.base_repo_id, root=args.base)
     added = LeRobotDataset(args.add_repo_id, root=args.add)
     print(f"元 {base.meta.total_episodes} 本 ＋ 作った分 "

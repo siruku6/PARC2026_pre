@@ -390,18 +390,23 @@ docker run --rm \
 
 ```bash
 # 1b. 混ぜる（16 GB を複製する）
+#     **書き出し先を -v で直接指さない。** 親を渡し、その下の未作成の名前にする
+rm -rf work/merged
 docker run --rm \
-    -v "$PWD/solution/tools:/host/tools:ro" \
-    -v "$PWD/work/scripted:/data" -v "$PWD/work/merged:/merged" \
+    -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work:/work" \
     -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
     parc2026-train python /host/tools/npz_to_lerobot.py merge \
     --base /root/.cache/huggingface/lerobot/lerobot/libero_plus \
-    --add /data/lerobot --add-repo-id local/scripted_moka \
-    --output /merged
+    --add /work/scripted/lerobot --add-repo-id local/scripted_moka \
+    --output /work/merged
 
 docker run --rm -v "$PWD/work:/w" --entrypoint chown parc2026-train \
     -R "$(id -u):$(id -g)" /w/merged        # Linux では root で書かれる
 ```
+
+**`-v "$PWD/work/merged:/merged"` と書くと必ず失敗する。** lerobot は書き出し先が
+既にあると作らない（`mkdir(exist_ok=False)`）のに、**docker が先に作ってしまう。**
+しかもそれは取り付け先そのものなので、コンテナの中からは消せない。
 
 **`--add-repo-id` を忘れないこと**（既定は `local/scripted_demos`）。
 最後に**足した分のエピソード番号**（`14347〜14391`）が印字される。
@@ -461,6 +466,7 @@ EVAL_CSV=compe/val/EVAL_TASKS.csv MUJOCO_GL=osmesa \
 | 詰まったら | |
 |---|---|
 | `Same features is expected` | 1a の `align` を飛ばしている（形ではなく書き方の食い違い） |
+| `FileExistsError: /merged` | 書き出し先を `-v` で直接指している。**親を渡す**（1b） |
 | `14,347 本` と出る | 足せていない。`--dataset-root` が混ぜた側を指しているか |
 | `PermissionError` | root 所有。上の `chown` を回す |
 | `vlm が無い` | 4 の `cp` を飛ばしている |
