@@ -418,12 +418,17 @@ docker run --gpus all --rm -v "$PWD/work/train:/out" -v "$PWD/work/merged:/data"
     parc2026-train python /workspace/train.py --run-name scripted_mix_smoke \
     --dataset-root /data --steps 10 --save-freq 10 \
     --max-demo-steps 300 --emphasis-multiplier 3 \
-    --emphasize-tasks "put both moka pots on the stove" <他 3 つ>
+    --emphasize-tasks "put both moka pots on the stove" <weak3x の 3 つ>
 ```
 
+**`<weak3x の 3 つ>` は [01_retrain.md](01_retrain.md) の A-2-3 にある指示文を
+そのまま並べる**（**完全一致。1 文字違うと 0 本になる**）。**台本のタスクは
+4 つ目として足す** —— 入れないと、45 本のうち 12 本しか使われない
+（得意タスクの間引きを受けるため。理由は
+[../talk/260813_today.md](../talk/260813_today.md)）。
+
 **`14,392 本 / 40 タスク` と印字されるのを確かめる。** ここでしか混ぜ損ねに
-気付けない（14,347 のままなら足せていない）。**`--emphasize-tasks` に台本の
-指示文を入れないと、45 本のうち 12 本しか使われない**（間引きを受けるため）。
+気付けない（14,347 のままなら足せていない）。
 
 ```bash
 # 3. ゲート B：本番の歩数（20,000 歩・約 2 時間）
