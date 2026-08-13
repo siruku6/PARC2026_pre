@@ -77,6 +77,33 @@ torchvision.ops.nms; \
 print(f'torch {torch.__version__} / torchcodec {torchcodec.__version__} '\
       f'/ torchvision {torchvision.__version__} 整合')"
 
+# **RunPod で使うための追い足し（ローカル実行には影響しない）。**
+# 1. openssh-server: RunPod の「Basic SSH」は RunPod のサーバを経由する簡易接続で
+#    scp/sftp に対応しない。11GB 級のチェックポイントを持ち帰るには公開 IP +
+#    Pod 内の sshd による「Full SSH」が必要で、公式テンプレートには最初から
+#    入っているが**カスタムイメージには自分で入れないと使えない**
+#    （https://docs.runpod.io/pods/configuration/use-ssh 2026-08-13 確認）。
+#    起動は runpod_ssh_start.sh が行う。
+# 2. openssh-sftp-server: **`--no-install-recommends` を付けているので明示が要る。**
+#    OpenSSH 9 以降の `scp` は既定で SFTP プロトコルを使うため、これが無いと
+#    サーバ側で `subsystem request failed` になり、`scp -O`（旧方式）でしか
+#    転送できなくなる。持ち帰りが scp 前提なので入れておく。
+# 3. tmux: 10 時間規模の学習を、接続が切れても生き残る形で回すため。
+# 4. ホスト鍵は消す: apt の postinst がビルド時に作ってしまうため、そのままだと
+#    このイメージを使う全 Pod が同一のホスト鍵を持つことになる。Pod ごとに
+#    起動時に `ssh-keygen -A` で作り直す（runpod_ssh_start.sh）。
+# 5. root への公開鍵ログインを明示的に許可する。Debian の既定
+#    （`prohibit-password`）でも鍵認証は通るが、既定値に依存しないでおく。
+# pip のレイヤより後ろに置いてあるのは、ここを直してもビルドし直しが安いようにするため。
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        openssh-server openssh-sftp-server tmux \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -f /etc/ssh/ssh_host_* \
+    && mkdir -p /etc/ssh/sshd_config.d \
+    && printf 'PermitRootLogin prohibit-password\nPasswordAuthentication no\n' \
+        > /etc/ssh/sshd_config.d/runpod.conf
+EXPOSE 22
+
 WORKDIR /opt/pi05
 # **スクリプトは /workspace ではなく /opt/pi05 に置く。** RunPod で Volume Disk /
 # Network Volume を使うと、その永続ストレージは /workspace に上書きでマウント
@@ -87,7 +114,8 @@ WORKDIR /opt/pi05
 # 両方を COPY する。prune_checkpoints.sh も学習と並行して使う。merge.py は
 # 要らない —— pi05 は LoRA を使わず、train_expert_only のフルパラメータ学習
 # なのでチェックポイントがそのまま提出用になる。
-COPY train.py train_pi05.py prune_checkpoints.sh /opt/pi05/
+# runpod_ssh_start.sh は RunPod の Container Start Command から呼ぶ（上記参照）。
+COPY train.py train_pi05.py prune_checkpoints.sh runpod_ssh_start.sh /opt/pi05/
 
 VOLUME ["/out"]
 ENV OUTPUT_ROOT=/out

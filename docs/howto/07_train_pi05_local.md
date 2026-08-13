@@ -42,8 +42,13 @@ docker run --gpus all --rm -it \
     --user "$(id -u):$(id -g)" \
     -v "$PWD/work/train:/out" -v "$HOME/.cache/huggingface:/hf_home" \
     parc2026-train-pi05 \
-    python /workspace/train_pi05.py --run-name pi05_full_local --steps 24000 --batch-size 16
+    python /opt/pi05/train_pi05.py --run-name pi05_full_local --steps 24000 --batch-size 16
 ```
+
+(イメージ名の後ろに書いた分は既定のCMDを丸ごと置き換えるので、`python ...`から
+全部書く必要がある。スクリプトの置き場所が`/opt/pi05/`なのは、RunPodで
+`/workspace`が永続化ストレージに上書きマウントされるためである
+——[docs/howto/06](06_runpod_pi05.md)の3節。)
 
 24,000歩を選んだ理由は、`smp/s≈10.5`で見積もると`24000×16÷10.5÷3600≈10.2時間`と、
 確保できる時間(10時間以上)に収まるためである。**歩数(`--steps`)は学習率の
