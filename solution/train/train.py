@@ -446,8 +446,15 @@ def _select_emphasized_episodes(
         print(f"[train] **倍率が高すぎるので {share_target / share_now:.1f} 倍で打ち切った**")
 
     # 目標の割合になるよう、得意タスクを残す比率を解く。
-    keep_ratio = weak_frames * (1.0 - share_target) / (share_target * strong_frames)
-    keep_ratio = min(keep_ratio, 1.0)
+    # **強調するタスクが無いときは間引かない。** そのまま計算すると
+    # `weak_frames` も `share_target` も 0 になり `0.0 / 0.0` で
+    # ZeroDivisionError になる。**`--max-demo-steps` だけを渡す使い方で踏む**
+    # （手本の長さで落とすだけにしたいときは、強調は要らない）。
+    if wanted:
+        keep_ratio = weak_frames * (1.0 - share_target) / (share_target * strong_frames)
+        keep_ratio = min(keep_ratio, 1.0)
+    else:
+        keep_ratio = 1.0
 
     selected = list(weak_indices)
     for _, group in strong.groupby("task"):
@@ -460,9 +467,13 @@ def _select_emphasized_episodes(
     chosen_brightness = [brightness[index] for index in selected]
     whole_brightness = list(brightness.values())
 
-    print(f"[train] 苦手 {len(wanted)} タスクを {multiplier:g} 倍にする"
-          f"（割合 {share_now:.1%} → {weak_frames / chosen_frames:.1%}）")
-    print(f"[train]   得意タスクは {keep_ratio:.0%} に間引いた")
+    if wanted:
+        print(f"[train] 苦手 {len(wanted)} タスクを {multiplier:g} 倍にする"
+              f"（割合 {share_now:.1%} → {weak_frames / chosen_frames:.1%}）")
+        print(f"[train]   得意タスクは {keep_ratio:.0%} に間引いた")
+    else:
+        print("[train] 強調するタスクの指定が無いので、割合はいじらない"
+              "（手本の長さで落とすだけ）")
     print(f"[train]   選んだのは {len(selected):,} 本 / {chosen_frames:,} フレーム")
     # **引く回数も出す。** `--steps 1` の下見だと 0.00 回になり、
     # 「選び方が壊れている」と読み違える。分子を見せれば理由が分かる。
