@@ -7,6 +7,7 @@
 | **今なにをやるべきか** | [talk/open_items.md](talk/open_items.md) |
 | **手を動かす手順** | [howto/](howto/) |
 | **測った数字** | [strategy/05_実測結果.md](strategy/05_実測結果.md) |
+| **次にどこを直して学習するか** | **[plan/04_training_targets.md](plan/04_training_targets.md)** |
 | **これから作るものの設計** | [plan/](plan/) |
 | **提出物のしくみ** | [solution/README.md](solution/README.md) |
 | **次のコンペに持ち越すこと** | [talk/lessons_learned.md](talk/lessons_learned.md) |
@@ -38,6 +39,7 @@
 | [solution/COLAB.md](solution/COLAB.md) | Colab で学習を回すとき |
 | [strategy/05_実測結果.md](strategy/05_実測結果.md) | 判断する前。数字はすべてここ |
 | **[strategy/06_scripted_demos.md](strategy/06_scripted_demos.md)** | **手本が 300 歩に収まらないタスクを扱うとき。台本で手本を自分で作る** |
+| **[plan/04_training_targets.md](plan/04_training_targets.md)** | **学習を流す前と、評価が出た直後。**ものさし・天井・候補・外したもの・記録が 1 枚にある |
 | [plan/01_failure_accounting.md](plan/01_failure_accounting.md) | 評価の結果を読むとき。**ゴール到達と衝突の読み分け方** |
 | [reference/04_track1_population.md](reference/04_track1_population.md) | 出題の母集団を確かめるとき |
 | **[reference/05_perturbation_categories.md](reference/05_perturbation_categories.md)** | **摂動 7 カテゴリの中身と、どれが出るか（運営回答の原文つき）** |
