@@ -242,29 +242,69 @@ docker run --gpus all --rm \
 
 **2 つ気をつける。**
 
+**混ぜたデータで絞り込みも掛けるときは `--dataset-root` を使う**（8/13 に追加。
+`train.py`）。`--` の後ろで `--dataset.root=` を渡すだけでは**番号選びには効かない**
+——`--emphasize-tasks` / `--max-demo-steps` / `--episodes-per-task` は
+`lerobot/libero_plus` のメタデータを Hub から落として番号を決めるので、
+**足した分が 1 本も選ばれないまま、エラーも出さずに学習が始まる。**
+
+```bash
+docker run --gpus all --rm -v "$PWD/work/train:/out" -v "$PWD/work/merged:/data" \
+    -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
+    parc2026-train python /workspace/train.py --run-name scripted_mix \
+    --dataset-root /data --max-demo-steps 300 --emphasis-multiplier 3 \
+    --emphasize-tasks "put both moka pots on the stove" ...
+```
+
+**渡すと本数とタスク数が印字される。** 混ぜ損ねはそこでしか気付けない
+（14,347 ＋ 45 = **14,392 本**と出るのが正しい）。
+
 | 気をつけること | なぜ |
 |---|---|
-| **`--episodes-per-task` / `--emphasize-tasks` / `--max-demo-steps` と併用しない** | これらは `lerobot/libero_plus` のメタデータを別に落として番号を決めるので、**差し替えたデータセットとは番号が対応しない。** 混ぜたデータで絞るなら `--dataset.episodes` を `--` の後ろで自分で渡す |
-| **`--dataset.revision` は上書き不要**（8/13 実測） | 固定値が渡ったままでも `--dataset.root` のローカルを読む。`revision` を見に行くのは Hub から取るときだけである |
+| **`--emphasize-tasks` に台本のタスクを入れる** | 入れないと**得意タスクの間引き（27%）を台本も受けて 45 本のうち 12 本しか使われない**（[../talk/260813_today.md](../talk/260813_today.md)） |
+| **`--dataset.revision` は上書き不要**（8/13 実測） | 固定値が渡ったままでも `root` のローカルを読む。`revision` を見に行くのは Hub から取るときだけである |
 | **正規化の統計値は渡したデータセットのものに差し替わる** | 下記 |
 
 **出発点の重みが持っている統計値は使われない。** lerobot の学習は
-`normalizer_processor` の `stats` を `dataset.meta.stats` で上書きする
-（`lerobot_train.py` の `preprocessor_overrides`）。つまり**作った分だけで
-学習すると、正規化の基準が 1 タスク 47 本から計算し直される。**
+`normalizer_processor` の `stats` を `dataset.meta.stats` で上書きし
+（`lerobot_train.py` の `preprocessor_overrides`）、その中身は
+**`<root>/meta/stats.json`** である（`datasets/dataset_metadata.py:184` の
+`load_stats(self.root)`）。**`repo_id` は関係ない。**
 
 | | 影響 |
 |---|---|
-| ① 作った分だけ | 基準が変わる。**同じタスクの中では筋が通るが、他タスクの評価には使えない**（忘却とは別の理由でも壊れる） |
-| ② 混ぜる | 14,347 本に 47 本を足すので**ずれは 0.3% 相当。実質変わらない** |
+| ① 作った分だけ | 基準が 1 タスク 45 本から計算し直される。**同じタスクの中では筋が通るが、他タスクの評価には使えない**（忘却とは別の理由でも壊れる） |
+| ② 混ぜる | `merge_datasets` が**エピソードごとの統計を足し合わせる**（`aggregate_stats`）。14,347 本に 45 本なので**ずれは 0.3% 相当** |
 
 **作った分だけで学習したものは提出できない。** 1 タスクぶんの手本しか無いので
 残り 39 タスクの性能が落ちる（8/11 の追加学習は本番 0.1409 → 0.016 に崩れた）。
 `build` は「台本を真似られるか」を見るため、`merge` が提出候補を作るためのものである。
 
-## 7. 評価する
+## 7. 評価する — **既定の 36 件では測れない**
 
-いつもどおり。手順は [03_gpu_eval.md](03_gpu_eval.md) にある。
+**このタスクは 36 件に入っていない**（146 本すべてが 341 歩以上で、
+`--max-demo-steps 300` に全部落ちるため）。**このタスクの変種だけを集めた
+一覧が `compe/val/MOKA_TASKS.csv`（8 件）にある**ので、それを渡す
+（作り直すときは `solution/tools/make_task_suite.py`）。
+
+```bash
+EVAL_CSV=compe/val/MOKA_TASKS.csv MUJOCO_GL=osmesa \
+    WEIGHTS="$PWD/work/train/<run 名>/merged_model" LABEL=<run 名> \
+    bash solution/tools/run_docker_eval.sh --detach
+```
+
+手順の詳細は [03_gpu_eval.md](03_gpu_eval.md) にある。
+
+> **8 件は照明 4 種と背景 4 種で、素の見た目は入っていない。** 一方
+> **台本の 45 本は素の見た目だけで撮った。** つまりこの 8 件は
+> 「動きを学べたか」と「見た目の変化を越えられるか」を**同時に**問う。
+> **0/8 だったときに原因が分かれない**ので、そのときは素の 1 件
+> （`KITCHEN_SCENE8_put_both_moka_pots_on_the_stove`・接尾辞なし）を
+> 診断用に回す。**ただし初期配置が学習と重なるので、成功しても
+> 「覚えた」までしか言えない。**
+>
+> 変種でも撮れば根本から消える（**物理は同じなので台本は変えない**。
+> `--variant` と `--output` を差し替えるだけ。手元の Mac で 45 本 72 分）。
 
 ## 時間の見積もり
 
