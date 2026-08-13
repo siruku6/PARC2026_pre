@@ -2,6 +2,20 @@
 
 **Colab は要らない。** 必要な環境は 2 つとも既にある。
 
+## どの節から始めるか
+
+**上から順に読む文書ではない。** やることで入り口が変わる。
+
+| やること | 入り口 | 8/13 時点 |
+|---|---|---|
+| `put both moka pots on the stove` の手本を**混ぜて学習する** | **8 節** | **ここから。**1〜5 は済み |
+| 別のタスクの台本を書く | 1 節（環境）→ **[../strategy/06](../strategy/06_scripted_demos.md) の「作り方」** | 中継点を差し替える |
+| 撮り直す・変種で本数を増やす | **3 節**（`record`） | 45 本ある |
+| npz をデータセットにする | **5 節**（`build`） | 済み（45 本 / 10,339 コマ） |
+| 作った分だけで学習する | 6 節 | **やっても測れない**（6 節の「基準が潰れる」） |
+
+**`merge`（混ぜる）は 8 節にしかない。** 5 節は `build` までである。
+
 > **撮影（`record`）に GPU は要らない。** 物理と描画だけなので、**手元の Mac の
 > Docker で回せる**（8/13 の 50 本はそうやって撮った）。GPU が要るのは学習
 > （6 節）だけで、**撮影と学習は別のマシンで同時に進められる。**
@@ -30,7 +44,7 @@ PEP 695 の型構文（`def f[T: X](...)`）を使うので 3.12 が要り、キ
 そして**どちらのマシンでも描画に GPU が使えない**（下の 2 節）。GPU が要るのは
 学習（6 節）だけである。
 
-| 段 | 回す場所 | なぜ |
+| 手 | 回す場所 | なぜ |
 |---|---|---|
 | `record` / `check` | **手元の Mac の Docker でよい** | CPU しか使わない。GPU マシンを空けておける |
 | `build` / `merge` / 学習 | GPU マシン | 学習が GPU を使う。`build` 自体は CPU でもよい |
@@ -78,7 +92,8 @@ docker run --rm \
     --task KITCHEN_SCENE8_put_both_moka_pots_on_the_stove \
     --episodes 0 --output /out/base
 
-# root で書かれるので、持ち主を戻す
+# Linux のホストでは root で書かれるので、持ち主を戻す
+# **手元の Mac（colima）では要らない**——共有の仕組みが自分のものとして見せる
 docker run --rm -v "$PWD/work/scripted:/out" --entrypoint chown parc2026 \
     -R "$(id -u):$(id -g)" /out
 ```
@@ -164,32 +179,23 @@ docker run --rm -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/
 混ぜる相手の宣言と突き合わせるなら `--against <libero_plus の meta/info.json>` を足す。
 **食い違ったら 0 以外で終わる。**
 
-## 5. 学習データの形式に変換する
+## 5. 学習データの形式に変換する（`build`）
 
 **ここから Python 3.12 側。** 道具はイメージに入っていないのでマウントする
 （`solution/train/Dockerfile` は `train.py` と `merge.py` だけを COPY する）。
 
-**`--gpus all` を付けない。** `build` も `merge` も GPU を使わないので、
-**手元の Mac でもそのまま回る**（付けると colima では
-`could not select device driver` で落ちる）。
+**`--gpus all` を付けない。** `build` は GPU を使わないので**手元の Mac でも
+そのまま回る**（付けると colima では `could not select device driver` で落ちる）。
 
 ```bash
-# 作った分だけで 1 つのデータセットにする
 docker run --rm \
     -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/data" \
     parc2026-train python /host/tools/npz_to_lerobot.py build \
     --npz-dir /data/base --output /data/lerobot --repo-id local/scripted_moka
-
-# 既存の学習データに混ぜる（提出候補を作るときはこちら）
-docker run --rm \
-    -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/data" \
-    -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
-    parc2026-train python /host/tools/npz_to_lerobot.py merge \
-    --base /root/.cache/huggingface/lerobot/lerobot/libero_plus \
-    --add /data/lerobot --output /data/merged
 ```
 
-**`merge` は 16 GB を複製する。** ディスクを先に確認すること。
+**混ぜる（`merge`）はこの節にはない。8 節にまとめてある。** 16 GB の複製・
+持ち主の戻し・関門 A の確認まで通しで要るので、途中だけを真似ると必ず抜ける。
 
 **書き出したら、学習を流す前に読ませて確かめる。** ファイルが揃っていることと
 学習が読めることは別で、**動画の符号化が壊れていれば読み出しで初めて落ちる**
@@ -241,41 +247,273 @@ docker run --gpus all --rm \
 
 **2 つ気をつける。**
 
+**混ぜたデータで絞り込みもするときは `--dataset-root` を使う**（8/13 に追加。
+`train.py`）。`--` の後ろで `--dataset.root=` を渡すだけでは**番号選びには効かない**
+——`--emphasize-tasks` / `--max-demo-steps` / `--episodes-per-task` は
+`lerobot/libero_plus` のメタデータを Hub から落として番号を決めるので、
+**足した分が 1 本も選ばれないまま、エラーも出さずに学習が始まる。**
+
+```bash
+docker run --gpus all --rm -v "$PWD/work/train:/out" -v "$PWD/work/merged:/data" \
+    -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
+    parc2026-train python /workspace/train.py --run-name scripted_mix \
+    --dataset-root /data --max-demo-steps 300 --emphasis-multiplier 3 \
+    --emphasize-tasks "put both moka pots on the stove" ...
+```
+
+**渡すと本数とタスク数が印字される。** 混ぜ損ねはそこでしか気付けない
+（14,347 ＋ 45 = **14,392 本**と出るのが正しい）。
+
 | 気をつけること | なぜ |
 |---|---|
-| **`--episodes-per-task` / `--emphasize-tasks` / `--max-demo-steps` と併用しない** | これらは `lerobot/libero_plus` のメタデータを別に落として番号を決めるので、**差し替えたデータセットとは番号が対応しない。** 混ぜたデータで絞るなら `--dataset.episodes` を `--` の後ろで自分で渡す |
-| **`--dataset.revision` は上書き不要**（8/13 実測） | 固定値が渡ったままでも `--dataset.root` のローカルを読む。`revision` を見に行くのは Hub から取るときだけである |
+| **`--emphasize-tasks` に台本のタスクを入れる** | 入れないと**得意タスクの間引き（27%）を台本も受けて 45 本のうち 12 本しか使われない**（[../talk/260813_today.md](../talk/260813_today.md)） |
+| **`--dataset.revision` は上書き不要**（8/13 実測） | 固定値が渡ったままでも `root` のローカルを読む。`revision` を見に行くのは Hub から取るときだけである |
 | **正規化の統計値は渡したデータセットのものに差し替わる** | 下記 |
 
 **出発点の重みが持っている統計値は使われない。** lerobot の学習は
-`normalizer_processor` の `stats` を `dataset.meta.stats` で上書きする
-（`lerobot_train.py` の `preprocessor_overrides`）。つまり**作った分だけで
-学習すると、正規化の基準が 1 タスク 47 本から計算し直される。**
+`normalizer_processor` の `stats` を `dataset.meta.stats` で上書きし
+（`lerobot_train.py` の `preprocessor_overrides`）、その中身は
+**`<root>/meta/stats.json`** である（`datasets/dataset_metadata.py:184` の
+`load_stats(self.root)`）。**`repo_id` は関係ない。**
 
 | | 影響 |
 |---|---|
-| ① 作った分だけ | 基準が変わる。**同じタスクの中では筋が通るが、他タスクの評価には使えない**（忘却とは別の理由でも壊れる） |
-| ② 混ぜる | 14,347 本に 47 本を足すので**ずれは 0.3% 相当。実質変わらない** |
+| ① 作った分だけ | **基準が潰れる。** 1 タスクを 1 つの台本で解くので、`observation.state` の std が 4 次元でほぼ 0（素の 0.00〜0.10 倍）、姿勢の指令は std が **0**。**わずかなずれが何十倍に拡大されて方策へ渡り、戻れなくなる**（8/13 に 0/10。[../strategy/06](../strategy/06_scripted_demos.md) に数字） |
+| ② 混ぜる | `merge_datasets` が**エピソードごとの統計を足し合わせる**（`aggregate_stats`）。14,347 本に 45 本なので**ずれは 0.3% 相当。問題は起きない** |
+
+**だから「作った分だけで学習して測る」は台本の良し悪しを測れない。**
+測るなら `meta/stats.json` の基準を素の重みのものに差し替えてから回すこと。
 
 **作った分だけで学習したものは提出できない。** 1 タスクぶんの手本しか無いので
 残り 39 タスクの性能が落ちる（8/11 の追加学習は本番 0.1409 → 0.016 に崩れた）。
 `build` は「台本を真似られるか」を見るため、`merge` が提出候補を作るためのものである。
 
-## 7. 評価する
+### 学習した重みを評価に渡すまでに 2 つ手当てが要る
 
-いつもどおり。手順は [03_gpu_eval.md](03_gpu_eval.md) にある。
+**`merge.py` の出力はそのままでは評価に渡せない。** 2 つとも `PermissionError`
+や「`vlm` が無い」で止まるので、先に済ませる。
+
+```bash
+# ① 持ち主を戻す（Linux のホストでは root で書かれる）
+docker run --rm -v "$PWD/work/train:/out" --entrypoint chown parc2026-train \
+    -R "$(id -u):$(id -g)" /out/<run 名>
+
+# ② 名前を付けて置き、SmolVLM の設定とトークナイザを足す（merge.py は出さない）
+cp -r work/train/<run 名>/merged_model work/artifacts/model_weights_<label>
+cp -r work/artifacts/model_weights_base/vlm work/artifacts/model_weights_<label>/vlm
+```
+
+**引き継ぎ元は `model_weights_base` である。** GPU マシンには
+`work/artifacts/model_weights/`（提出用の 1 つの置き場）を作っておらず、
+**回ごとの名前で並べてある**（`model_weights_base` `model_weights_weak3x` …）。
+手順の元は [01_retrain.md](01_retrain.md) の A-7 にある。
+
+> **`vlm/` はどの回のものでも同じである。** 中身は SmolVLM の設定と
+> トークナイザ 11 ファイル（約 4.9 MB）で、**重みは 1 つも入っていない。**
+> 学習も `merge.py` も触らないので、どの回のものも `model_weights_base` の
+> 複製である。疑うときは全部のハッシュを並べて確かめられる。
+>
+> ```bash
+> for d in work/artifacts/*/vlm; do
+>     echo "$(cd "$d" && find . -type f | sort | xargs sha256sum | sha256sum | cut -c1-16)  $d"
+> done
+> ```
+
+**`install_weights.py` を `--dry-run` 無しで実行しないこと。** 既定の取り込み先が
+`work/artifacts/model_weights`（**提出する重みそのもの**）である。実験の重みで
+置き換える理由は無い。**GPU マシンでは比較相手を明示する**と、テンソル構成まで
+見てくれる（書き換えは起きない）。
+
+```bash
+python solution/tools/install_weights.py work/train/<run 名>/merged_model \
+    --destination work/artifacts/model_weights_base --dry-run
+```
+
+## 7. 評価する — **既定の 36 件では測れない**
+
+**このタスクは 36 件に入っていない**（146 本すべてが 341 歩以上で、
+`--max-demo-steps 300` に全部落ちるため）。**このタスクの変種だけを集めた
+一覧が `compe/val/MOKA_TASKS.csv`（8 件）にある**ので、それを渡す
+（作り直すときは `solution/tools/make_task_suite.py`）。
+
+```bash
+EVAL_CSV=compe/val/MOKA_TASKS.csv MUJOCO_GL=osmesa \
+    WEIGHTS="$PWD/work/artifacts/model_weights_<label>" LABEL=<label> \
+    bash solution/tools/run_docker_eval.sh --detach
+```
+
+手順の詳細は [03_gpu_eval.md](03_gpu_eval.md) にある。
+
+> **8 件は照明 4 種と背景 4 種で、素の見た目は入っていない。** 一方
+> **台本の 45 本は素の見た目だけで撮った。** つまりこの 8 件は
+> 「動きを学べたか」と「見た目の変化を越えられるか」を**同時に**問う。
+> **0/8 だったときに原因が分かれない**ので、そのときは素の 1 件
+> （`KITCHEN_SCENE8_put_both_moka_pots_on_the_stove`・接尾辞なし）を
+> 診断用に回す。**ただし初期配置が学習と重なるので、成功しても
+> 「覚えた」までしか言えない。**
+>
+> 変種でも撮れば根本から消える（**物理は同じなので台本は変えない**。
+> `--variant` と `--output` を差し替えるだけ。手元の Mac で 45 本 72 分）。
+
+## 8. 混ぜて学習する（提出候補）— **上から順に 6 手**
+
+**ここが本命である。** 作った分だけで学習したものは提出できず、
+**測ることさえできない**（6 節の「基準が潰れる」）。**混ぜる側にその問題は無い。**
+
+**全部 GPU マシンで行う。** `merge` には `lerobot/libero_plus`（16 GB）が要り、
+それがあるのは学習を回したマシンだけである。**判断の枠組み（3 つの関門）と
+どの指示文を重くするかは [../talk/260813_today.md](../talk/260813_today.md) にある。**
+
+```bash
+# 0. 前提。**足りなければここで止まる**
+du -sh ~/.cache/huggingface/lerobot/lerobot/libero_plus   # 16 GB あるか
+df -h .                                                   # 17 GB 以上空いているか
+```
+
+```bash
+# 1a. 列の書き方を相手に合わせる（**1 度だけ。数秒**）
+docker run --rm \
+    -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/data" \
+    -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
+    parc2026-train python /host/tools/npz_to_lerobot.py align \
+    --base /root/.cache/huggingface/lerobot/lerobot/libero_plus \
+    --add /data/lerobot
+```
+
+**これを飛ばすと `merge` が `Same features is expected` で落ちる。**
+形は同じでも**飾りが違う**ためである。`lerobot/libero_plus` は古い版で
+作られており、v0.6.0 が書く `features` とは 2 か所で書き方が違う
+（非動画の列に `fps` を書くか・動画の `info` が `video.is_depth_map` か
+`is_depth_map` か）。`align` は**`dtype`・`shape`・`names` の一致を確かめてから
+飾りだけコピーする**ので、本当に形が違うときは止まる。元の `info.json` は
+`info.json.bak` に残る。
+
+```bash
+# 1b. 混ぜる（16 GB を複製する）
+#     **書き出し先を -v で直接指さない。** 親を渡し、その下の未作成の名前にする
+rm -rf work/merged
+docker run --rm \
+    -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work:/work" \
+    -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
+    parc2026-train python /host/tools/npz_to_lerobot.py merge \
+    --base /root/.cache/huggingface/lerobot/lerobot/libero_plus \
+    --add /work/scripted/lerobot --add-repo-id local/scripted_moka \
+    --output /work/merged
+
+docker run --rm -v "$PWD/work:/w" --entrypoint chown parc2026-train \
+    -R "$(id -u):$(id -g)" /w/merged        # Linux では root で書かれる
+```
+
+**`-v "$PWD/work/merged:/merged"` と書くと必ず失敗する。** lerobot は書き出し先が
+既にあると作らない（`mkdir(exist_ok=False)`）のに、**docker が先に作ってしまう。**
+しかもそれは取り付け先そのものなので、コンテナの中からは消せない。
+
+**`--add-repo-id` を忘れないこと**（既定は `local/scripted_demos`）。
+最後に**足した分のエピソード番号**（`14347〜14391`）が印字される。
+
+```bash
+# 2. ゲート A：配線を 10 歩で見る（5 分）
+docker run --gpus all --rm -v "$PWD/work/train:/out" -v "$PWD/work/merged:/data" \
+    -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
+    parc2026-train python /workspace/train.py --run-name scripted_mix_smoke \
+    --dataset-root /data --steps 10 --save-freq 10 \
+    --max-demo-steps 300 --emphasis-multiplier 3 \
+    --emphasize-tasks "put both moka pots on the stove" <weak3x の 3 つ>
+```
+
+**`<weak3x の 3 つ>` は [01_retrain.md](01_retrain.md) の A-2-3 にある指示文を
+そのまま並べる**（**完全一致。1 文字違うと 0 本になる**）。**台本のタスクは
+4 つ目として足す** —— 入れないと、45 本のうち 12 本しか使われない
+（得意タスクの間引きを受けるため。理由は
+[../talk/260813_today.md](../talk/260813_today.md)）。
+
+**`14,392 本 / 40 タスク` と印字されるのを確かめる。** ここでしか混ぜ損ねに
+気付けない（14,347 のままなら足せていない）。
+
+```bash
+# 3. ゲート B：本番の歩数（20,000 歩・約 2 時間）
+#    2 と同じ引数から --steps / --save-freq / --run-name を差し替えるだけ
+```
+
+```bash
+# 4. 重みを整える（6 節と同じ 2 手）
+#    **`chown` は `merge.py` の「後」に打つ。** merge.py も root で走るので、
+#    先に打つと出来たての merged_model がまた root 所有になり、cp が
+#    `Permission denied` で落ちる（8/13 に実際に踏んだ）
+docker run --rm --gpus all -v "$PWD/work/train:/out" \
+    -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
+    parc2026-train python /workspace/merge.py --run-name scripted_mix
+docker run --rm -v "$PWD/work/train:/out" --entrypoint chown parc2026-train \
+    -R "$(id -u):$(id -g)" /out/scripted_mix
+cp -r work/train/scripted_mix/merged_model work/artifacts/model_weights_scripted_mix
+cp -r work/artifacts/model_weights_base/vlm work/artifacts/model_weights_scripted_mix/vlm
+```
+
+> **【8/13】`compe/val/MOKA_TASKS.csv` は作り直した。前の版は 8 件とも
+> 「初期状態が無い」で落ちる。** `init_states_file` の列が無かったため、評価側が
+> 接尾辞を正規表現で剥がして初期状態を探しに行き、実在しない
+> `KITCHEN_SCENE8_..._light_11.pruned_init` を開こうとしていた
+> （実在するのは接尾辞を剥がした `KITCHEN_SCENE8_....pruned_init` のほう）。
+> **`make_task_suite.py` が `make_validation_suite._build_rows` を呼ぶようにして直した。**
+> 手元にある CSV が古いときは作り直す（数秒・GPU 不要）。
+>
+> ```bash
+> python3 solution/tools/make_task_suite.py \
+>     --instruction "put both moka pots on the stove" \
+>     --count 8 --output compe/val/MOKA_TASKS.csv
+> ```
+>
+> **列があることを目で確かめる。** 先頭行に `init_states_file` が要る。
+> **`compe/val/MOKA_BASE.csv` にも列は無いが、あちらは接尾辞が無いので
+> 剥がしても同じ名前になり、偶然通る。**
+
+```bash
+# 5. モカポット 8 件で測る（20 分）。**比べる相手を先に測る**
+EVAL_CSV=compe/val/MOKA_TASKS.csv MUJOCO_GL=osmesa \
+    WEIGHTS="$PWD/work/artifacts/model_weights_weak3x" LABEL=weak3x_moka \
+    bash solution/tools/run_docker_eval.sh --detach     # 0/8 のはず
+
+EVAL_CSV=compe/val/MOKA_TASKS.csv MUJOCO_GL=osmesa \
+    WEIGHTS="$PWD/work/artifacts/model_weights_scripted_mix" LABEL=scripted_mix_moka \
+    bash solution/tools/run_docker_eval.sh --detach
+```
+
+```bash
+# 6. ゲート C：他のタスクを壊していないか（36 件・72 分）
+EVAL_CSV=compe/val/EVAL_TASKS.csv MUJOCO_GL=osmesa \
+    WEIGHTS="$PWD/work/artifacts/model_weights_scripted_mix" LABEL=scripted_mix_36 \
+    bash solution/tools/run_docker_eval.sh --detach
+```
+
+**評価は 2 つ同時に走らせられない。** 起動時に前回の残骸（`parc-policy` と
+`parc-eval-net`）を消しに行くので、**走っている評価が途中で終わる。**
+1 つずつ流すこと。
+
+| 詰まったら | |
+|---|---|
+| `Same features is expected` | 1a の `align` を飛ばしている（形ではなく書き方の食い違い） |
+| `FileExistsError: /merged` | 書き出し先を `-v` で直接指している。**親を渡す**（1b） |
+| `14,347 本` と出る | 足せていない。`--dataset-root` が混ぜた側を指しているか |
+| `PermissionError` | root 所有。上の `chown` を回す |
+| `vlm が無い` | 4 の `cp` を飛ばしている |
+| 方策サーバーが消えた | 評価を 2 つ同時に流した |
 
 ## 時間の見積もり
 
 **下の実測はすべて手元の Mac の Docker（colima・2 コア / 9.69 GiB）である。**
 GPU マシンで撮る場合は `nproc` から測り直すこと。
 
-| 段 | 直列 | 2 並列 |
+| 手 | 直列 | 2 並列 |
 |---|---|---|
 | `verify` 50 通り（描画なし） | 153 秒 | — |
 | `record` 1 本 | **111 秒**（233 歩） | **172 秒** |
-| `record` 50 本 | 約 92 分 | **約 72 分** |
+| `record` 50 本 | 約 92 分 | **約 72 分**（実測。45 本が成功） |
 | `record` 変種 4 種で 200 本 | 6.2 時間 | **約 4.8 時間** |
+| `build` 45 本 | **10 分 31 秒**（実測・**14 秒/本**） | — |
+
+**`build` は `record` の 1/12 の時間で済む**（1 本 14 秒 対 172 秒）。
+出来上がりは **45 本で 64 MB**（front 41.2 MB ＋ wrist 23.6 MB）で、
+元の npz 3.8 GB の **1.7%** である。
 
 **`record` の中身は描画が支配的である。** 実測 111 秒 / 233 歩 = 1 歩 476 ms で、
 うち物理は 39 ms しかない。**GPU では描けないので、速くする手は並列だけである。**

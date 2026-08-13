@@ -704,11 +704,21 @@ def reset_to(env: Any, init_state: np.ndarray) -> dict[str, np.ndarray]:
 
 
 def _resolve_plan(task: str, smoothing: float | None = None,
-                  blend_radius: float | None = None) -> TaskPlan:
-    """台本を引く。滑らかさのつまみだけ、その場で差し替えられる。"""
+                  blend_radius: float | None = None,
+                  suite: str | None = None) -> TaskPlan:
+    """台本を引く。滑らかさのつまみだけ、その場で差し替えられる。
+
+    **`measure` は台本より先に走る。** 寸法を測ってから台本を書くのに、
+    台本が無いと測れないのでは順序が逆になる。`--suite` を渡した場合だけ、
+    **空の台本**を作って場面を開けるようにする（`measure` 専用）。
+    """
     if task not in TASK_PLANS:
+        if suite is not None:
+            return TaskPlan(suite=suite, steps=[], carry_z=0.0,
+                            place_z=0.0, retreat_z=0.0)
         raise SystemExit(
-            f"台本が無い: {task}\n  ある台本: {', '.join(sorted(TASK_PLANS))}")
+            f"台本が無い: {task}\n  ある台本: {', '.join(sorted(TASK_PLANS))}\n"
+            "  **測るだけなら `--suite libero_10` を渡す**（台本より先に測る）")
     plan = TASK_PLANS[task]
     if smoothing is not None:
         plan = replace(plan, smoothing=smoothing)
@@ -781,13 +791,52 @@ def _report_goal_sites(env: Any, sim: Any) -> None:
         print(f"  {site_name:34s} 中心 {np.round(position, 4)} 半幅 {size}")
 
 
+def _report_articulation(env: Any, sim: Any) -> None:
+    """関節を持つ什器（コンロのつまみ・引き出し）の状態と、点く境目を出す。
+
+    **「点ける」は関節の角度で判定される。** `flat_stove` なら
+    `qpos >= 0.5`（`libero/libero/envs/objects/articulated_objects.py` の
+    `default_turnon_ranges` の下限）で、**どの関節でもよい**（`turn_on` は
+    どれか 1 つが超えれば真を返す）。**見た目ではなくこの値を狙う。**
+    """
+    print("\n--- 関節（つまみ・扉）---")
+    found = False
+    for name in env.env.obj_body_id:
+        obj = env.env.get_object(name) if hasattr(env.env, "get_object") else None
+        joints = list(getattr(obj, "joints", None) or [])
+        for joint in joints:
+            if not isinstance(joint, str):
+                continue
+            try:
+                address = sim.model.get_joint_qpos_addr(joint)
+            except Exception:  # noqa: BLE001 - 名前が無いだけ
+                continue
+            # **`int` で判定すると取りこぼす。** mujoco は numpy の整数を返す
+            # （自由関節など複数自由度のときは範囲の対を返すので、そこは飛ばす）。
+            if not isinstance(address, (int, np.integer)):
+                continue
+            found = True
+            index = sim.model.joint_name2id(joint)
+            limited = bool(sim.model.jnt_limited[index])
+            low, high = sim.model.jnt_range[index]
+            ranges = (getattr(obj, "object_properties", {})
+                      .get("articulation", {}))
+            print(f"  {joint:34s} いま {sim.data.qpos[address]:+.4f}"
+                  f"  可動 {low:+.3f}〜{high:+.3f}{'' if limited else '（制限なし）'}")
+            for key, value in ranges.items():
+                print(f"      {key}: {value}")
+    if not found:
+        print("  関節を持つ物体が無い（掴んで運ぶだけの場面）")
+
+
 def _setup(args: argparse.Namespace, with_images: bool
            ) -> tuple[TaskPlan, str, Any, np.ndarray]:
     """3 つの口に共通の下ごしらえ。台本・変種名・環境・初期状態を揃える。
 
     **`--variant` 省略時は元タスクそのもの**という決まりを 1 か所に置く。
     """
-    plan = _resolve_plan(args.task, args.smoothing, args.blend_radius)
+    plan = _resolve_plan(args.task, args.smoothing, args.blend_radius,
+                         getattr(args, "suite", None))
     variant = args.variant or args.task
     env = _make_env(_bddl_path(args.libero_root, plan.suite, variant),
                     with_images)
@@ -810,6 +859,7 @@ def command_measure(args: argparse.Namespace) -> None:
     print(f"手先の初期位置: {np.round(observation['robot0_eef_pos'], 4)}")
     _report_gripper_span(sim)
     _report_collision_extents(env, sim)
+    _report_articulation(env, sim)
     _report_goal_sites(env, sim)
     print(f"\n初期配置 {len(init_states)} 通り")
 
@@ -898,6 +948,9 @@ def _parse_args() -> argparse.Namespace:
                         help="元タスクの名前（bddl から摂動の接尾辞を落としたもの）")
     parser.add_argument("--variant", default=None,
                         help="実際に使う変種の bddl 名。省略時は元タスクそのもの")
+    parser.add_argument("--suite", default=None,
+                        help="**台本を書く前に measure だけ回すときに渡す**"
+                             "（例 libero_10）。台本があるときは要らない")
     parser.add_argument("--libero-root", type=Path, default=_DEFAULT_LIBERO_ROOT,
                         help=f"LIBERO-plus の libero/libero（既定 {_DEFAULT_LIBERO_ROOT}）")
     parser.add_argument("--episodes", default=None,

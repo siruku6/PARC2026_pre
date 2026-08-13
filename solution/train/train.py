@@ -184,6 +184,18 @@ def _parse_args() -> argparse.Namespace:
                         metavar="CSV",
                         help="このCSVの instruction 列にあるタスクを学習から外す。"
                              "**データセットに無い指示文があればその場で止める**")
+    # **台本の手本を混ぜたデータセットで学習するための口。**
+    # 既定では番号選びが `lerobot/libero_plus` のメタデータを Hub から落とすので、
+    # **混ぜたデータセットとエピソード番号が対応しない**（足した分が丸ごと
+    # 学習に入らないまま、黙って通ってしまう）。ここを渡すと
+    # **番号選びと学習の両方が同じディレクトリを読む。**
+    parser.add_argument("--dataset-root", type=Path, default=None,
+                        metavar="DIR",
+                        help="混ぜたデータセットの場所。**番号選び（--emphasize-tasks / "
+                             "--max-demo-steps / --episodes-per-task）と学習の両方が"
+                             "ここを読む。** 渡さなければ Hub の lerobot/libero_plus。"
+                             "**渡したら `meta/episodes/*.parquet` の本数が"
+                             "画面に出るので、足した分が入っているか必ず数える**")
     parser.add_argument("--save-freq", type=int, default=500)
     parser.add_argument("--num-workers", type=int, default=2,
                         help="データ供給のプロセス数。**CPU のコア数に合わせる。**"
@@ -616,6 +628,11 @@ def _build_command(
         f"--policy.scheduler_decay_steps={args.steps}",
         f"--dataset.repo_id={_DATASET_REPO}",
         f"--dataset.revision={_DATASET_REVISION}",
+        # **番号選びと学習は同じデータセットを見なければならない。**
+        # `--dataset-root` を渡したときだけ足す（`revision` は Hub から取る
+        # ときしか見られないので、固定値が残っていてよい）。
+        *([f"--dataset.root={args.dataset_root.expanduser().resolve()}"]
+          if args.dataset_root is not None else []),
         "--dataset.use_imagenet_stats=false",
         f"--dataset.video_backend={args.video_backend}",
         f"--output_dir={output_dir}",
@@ -700,6 +717,50 @@ def _load_holdout(path: Path) -> list[str]:
     if not seen:
         raise SystemExit(f"[train] 除外リストが空です: {path}")
     return list(seen)
+
+
+def _resolve_dataset_root(dataset_root: Path | None) -> Path:
+    """番号選びが読むメタデータの場所を決める。
+
+    **混ぜたデータセットを渡されたら Hub へ取りに行かない。** 取りに行くと
+    `lerobot/libero_plus` の 14,347 本ぶんの番号が返り、**足した分が 1 本も
+    選ばれないまま学習が始まる**（エラーにならないので気付けない）。
+
+    Parameters
+    ----------
+    dataset_root : Path | None
+        `--dataset-root`。None なら Hub から取る。
+
+    Returns
+    -------
+    root : Path
+        `meta/episodes/*.parquet` があるディレクトリ。
+
+    Raises
+    ------
+    FileNotFoundError
+        渡された場所にメタデータが無いとき。
+    """
+    if dataset_root is None:
+        return _download_metadata()
+
+    root = dataset_root.expanduser().resolve()
+    files = sorted((root / "meta" / "episodes").rglob("*.parquet"))
+    if not files:
+        raise FileNotFoundError(
+            f"[train] 渡された場所にメタデータがありません: {root}/meta/episodes/*.parquet"
+        )
+
+    # **本数とタスクの内訳を出す。** 混ぜ忘れ・混ぜ損ねはここでしか気付けない。
+    frame = _load_episode_metadata(root)
+    counts = frame["task"].value_counts()
+    print(f"[train] 渡されたデータセットを使う: {root}")
+    print(f"[train]   {len(frame):,} 本 / {frame['task'].nunique()} タスク")
+    print(f"[train]   1 本あたりの歩数 {int(frame['length'].min())}〜"
+          f"{int(frame['length'].max())}（中央 {int(frame['length'].median())}）")
+    print(f"[train]   本数の少ないタスク 3 つ: "
+          f"{[(name, int(value)) for name, value in counts.tail(3).items()]}")
+    return root
 
 
 def _download_metadata() -> Path:
@@ -893,7 +954,7 @@ def main() -> None:
                 "holdout_source": str(args.holdout_tasks),
             }
         else:
-            dataset_root = _download_metadata()
+            dataset_root = _resolve_dataset_root(args.dataset_root)
             if selects_by_task:
                 episode_indices = _select_emphasized_episodes(
                     dataset_root, list(args.emphasize_tasks or []),

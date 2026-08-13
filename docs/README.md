@@ -21,8 +21,8 @@
 | [howto/](howto/) | 手順書。上から順にやれば終わる形で書いてある |
 | [solution/](solution/) | 提出物と Colab の説明。コード本体は `../solution/` |
 | [strategy/](strategy/) | 何を狙うか、なぜそうするか。判断の材料 |
-| [reference/](reference/) | 調べて分かった事実（モデル・評価データ・出題の母集団・設定の意味） |
-| [plan/](plan/) | **個別の施策の設計。** 何を測り、出た数字で何を決めるか |
+| [reference/](reference/) | 調べて分かった事実（モデル・評価データ・出題元のデータ・設定の意味） |
+| [plan/](plan/) | **1 つずつの手の設計。** 何を測り、出た数字で何を決めるか |
 | [prod_eval_results/](../outputs/prod_eval_results/) | 本番採点の生ログと読み解き |
 
 ## よく開くファイル
@@ -41,7 +41,7 @@
 | **[strategy/06_scripted_demos.md](strategy/06_scripted_demos.md)** | **手本が 300 歩に収まらないタスクを扱うとき。台本で手本を自分で作る** |
 | **[plan/04_training_targets.md](plan/04_training_targets.md)** | **学習を流す前と、評価が出た直後。**ものさし・天井・候補・外したもの・記録が 1 枚にある |
 | [plan/01_failure_accounting.md](plan/01_failure_accounting.md) | 評価の結果を読むとき。**ゴール到達と衝突の読み分け方** |
-| [reference/04_track1_population.md](reference/04_track1_population.md) | 出題の母集団を確かめるとき |
+| [reference/04_track1_population.md](reference/04_track1_population.md) | 出題元のデータを確かめるとき |
 | **[reference/05_perturbation_categories.md](reference/05_perturbation_categories.md)** | **摂動 7 カテゴリの中身と、どれが出るか（運営回答の原文つき）** |
 | **[reference/06_training_data_composition.md](reference/06_training_data_composition.md)** | **学習データ 14,347 本の中身。摂動カテゴリで絞れるかの判定** |
 | [reference/07_chunk_params.md](reference/07_chunk_params.md) | 学習後に変えてよい設定はどれか（`n_action_steps` と `chunk_size`） |
