@@ -78,7 +78,8 @@ docker run --rm \
     --task KITCHEN_SCENE8_put_both_moka_pots_on_the_stove \
     --episodes 0 --output /out/base
 
-# root で書かれるので、持ち主を戻す
+# Linux のホストでは root で書かれるので、持ち主を戻す
+# **手元の Mac（colima）では要らない**——共有の仕組みが自分のものとして見せる
 docker run --rm -v "$PWD/work/scripted:/out" --entrypoint chown parc2026 \
     -R "$(id -u):$(id -g)" /out
 ```
@@ -274,8 +275,13 @@ GPU マシンで撮る場合は `nproc` から測り直すこと。
 |---|---|---|
 | `verify` 50 通り（描画なし） | 153 秒 | — |
 | `record` 1 本 | **111 秒**（233 歩） | **172 秒** |
-| `record` 50 本 | 約 92 分 | **約 72 分** |
+| `record` 50 本 | 約 92 分 | **約 72 分**（実測。45 本が成功） |
 | `record` 変種 4 種で 200 本 | 6.2 時間 | **約 4.8 時間** |
+| `build` 45 本 | **10 分 31 秒**（実測・**14 秒/本**） | — |
+
+**`build` は `record` の 1/12 の時間で済む**（1 本 14 秒 対 172 秒）。
+出来上がりは **45 本で 64 MB**（front 41.2 MB ＋ wrist 23.6 MB）で、
+元の npz 3.8 GB の **1.7%** である。
 
 **`record` の中身は描画が支配的である。** 実測 111 秒 / 233 歩 = 1 歩 476 ms で、
 うち物理は 39 ms しかない。**GPU では描けないので、速くする手は並列だけである。**
