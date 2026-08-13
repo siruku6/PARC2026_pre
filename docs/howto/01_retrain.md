@@ -414,6 +414,17 @@ cat work/train/<run-name>_episodes.json | head -c 200   # 使ったエピソー�
 
 **この 2 行が一致していれば、明るさで散らす選び方が効いている。**
 
+> **正規化の基準はデータセットから来る。出発点の重みが持っている値は使われない。**
+> lerobot は `normalizer_processor` の `stats` を `dataset.meta.stats` で上書きする
+> （`lerobot_train.py` の `preprocessor_overrides`）。
+>
+> **本数を絞っただけなら基準は変わらない。** `meta.stats` は `meta/stats.json`
+> （全 14,347 本ぶん）をそのまま読むだけで、`--dataset.episodes` で選んだ
+> 部分から計算し直したりはしない（`datasets/dataset_metadata.py` の
+> `load_stats(self.root)`）。**変わるのはデータセットごと差し替えたときだけ**で、
+> そのときは基準まで入れ替わるので、**別のデータで評価してはいけない**
+> （[05_scripted_demos.md](05_scripted_demos.md) の 6 節）。
+
 ### A-2-3. 苦手タスクに寄せて学習する
 
 **84 件の検証用データで切り分けたら、落としているのは摂動ではなく特定のタスクだった。**
@@ -457,6 +468,54 @@ docker run --gpus all -d --name parc-train \
 > **ただし「絞れない」と断定はしていない。** `meta/` の他のファイル・
 > LIBERO-plus の変換スクリプト・データセットカードを見ていない。
 > **明るさで `light` を代用できる可能性もある**（[open_items.md](../talk/open_items.md) の 28）。
+
+### A-2-4. LoRA の当て先を広げて学習する
+
+**これまで動かしていたのは 4.5 億個のうち 74 万個（0.17%）だけだった。**
+言語も視覚も凍っていた。**候補 4 つと、どれを採ったかの理由は
+[../reference/12_lora_targets.md](../reference/12_lora_targets.md) にある。**
+
+```bash
+docker run --gpus all -d --name parc-train-text \
+    -v "$PWD/work/train2:/out" \
+    -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
+    parc2026-train \
+    python /workspace/train.py --run-name text_lora32_40k --peft-scope text \
+      --lora-r 32 --lora-alpha 32 --steps 40000
+```
+
+| 旗 | なぜこの値か |
+|---|---|
+| `--peft-scope text` | **action expert ＋ 言語**（69 層・3,123,712 個・0.69%）。既定の `expert` は 0.17% |
+| `--lora-r 32` | 文献の推奨が 16〜32。**当て先を広げるのが主で、rank は従である** |
+| `--lora-alpha 32` | **rank と同じにして倍率を 1.0 に保つ。** 従来も 16 / 16 だった |
+| `--steps 40000` | 1 コマを見る回数が 0.29 → 0.57 回になる（20,000 歩の 2 倍） |
+
+**バッチは 32 のままにする。** 16 に落とすと引く回数が半分になり、
+**歩数を増やした意味が消える**（40,000 × 16 は 20,000 × 32 と同じ 0.29 回）。
+時間も減らない —— 律速は動画をほどく側なので、**時間はほぼ「引いた回数」で決まる。**
+
+**流したら真っ先にこの 1 行を見る。**
+
+```bash
+docker logs parc-train-text 2>&1 | grep -E "num_learnable_params|OutOfMemory"
+```
+
+**`num_learnable_params=3123712` が出れば当て先が正しい。**
+`742656` のままなら旗が効いていないので、その場で止める。
+
+**8/12 の実測。** 500 歩 2 分 13 秒、**40,000 歩を 2 時間 54 分 12 秒**で走り切った。
+GPU は 9.1 GB（`mem_gb: 7.80`）で 11 GB 余る。**当て先を言語まで広げても、
+expert だけのとき（1 歩 0.254 秒）から 5% しか遅くならない。**
+
+**loss は最後まで 0.092〜0.099 で動かない。** 出発点が同じデータで学習済みなので
+これは正常だが、**効いたかどうかは loss では判定できない**（[../reference/12](../reference/12_lora_targets.md)）。
+
+> **`--peft-scope vlm`（視覚まで広げる）は 20 GB では入らない。**
+> 8/12 に試して、**1 歩も進まず `torch.OutOfMemoryError`** で落ちた。
+> **入らない理由は当て先の数ではなく順番である** —— 視覚は言語より前にあるため、
+> 視覚へ勾配を返すには言語の 16 層を必ず通り、**言語を外しても減らない。**
+> 詳細は [../reference/12_lora_targets.md](../reference/12_lora_targets.md)。
 
 ## A-3. 中断したときに再開する
 
@@ -580,16 +639,27 @@ requires the same batch size.
 
 **学習しただけでは提出できない。** チェックポイントには LoRA の差分しか入っていない。
 
+**マウント先と `--run-name` は、学習で使ったものに合わせる。**
+`merge.py` は `/out/<run-name>/checkpoints/` を見るので、**ここが食い違うと
+別の回を畳むか、見つからずに止まる。**
+
 ```bash
 docker run --rm -it \
-    -v "$PWD/work/train:/out" -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
+    -v "$PWD/work/train2:/out" \
+    -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
     parc2026-train \
-    python /workspace/merge.py
+    python /workspace/merge.py --run-name <run_name>
 ```
 
-**GPU は不要**なので `--gpus` は付けなくてよい。`--step` を省略すると最新を使う。
+| 旗・マウント | 何に合わせるか |
+|---|---|
+| `-v "$PWD/work/train2:/out"` | **学習の `docker run` で `/out` に当てた場所と同じにする**（A-2-4 は `work/train2`、A-2-3 は `work/train`） |
+| `--run-name` | **学習で渡した名前。** 省略すると `smolvla_lora_all_suites`（2026-08-10 の回）を探しにいく |
+| `--step` | 省略すると最新。今回は 040000 |
 
-出力は `work/train/<run-name>/merged_model/` である。
+**GPU は不要**なので `--gpus` は付けなくてよい。
+
+出力は `work/train2/<run_name>/merged_model/` である。
 
 **`merged_model/config.json` の `n_action_steps` は 50 のままだが、直さなくてよい。**
 提出物側が重みを読んだあとに 5 で上書きする。なぜ学習後に変えて構うのか、逆に
@@ -600,8 +670,8 @@ docker run --rm -it \
 > 次へ進む前に持ち主を移す。
 >
 > ```bash
-> sudo chown -R "$USER:$USER" work/train/<run-name>/merged_model
-> chmod -R u+rw,go+r work/train/<run-name>/merged_model
+> sudo chown -R "$USER:$USER" work/train2/<run_name>/merged_model
+> chmod -R u+rw,go+r work/train2/<run_name>/merged_model
 > ```
 
 ## A-6. マージが本当にできているか確かめる
@@ -613,20 +683,26 @@ docker run --rm -it \
 初期重みと 1 テンソルずつ比べる。
 
 ```bash
-python3 solution/tools/verify_merge.py work/train/smolvla_lora_all_suites/merged_model
+python3 solution/tools/verify_merge.py work/train2/<run_name>/merged_model \
+    --base-model work/artifacts/model_weights_base
 ```
 
-通ればこう出る。
+**`--base-model` を渡すと通信しない。** 省略すると HuggingFace から出発点の
+`model.safetensors` を取り直す（手元の `work/artifacts/model_weights_base` は
+それと同じもので、`lora20k` を測ると記録どおり 37 テンソルの変化になる）。
+
+通ればこう出る（8/12 の `text_lora32_40k` の実物）。
 
 ```
-変化したテンソル 2 個のうち、大きい順に 2 件
+変化したテンソル 68 個のうち、大きい順に 10 件
         相対変化         最大絶対差  テンソル名
-    1.29e-03      3.00e-03  model.layers.0.self_attn.q_proj.weight
-    4.44e-04      1.00e-03  model.layers.0.self_attn.v_proj.weight
+    3.88e-01      2.58e-02  model.vlm_with_expert.lm_expert.layers.14.self_attn.q_proj.weight
+    2.32e-01      1.54e-02  model.vlm_with_expert.lm_expert.layers.12.self_attn.q_proj.weight
+    …
 
 判定
-  変化したテンソル      2 個（LoRA の対象 2 / 対象外 0）
-  いちばん大きい相対変化 1.29e-03
+  変化したテンソル      68 個（LoRA の対象 63 / 対象外 5）
+  いちばん大きい相対変化 3.88e-01
 
   正常。学習の成果が入っており、壊れてもいない。
 ```
@@ -640,13 +716,77 @@ python3 solution/tools/verify_merge.py work/train/smolvla_lora_all_suites/merged
 | 変化量が大きすぎないか（相対 1 超）・NaN や Inf | 重みが壊れている |
 | **変化が LoRA の対象**（`q_proj` `k_proj` `v_proj` `o_proj`）**に出ているか** | LoRA の当たり先が想定と違う |
 
+**変化するテンソルの数は当て先で決まる。** 出発点の重みのキーと突き合わせて数えた
+（8/12）。ここと違う数が出たら、当て先の指定が効いていない。
+
+| 当て先 | LoRA を当てた層 | 変化するテンソル | 「対象」と数えられる | 対象外 |
+|---|---|---|---|---|
+| `--peft-scope expert`（従来） | 37 | **37** | 32 | 5 |
+| `--peft-scope text` | 69 | **68** | 63 | 5 |
+
+**対象外の 5 個は当て先を広げても増えない。** 中身は
+`state_proj` `action_in_proj` `action_out_proj` `action_time_mlp_in`
+`action_time_mlp_out` で、**名前に `q_proj` などが入らないので「対象外」に
+数えられるだけである。** これは正常で、判定も止まらない。
+
+> ### `text` で 69 当てて 68 しか動かないのは正常である
+>
+> **動かないのは 1 つだけで、場所も決まっている** ——
+> `vlm.model.text_model.layers.15.self_attn.q_proj`、**言語側のいちばん最後の層の
+> `q_proj`** である（8/12 に実測。`layers.0`〜`14` の `q_proj` と、
+> `layers.15` の `v_proj` はどれも動いている）。
+>
+> **理由は、最後の層の出力が誰にも読まれないことである。** 言語側は
+> 「行動を出す側（action expert）へ渡す鍵と値」を作るために 1 度流れる。
+> このとき各層の `key` と `value` は保管されるが、**最後の層が出した状態そのものは
+> 捨てられる**（`past_key_values` だけが次に渡る）。
+>
+> - `v_proj` …… 保管される値を作る → **使われる → 勾配が来る → 動く**
+> - `q_proj` …… その層の出力を作るためだけに要る → **捨てられる → 勾配が 0 → 動かない**
+>
+> **学習の失敗ではない。** 4.5 億個のうち 65,536 個が余っているだけである。
+
 あわせて `config.json` の `use_peft` `pretrained_path` `load_vlm_weights` も見る。
 **`pretrained_path` が残っていると、提出物の側では解決できないパスになる。**
 
 初期重みは HuggingFace から取る（`model.safetensors` だけなので通信は 1 ファイル）。
 手元にあるなら `--base-model <ディレクトリ>` で渡せば通信しない。
 
-**ここまで来たら [02_build_submission.md](02_build_submission.md) へ進む。**
+## A-7. この先は 2 つに分かれる
+
+**`merged_model/` はそのままでは評価にも提出にも使えない。**
+**`vlm/`（SmolVLM の設定とトークナイザ）が入っていないからである。**
+`merge.py` はこれを出さないので、別に足す。**足し方が 2 通りある。**
+
+### 測るだけなら —— 名前を付けて置き、`WEIGHTS` で指す
+
+```bash
+cp -r work/train2/<run_name>/merged_model work/artifacts/model_weights_<label>
+cp -r work/artifacts/model_weights_base/vlm work/artifacts/model_weights_<label>/vlm
+
+MUJOCO_GL=osmesa WEIGHTS=work/artifacts/model_weights_<label> LABEL=<label> \
+    bash solution/tools/run_docker_eval.sh --detach
+```
+
+**回ごとに別の名前にする。** そうすれば前の回を消さずに並べて測れる
+（`model_weights_base` `model_weights_lora20k` `model_weights_weak3x` が既にある）。
+続きは [03_gpu_eval.md](03_gpu_eval.md)。
+
+### 提出物に載せるなら —— `install_weights.py` で取り込む
+
+```bash
+work/venv310/bin/python solution/tools/install_weights.py \
+    work/train2/<run_name>/merged_model --dry-run
+```
+
+**こちらは置き場所が 1 つに決まっている**（`work/artifacts/model_weights/`）。
+`vlm/` は**いまそこにあるものを引き継ぐ**ので、上のコピーは要らない。
+取り込む前に 4 つ検査し、1 つでも外れれば書き換えずに止まる。
+続きは [02_build_submission.md](02_build_submission.md) のケース 2。
+
+> **`install_weights.py` は提出物を作るマシンで使うものである。**
+> GPU マシンには `work/artifacts/model_weights/` を置いていない（回ごとの名前で
+> 並べてある）。**測るだけの段階では上の `WEIGHTS` を使う。**
 
 ---
 
@@ -686,6 +826,7 @@ python3 solution/tools/verify_merge.py work/train/smolvla_lora_all_suites/merged
 
 | 症状 | 原因 | 対処 |
 |---|---|---|
+| **1 歩も進まず** `torch.OutOfMemoryError` で落ちる | LoRA の当て先を視覚まで広げた（`--peft-scope vlm`）。**視覚の中間結果が 20 GB に入らない** | `--peft-scope text` にする（A-2-4）。当て先を減らさずに済ませたいならバッチを 16 へ |
 | **ビルド中に** `libnppicc.so.12: cannot open shared object file` で落ちる | torchcodec が要求する CUDA の NPP が入っていない。**古い Dockerfile を使っている** | 新しい Dockerfile で A-1 をやり直す（`nvidia-npp-cu12` を入れて `ldconfig` へ登録する行が入っている） |
 | データを落としきったあと `undefined symbol` で落ちる | torch と torchcodec の版が対になっていない | A-1 のイメージを作り直す。それでも駄目なら `--video-backend pyav` |
 | `RuntimeError: operator torchvision::nms does not exist` | torch と torchvision の版が対になっていない | A-1 のイメージを作り直す（Dockerfile で torchvision を torch と同じ index から固定済み） |

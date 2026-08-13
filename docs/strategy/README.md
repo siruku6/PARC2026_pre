@@ -227,7 +227,7 @@ flowchart TD
 | [02_環境戦略.md](02_環境戦略.md) | STEP 1。Python 3.10 / 3.12 問題の判断材料 |
 | [03_学習とデータの方針.md](03_学習とデータの方針.md) | STEP 3。配布ノートブックの**どこを変えるか（なぜ）** |
 | **[05_実測結果.md](05_実測結果.md)** | **測った数字はすべてここ。** 判断の前に必ず見る |
-| **[06_scripted_demos.md](06_scripted_demos.md)** | **手本が全部 300 歩を超えるタスクを、台本で 208 歩にした記録。** 手本を自分で作る |
+| **[06_scripted_demos.md](06_scripted_demos.md)** | **手本が全部 300 歩を超えるタスクを、台本で 230 歩にした記録。** 手本を自分で作る |
 | [../solution/COLAB.md](../solution/COLAB.md) | STEP 3。Colab で**どう変えるか（貼れるコード）** |
 | [../solution/colab_eval/](../solution/colab_eval/README.md) | Colab GPU で評価を回す（84 件 45 分。28 件 × 3 に割る） |
 | **[../howto/01_retrain.md](../howto/01_retrain.md)** | **手を動かすとき。** 再学習の手順（Docker / Colab） |

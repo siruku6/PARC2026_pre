@@ -12,3 +12,7 @@ assets.zip
 work/
 outputs/
 .claude/settings.json
+
+
+.venv/
+venv/

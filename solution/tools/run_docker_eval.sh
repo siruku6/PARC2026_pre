@@ -19,8 +19,13 @@
 #
 # 環境変数（省略時の既定）
 #   MAX_STEPS=300  本番と同じ打ち切り
-#   N_EPISODES=1   **タスクあたり**の本数。84 件あるので 1 のままにする
-#   PER_CELL=3     スイート × カテゴリあたりの本数（CSV 全体で 84 件）
+#   N_EPISODES=1   **タスクあたり**の本数。件数が多いので 1 のままにする
+#   EVAL_CSV       **測るタスクの一覧。既定は compe/val/EVAL_TASKS.csv（36 件）。**
+#                  学習が引かなかった実演がある指示文だけで作った集合である
+#                  （solution/tools/make_eval_split.py）。
+#                  `EVAL_CSV=` と空にすると、代わりに 84 件を生成して測る
+#   PER_CELL=3     84 件を生成するときの、スイート × カテゴリあたりの本数。
+#                  **EVAL_CSV を空にしたときだけ効く**
 #   RECORD=1       ロールアウトを mp4 に撮る（失敗した回だけ）
 #   WEIGHTS        測る重み。既定 work/artifacts/model_weights
 #                  **素の重み（0.1409 の構成）と学習後を比べるときはここを変える**
@@ -42,6 +47,10 @@ KIT_IMAGE="${KIT_IMAGE:-parc2026}"
 MAX_STEPS="${MAX_STEPS:-300}"
 N_EPISODES="${N_EPISODES:-1}"
 PER_CELL="${PER_CELL:-3}"
+# **既定は 36 件の集合である。** 84 件は学習に使ったタスクを検証にも使っており、
+# 手元の順序が採点環境と逆になった（docs/howto/04_proxy_eval.md）。
+# 空にすると 84 件を生成する道に戻る。
+EVAL_CSV="${EVAL_CSV-$REPOSITORY_ROOT/compe/val/EVAL_TASKS.csv}"
 RECORD="${RECORD:-1}"
 NETWORK="${NETWORK:-parc-eval-net}"
 POLICY_HOST="parc-policy"
@@ -130,6 +139,21 @@ label="n${PARC_N_ACTION_STEPS:-5}_ep${N_EPISODES}_max${MAX_STEPS}"
 OUTPUT_DIR="$REPOSITORY_ROOT/work/gpu_eval/$(date +%m%d_%H%M%S)_${label}"
 mkdir -p "$OUTPUT_DIR"
 echo "  出力先 $OUTPUT_DIR"
+
+# **測るタスクの一覧を、コンテナから見える場所へ先に置く。**
+# コンテナへ渡しているのは `/host/tools` と `/out` の 2 つだけなので、
+# `$OUTPUT_DIR`（＝コンテナの `/out`）へ写すのがいちばん短い。
+# **置いてあれば `docker_eval_inside.sh` は生成せずにこれを使う。**
+if [ -n "$EVAL_CSV" ]; then
+    if [ ! -f "$EVAL_CSV" ]; then
+        echo "  **測るタスクの一覧がない: $EVAL_CSV**" >&2
+        echo "  作る: python3 solution/tools/make_eval_split.py --record <episodes.json>" >&2
+        echo "  84 件を生成する道に戻す: EVAL_CSV= bash $0" >&2
+        exit 1
+    fi
+    cp "$EVAL_CSV" "$OUTPUT_DIR/VAL_TASKS.csv"
+    echo "  測るタスク $(( $(wc -l < "$EVAL_CSV") - 1 )) 件（$EVAL_CSV）"
+fi
 
 # 方策側へ渡す並びを作る。**`policy_server.py` は重みを自分の隣から読む**
 # （`Path(__file__).parent / "model_weights"`）ので、この形にする必要がある。

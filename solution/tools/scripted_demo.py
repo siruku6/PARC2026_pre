@@ -24,11 +24,17 @@
     python3 solution/tools/scripted_demo.py verify \\
         --task KITCHEN_SCENE8_put_both_moka_pots_on_the_stove
 
-    # 3. 学習データとして書き出す（描画するので GPU 推奨。EGL で 1 本 8 秒）
-    MUJOCO_GL=egl python3 solution/tools/scripted_demo.py record \\
+    # 3. 学習データとして書き出す（描画するので 1 本 100 秒。**並列で回す**）
+    MUJOCO_GL=osmesa python3 solution/tools/scripted_demo.py record \\
         --task KITCHEN_SCENE8_put_both_moka_pots_on_the_stove \\
         --variant KITCHEN_SCENE8_put_both_moka_pots_on_the_stove_light_2 \\
         --episodes 0,1,2 --output /out/scripted/
+
+**描画は CPU（`osmesa`）で行う。** 手元の GPU マシンの vGPU は
+`NVIDIA Virtual Compute Server` で OpenGL に対応せず、`egl` を指定すると
+**空の場面は 0.4 ms で描けるのに、実際の場面で止まる。**
+速くする手は並列だけである（`--episodes` を分けて同時に流す。手順は
+`docs/howto/05_scripted_demos.md` の 3 節）。
 
 **台本を書くときに必ず先に測ること**（`measure` が出す）。
 

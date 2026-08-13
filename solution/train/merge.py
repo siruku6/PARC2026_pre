@@ -5,7 +5,9 @@
 しか入っていない。**そのままでは提出物として読めない。** 配布ノートブックの
 マージセルと同じ処理をここで行う。
 
-出力は `solution/tools/install_weights.py` にそのまま渡せる。
+出力には **`vlm/`（SmolVLM の設定とトークナイザ）が入らない。** 評価にも提出にも
+これが要るので、次は [docs/howto/01_retrain.md](../../docs/howto/01_retrain.md) の
+A-6（検算）→ A-7（`vlm/` の足し方が 2 通り）へ進む。
 
     python merge.py                       # 最新のチェックポイントをマージ
     python merge.py --step 15000          # 特定のステップを指定
@@ -209,7 +211,11 @@ def main() -> None:
     total = sum(path.stat().st_size for path in destination.rglob("*") if path.is_file())
     print(f"[merge] 完了: {destination}  {total / 1e6:.0f} MB")
     print(f"[merge] {produced}")
-    print("[merge] 次に: python solution/tools/install_weights.py <このディレクトリ> --dry-run")
+    # **次はマージの検算である。**`merge.py` 自身の検査は「LoRA が残っていないこと」
+    # しか見ないので、ここを飛ばすと初期重みのままでも先へ進めてしまう。
+    # ホスト側のパスはコンテナから分からないため、手順書の節番号で案内する。
+    print("[merge] 次に: verify_merge.py で検算する（docs/howto/01_retrain.md の A-6）")
+    print("[merge] **vlm/ はここに入っていない。** 評価・提出の前に足す（同 A-7）")
 
 
 if __name__ == "__main__":
