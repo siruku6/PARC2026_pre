@@ -280,6 +280,25 @@ docker run --gpus all --rm -v "$PWD/work/train:/out" -v "$PWD/work/merged:/data"
 残り 39 タスクの性能が落ちる（8/11 の追加学習は本番 0.1409 → 0.016 に崩れた）。
 `build` は「台本を真似られるか」を見るため、`merge` が提出候補を作るためのものである。
 
+### 学習した重みを評価に渡すまでに 2 つ手当てが要る
+
+**`merge.py` の出力はそのままでは評価に渡せない。** 2 つとも `PermissionError`
+や「`vlm` が無い」で止まるので、先に済ませる。
+
+```bash
+# ① 持ち主を戻す（Linux のホストでは root で書かれる）
+docker run --rm -v "$PWD/work/train:/out" --entrypoint chown parc2026-train \
+    -R "$(id -u):$(id -g)" /out/<run 名>
+
+# ② SmolVLM の設定とトークナイザを持ち込む（merge.py は出力しない）
+cp -r work/artifacts/model_weights/vlm work/train/<run 名>/merged_model/vlm
+```
+
+**`install_weights.py` を `--dry-run` 無しで実行しないこと。** 既定の取り込み先が
+`work/artifacts/model_weights`（**提出する重みそのもの**）である。実験の重みで
+置き換える理由は無い。`--dry-run` なら**畳み込みが効いたか**（LoRA が残って
+いないか・テンソル構成が一致するか）だけを読める。
+
 ## 7. 評価する — **既定の 36 件では測れない**
 
 **このタスクは 36 件に入っていない**（146 本すべてが 341 歩以上で、
