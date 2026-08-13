@@ -371,7 +371,25 @@ df -h .                                                   # 17 GB 以上空い�
 ```
 
 ```bash
-# 1. 混ぜる（16 GB を複製する）
+# 1a. 列の書き方を相手に合わせる（**1 度だけ。数秒**）
+docker run --rm \
+    -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/data" \
+    -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
+    parc2026-train python /host/tools/npz_to_lerobot.py align \
+    --base /root/.cache/huggingface/lerobot/lerobot/libero_plus \
+    --add /data/lerobot
+```
+
+**これを飛ばすと `merge` が `Same features is expected` で落ちる。**
+形は同じでも**飾りが違う**ためである。`lerobot/libero_plus` は古い版で
+作られており、v0.6.0 が書く `features` とは 2 か所で書き方が違う
+（非動画の列に `fps` を書くか・動画の `info` が `video.is_depth_map` か
+`is_depth_map` か）。`align` は**`dtype`・`shape`・`names` の一致を確かめてから
+飾りだけ写す**ので、本当に形が違うときは止まる。元の `info.json` は
+`info.json.bak` に残る。
+
+```bash
+# 1b. 混ぜる（16 GB を複製する）
 docker run --rm \
     -v "$PWD/solution/tools:/host/tools:ro" \
     -v "$PWD/work/scripted:/data" -v "$PWD/work/merged:/merged" \
@@ -442,6 +460,7 @@ EVAL_CSV=compe/val/EVAL_TASKS.csv MUJOCO_GL=osmesa \
 
 | 詰まったら | |
 |---|---|
+| `Same features is expected` | 1a の `align` を飛ばしている（形ではなく書き方の食い違い） |
 | `14,347 本` と出る | 足せていない。`--dataset-root` が混ぜた側を指しているか |
 | `PermissionError` | root 所有。上の `chown` を回す |
 | `vlm が無い` | 4 の `cp` を飛ばしている |
