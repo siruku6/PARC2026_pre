@@ -21,6 +21,8 @@ OUTPUT="${REPOSITORY_ROOT}/work/claude-setup.tgz"
 # 使っていない skill を混ぜると、受け取り側で何が効いているのか分からなくなる。
 ITEMS=(
     CLAUDE.md                        # 会話と作業の基本方針。**これが最重要**
+    plain-japanese.md                # 使わない語と言い換えの表。**CLAUDE.md 1.1 が指す。
+                                     # これが無いと 1.1 は「専門語か否か」の判断に戻る**
     skills/ml-competition-workflow   # 採点が見えない相手にスコアを詰める手順
     skills/torch-ecosystem-deps      # torch と周辺パッケージの版・CUDA 系統
     skills/notebook-runbook          # Colab の手順書と、結果を失わない作り
