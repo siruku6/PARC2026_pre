@@ -1,0 +1,89 @@
+# π0.5 (pi05) 学習用のイメージ。solution/train/Dockerfile（SmolVLA 用）の変種で、
+# 差分は extras（`smolvla,peft` → `pi`）と COPY するスクリプトだけである。
+#
+#   docker build -t parc2026-train-pi05 -f solution/train/Dockerfile.pi05 solution/train
+#   docker run --gpus all --rm -it \
+#       --user "$(id -u):$(id -g)" \
+#       -v "$PWD/work/train:/out" -v "$HOME/.cache/huggingface:/hf_home" \
+#       parc2026-train-pi05
+#
+# **`--user` を付けて非rootで動かす前提。** マウント先を `/root/.cache/huggingface`
+# ではなく `/hf_home` にしてあるのはそのため —— `/root` 自体が `drwx------`
+# （root 所有）なので、`--user` で非root にした瞬間、中身の権限が正しくても
+# `/root` を跨げず全滅する（2026-08-13 に実機で確認済みの失敗）。`/` 直下の
+# `/hf_home` なら、マウント元（`$HOME/.cache/huggingface`）の所有者と
+# `--user` の数値が一致してさえいれば通る。
+#
+# **学習前に、ホスト側で一度だけ `hf auth login` が要る**
+# （`$HOME/.cache/huggingface` をマウントしているので、ログイン済みならこのまま使える）。
+# π0.5 は Hugging Face の gemma ライセンスで配布されており、
+# https://huggingface.co/google/paligemma-3b-pt-224 の利用規約に同意した
+# アカウントでログインしていないと初期重みの取得で止まる。
+# 詳しくは train_pi05.py の docstring を読むこと。
+#
+# CUDA・torch・torchcodec・torchvision の版の対については
+# solution/train/Dockerfile の注記をそのまま参照（このファイルでは省略しない）。
+FROM python:3.12-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV HF_HOME=/hf_home
+
+# **`--user` で動かすと /etc/passwd に UID のエントリが無い。**
+# torch の内部（`_inductor/runtime/cache_dir_utils.py`）がキャッシュ置き場を
+# 決めるのに `getpass.getuser()` を呼び、それが `pwd.getpwuid(os.getuid())`
+# へ落ちて `KeyError` になる（2026-08-13 に実機で確認済みの失敗）。
+# `getpass.getuser()` は `USER`/`LOGNAME` 環境変数があればそちらを先に見るので、
+# 中身が何であっても構わず設定しておく。`HOME` も `/root`（前述の理由で
+# 非rootから書けない）ではなく、誰の UID でも書き込める `/tmp` にする。
+ENV HOME=/tmp
+ENV USER=trainer
+ENV LOGNAME=trainer
+
+ARG TORCH_INDEX=https://download.pytorch.org/whl/cu128
+ARG TORCH_VERSION=2.11.0
+ARG TORCHCODEC_VERSION=0.11.1
+ARG TORCHVISION_VERSION=0.26.0
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git build-essential ca-certificates ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir "torch==${TORCH_VERSION}" --index-url ${TORCH_INDEX}
+RUN pip install --no-cache-dir "torchcodec==${TORCHCODEC_VERSION}" --index-url ${TORCH_INDEX}
+
+RUN pip install --no-cache-dir "nvidia-npp-cu12" \
+    && NPP_SO="$(find /usr/local/lib/python3.12/site-packages/nvidia \
+            -name 'libnppicc.so*' -print -quit)" \
+    && test -n "$NPP_SO" \
+    && dirname "$NPP_SO" > /etc/ld.so.conf.d/nvidia-npp.conf \
+    && ldconfig \
+    && ldconfig -p | grep -q libnppicc.so.12
+
+RUN pip install --no-cache-dir "torchvision==${TORCHVISION_VERSION}" --index-url ${TORCH_INDEX}
+
+# **ここだけが Dockerfile 本体との違い。** `smolvla,peft` の代わりに `pi`
+# （π0/π0.5 が要る依存一式。openpi 由来のパッケージを含む）を入れる。
+ARG LEROBOT_TAG=v0.6.0
+RUN git clone --quiet --depth 1 --branch ${LEROBOT_TAG} \
+        https://github.com/huggingface/lerobot.git /opt/lerobot \
+    && pip install --no-cache-dir -e "/opt/lerobot[training,pi]" \
+    && pip uninstall -y -q torchao || true
+
+RUN python -c "\
+import torch, torchcodec, torchvision; \
+from torchcodec.decoders import VideoDecoder; \
+torchvision.ops.nms; \
+print(f'torch {torch.__version__} / torchcodec {torchcodec.__version__} '\
+      f'/ torchvision {torchvision.__version__} 整合')"
+
+WORKDIR /workspace
+# train_pi05.py は同じディレクトリの train.py から選択ロジックを import するため、
+# 両方を COPY する。merge.py は要らない —— pi05 は LoRA を使わず、
+# train_expert_only のフルパラメータ学習なのでチェックポイントがそのまま提出用になる。
+COPY train.py train_pi05.py /workspace/
+
+VOLUME ["/out"]
+ENV OUTPUT_ROOT=/out
+
+CMD ["python", "/workspace/train_pi05.py", "--smoke-test"]
