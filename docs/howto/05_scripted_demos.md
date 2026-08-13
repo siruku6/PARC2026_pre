@@ -333,7 +333,7 @@ python solution/tools/install_weights.py work/train/<run 名>/merged_model \
 
 ```bash
 EVAL_CSV=compe/val/MOKA_TASKS.csv MUJOCO_GL=osmesa \
-    WEIGHTS="$PWD/work/train/<run 名>/merged_model" LABEL=<run 名> \
+    WEIGHTS="$PWD/work/artifacts/model_weights_<label>" LABEL=<label> \
     bash solution/tools/run_docker_eval.sh --detach
 ```
 
@@ -349,6 +349,98 @@ EVAL_CSV=compe/val/MOKA_TASKS.csv MUJOCO_GL=osmesa \
 >
 > 変種でも撮れば根本から消える（**物理は同じなので台本は変えない**。
 > `--variant` と `--output` を差し替えるだけ。手元の Mac で 45 本 72 分）。
+
+## 8. 混ぜて学習する（提出候補）— **上から順に 6 手**
+
+**ここが本命である。** 作った分だけで学習したものは提出できず、
+**測ることさえできない**（6 節の「基準が潰れる」）。**混ぜる側にその問題は無い。**
+
+**全部 GPU マシンで行う。** `merge` には `lerobot/libero_plus`（16 GB）が要り、
+それがあるのは学習を回したマシンだけである。**判断の枠組み（3 段のゲート）と
+どの指示文を重くするかは [../talk/260813_today.md](../talk/260813_today.md) にある。**
+
+```bash
+# 0. 前提。**足りなければここで止まる**
+du -sh ~/.cache/huggingface/lerobot/lerobot/libero_plus   # 16 GB あるか
+df -h .                                                   # 17 GB 以上空いているか
+```
+
+```bash
+# 1. 混ぜる（16 GB を複製する）
+docker run --rm \
+    -v "$PWD/solution/tools:/host/tools:ro" \
+    -v "$PWD/work/scripted:/data" -v "$PWD/work/merged:/merged" \
+    -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
+    parc2026-train python /host/tools/npz_to_lerobot.py merge \
+    --base /root/.cache/huggingface/lerobot/lerobot/libero_plus \
+    --add /data/lerobot --add-repo-id local/scripted_moka \
+    --output /merged
+
+docker run --rm -v "$PWD/work:/w" --entrypoint chown parc2026-train \
+    -R "$(id -u):$(id -g)" /w/merged        # Linux では root で書かれる
+```
+
+**`--add-repo-id` を忘れないこと**（既定は `local/scripted_demos`）。
+最後に**足した分のエピソード番号**（`14347〜14391`）が印字される。
+
+```bash
+# 2. ゲート A：配線を 10 歩で見る（5 分）
+docker run --gpus all --rm -v "$PWD/work/train:/out" -v "$PWD/work/merged:/data" \
+    -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
+    parc2026-train python /workspace/train.py --run-name scripted_mix_smoke \
+    --dataset-root /data --steps 10 --save-freq 10 \
+    --max-demo-steps 300 --emphasis-multiplier 3 \
+    --emphasize-tasks "put both moka pots on the stove" <他 3 つ>
+```
+
+**`14,392 本 / 40 タスク` と印字されるのを確かめる。** ここでしか混ぜ損ねに
+気付けない（14,347 のままなら足せていない）。**`--emphasize-tasks` に台本の
+指示文を入れないと、45 本のうち 12 本しか使われない**（間引きを受けるため）。
+
+```bash
+# 3. ゲート B：本番の歩数（20,000 歩・約 2 時間）
+#    2 と同じ引数から --steps / --save-freq / --run-name を差し替えるだけ
+```
+
+```bash
+# 4. 重みを整える（6 節と同じ 2 手）
+docker run --rm -v "$PWD/work/train:/out" --entrypoint chown parc2026-train \
+    -R "$(id -u):$(id -g)" /out/scripted_mix
+docker run --rm --gpus all -v "$PWD/work/train:/out" \
+    -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
+    parc2026-train python /workspace/merge.py --run-name scripted_mix
+cp -r work/train/scripted_mix/merged_model work/artifacts/model_weights_scripted_mix
+cp -r work/artifacts/model_weights_base/vlm work/artifacts/model_weights_scripted_mix/vlm
+```
+
+```bash
+# 5. モカポット 8 件で測る（20 分）。**比べる相手を先に測る**
+EVAL_CSV=compe/val/MOKA_TASKS.csv MUJOCO_GL=osmesa \
+    WEIGHTS="$PWD/work/artifacts/model_weights_weak3x" LABEL=weak3x_moka \
+    bash solution/tools/run_docker_eval.sh --detach     # 0/8 のはず
+
+EVAL_CSV=compe/val/MOKA_TASKS.csv MUJOCO_GL=osmesa \
+    WEIGHTS="$PWD/work/artifacts/model_weights_scripted_mix" LABEL=scripted_mix_moka \
+    bash solution/tools/run_docker_eval.sh --detach
+```
+
+```bash
+# 6. ゲート C：他のタスクを壊していないか（36 件・72 分）
+EVAL_CSV=compe/val/EVAL_TASKS.csv MUJOCO_GL=osmesa \
+    WEIGHTS="$PWD/work/artifacts/model_weights_scripted_mix" LABEL=scripted_mix_36 \
+    bash solution/tools/run_docker_eval.sh --detach
+```
+
+**評価は 2 つ同時に走らせられない。** 起動時に前回の残骸（`parc-policy` と
+`parc-eval-net`）を消しに行くので、**走っている評価が途中で終わる。**
+1 つずつ流すこと。
+
+| 詰まったら | |
+|---|---|
+| `14,347 本` と出る | 足せていない。`--dataset-root` が混ぜた側を指しているか |
+| `PermissionError` | root 所有。上の `chown` を回す |
+| `vlm が無い` | 4 の `cp` を飛ばしている |
+| 方策サーバーが消えた | 評価を 2 つ同時に流した |
 
 ## 時間の見積もり
 
