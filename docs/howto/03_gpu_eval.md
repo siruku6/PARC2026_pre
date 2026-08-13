@@ -104,6 +104,18 @@ MUJOCO_GL=osmesa LABEL=lora20k \
 | λ=0.25 のブレンド | `work/artifacts/model_weights_lam025` | 0.095 |
 | LoRA 20,000 歩 | `outputs/train2/weak3x_max300/merged_model` ほか | **0.016** |
 
+> **⚠️ この「置き場所」は実行環境によって変わる。`WEIGHTS` に渡す前に、その環境で
+> `ls` して実在を確かめること。** 上の `outputs/train2/...` は書いた時点の配置であり、
+> 別の GPU マシンでは同じ中身が違う場所にあることがある
+> （8/13 に実機で `outputs/` ではなく `work/` 配下だったことがあった）。
+>
+> **GPU マシンでは大体、次のどちらかに置かれている。**
+> - `work/artifacts/model_weights_<label>` — `install_weights.py` で取り込み済み。
+>   `vlm/`（SmolVLM の設定とトークナイザ）を含み、そのまま `WEIGHTS` に渡せる
+> - `work/train2/<設定>/merged_model` — マージセルが出した生の出力。`vlm/` を
+>   **含まない**ため、そのまま `WEIGHTS` に渡すと
+>   `エラー: .../vlm が無い` で止まる。先に `install_weights.py` を通すこと
+
 **素と LoRA 20,000 歩の 2 つで足りる。** この 2 つは採点環境で段が分かれており、
 λ=0.25 は素との差が 1 本ぶん（0.046）しかないので判定に使わない。
 
