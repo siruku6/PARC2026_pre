@@ -2,6 +2,20 @@
 
 **Colab は要らない。** 必要な環境は 2 つとも既にある。
 
+## どの節から始めるか
+
+**上から順に読む文書ではない。** やることで入り口が変わる。
+
+| やること | 入り口 | 8/13 時点 |
+|---|---|---|
+| `put both moka pots on the stove` の手本を**混ぜて学習する** | **8 節** | **ここから。**1〜5 は済み |
+| 別のタスクの台本を書く | 1 節（環境）→ **[../strategy/06](../strategy/06_scripted_demos.md) の「作り方」** | 中継点を差し替える |
+| 撮り直す・変種で本数を増やす | **3 節**（`record`） | 45 本ある |
+| npz をデータセットにする | **5 節**（`build`） | 済み（45 本 / 10,339 コマ） |
+| 作った分だけで学習する | 6 節 | **やっても測れない**（6 節の「基準が潰れる」） |
+
+**`merge`（混ぜる）は 8 節にしかない。** 5 節は `build` までである。
+
 > **撮影（`record`）に GPU は要らない。** 物理と描画だけなので、**手元の Mac の
 > Docker で回せる**（8/13 の 50 本はそうやって撮った）。GPU が要るのは学習
 > （6 節）だけで、**撮影と学習は別のマシンで同時に進められる。**
@@ -165,32 +179,23 @@ docker run --rm -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/
 混ぜる相手の宣言と突き合わせるなら `--against <libero_plus の meta/info.json>` を足す。
 **食い違ったら 0 以外で終わる。**
 
-## 5. 学習データの形式に変換する
+## 5. 学習データの形式に変換する（`build`）
 
 **ここから Python 3.12 側。** 道具はイメージに入っていないのでマウントする
 （`solution/train/Dockerfile` は `train.py` と `merge.py` だけを COPY する）。
 
-**`--gpus all` を付けない。** `build` も `merge` も GPU を使わないので、
-**手元の Mac でもそのまま回る**（付けると colima では
-`could not select device driver` で落ちる）。
+**`--gpus all` を付けない。** `build` は GPU を使わないので**手元の Mac でも
+そのまま回る**（付けると colima では `could not select device driver` で落ちる）。
 
 ```bash
-# 作った分だけで 1 つのデータセットにする
 docker run --rm \
     -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/data" \
     parc2026-train python /host/tools/npz_to_lerobot.py build \
     --npz-dir /data/base --output /data/lerobot --repo-id local/scripted_moka
-
-# 既存の学習データに混ぜる（提出候補を作るときはこちら）
-docker run --rm \
-    -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/data" \
-    -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
-    parc2026-train python /host/tools/npz_to_lerobot.py merge \
-    --base /root/.cache/huggingface/lerobot/lerobot/libero_plus \
-    --add /data/lerobot --output /data/merged
 ```
 
-**`merge` は 16 GB を複製する。** ディスクを先に確認すること。
+**混ぜる（`merge`）はこの節にはない。8 節にまとめてある。** 16 GB の複製・
+持ち主の戻し・関門 A の確認まで通しで要るので、途中だけを写すと必ず抜ける。
 
 **書き出したら、学習を流す前に読ませて確かめる。** ファイルが揃っていることと
 学習が読めることは別で、**動画の符号化が壊れていれば読み出しで初めて落ちる**
