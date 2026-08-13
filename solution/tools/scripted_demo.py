@@ -120,6 +120,48 @@ class PickPlace:
 
 
 @dataclass
+class TurnKnob:
+    """つまみを掴んで回す。**「点ける」は角度で判定される。**
+
+    SCENE3 のコンロなら `flat_stove_1_button` が **0.5 rad 以上**で点火
+    （`libero/libero/envs/objects/articulated_objects.py` の
+    `default_turnon_ranges` の下限。どの関節でも 1 つ超えれば真になる）。
+    **ばねが無いので、一度回せば戻らない**（`jnt_stiffness` が 0）。
+
+    **押すだけでは足りない。** 実測で、まっすぐ押すと 0.12、円弧に沿って
+    押しても 0.05 で止まる（接線から外れて滑る）。**掴んで、円弧に沿って
+    動かしながら手首も回すと 0.83 まで回った。** 3 つ揃って初めて回る。
+
+    Attributes
+    ----------
+    joint : str
+        回る関節の名前。**回転の中心はこの関節から実行時に読む**（什器は
+        初期配置ごとに数 mm ずれるので、絶対座標では書けない）。
+    radius : float
+        中心から、掴む位置までの距離。**羽の半径 4cm より内側を掴む。**
+    height : float
+        掴む高さ（絶対 z）。**実測でここが最も効く** —— 0.910 で 0.83、
+        0.925 では 0.21 しか回らなかった（羽の上端をつまんで滑る）。
+    sweep : float
+        手先を動かす角（rad）。関節が回る角そのものではない（滑るぶん多く要る）。
+    turn_steps : int
+        回すのに使う歩数。**1 歩ごとに中継点を 1 つ進める。**
+    yaw : float
+        手首を回す指令。**1.0 が上限**（`output_max` は 0.5 rad）。
+    hover_dz : float
+        掴む前に構える高さ。
+    """
+
+    joint: str
+    radius: float
+    height: float
+    sweep: float = 1.2
+    turn_steps: int = 50
+    yaw: float = 1.0
+    hover_dz: float = 0.06
+
+
+@dataclass
 class TaskPlan:
     """1 タスクぶんの台本。
 
@@ -127,8 +169,9 @@ class TaskPlan:
     ----------
     suite : str
         `libero_10` など、bddl の置き場所。
-    steps : list[PickPlace]
-        前から順に実行する。
+    steps : list[PickPlace | TurnKnob]
+        前から順に実行する。**動きの種類ごとに実行の中身が違う**
+        （`_RUNNERS` で引く）。
     carry_z : float
         運ぶときの手先の高さ。**什器の上端より、物体の背丈のぶん高く取る。**
     place_z : float
@@ -163,7 +206,7 @@ class TaskPlan:
     """
 
     suite: str
-    steps: list[PickPlace]
+    steps: list[PickPlace | TurnKnob]
     carry_z: float
     place_z: float
     retreat_z: float
@@ -195,6 +238,28 @@ TASK_PLANS: dict[str, TaskPlan] = {
         # コンロの当たる上端 0.9652、鍋の底は手先から 0.1398 下。
         carry_z=1.14,     # 鍋の底が 1.000 まで上がる
         place_z=1.072,    # 鍋の底が 0.932。コンロ上面 0.9305 のすぐ上
+        retreat_z=1.16,
+    ),
+    "KITCHEN_SCENE3_turn_on_the_stove_and_put_the_moka_pot_on_it": TaskPlan(
+        suite="libero_10",
+        steps=[
+            # 鍋は 1 つ。**枠の中心へ置く**（半幅 0.075）。掴めるのは
+            # SCENE8 と同じく蓋のつまみ（原点から 7.2cm 上）だけ。
+            PickPlace("moka_pot_1", "flat_stove_1_cook_region", (0.0, 0.0),
+                      grasp_dz=0.072),
+            # **点けるのは最後にする。** 手首を 50 歩回すと姿勢が戻らず、
+            # **そのあとの動きが届かなくなる**（実測で逃げる誤差 5〜24cm、
+            # 続く「近づく」が 9〜34cm 外れ、3 本のうち 2 本が歩数切れ）。
+            # ゴールは「点いている」と「置いてある」の連言で毎歩見られるので、
+            # **置いてから点ければ、点いた瞬間に成功が立つ。**
+            # ばねが無いので回した角は戻らない（`jnt_stiffness` が 0）。
+            TurnKnob("flat_stove_1_button", radius=0.036, height=0.910),
+        ],
+        # コンロの当たる上端は SCENE8 と同じ 0.9652。**フライパン（上端 1.0097）は
+        # y = -0.27 にあり、鍋（y ≈ 0）からコンロ（y ≈ 0.20）へ運ぶ経路の外**なので、
+        # 運ぶ高さを上げる必要は無い。
+        carry_z=1.14,
+        place_z=1.072,
         retreat_z=1.16,
     ),
 }
@@ -536,6 +601,33 @@ class _Rollout:
         error = float(np.linalg.norm(targets[-1] - self.eef_position))
         self.phases.append((label, self.record.steps - used, error))
 
+    def joint_anchor(self, name: str) -> np.ndarray:
+        """関節の回転の中心。**什器は初期配置ごとに数 mm ずれる**ので実行時に読む。"""
+        sim = self.env.env.sim
+        return np.asarray(sim.data.xanchor[sim.model.joint_name2id(name)])
+
+    def turn_arc(self, label: str, centre: np.ndarray, step: TurnKnob) -> None:
+        """掴んだつまみを、円弧に沿って動かしながら手首も回す。
+
+        **`follow` を使わない。** あちらは中継点に近づいたら次へ飛ぶので、
+        回す速さが場面ごとに変わってしまう。ここは**1 歩に中継点 1 つ**を
+        割り当てて、手先の進みと手首の回りを揃える。
+        """
+        used = self.record.steps
+        for index in range(step.turn_steps):
+            angle = (index + 1) / step.turn_steps * step.sweep
+            target = np.array([centre[0] + step.radius * np.cos(angle),
+                               centre[1] + step.radius * np.sin(angle),
+                               step.height])
+            action = np.zeros(7)
+            action[:3] = self._velocity_command(target - self.eef_position,
+                                                BRAKE_WITHIN_STOP)
+            action[5] = step.yaw
+            action[6] = GRIPPER_CLOSE
+            if not self._take_step(action):
+                break
+        self.phases.append((label, self.record.steps - used, 0.0))
+
     def hold(self, label: str, gripper: float, count: int) -> None:
         """腕を止めたまま指だけ動かす。"""
         used = self.record.steps
@@ -607,6 +699,38 @@ def _run_pick_place(rollout: _Rollout, step: PickPlace, plan: TaskPlan) -> None:
                    smoothing=plan.smoothing)
 
 
+def _run_turn_knob(rollout: _Rollout, step: TurnKnob, plan: TaskPlan) -> None:
+    """つまみを掴んで回し、離して逃げる。
+
+    ```
+    出発 ─▶ つまみの上   ← 構える
+           ▶ 掴む高さ     ← ここだけ正確に止まる
+             掴む
+           ⤿ 円弧に沿って動かしながら手首を回す   ← ここで点く
+             離す
+           ▲ 真上へ逃げる
+    ```
+    """
+    centre = rollout.joint_anchor(step.joint)
+    grip_at = np.array([centre[0] + step.radius, centre[1], step.height])
+
+    rollout.move_to("つまみへ構える", grip_at + [0.0, 0.0, step.hover_dz],
+                    GRIPPER_OPEN, tolerance=0.006, budget=plan.budget_move)
+    rollout.move_to("つまみを掴む位置へ", grip_at, GRIPPER_OPEN,
+                    tolerance=0.004, budget=plan.budget_descend)
+    rollout.hold("つまみを掴む", GRIPPER_CLOSE, plan.close_steps)
+    rollout.turn_arc("つまみを回す", centre, step)
+    rollout.hold("つまみを離す", GRIPPER_OPEN, plan.open_steps)
+    rollout.move_to("つまみから逃げる",
+                    [rollout.eef_position[0], rollout.eef_position[1],
+                     plan.retreat_z],
+                    GRIPPER_OPEN, tolerance=0.01, budget=plan.budget_lift)
+
+
+# **動きの種類ごとに実行の中身を引く。** 種類が増えても `run_episode` は変わらない。
+_RUNNERS: dict[type, Any] = {PickPlace: _run_pick_place, TurnKnob: _run_turn_knob}
+
+
 def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
                 max_steps: int = 300, record_images: bool = False,
                 verbose: bool = False) -> EpisodeRecord:
@@ -634,7 +758,7 @@ def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
     """
     rollout = _Rollout(env, init_state, max_steps, record_images)
     for step in plan.steps:
-        _run_pick_place(rollout, step, plan)
+        _RUNNERS[type(step)](rollout, step, plan)
     rollout.hold("整定", GRIPPER_OPEN, plan.final_settle_steps)
 
     record = rollout.record
