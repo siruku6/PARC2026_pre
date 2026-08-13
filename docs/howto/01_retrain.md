@@ -414,6 +414,17 @@ cat work/train/<run-name>_episodes.json | head -c 200   # 使ったエピソー�
 
 **この 2 行が一致していれば、明るさで散らす選び方が効いている。**
 
+> **正規化の基準はデータセットから来る。出発点の重みが持っている値は使われない。**
+> lerobot は `normalizer_processor` の `stats` を `dataset.meta.stats` で上書きする
+> （`lerobot_train.py` の `preprocessor_overrides`）。
+>
+> **本数を絞っただけなら基準は変わらない。** `meta.stats` は `meta/stats.json`
+> （全 14,347 本ぶん）をそのまま読むだけで、`--dataset.episodes` で選んだ
+> 部分から計算し直したりはしない（`datasets/dataset_metadata.py` の
+> `load_stats(self.root)`）。**変わるのはデータセットごと差し替えたときだけ**で、
+> そのときは基準まで入れ替わるので、**別のデータで評価してはいけない**
+> （[05_scripted_demos.md](05_scripted_demos.md) の 6 節）。
+
 ### A-2-3. 苦手タスクに寄せて学習する
 
 **84 件の検証用データで切り分けたら、落としているのは摂動ではなく特定のタスクだった。**

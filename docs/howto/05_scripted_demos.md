@@ -295,7 +295,7 @@ GPU マシンで撮る場合は `nproc` から測り直すこと。
 |---|---|
 | `EOFError: EOF when reading a line` | `$HOME/.libero/config.yaml` が見えていない。**`--user` と `HOME` を外す** |
 | 場面の描画で止まる | `MUJOCO_GL=egl` になっている。**このマシンでは使えない。** `osmesa` にする |
-| 並列にしても速くならない | `LP_NUM_THREADS=1` を渡していない、または **`N` がコア数を超えている**（このマシンは 2） |
+| 並列にしても速くならない | `LP_NUM_THREADS=1` を渡していない、または **`N` が Docker の見ているコア数を超えている**（`nproc` で数える。手元の Mac は 2） |
 | `docker stats` の CPU% が上限に届かない／BLOCK I/O が数十 GB | **並べすぎで swap を叩いている。** `N` を下げる |
 | コンテナが消える（`Status` が 137） | OOM で殺された。**`N` × 1.25 GB が実装メモリに収まるか**を確かめる |
 | 出力を消せない | root で書かれている。上の `chown` を回す |
