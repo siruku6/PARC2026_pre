@@ -77,13 +77,19 @@ torchvision.ops.nms; \
 print(f'torch {torch.__version__} / torchcodec {torchcodec.__version__} '\
       f'/ torchvision {torchvision.__version__} 整合')"
 
-WORKDIR /workspace
+WORKDIR /opt/pi05
+# **スクリプトは /workspace ではなく /opt/pi05 に置く。** RunPod で Volume Disk /
+# Network Volume を使うと、その永続ストレージは /workspace に上書きでマウント
+# される（docs/howto/06_runpod_pi05.md）。/workspace にスクリプトを COPY すると、
+# マウント方式によっては見えなくなる可能性があるため、影響を受けない場所に置く。
+#
 # train_pi05.py は同じディレクトリの train.py から選択ロジックを import するため、
-# 両方を COPY する。merge.py は要らない —— pi05 は LoRA を使わず、
-# train_expert_only のフルパラメータ学習なのでチェックポイントがそのまま提出用になる。
-COPY train.py train_pi05.py /workspace/
+# 両方を COPY する。prune_checkpoints.sh も学習と並行して使う。merge.py は
+# 要らない —— pi05 は LoRA を使わず、train_expert_only のフルパラメータ学習
+# なのでチェックポイントがそのまま提出用になる。
+COPY train.py train_pi05.py prune_checkpoints.sh /opt/pi05/
 
 VOLUME ["/out"]
 ENV OUTPUT_ROOT=/out
 
-CMD ["python", "/workspace/train_pi05.py", "--smoke-test"]
+CMD ["python", "/opt/pi05/train_pi05.py", "--smoke-test"]

@@ -49,15 +49,78 @@ RunPod上ではそのまま持ち込めない。**
 | **A. 自分のイメージをそのままPodにする(推奨)** | [Dockerfile.pi05](../../solution/train/Dockerfile.pi05)をこのマシンでビルドし、Docker Hubへpushする。RunPod側は「そのイメージを実行するPod」を作るだけで、Pod自身はコンテナを入れ子にしない | ローカルで検証済みの環境をそのまま持っていきたいとき。**今回はこちら** |
 | B. 公式テンプレート+スクリプトで直接installする | 公式の「RunPod PyTorch」テンプレートのPodの中で[runpod_setup.sh](../../solution/train/runpod_setup.sh)を実行し、pip/aptで直接環境を作る(dockerは使わない) | Docker Hubのアカウントを用意したくないとき |
 
-**Aは3〜4節、Bは5節でポッドを作る。どちらを選んでも、6節(ライセンス同意)以降は
-共通の手順になる。**
+**Aは4〜5節、Bは6節でポッドを作る。どちらを選んでも、7節(ライセンス同意)以降は
+共通の手順になる。** ただし3節(永続化ストレージ)は、道A・道Bどちらでも
+共通で必要な設定なので、先に読むこと。
 
-## 3. イメージをビルドしてpushする(道A)
+## 3. 永続化ストレージの使い分け
+
+**10〜12時間の無人実行の途中で接続が切れたり、誤ってPodを止めてしまったりすると、
+何も対策していなければ学習結果ごと消える。** どこにデータを置くかを、
+Podを作る前に決めておく。
+
+RunPodのストレージは3種類ある。
+
+| | Container Disk | Volume Disk(Pod付属) | Network Volume |
+|---|---|---|---|
+| **Stopで消えるか** | **消える** | 消えない | 消えない |
+| **Terminateで消えるか** | 消える | 消える | **消えない** |
+| **マウント先** | 指定不可 | **`/workspace`固定** | `/workspace`(Volume Diskの代わりに使う) |
+| **作る操作** | Pod作成時に自動 | Pod作成時にサイズを指定するだけ | 別途「Storage」から先に作り、Pod作成時に選ぶ |
+| **他のPodと共有** | 不可 | 不可 | 可(ただし作った場所のデータセンターに固定される) |
+| **料金** | $0.10/GB/月 | 稼働中$0.10・停止中$0.20/GB/月(**止めている間の方が高い**) | $0.07/GB/月(稼働/停止同額) |
+
+出典: [公式ドキュメント](https://docs.runpod.io/pods/storage/types)、
+[Aquanodeの整理](https://www.aquanode.io/blog/runpod-volume-disk-vs-network-volume)。
+
+**今回のように1回のPodを10〜12時間回して、終わったら持ち帰ってすぐ止める使い方
+なら、Volume Diskで十分。** Network Volumeは複数Podで使い回す・長期間残す
+場合向けで、今回はそこまでの要件が無い。
+
+### サイズの目安
+
+- **Container Disk: 20GB程度**(OS・pip/aptで入れたパッケージ分だけで足りる)
+- **Volume Disk: 60GB以上。** 内訳はおおよそ、初期重み(実測11GB)＋
+  データセット(全部使うと約16GB。[train.py](../../solution/train/train.py)の
+  docstringに実測値がある)＋間引いて残す直近2チェックポイント(11GB×2=22GB)
+  ＋lerobot本体やpipのキャッシュ数GBで、合計55GB前後になる
+
+### Pod作成時に、環境変数でデータの置き場所を`/workspace`へ向ける
+
+Volume Diskは`/workspace`に固定でマウントされる。**学習の出力先(`OUTPUT_ROOT`)
+とHFキャッシュ(`HF_HOME`)を、Pod作成画面の「Environment Variables」で
+明示的にその配下へ向けないと、Volume Diskを付けても永続化されない**
+(既定のままだと道Aは`/out`と`/hf_home`、道Bは`/root/.cache/huggingface`に
+書かれ続け、どちらも`/workspace`の外にあるため消える)。
+
+```
+OUTPUT_ROOT=/workspace/out
+HF_HOME=/workspace/hf_home
+```
+
+**これは道A・道Bどちらでも必要。** 道Bはイメージを使わないので、Pod作成時の
+環境変数として設定するか、`hf auth login`より前に`export OUTPUT_ROOT=...`
+`export HF_HOME=...`しておく。
+
+### スクリプト自体の置き場所は別問題
+
+**上のデータの置き場所とは別に、学習スクリプト自体をどこに置くかにも注意が要る。**
+道Aのイメージは、`train_pi05.py`などを`/workspace`ではなく**`/opt/pi05/`**に
+置くようにしてある([Dockerfile.pi05](../../solution/train/Dockerfile.pi05)参照)。
+**Volume Diskは`/workspace`に上書きでマウントされるため、そこにCOPYで
+焼き込んだファイルは、マウントのされ方によっては見えなくなる可能性が
+あるからである。** 道Bはファイルを起動後にscpで`/workspace`へ転送するので、
+この問題は起きない(書き込む順番が逆——先にマウントされた場所へ後から書く)。
+
+**以降のコマンド例で`/opt/pi05/`と書いている箇所は、道Bの場合`/workspace/`と
+読み替えること。**
+
+## 4. イメージをビルドしてpushする(道A)
 
 このマシン(ローカル)で、ローカル用に使ったのと同じイメージをそのまま使う。
-**Dockerfile自体は変更不要**——ローカルの`--user`回避(`/hf_home`・`HOME=/tmp`)は
-RunPod側では効果自体が要らなくなる(Podは既定でrootのまま動くため)が、
-入っていても害はないのでそのまま流用できる。
+**Dockerfile自体はこれ以上の変更不要**——ローカルの`--user`回避
+(`/hf_home`・`HOME=/tmp`)はRunPod側では効果自体が要らなくなる(Podは
+既定でrootのまま動くため)が、入っていても害はないのでそのまま流用できる。
 
 ```bash
 docker build -t <Docker Hubのユーザー名>/parc2026-train-pi05:v1 \
@@ -71,41 +134,42 @@ docker push <Docker Hubのユーザー名>/parc2026-train-pi05:v1
 (Ubuntu)であれば意識しなくてよいが、Apple Silicon等でビルドした場合は
 `docker buildx build --platform linux/amd64 ...`が要る。
 
-## 4. ポッドを作る(道A)
+## 5. ポッドを作る(道A)
 
-1. RunPodの「Templates」→「New Template」で、3節でpushしたイメージ名
+1. RunPodの「Templates」→「New Template」で、4節でpushしたイメージ名
    (`<ユーザー名>/parc2026-train-pi05:v1`)を指定する。
-2. **Container Diskは60GB以上にする。** 内訳の目安:
-   初期重み(実測で1チェックポイント約11GB)＋データセット(全部使うと
-   [約16GB](../../solution/train/train.py)、`train.py`の docstring による)
-   ＋間引いて残す直近2つのチェックポイント(11GB×2=22GB)＋lerobot本体や
-   pipのキャッシュ(数GB)で、**合計おおよそ55GB前後になる。** 余裕を見て60GB以上。
-3. **Container Start Commandを`sleep infinity`で上書きする。** 空のままだと
-   イメージの既定CMD(`python /workspace/train_pi05.py --smoke-test`)が
-   デプロイ直後に動き出してしまうが、**5節のライセンス同意より前に初期重みの
+2. **Container Diskは20GB程度、Volume Diskは60GB以上**にする(3節)。
+3. **「Environment Variables」に`OUTPUT_ROOT=/workspace/out`と
+   `HF_HOME=/workspace/hf_home`を追加する**(3節)。
+4. **Container Start Commandを`sleep infinity`で上書きする。** 空のままだと
+   イメージの既定CMD(`python /opt/pi05/train_pi05.py --smoke-test`)が
+   デプロイ直後に動き出してしまうが、**7節のライセンス同意より前に初期重みの
    取得を試みて確実に失敗する。** `sleep infinity`にしておけばコンテナは
    何もせず起動し続けるので、Web Terminalから入って手動で進められる。
-4. 「Deploy」→「GPU Pod」で、作ったテンプレートを選び、GPUは
+5. 「Deploy」→「GPU Pod」で、作ったテンプレートを選び、GPUは
    **A100 80GBまたはH100 80GB(Secure Cloud)**を選ぶ。
-5. デプロイ後、Pod管理画面から**「Enable Web Terminal」→「Open Web Terminal」**
+6. デプロイ後、Pod管理画面から**「Enable Web Terminal」→「Open Web Terminal」**
    を押すと、SSH鍵を用意しなくてもブラウザから直接コマンドを打てる。
    最初はこれで十分——ファイル転送が必要になったら、
    [公式のSSH手順](https://docs.runpod.io/pods/configuration/use-ssh)に従って
    フルSSH(鍵認証・scp対応)を別途設定する(**このイメージにはsshdを入れていない**
-   ため、フルSSHが要るならDockerfile側の対応が別途要る。11節で代わりの持ち帰り方を書く)。
+   ため、フルSSHが要るならDockerfile側の対応が別途要る。12節で代わりの持ち帰り方を書く)。
 
-## 5. ポッドを作る(道B)
+## 6. ポッドを作る(道B)
 
 1. 「Deploy」→「GPU Pod」で、テンプレートは公式の**「RunPod PyTorch」系**
    (SSHが最初から使える状態で入っている)を選ぶ。
-2. GPUは**A100 80GBまたはH100 80GB(Secure Cloud)**。ディスクサイズの考え方は
-   4節と同じ(60GB以上)。
-3. デプロイ後、「Connect」タブに出るSSHコマンド
+2. **Container Diskは20GB程度、Volume Diskは60GB以上**にする(3節)。
+3. **「Environment Variables」に`OUTPUT_ROOT=/workspace/out`と
+   `HF_HOME=/workspace/hf_home`を追加する**(3節)。設定し忘れた場合は、
+   接続後に`export`で代用できる。
+4. GPUは**A100 80GBまたはH100 80GB(Secure Cloud)**。
+5. デプロイ後、「Connect」タブに出るSSHコマンド
    (`ssh root@<IP> -p <port> -i ~/.ssh/id_ed25519`)で接続する。無ければ
    [公式のSSH手順](https://docs.runpod.io/pods/configuration/use-ssh)に従って
    鍵を作る。**公式テンプレートはフルSSH(scp対応)が最初から設定済み**なので、
-   道Aと違って11節の持ち帰りで追加設定は要らない。
-4. このリポジトリから4ファイルを転送する。
+   道Aと違って12節の持ち帰りで追加設定は要らない。
+6. このリポジトリから4ファイルを転送する。
 
    ```bash
    scp -P <port> -i ~/.ssh/id_ed25519 \
@@ -113,14 +177,14 @@ docker push <Docker Hubのユーザー名>/parc2026-train-pi05:v1
        solution/train/runpod_setup.sh solution/train/prune_checkpoints.sh \
        root@<IP>:/workspace/
    ```
-5. ポッド側で依存関係を入れる。
+7. ポッド側で依存関係を入れる。
 
    ```bash
    cd /workspace
    bash runpod_setup.sh
    ```
 
-## 6. ライセンス同意とログイン
+## 7. ライセンス同意とログイン
 
 π0.5はgemmaライセンス配布。**道A・道Bどちらでも共通の手順。**
 
@@ -131,15 +195,16 @@ hf auth login
 未同意なら https://huggingface.co/google/paligemma-3b-pt-224 を先に開いて
 同意しておくこと。
 
-## 7. 少量データで、まずフルパラメータ学習が通るか確かめる
+## 8. 少量データで、まずフルパラメータ学習が通るか確かめる
 
 **いきなり本番(14,347エピソード全部・30,000歩)を回さない。** `--episodes-per-task`
 (`train.py`から再利用している、`train_pi05.py`が既に対応済みの引数)で
 データを絞り、**VLMを含めた全パラメータの学習ループが、そもそもエラーなく
-1周するか**を数十秒で確認する。
+1周するか**を数十秒で確認する。**以下は道Aの例(`/opt/pi05/`)。道Bなら
+`/workspace/`と読み替える(3節)。**
 
 ```bash
-python /workspace/train_pi05.py --run-name pi05_small_check --steps 20 --batch-size 2 \
+python /opt/pi05/train_pi05.py --run-name pi05_small_check --steps 20 --batch-size 2 \
     --episodes-per-task 3 \
     --freeze-vision-encoder false --train-expert-only false
 ```
@@ -154,7 +219,7 @@ python /workspace/train_pi05.py --run-name pi05_small_check --steps 20 --batch-s
 
 通ったら、次はバッチサイズの探索に進む。
 
-## 8. 適正なバッチサイズを探す
+## 9. 適正なバッチサイズを探す
 
 ローカルで使ったのと同じ考え方——**学習ログ自身が出す`mem_gb`を見比べる**。
 公式ドキュメントは80GBでbatch_size=64を挙げているが、それが**本当にこの
@@ -162,7 +227,7 @@ python /workspace/train_pi05.py --run-name pi05_small_check --steps 20 --batch-s
 
 ```bash
 for bs in 32 64 96; do
-    python /workspace/train_pi05.py --run-name "pi05_bs_check_${bs}" \
+    python /opt/pi05/train_pi05.py --run-name "pi05_bs_check_${bs}" \
         --steps 20 --batch-size "${bs}" --episodes-per-task 3 \
         --freeze-vision-encoder false --train-expert-only false
 done
@@ -190,7 +255,7 @@ done
 ローカルの数値(batch 2→8→16でmem_gbが12.90→13.99→16.27)をそのまま
 当てはめられないことに注意。
 
-## 9. 本番のフルパラメータ学習を始める
+## 10. 本番のフルパラメータ学習を始める
 
 バッチサイズが決まったら、本番へ進む。**Web Terminal/SSHの接続が切れても
 プロセスが生き残るよう、`tmux`か`screen`の中で実行すること**
@@ -198,32 +263,31 @@ done
 
 ```bash
 tmux new -s train
-cd /workspace
-python train_pi05.py --run-name pi05_full --steps 30000 --batch-size 64 \
+python /opt/pi05/train_pi05.py --run-name pi05_full --steps 30000 --batch-size 64 \
     --num-workers 8 --save-freq 5000 \
     --freeze-vision-encoder false --train-expert-only false
 ```
 
 `--batch-size 64`は公式ドキュメント([lerobot/pi05](https://huggingface.co/docs/lerobot/en/pi05))
-の値。8節の実測でもっと上げられると分かればそちらに変える。歩数(30000)は
+の値。9節の実測でもっと上げられると分かればそちらに変える。歩数(30000)は
 公式ドキュメントがそのまま挙げている値——80GB GPU 1枚を前提にした数字。
 
 `tmux`から抜けるには`Ctrl+b` → `d`(プロセスは動き続ける)。切断されても
 再接続して`tmux attach -t train`で戻れる。
 
-## 10. チェックポイントの間引き(ローカルと同じ問題がある)
+## 11. チェックポイントの間引き(ローカルと同じ問題がある)
 
 チェックポイント1個は約11GBで、LeRobotは古いものを自動で消さない。
 **別のWeb Terminal(またはSSHセッション)**を開いて、並行して回す。
 
 ```bash
 tmux new -s prune
-bash /workspace/prune_checkpoints.sh /out/pi05_full 2
+bash /opt/pi05/prune_checkpoints.sh /workspace/out/pi05_full 2
 ```
 
-(`/out`は`train_pi05.py`の既定の出力先。)
+(3節の設定どおり`OUTPUT_ROOT=/workspace/out`にしていれば、この場所になる。)
 
-## 11. 終わったら——チェックポイントを持ち帰る
+## 12. 終わったら——チェックポイントを持ち帰る
 
 **持ち帰り方は、道Aと道Bで変わる。**
 
@@ -231,32 +295,33 @@ bash /workspace/prune_checkpoints.sh /out/pi05_full 2
 
 ```bash
 scp -P <port> -i ~/.ssh/id_ed25519 -r \
-    root@<IP>:/out/pi05_full/checkpoints/030000/pretrained_model \
+    root@<IP>:/workspace/out/pi05_full/checkpoints/030000/pretrained_model \
     ./work/train/pi05_full_runpod/
 ```
 
 **道A(カスタムイメージ)はsshdを入れていないため、上のscpはそのままでは使えない。**
-Hugging Face Hubへ直接アップロードする方が確実(`6節`で`hf auth login`は
+Hugging Face Hubへ直接アップロードする方が確実(`7節`で`hf auth login`は
 済んでいる前提)。
 
 ```bash
 huggingface-cli upload <自分のHFユーザー名>/pi05_full_runpod \
-    /out/pi05_full/checkpoints/030000/pretrained_model .
+    /workspace/out/pi05_full/checkpoints/030000/pretrained_model .
 ```
 
 (`huggingface-cli`の代わりに新しい`hf upload`が使える版もある。どちらも
 リポジトリが無ければ自動で作られる。)
 
 いずれの方法でも、**持ち帰りが終わってからポッドをStop(またはTerminate)して
-課金を止めること。** Volume Diskを使わずContainer Diskだけで進めた場合、
-Stopしただけでも中身は消える(Terminateと同じ扱い)ので注意。
+課金を止めること。** Volume Diskは3節の表のとおりStopでは消えないが、
+**Terminateすると消える**ので、Terminateする前には必ず持ち帰りを終えること。
 
 ## まだ確認していないこと
 
 | 事柄 | 確かめ方 |
 |---|---|
 | Docker Hubへpushしたカスタムイメージが、RunPodの「New Template」画面でそのまま認識されるか | 実際にテンプレートを作って試す |
+| Volume Diskを`/workspace`に付けたとき、イメージの`/opt/pi05/`の中身(`/workspace`の外)が本当に影響を受けないか | 実際にPodを作って`ls /opt/pi05/`を確認する |
 | `sleep infinity`で起動したコンテナで、Web Terminalが問題なく開けるか | デプロイ後に実際に押してみる |
-| 80GBで本当にbatch_size=64、あるいはそれ以上が収まるか | 8節の実測 |
+| 80GBで本当にbatch_size=64、あるいはそれ以上が収まるか | 9節の実測 |
 | `huggingface-cli upload`が、11GB級のディレクトリでも問題なく完走するか(タイムアウト・分割の有無) | 実際にアップロードして試す |
 | フルパラメータ学習が、train_expert_onlyより実際にスコアで勝るか | 両方のチェックポイントをpolicy_server.py経由で評価して比べる以外に確かめる方法が無い |
