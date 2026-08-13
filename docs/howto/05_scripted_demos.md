@@ -290,14 +290,36 @@ docker run --gpus all --rm -v "$PWD/work/train:/out" -v "$PWD/work/merged:/data"
 docker run --rm -v "$PWD/work/train:/out" --entrypoint chown parc2026-train \
     -R "$(id -u):$(id -g)" /out/<run 名>
 
-# ② SmolVLM の設定とトークナイザを持ち込む（merge.py は出力しない）
-cp -r work/artifacts/model_weights/vlm work/train/<run 名>/merged_model/vlm
+# ② 名前を付けて置き、SmolVLM の設定とトークナイザを足す（merge.py は出さない）
+cp -r work/train/<run 名>/merged_model work/artifacts/model_weights_<label>
+cp -r work/artifacts/model_weights_base/vlm work/artifacts/model_weights_<label>/vlm
 ```
+
+**引き継ぎ元は `model_weights_base` である。** GPU マシンには
+`work/artifacts/model_weights/`（提出用の 1 つの置き場）を作っておらず、
+**回ごとの名前で並べてある**（`model_weights_base` `model_weights_weak3x` …）。
+手順の元は [01_retrain.md](01_retrain.md) の A-7 にある。
+
+> **`vlm/` はどの回のものでも同じである。** 中身は SmolVLM の設定と
+> トークナイザ 11 ファイル（約 4.9 MB）で、**重みは 1 つも入っていない。**
+> 学習も `merge.py` も触らないので、どの回のものも `model_weights_base` の
+> 複製である。疑うときは全部のハッシュを並べて確かめられる。
+>
+> ```bash
+> for d in work/artifacts/*/vlm; do
+>     echo "$(cd "$d" && find . -type f | sort | xargs sha256sum | sha256sum | cut -c1-16)  $d"
+> done
+> ```
 
 **`install_weights.py` を `--dry-run` 無しで実行しないこと。** 既定の取り込み先が
 `work/artifacts/model_weights`（**提出する重みそのもの**）である。実験の重みで
-置き換える理由は無い。`--dry-run` なら**畳み込みが効いたか**（LoRA が残って
-いないか・テンソル構成が一致するか）だけを読める。
+置き換える理由は無い。**GPU マシンでは比較相手を明示する**と、テンソル構成まで
+見てくれる（書き換えは起きない）。
+
+```bash
+python solution/tools/install_weights.py work/train/<run 名>/merged_model \
+    --destination work/artifacts/model_weights_base --dry-run
+```
 
 ## 7. 評価する — **既定の 36 件では測れない**
 
