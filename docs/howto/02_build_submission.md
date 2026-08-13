@@ -251,6 +251,49 @@ work/venv310/bin/python solution/tools/validate_submission.py --static
 
 ---
 
+# 指示文の正規化を測る（版 3.5.0 から）
+
+**`/reset` で来た文を、学習データの 40 種のうち最も近いものへ寄せている。**
+**寄せ先を出すのと、正しく寄せられるかを測るのは、別の道具である。**
+
+```bash
+# 寄せ先 40 種を出す（policy_server.py に貼ってある値の出し方）
+python3 solution/tools/instruction_targets.py --emit python
+
+# 正しく寄せられるかを測る（変種 10,030 件・答え合わせ付き。torch 不要）
+python3 solution/tools/check_instruction_normalization.py
+python3 solution/tools/check_instruction_normalization.py --sweep   # しきい値を振る
+```
+
+**本番の 2 カテゴリで 1 件でも誤って寄せたら、道具が終了コードを立てて落ちる。**
+いま点が取れている場所なので、壊す変更を黙って通さないためである。
+
+| 束 | 渡る文 | 寄せた（正しい） | **誤り** | 触らない |
+|---|---|---|---|---|
+| **本番の 2 カテゴリ** | **40 種** | **40 種すべて** | **0** | 0 |
+| その他の摂動 | 30 種 | 30 種すべて | **0** | 0 |
+| 言い換え | 1,527 種 | 468 種 | 4 | 1,055 |
+
+**意味で寄せる道（Q&A No.31 の埋め込み最近傍）は既定で切ってある。**
+`--embed` を付けると測れるが、**torch と重みが要るので Docker で回す**
+（[03_gpu_eval.md](03_gpu_eval.md) の「指示文の正規化の精度を測る」）。
+
+**採点ログで本番の中身が読める。** エピソードごとに次の行が出る。
+**指示文そのものは出さない**（非公開タスクの特定に使えてしまう）。
+
+```
+[parc] reset  normalize=lexical score=0.708
+```
+
+| 出る語 | 意味 |
+|---|---|
+| `exact` | 学習と同じ文が来た（小文字化だけ） |
+| `lexical` | **寄せた。** 語の重なりで 1 つに絞れた |
+| `unchanged` | **迷ったので何もしなかった。** これが出れば言い換えが来ている |
+| `off` | `PARC_NORMALIZE_INSTRUCTION=0` で切ってある |
+
+---
+
 # 出来上がった zip を確かめる
 
 ## zip を書いたあとに自動でしていること
@@ -329,6 +372,13 @@ work/venv310/bin/python solution/tools/digest_submission.py --per-entry
 | **3.2.0** | weak3x | n=5・samples=3 | `2ef66638…` | 未提出（n=5 が n=2 に負けたため保留） |
 | **3.3.0** | weak3x | **n=1** | `c3b8b901…` | **0.080**（**悪化。n=2 が谷底と確定**） |
 | **3.4.0** | weak3x | **n=2 ＋ samples=3** | `ff9b1b03…` | 未提出（用意済み） |
+| **3.5.0** | weak3x | **指示文の正規化**（n=2・samples=3 は 3.4.0 と同じ） | `c97b0b2e…` | 未提出（**用意済み。`validate_submission.py --static` は PASS**） |
+
+> **3.5.0 が変えるのは `/reset` で受け取る文だけである。** 本番の 2 カテゴリで
+> 渡ってくる文は **40 種**しかなく、そのうち **25 種が学習データの書き方と
+> ずれている**（配布 4 タスクの CSV が `Pick the akita black bowl …` を渡すのに、
+> 学習データは `pick up the black bowl …`）。**40 種すべてを正しく寄せ、誤りは 0**
+> だった（変種 7,280 件で実測。下の「指示文の正規化を測る」）。
 
 **`n_action_steps` の実測（weak3x・EMA 0.3・samples=1 で固定＝n だけの差）。**
 
