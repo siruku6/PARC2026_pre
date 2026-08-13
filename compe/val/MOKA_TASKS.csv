@@ -1,9 +1,9 @@
-task_num,task_id,instruction,libero_plus_id,suite,category,difficulty_level
-1,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove_light_11,put both moka pots on the stove,2375,libero_10,Light Conditions,5
-2,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove_light_26,put both moka pots on the stove,2383,libero_10,Light Conditions,5
-3,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove_light_35,put both moka pots on the stove,2390,libero_10,Light Conditions,5
-4,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove_light_49,put both moka pots on the stove,2398,libero_10,Light Conditions,5
-5,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove_table_19,put both moka pots on the stove,114,libero_10,Background Textures,5
-6,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove_table_3,put both moka pots on the stove,122,libero_10,Background Textures,5
-7,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove_tb_15,put both moka pots on the stove,129,libero_10,Background Textures,5
-8,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove_tb_9,put both moka pots on the stove,137,libero_10,Background Textures,5
+task_num,task_id,instruction,libero_plus_id,suite,category,difficulty_level,init_states_file,n_nontarget_objects
+1,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove_light_11,put both moka pots on the stove,2375,libero_10,Light Conditions,5,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.pruned_init,0
+2,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove_light_26,put both moka pots on the stove,2383,libero_10,Light Conditions,5,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.pruned_init,0
+3,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove_light_35,put both moka pots on the stove,2390,libero_10,Light Conditions,5,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.pruned_init,0
+4,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove_light_49,put both moka pots on the stove,2398,libero_10,Light Conditions,5,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.pruned_init,0
+5,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove_table_19,put both moka pots on the stove,114,libero_10,Background Textures,5,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.pruned_init,0
+6,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove_table_3,put both moka pots on the stove,122,libero_10,Background Textures,5,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.pruned_init,0
+7,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove_tb_15,put both moka pots on the stove,129,libero_10,Background Textures,5,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.pruned_init,0
+8,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove_tb_9,put both moka pots on the stove,137,libero_10,Background Textures,5,KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.pruned_init,0

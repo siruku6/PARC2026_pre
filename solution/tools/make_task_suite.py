@@ -112,6 +112,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--count", type=int, default=8, help="作る件数")
     parser.add_argument("--categories", nargs="*", default=list(_PRODUCTION_CATEGORIES),
                         help="残す摂動の種類。空文字を 1 つ渡すと全部")
+    parser.add_argument("--bddl-root", type=Path, default=None,
+                        help="bddl の置き場。既定は <libero-plus>/libero/libero/bddl_files")
+    parser.add_argument("--init-states-root", type=Path, default=None,
+                        help="初期状態の置き場。既定は <libero-plus>/libero/libero/init_files")
     parser.add_argument("--output", type=Path, required=True, help="出力する CSV")
     parser.add_argument("--dry-run", action="store_true", help="書かずに内容だけ出す")
     return parser.parse_args()
@@ -129,38 +133,55 @@ def main() -> None:
         )
 
     chosen = _spread(sorted(variants, key=lambda item: item["name"]), args.count)
-    index = _bddl_index(args.libero_plus)
 
-    rows = []
-    for number, variant in enumerate(chosen, start=1):
-        path = _resolve_bddl(index, variant["name"])
-        delivered = language_of(path) if path is not None else None
-        if delivered is None:
-            raise SystemExit(f"[suite] BDDL が引けません: {variant['name']}")
-        rows.append({
-            "task_num": number,
-            "task_id": variant["name"],
-            # **評価が実際に渡す文をそのまま入れる**（配布の T1_TASKS.csv と同じ流儀）。
-            # 指示文の正規化が入っていれば、これは学習の書き方へ寄せられる。
-            "instruction": delivered,
-            "libero_plus_id": variant["libero_plus_id"],
-            "suite": variant["suite"],
-            "category": variant["category"],
-            "difficulty_level": variant["difficulty_level"],
-        })
+    # **行の組み立ては `make_validation_suite` に任せる。**
+    # 自前で組んでいたら `init_states_file` が抜け、評価が接尾辞を正規表現で
+    # 剥がして初期状態を探しにいって「初期状態が無い」で 8 件とも落ちた
+    # （`KITCHEN_SCENE8_..._light_11.pruned_init` は存在しない。実在するのは
+    # 接尾辞を剥がした `KITCHEN_SCENE8_....pruned_init` である）。
+    # **置き場の解決は 1 か所に置く**（`make_eval_split.py` の 306 行と同じ方針）。
+    #
+    # `libero` パッケージの import は `_resolve_libero_path` の中だけなので、
+    # **置き場を渡すかたちなら手元（macOS）でも動く。**
+    from make_validation_suite import _build_rows, _index_init_state_stems, _report
+
+    bddl_root = args.bddl_root or args.libero_plus / "libero/libero/bddl_files"
+    init_states_root = (args.init_states_root
+                        or args.libero_plus / "libero/libero/init_files")
+    for root in (bddl_root, init_states_root):
+        if not root.is_dir():
+            raise SystemExit(f"[suite] 置き場が見つかりません: {root}")
+
+    # `_build_rows` は `id` を読む。こちらは `libero_plus_id` で持っているので渡し直す。
+    selected = [dict(item, id=item["libero_plus_id"]) for item in chosen]
+    rows, skipped = _build_rows(
+        selected, bddl_root, init_states_root,
+        _index_init_state_stems(init_states_root),
+    )
 
     print(f"[suite] {args.instruction!r}")
-    print(f"[suite]   候補 {len(variants)} 件 → {len(rows)} 件を選んだ")
+    print(f"[suite]   候補 {len(variants)} 件 → {len(chosen)} 件を選んだ")
+    _report(rows, skipped)
+    if not rows:
+        raise SystemExit("[suite] 1 件も載せられませんでした。上の理由を読むこと")
+    if len(rows) < len(chosen):
+        raise SystemExit(
+            f"[suite] **実体が無くて落ちた変種が {len(chosen) - len(rows)} 件ある。**"
+            "黙って減った一覧は使わない。--count を増やして選び直すこと"
+        )
     print(f"[suite]   渡る指示文: {rows[0]['instruction']!r}")
     for row in rows:
         print(f"[suite]   {row['category']:<20} {row['task_id']}")
+        print(f"[suite]     初期状態 {row['suite']}/{row['init_states_file']}")
 
     if args.dry_run:
         return
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=_COLUMNS)
+        # **列は `_build_rows` が決めたものをそのまま使う。**
+        # `register.py` は `DictReader` で読むので、列が増えても困らない。
+        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
     print(f"[suite] 書き出し {args.output}")

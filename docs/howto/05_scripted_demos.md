@@ -44,7 +44,7 @@ PEP 695 の型構文（`def f[T: X](...)`）を使うので 3.12 が要り、キ
 そして**どちらのマシンでも描画に GPU が使えない**（下の 2 節）。GPU が要るのは
 学習（6 節）だけである。
 
-| 段 | 回す場所 | なぜ |
+| 手 | 回す場所 | なぜ |
 |---|---|---|
 | `record` / `check` | **手元の Mac の Docker でよい** | CPU しか使わない。GPU マシンを空けておける |
 | `build` / `merge` / 学習 | GPU マシン | 学習が GPU を使う。`build` 自体は CPU でもよい |
@@ -195,7 +195,7 @@ docker run --rm \
 ```
 
 **混ぜる（`merge`）はこの節にはない。8 節にまとめてある。** 16 GB の複製・
-持ち主の戻し・関門 A の確認まで通しで要るので、途中だけを写すと必ず抜ける。
+持ち主の戻し・関門 A の確認まで通しで要るので、途中だけを真似ると必ず抜ける。
 
 **書き出したら、学習を流す前に読ませて確かめる。** ファイルが揃っていることと
 学習が読めることは別で、**動画の符号化が壊れていれば読み出しで初めて落ちる**
@@ -247,7 +247,7 @@ docker run --gpus all --rm \
 
 **2 つ気をつける。**
 
-**混ぜたデータで絞り込みも掛けるときは `--dataset-root` を使う**（8/13 に追加。
+**混ぜたデータで絞り込みもするときは `--dataset-root` を使う**（8/13 に追加。
 `train.py`）。`--` の後ろで `--dataset.root=` を渡すだけでは**番号選びには効かない**
 ——`--emphasize-tasks` / `--max-demo-steps` / `--episodes-per-task` は
 `lerobot/libero_plus` のメタデータを Hub から落として番号を決めるので、
@@ -361,7 +361,7 @@ EVAL_CSV=compe/val/MOKA_TASKS.csv MUJOCO_GL=osmesa \
 **測ることさえできない**（6 節の「基準が潰れる」）。**混ぜる側にその問題は無い。**
 
 **全部 GPU マシンで行う。** `merge` には `lerobot/libero_plus`（16 GB）が要り、
-それがあるのは学習を回したマシンだけである。**判断の枠組み（3 段のゲート）と
+それがあるのは学習を回したマシンだけである。**判断の枠組み（3 つの関門）と
 どの指示文を重くするかは [../talk/260813_today.md](../talk/260813_today.md) にある。**
 
 ```bash
@@ -385,7 +385,7 @@ docker run --rm \
 作られており、v0.6.0 が書く `features` とは 2 か所で書き方が違う
 （非動画の列に `fps` を書くか・動画の `info` が `video.is_depth_map` か
 `is_depth_map` か）。`align` は**`dtype`・`shape`・`names` の一致を確かめてから
-飾りだけ写す**ので、本当に形が違うときは止まる。元の `info.json` は
+飾りだけコピーする**ので、本当に形が違うときは止まる。元の `info.json` は
 `info.json.bak` に残る。
 
 ```bash
@@ -437,14 +437,35 @@ docker run --gpus all --rm -v "$PWD/work/train:/out" -v "$PWD/work/merged:/data"
 
 ```bash
 # 4. 重みを整える（6 節と同じ 2 手）
-docker run --rm -v "$PWD/work/train:/out" --entrypoint chown parc2026-train \
-    -R "$(id -u):$(id -g)" /out/scripted_mix
+#    **`chown` は `merge.py` の「後」に打つ。** merge.py も root で走るので、
+#    先に打つと出来たての merged_model がまた root 所有になり、cp が
+#    `Permission denied` で落ちる（8/13 に実際に踏んだ）
 docker run --rm --gpus all -v "$PWD/work/train:/out" \
     -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
     parc2026-train python /workspace/merge.py --run-name scripted_mix
+docker run --rm -v "$PWD/work/train:/out" --entrypoint chown parc2026-train \
+    -R "$(id -u):$(id -g)" /out/scripted_mix
 cp -r work/train/scripted_mix/merged_model work/artifacts/model_weights_scripted_mix
 cp -r work/artifacts/model_weights_base/vlm work/artifacts/model_weights_scripted_mix/vlm
 ```
+
+> **【8/13】`compe/val/MOKA_TASKS.csv` は作り直した。前の版は 8 件とも
+> 「初期状態が無い」で落ちる。** `init_states_file` の列が無かったため、評価側が
+> 接尾辞を正規表現で剥がして初期状態を探しに行き、実在しない
+> `KITCHEN_SCENE8_..._light_11.pruned_init` を開こうとしていた
+> （実在するのは接尾辞を剥がした `KITCHEN_SCENE8_....pruned_init` のほう）。
+> **`make_task_suite.py` が `make_validation_suite._build_rows` を呼ぶようにして直した。**
+> 手元にある CSV が古いときは作り直す（数秒・GPU 不要）。
+>
+> ```bash
+> python3 solution/tools/make_task_suite.py \
+>     --instruction "put both moka pots on the stove" \
+>     --count 8 --output compe/val/MOKA_TASKS.csv
+> ```
+>
+> **列があることを目で確かめる。** 先頭行に `init_states_file` が要る。
+> **`compe/val/MOKA_BASE.csv` にも列は無いが、あちらは接尾辞が無いので
+> 剥がしても同じ名前になり、偶然通る。**
 
 ```bash
 # 5. モカポット 8 件で測る（20 分）。**比べる相手を先に測る**
@@ -482,7 +503,7 @@ EVAL_CSV=compe/val/EVAL_TASKS.csv MUJOCO_GL=osmesa \
 **下の実測はすべて手元の Mac の Docker（colima・2 コア / 9.69 GiB）である。**
 GPU マシンで撮る場合は `nproc` から測り直すこと。
 
-| 段 | 直列 | 2 並列 |
+| 手 | 直列 | 2 並列 |
 |---|---|---|
 | `verify` 50 通り（描画なし） | 153 秒 | — |
 | `record` 1 本 | **111 秒**（233 歩） | **172 秒** |
