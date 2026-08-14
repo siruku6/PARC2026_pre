@@ -25,11 +25,16 @@ WEIGHTS_PATH="${WEIGHTS:-work/artifacts/model_weights_pi05_024000}"
 
 # 比べる候補。**1 行 1 つのつまみだけ動かす**のを基本にし、
 # 最後に「効いたものを重ねた回」を置く。
+# **8/14 18:40 に並べ替えた。** blend_steps=4 が 36 件で当たった
+# （成功 0.694 → 0.778・ジャーク −10%・方策の衝突率 0.111 → 0.083）ので、
+# **8 を先頭に上げる。** 4 より良くなるか、行き過ぎて応答が遅れるかの
+# どちらかで、どちらに出てもそのまま読める。
+# **既定が 4 になった（版 3.10.0）ので、4 と比べたい回は 0 を明示的に渡す。**
 KNOB_SERIES=(
-    "ema05	PARC_N_ACTION_STEPS=16 PARC_EMA_ALPHA=0.5"
-    "infer20	PARC_N_ACTION_STEPS=16 PARC_NUM_INFERENCE_STEPS=20"
     "blend8	PARC_N_ACTION_STEPS=16 PARC_BLEND_STEPS=8"
-    "n20	PARC_N_ACTION_STEPS=20"
+    "ema05	PARC_N_ACTION_STEPS=16 PARC_BLEND_STEPS=4 PARC_EMA_ALPHA=0.5"
+    "infer20	PARC_N_ACTION_STEPS=16 PARC_BLEND_STEPS=4 PARC_NUM_INFERENCE_STEPS=20"
+    "n20	PARC_N_ACTION_STEPS=20 PARC_BLEND_STEPS=4"
 )
 
 echo "===== つまみを順番に回す（${#KNOB_SERIES[@]} 本）====="

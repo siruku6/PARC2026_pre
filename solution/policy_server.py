@@ -140,7 +140,7 @@
 #          3.8.0（n=10）が 0.177 なので、**これは 1 変数だけ違う比較になる**
 #          （採点タスクと乱数種は提出をまたいで固定＝運営 Q&A No.26）。
 #          → **落ちたら 3.8.0 でも 3.6.1（0.184）でもなく、数字を見て決める。**
-__version__ = "3.9.0"
+__version__ = "3.10.0"
 
 import argparse
 import math
@@ -673,7 +673,14 @@ class MyPolicy(BasePolicy):
         # avg_cartesian_jerk が 4.5161 → 3.5335（−22%）、rms が −16% になった。
         # 衝突率も 0.087 → 0.075。懸念した「惰性で行き過ぎて接触が増える」は
         # 起きていない。n を小さくしたときのガタつきを抑える役目も兼ねる。
-        self._blend_steps = int(os.environ.get("PARC_BLEND_STEPS", "0"))
+        #
+        # **版 3.10.0 で blend_steps の既定を 0 → 4 にした（π0.5・n=16 で実測）。**
+        # chunk の継ぎ目の最初の 4 歩だけ直前の行動へ寄せる。手元 36 件で
+        # 成功 25 → 28（0.694 → 0.778。過去最高）、方策の衝突率 0.111 → 0.083、
+        # avg_cartesian_jerk 3.699 → 3.320（−10%）、SPARC は −2.595 → −2.603（横ばい）。
+        # 出典 work/gpu_eval/0814_172608_pi05_24k_blend4_n16_ep1_max300_blend4/
+        # summary_compare.txt。**採点環境は環境変数を渡さないので、既定を変えるしかない。**
+        self._blend_steps = int(os.environ.get("PARC_BLEND_STEPS", "4"))
         self._ema_alpha = float(os.environ.get("PARC_EMA_ALPHA", "0.3"))
         self._n_action_steps = int(self._policy.config.n_action_steps)
 
