@@ -2,6 +2,9 @@ venv/
 LIBERO-plus/
 LIBERO/
 results/
+# 学習の出力と重み。2026-08-14 時点で 91GB あり、入れるとビルドの前に
+# 91GB の転送が走る。イメージ側で使うものは 1 つも入っていない。
+work/
 __pycache__/
 *.pyc
 assets.zip

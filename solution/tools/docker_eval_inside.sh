@@ -155,4 +155,15 @@ set +e
 status=${PIPESTATUS[0]}
 set -e
 echo "  終了コード=$status"
+
+# **MuJoCo と robosuite は自分のログを別の場所へ書く。** 落ちた理由が
+# `eval.log` に出ず、こちらにだけ残ることがある（2026-08-14、描画の
+# `read_pixels` で異常終了したときに `eval.log` は進捗行で途切れていた）。
+# コンテナは `--rm` で消えるので、消える前に持ち出す。
+for source in /tmp/robosuite.log MUJOCO_LOG.TXT /workspace/MUJOCO_LOG.TXT; do
+    if [ -s "$source" ]; then
+        cp "$source" "$OUT_DIR/$(basename "$source")" 2>/dev/null || true
+        echo "  $(basename "$source") を持ち出した（$(wc -l < "$source") 行）"
+    fi
+done
 echo "  [結果] 行: $(grep -c '\[結果\]' "$OUT_DIR/eval.log" || true)"

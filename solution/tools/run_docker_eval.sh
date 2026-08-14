@@ -178,7 +178,8 @@ echo
 echo "===== 1/5 方策サーバーを起動する（$SERVER_IMAGE）====="
 
 policy_environment=()
-for name in PARC_N_ACTION_STEPS PARC_SAMPLES PARC_BLEND_STEPS PARC_EMA_ALPHA; do
+for name in PARC_N_ACTION_STEPS PARC_SAMPLES PARC_BLEND_STEPS PARC_EMA_ALPHA \
+            PARC_NUM_INFERENCE_STEPS; do
     value="$(eval "printf '%s' \"\${$name:-}\"")"
     if [ -n "$value" ]; then
         policy_environment+=(-e "$name=$value")
@@ -241,7 +242,15 @@ kit_environment=(
     -e "RECORD=$RECORD"
 )
 
+# **`--ulimit core=0` と `PYTHONFAULTHANDLER=1` は、落ちたときに気づくためにある。**
+# 2026-08-14、評価側が 50 歩目で segfault した。既定のままだとカーネルが
+# コアダンプを書きに行き（`core_pattern` は apport へのパイプ）、**GPU の
+# メモリを抱えたプロセスのダンプは終わらない。** 結果、`docker ps` では
+# 動いたまま、進捗だけが止まる——落ちたことに 20 分気づけなかった。
+# **`PYTHONFAULTHANDLER` は元から kit_environment に入っていた。** それでも
+# 位置が出なかったのは、ダンプが終わらず出力を流し切れなかったからである。
 docker run --rm --gpus all --network "$NETWORK" \
+    --ulimit core=0 \
     "${kit_environment[@]}" \
     -v "$REPOSITORY_ROOT/solution/tools:/host/tools:ro" \
     -v "$OUTPUT_DIR:/out" \
