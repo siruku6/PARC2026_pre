@@ -512,6 +512,71 @@ git checkout scored-0.05832 -- solution/policy_server.py solution/requirements.t
 
 ---
 
+# zip を Mac へ運ぶ —— **`scp` ではなく HuggingFace 経由**
+
+**`scp` は 1.7 MB/s しか出ないので 9.4GB に 1 時間半掛かる。**
+**非公開リポジトリを中継すると 1 分で済む。**
+
+| やり方 | 9.4GB の実測 |
+|---|---|
+| `scp` | **1 時間半**（1.7 MB/s） |
+| HF 経由・初回 | **16 分** |
+| **HF 経由・作り直した zip** | **50 秒**（8/14 18:56 実測） |
+
+**作り直した zip が速いのは、送る前に中身を細かく切って、既に置いてある zip と
+同じ切れ端を送らないためである**（Xet。`hf_xet` が入っていると自動で効く）。
+`policy_server.py` を 1 行変えただけの zip なら、実際に送るのは数十 MB で済む。
+
+> **このリポジトリは非公開のままにする。** 中身は π0.5 の重み
+> （PaliGemma / gemma 由来）と提出コードである。**公開してはいけない。**
+
+## GPU マシン側（送る）
+
+```bash
+cd ~/lab/PARC2026_pre
+
+# 入っていなければ  .venv/bin/pip install "huggingface_hub[hf_xet]"
+.venv/bin/hf auth whoami        # user=siruku6 が出ることを確かめる
+
+.venv/bin/hf upload siruku6/parc2026-submission \
+    work/submission_pi05_blend4.zip \
+    submission_pi05_blend4.zip \
+    --repo-type model \
+    --commit-message "3.10.0 blend_steps=4 (sha256 3e0f5446)"
+```
+
+**引数は「ローカルの場所」「リポジトリ内での名前」の順である。**
+順番を取り違えると変な階層に入る。**コミットメッセージに sha256 の頭 8 桁を
+入れておく**と、後からどの zip がどれか分かる。
+
+送れたかを確かめる。**「サイズが手元と一致すること」まで見る。**
+
+```bash
+python3 -c "
+from huggingface_hub import HfApi
+for f in HfApi().list_repo_tree('siruku6/parc2026-submission', recursive=True):
+    if f.path.endswith('.zip'):
+        print(f'{f.path:34s} {getattr(f,\"size\",0):>13,}')
+"
+stat -c '%n %s' work/submission_pi05_blend4.zip
+```
+
+## Mac 側（受け取る）
+
+```bash
+hf download siruku6/parc2026-submission submission_pi05_blend4.zip \
+    --repo-type model --local-dir ~/Downloads/parc2026
+
+# **必ずハッシュを突き合わせる。** 途中で切れても途中まで残るため
+shasum -a 256 ~/Downloads/parc2026/submission_pi05_blend4.zip
+# 3e0f5446a1190433bf41924425883f46940e034af4d5eece938e2cec04b71dbb と一致すること
+```
+
+**`hf` が無ければ** `pip install "huggingface_hub[cli,hf_xet]"`。
+**初回はログインが要る**（`hf auth login`。読み取り権限のトークンでよい）。
+
+---
+
 # 提出する
 
 Omnicampus に `work/submission.zip` をアップロードする。
