@@ -24,7 +24,10 @@ N_EPISODES="${N_EPISODES:-1}"
 PER_CELL="${PER_CELL:-3}"
 RECORD="${RECORD:-}"
 
-export MUJOCO_GL="${MUJOCO_GL:-egl}"
+# **既定は osmesa。** このマシンの vGPU（Virtual Compute Server）は OpenGL に
+# 対応せず、egl だと本当の場面で異常終了する（呼び出し側の run_docker_eval.sh
+# の注記と docs/howto/03_gpu_eval.md）。呼び出し側が渡してくればそれを使う。
+export MUJOCO_GL="${MUJOCO_GL:-osmesa}"
 export PYTHONPATH="$KIT/LIBERO-plus:$KIT:$KIT/compe"
 
 # ---------------------------------------------------------------- 描画
@@ -65,7 +68,8 @@ print(f"  描画は {backend} / 空の場面を 1 枚 {per_frame_ms:.1f} ms")
 # 構成によって描画が許可されていない）。**通ったことを根拠にしない。**
 if backend == "egl":
     print("  注意: これは球 1 個の場面である。**本当の場面で止まることがある。**")
-    print("        最初のタスクで [進捗] が出なければ MUJOCO_GL=osmesa へ落とす。")
+    print("        **速さの測定は動く証拠にならない。** vGPU では 0.1 ms で")
+    print("        通ったうえで、本当の場面の 50〜99 歩目に異常終了する。")
 elif backend == "osmesa":
     print("  CPU 描画。1 歩あたり 384 ms（実測）。84 件で 2〜3 時間かかる")
 if per_frame_ms > 50.0:

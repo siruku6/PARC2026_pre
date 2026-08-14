@@ -221,11 +221,15 @@ echo
 echo "===== 2/5 評価側を起動する（$KIT_IMAGE）====="
 
 kit_environment=(
-    # **描画のやり方。`osmesa` に落とせるようにしてある。**
-    # `egl` は GPU で描くので速い（1 歩 39 ms 対 300 ms）が、vGPU の一部の
-    # 構成では描画が許可されておらず、**単純な図形は描けても実際の場面で
-    # 止まることがある。** 進まないときは MUJOCO_GL=osmesa で切り分ける。
-    -e "MUJOCO_GL=${MUJOCO_GL:-egl}"
+    # **描画のやり方。既定は `osmesa`（CPU 描画）である。**
+    # このマシンの vGPU は `NVIDIA Virtual Compute Server`（計算専用の製品）で、
+    # **OpenGL に対応しない。** `egl` にすると「空の場面 1 枚 0.1 ms」という
+    # 速さの測定は通るのに（実質何も描いていない）、**本当の場面で 50〜99 歩目に
+    # `read_pixels` で異常終了する**（2026-08-14 に 3 回とも再現）。
+    # 詳しくは docs/howto/03_gpu_eval.md「描画は osmesa を使う」。
+    # **既定を egl にしていたせいで、この罠に 2 度はまっている。**
+    # 描画のできる GPU（vWS 系や普通の GPU）で回すときだけ MUJOCO_GL=egl を渡す。
+    -e "MUJOCO_GL=${MUJOCO_GL:-osmesa}"
     # 止まった場所を後から知れるようにする。`docker exec <名前> kill -ABRT 1`
     # で python の居場所が出る。**これが無いと当て推量になる。**
     -e "PYTHONFAULTHANDLER=1"
