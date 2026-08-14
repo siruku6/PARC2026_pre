@@ -140,7 +140,40 @@
 #          3.8.0（n=10）が 0.177 なので、**これは 1 変数だけ違う比較になる**
 #          （採点タスクと乱数種は提出をまたいで固定＝運営 Q&A No.26）。
 #          → **落ちたら 3.8.0 でも 3.6.1（0.184）でもなく、数字を見て決める。**
-__version__ = "4.0.0"
+#   3.9.0  → **本番 0.264。過去最高を 0.080 上回った。**歩数は
+#          [90, 102, 225, 188, 216, 123, 96, 102] で**8 本すべてが 300 歩より前に
+#          終わった**（n=10 では ep3 と ep7 が 300 に張り付いていた）。
+#          **`pipeline/rollout.py` は `done` だけで打ち切る**（衝突では止まらない）
+#          ため、**300 歩より前に終わった＝ゴールに届いた**と読める。
+#          つまり**リーダーボードの 4 タスクは全部解けており、残りは
+#          1mm の失格と滑らかさ・歩数の配点である。**
+#   3.10.0 **`PARC_BLEND_STEPS` の既定を 0 → 4 にした。3.9.0 から 1 変数。**
+#          chunk の継ぎ目の最初の 4 歩だけ直前の行動へ寄せる。
+#          手元 36 件で成功 25 → 28（0.694 → 0.778。**過去最高。weak3x 0.722 も
+#          上回った**）、方策の衝突率 0.111 → 0.083、平均ジャーク 3.699 → 3.320
+#          （−10%）、SPARC は −2.595 → −2.603（横ばい）。
+#          **「型 D（課題ができていない）はつまみでは動かない」という読みを
+#          訂正した** ——型 D の 5 件のうち 4 件がこれだけで解けた。
+#          出典 work/gpu_eval/0814_172608_pi05_24k_blend4_n16_ep1_max300_blend4。
+#          **blend8 は行き過ぎ**（同じ 12 件で成功 7 対 9・3.10.0 が直した
+#          tb_13 を壊した・長い手本の 1 件が 300 歩に張り付いた）。**山は 4。**
+#   4.0.0  **重みを RunPod のフルパラメータ学習 3,000 歩に差し替えた**
+#          （`work/artifacts/pi05_rp3000`）。段 1 の 24,000 歩の続きを、
+#          **画像を見る側まで解いて**batch 64・lr 5e-6→2.5e-6 で 3,000 歩。
+#          `blend_steps=4` は 3.10.0 から引き継ぐので、**3.10.0 との差は重みだけ**。
+#          テンソルの並びは段 1 と完全一致（813 個・型も形も差なし）なので
+#          **コードは 1 行も変えていない＝リハーサルの心配が無い。**
+#          段 1 は 18,000 歩以降 loss 0.2375→0.2352→0.2360 で頭打ちだったのが、
+#          この 3,000 歩で 0.2294 → 0.2100（−11%）まで下がり、まだ下がっている。
+#   4.1.0  **`PARC_SAMPLES` > 1 を π0.5 でも使えるようにした（既定は 1 なので
+#          挙動は 4.0.0 と同じ）。** π0.5 の `select_action` は
+#          `predict_action_chunk` を呼ぶので、包む先をそちらにした。
+#          **同時に medoid の距離を「実際に実行する歩数」までに切った。**
+#          chunk は 50 歩ぶん作られるのに実行するのは n 歩だけなので、
+#          50 歩で選ぶと**捨てる区間が選択を奪う**（作った例で再現した）。
+#          版 3.4.0 で samples=3 に差が出なかったのは、**n=2 のとき距離の 96% が
+#          実行しない行動から来ていた**ためという疑いが濃い。
+__version__ = "4.1.0"
 
 import argparse
 import math
@@ -687,16 +720,13 @@ class MyPolicy(BasePolicy):
         # chunk を何回引くか。1 なら素の挙動。
         # 版 3.4.0 で 3 にして本番で測ったが、0.166 → 0.168（0.04 本ぶん）で
         # **差が無く、時間だけ 2.7 倍になった。版 3.5.0 で 1 に戻した。**
+        #
+        # **【8/14 20:00】その測定は n=2 と n=5 のときのものである。**
+        # n=2 は 2 歩ごとに引き直すので、外れを引いてもすぐ打ち消される。
+        # **外れを 16 歩ぶん引きずるのは n が大きいときだけ**で、そこは未測定。
+        # π0.5 は n=16 なので、軸を開け直して測る。
         self._samples = int(os.environ.get("PARC_SAMPLES", "1"))
         if self._samples > 1:
-            # **π0.5 には `_get_action_chunk` が無い**（包む先が違う）。
-            # 黙って素の挙動で走ると「複数引いたつもり」の結果を比べることに
-            # なるので、ここで止める。
-            if self._kind == "pi05":
-                raise SystemExit(
-                    "PARC_SAMPLES>1 は π0.5 では未対応である"
-                    "（_install_chunk_sampler が包む _get_action_chunk が無い）"
-                )
             self._install_chunk_sampler()
 
         self._previous_action: np.ndarray | None = None
@@ -897,23 +927,51 @@ class MyPolicy(BasePolicy):
 
         medoid は必ず実際に引いた 1 本を返すため、どちらも起きない。
 
-        `select_action` は `predict_action_chunk` ではなく
-        `_get_action_chunk` を直接呼ぶため、包むのはそちらである。
+        **包む先はモデルによって違う。**
+
+        - SmolVLA: `select_action` が `_get_action_chunk` を直接呼ぶ
+        - π0.5: `select_action` が `predict_action_chunk` を呼ぶ
+          （`modeling_pi05.py` の `select_action`）
+
+        **距離は「実際に実行する歩数」だけで測る。** chunk は 50 歩ぶん作られるが、
+        実行するのは `n_action_steps` 歩（π0.5 の既定 16）だけである。
+        50 歩で選ぶと、**捨てる 34 歩ぶんが選択を左右してしまう。**
+        版 3.4.0 で samples=3 に差が出なかったのは、これが原因である疑いが濃い
+        （当時は n=2 で、**50 歩のうち 2 歩しか使わないのに 50 歩で選んでいた**）。
         """
         policy = self._policy
         torch = self._torch
-        original = policy._get_action_chunk
         count = self._samples
+        horizon = self._n_action_steps
+
+        def pick_medoid(chunks):
+            """引いた複数の chunk から、他との距離の総和が最小の 1 本を返す。"""
+            # 距離は姿勢 6 次元だけで測る。グリッパは ±1 に振れるため、
+            # 含めるとそこだけで距離が決まってしまう。
+            # さらに、実行する歩数までに切る（上の docstring を参照）。
+            flat = chunks[:, :, :horizon, _POSE_DIMS].reshape(count, -1)
+            distances = torch.cdist(flat, flat).sum(dim=1)
+            return chunks[int(distances.argmin())]
+
+        if self._kind == "pi05":
+            original_predict = policy.predict_action_chunk
+
+            def sampled_predict(batch, **kwargs):
+                chunks = torch.stack(
+                    [original_predict(batch, **kwargs) for _ in range(count)]
+                )
+                return pick_medoid(chunks)
+
+            policy.predict_action_chunk = sampled_predict
+            return
+
+        original_chunk = policy._get_action_chunk
 
         def sampled_chunk(batch, noise=None, **kwargs):
             chunks = torch.stack(
-                [original(batch, noise, **kwargs) for _ in range(count)]
+                [original_chunk(batch, noise, **kwargs) for _ in range(count)]
             )
-            # 距離は姿勢 6 次元だけで測る。グリッパは ±1 に振れるため、
-            # 含めるとそこだけで距離が決まってしまう。
-            flat = chunks[..., _POSE_DIMS].reshape(count, -1)
-            distances = torch.cdist(flat, flat).sum(dim=1)
-            return chunks[int(distances.argmin())]
+            return pick_medoid(chunks)
 
         policy._get_action_chunk = sampled_chunk
 
