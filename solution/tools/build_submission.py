@@ -52,7 +52,13 @@ _SOLUTION_FILES = ("policy_server.py", "requirements.txt")
 _ARTIFACT_DIRS = ("model_weights", "vendor")
 
 # 実行時に生成されるもの。含めるとサイズが膨らむだけで意味がない。
-_EXCLUDE_PARTS = frozenset({"__pycache__", ".hf_home", ".ipynb_checkpoints", ".DS_Store"})
+# **`.cache` は `snapshot_download` が重みの隣に作るダウンロード履歴である。**
+# 8/14 の 3.6.1 の組み直しで `model_weights/vlm/.cache/huggingface/` の 14 個が
+# 紛れ込み、8/13 に検査を通した zip と中身が変わってしまった。**推論には
+# 一切使わないので必ず落とす。**
+_EXCLUDE_PARTS = frozenset(
+    {"__pycache__", ".hf_home", ".ipynb_checkpoints", ".DS_Store", ".cache"}
+)
 _EXCLUDE_SUFFIXES = frozenset({".pyc"})
 
 # 採点環境では `pip install lerobot` が失敗する（依存の evdev がビルドできない）。
