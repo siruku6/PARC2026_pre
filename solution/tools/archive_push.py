@@ -102,6 +102,14 @@ def _parse_args() -> argparse.Namespace:
         help="重みを作った学習実行の場所（既定: --train-config の親、"
              "無ければ source そのもの）",
     )
+    parser.add_argument(
+        "--step",
+        type=int,
+        default=None,
+        help="この重みが何歩目か。既定では --origin の数字だけのディレクトリ名から"
+             "読む。**train_config.json の steps は run の予定総歩数であって"
+             "これではない。**",
+    )
     parser.add_argument("--score", default=None, help="評価の成功率（例: 0.722）")
     parser.add_argument("--score-n", default=None, help="評価した件数（例: 36）")
     parser.add_argument(
@@ -223,19 +231,21 @@ def _build_entry(args: argparse.Namespace, source: Path,
     origin = args.origin
     if origin is None:
         origin = str(train_config.parent) if train_config else str(source)
-    steps: int | None = None
+    planned_steps: int | None = None
     dataset: str | None = None
     base: str | None = None
     if train_config is not None:
         config = json.loads(train_config.read_text(encoding="utf-8"))
-        steps = config.get("steps")
+        planned_steps = config.get("steps")
         dataset = (config.get("dataset") or {}).get("repo_id")
         base = (config.get("policy") or {}).get("pretrained_path")
+    step = args.step if args.step is not None else _read_step(origin)
     return {
         "folder": args.folder,
         "local_path": str(_relative_to_repo(source)),
         "origin": str(_relative_to_repo(Path(origin))),
-        "steps": steps,
+        "step": step,
+        "planned_steps": planned_steps,
         "dataset": dataset,
         "base_model": base,
         "has_train_config": train_config is not None,
@@ -247,6 +257,42 @@ def _build_entry(args: argparse.Namespace, source: Path,
         "note": args.note,
         "pushed_on": date.today().isoformat(),
     }
+
+
+def _read_step(origin: str) -> int | None:
+    """学習実行の場所から、この重みが何歩目かを読む。
+
+    lerobot は `checkpoints/024000/` のように歩数をディレクトリ名にする。
+    **`train_config.json` の `steps` は run の予定総歩数**であって、途中で
+    取り出した重みの歩数ではない。混同すると 500 歩の重みが 24000 歩に見える。
+
+    Parameters
+    ----------
+    origin : str
+        重みを作った学習実行の場所。
+
+    Returns
+    -------
+    step : int | None
+        数字だけのディレクトリ名が見つかればその値。無ければ None。
+    """
+    for part in reversed(Path(origin).parts):
+        if part.isdigit():
+            return int(part)
+    return None
+
+
+def _format_steps(entry: dict) -> str:
+    """歩数の欄を、予定総歩数と混ざらない書き方に整える。"""
+    step = entry.get("step")
+    planned = entry.get("planned_steps")
+    if step is not None and planned is not None:
+        return str(step) if step == planned else f"{step} / 予定 {planned}"
+    if step is not None:
+        return str(step)
+    if planned is not None:
+        return f"不明 / 予定 {planned}"
+    return "—"
 
 
 def _relative_to_repo(path: Path) -> Path:
@@ -268,8 +314,10 @@ def _render_provenance(entry: dict) -> str:
         f"- 作った学習実行: `{entry['origin']}`",
         f"- `model.safetensors` の sha256: `{entry['sha256_model']}`",
     ]
-    if entry["steps"] is not None:
-        lines.append(f"- 歩数: {entry['steps']}")
+    if entry.get("step") is not None:
+        lines.append(f"- この重みは {entry['step']} 歩目")
+    if entry.get("planned_steps") is not None:
+        lines.append(f"- その学習実行の予定総歩数: {entry['planned_steps']}")
     if entry["dataset"]:
         lines.append(f"- 学習データ: `{entry['dataset']}`")
     if entry["base_model"]:
@@ -313,6 +361,10 @@ def _render_readme(index: list[dict], repo_id: str) -> str:
         "**成功率は実行ごとに分母が違う。** 数字だけを並べて比べると誤る。"
         "必ず右の実測ログを見て、同じ条件どうしか確かめること。",
         "",
+        "歩数の欄が `500 / 予定 24000` の形になっているものは、**24000 歩回す"
+        "つもりだった学習の 500 歩目**である。`train_config.json` の `steps` は"
+        "予定の方なので、そこだけ見ると取り違える。",
+        "",
         "| フォルダ | 歩数 | 学習データ | 成功率 | 実測ログ | 手元の置き場 | 設定 | 上げた日 |",
         "|---|---|---|---|---|---|---|---|",
     ]
@@ -327,7 +379,7 @@ def _render_readme(index: list[dict], repo_id: str) -> str:
             "| [{folder}]({folder}/) | {steps} | {dataset} | {score} | {run} "
             "| `{local}` | {config} | {pushed} |".format(
                 folder=entry["folder"],
-                steps=entry.get("steps") or "—",
+                steps=_format_steps(entry),
                 dataset=f"`{entry['dataset']}`" if entry.get("dataset") else "—",
                 score=score,
                 run=(f"`work/gpu_eval/{entry['score_run']}/`"
@@ -360,7 +412,7 @@ def _print_plan(entry: dict, files: list[tuple[Path, str]],
     print(f"[archive] 退避先の置き場  {entry['folder']}")
     print(f"[archive] 手元の置き場    {entry['local_path']}")
     print(f"[archive] 作った学習実行  {entry['origin']}")
-    print(f"[archive] 歩数            {entry['steps']}")
+    print(f"[archive] 歩数            {_format_steps(entry)}")
     print(f"[archive] 学習データ      {entry['dataset']}")
     print(f"[archive] sha256          {entry['sha256_model']}")
     print(f"[archive] 設定            "
