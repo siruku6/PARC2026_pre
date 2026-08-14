@@ -178,6 +178,7 @@ __version__ = "4.1.0"
 import argparse
 import math
 import re
+from collections import deque
 from abc import ABC, abstractmethod
 from typing import Callable
 
@@ -729,6 +730,23 @@ class MyPolicy(BasePolicy):
         if self._samples > 1:
             self._install_chunk_sampler()
 
+        # RTC（Real-Time Chunking）。**既定は切ってある。**
+        # `blend_steps` が「出た行動を後からならす」のに対し、RTC は
+        # **継ぎ目で前の計画と一致するように生成させる**（塗り足しと同じ考え方）。
+        # blend4 が効いた＝継ぎ目が本物、という裏づけがあるので筋は良い。
+        # **ただし一度も採点環境で走っていない道**なので、
+        # 例外が出たら `blend_steps` の道へ戻す受け皿を付けてある（_get_action_rtc）。
+        self._rtc_enabled = os.environ.get("PARC_RTC", "0") not in ("0", "", "false")
+        self._rtc_horizon = int(
+            os.environ.get("PARC_RTC_HORIZON", str(self._n_action_steps))
+        )
+        self._rtc_guidance = float(os.environ.get("PARC_RTC_GUIDANCE", "10.0"))
+        self._rtc_queue: deque = deque()
+        self._rtc_previous_tail = None
+        self._rtc_fell_back = False
+        if self._rtc_enabled:
+            self._install_rtc()
+
         self._previous_action: np.ndarray | None = None
         self._step_index = 0
 
@@ -756,6 +774,7 @@ class MyPolicy(BasePolicy):
             f"num_inference_steps={getattr(self._policy.config, 'num_inference_steps', '-')}  "
             f"n_action_steps={self._n_action_steps}  ema_alpha={self._ema_alpha}  "
             f"blend_steps={self._blend_steps}  samples={self._samples}  "
+            f"rtc={f'on(horizon={self._rtc_horizon})' if self._rtc_enabled else 'off'}  "
             f"normalize={self._normalize_mode()}",
             flush=True,
         )
@@ -975,11 +994,100 @@ class MyPolicy(BasePolicy):
 
         policy._get_action_chunk = sampled_chunk
 
+    def _install_rtc(self) -> None:
+        """継ぎ目を「後からならす」のでなく「つながるように生成させる」ようにする。
+
+        `blend_steps` は出てきた行動を後から前の行動へ寄せる。RTC は
+        **生成の途中（ノイズ除去の各段）で、前の計画に一致する向きへ押す。**
+        重みは 0 番目が 1.0 で、`execution_horizon` 歩目で 0 まで直線的に落ちる
+        （`modeling_rtc.py` の `get_prefix_weights`）。つまり
+        **継ぎ目の直後だけ強く前の計画に従い、先へ行くほど自由になる。**
+
+        チェックポイントの `config.json` には `rtc_config` が入っていないため、
+        ここで作って `init_rtc_processor` を呼ぶ。この 1 つの呼び出しで
+        方策側と内側のモデル（`PI05Pytorch`）の両方に処理器が入る
+        （`modeling_pi05.py` の `init_rtc_processor`）。
+        """
+        from lerobot.policies.rtc.configuration_rtc import RTCConfig
+
+        self._policy.config.rtc_config = RTCConfig(
+            enabled=True,
+            execution_horizon=self._rtc_horizon,
+            max_guidance_weight=self._rtc_guidance,
+        )
+        self._policy.init_rtc_processor()
+
+    def _get_action_rtc(self, batch: dict):
+        """RTC で 1 歩ぶんの行動を返す。前の chunk の未実行部分を手がかりにする。
+
+        `select_action` は RTC を `assert` で止めるので、待ち行列をここで持つ。
+        本家と同じ形（要素は `(batch, action_dim)`）にしてある。
+
+        **手がかりに渡すのは「前の chunk のうち実行しなかった分」である。**
+        chunk は 50 歩ぶん作られるのに実行するのは `n_action_steps` 歩だけなので、
+        残りはそのまま「次に何をするつもりだったか」になる。
+
+        `inference_delay` は 0 である。**この評価では推論中にロボットが動かない**
+        （`/act` を待って 1 歩進む同期の作りなので、推論の間に消費される歩数が無い）。
+
+        Parameters
+        ----------
+        batch : dict
+            `_build_batch` が作った、モデルへ渡す観測。
+
+        Returns
+        -------
+        action : Tensor
+            形 `(batch, action_dim)` の 1 歩ぶんの行動。
+        """
+        if not self._rtc_queue:
+            kwargs = {
+                "inference_delay": 0,
+                "execution_horizon": self._rtc_horizon,
+            }
+            if self._rtc_previous_tail is not None:
+                kwargs["prev_chunk_left_over"] = self._rtc_previous_tail
+
+            chunk = self._policy.predict_action_chunk(batch, **kwargs)
+            executed = self._n_action_steps
+            # 実行しない残りを次回の手がかりに取っておく。
+            self._rtc_previous_tail = chunk[:, executed:, :].detach()
+            self._rtc_queue.extend(chunk[:, :executed, :].transpose(0, 1))
+
+        return self._rtc_queue.popleft()
+
+    def _fall_back_from_rtc(self, error: Exception) -> None:
+        """RTC で例外が出たら、以降は `blend_steps` の道へ戻す。
+
+        **一度も採点環境で走っていない道なので、落ちても 0 点にしない。**
+        `rtc_config.enabled` を偽にすると `select_action` の `assert` が通り、
+        3.10.0 と同じ挙動になる。
+        """
+        self._rtc_enabled = False
+        self._rtc_fell_back = True
+        self._rtc_queue.clear()
+        self._rtc_previous_tail = None
+        if getattr(self._policy.config, "rtc_config", None) is not None:
+            self._policy.config.rtc_config.enabled = False
+        self._policy.reset()
+        print(
+            f"[parc] rtc 失敗のため blend_steps の道へ戻す: "
+            f"{type(error).__name__}: {error}",
+            flush=True,
+        )
+
     def get_action(self, obs: dict[str, np.ndarray]) -> np.ndarray:
         batch = self._build_batch(obs)
 
         with self._torch.no_grad():
-            action = self._policy.select_action(batch)
+            if self._rtc_enabled:
+                try:
+                    action = self._get_action_rtc(batch)
+                except Exception as error:  # noqa: BLE001
+                    self._fall_back_from_rtc(error)
+                    action = self._policy.select_action(batch)
+            else:
+                action = self._policy.select_action(batch)
 
         action = self._postprocessor(action)
         action = np.asarray(
@@ -1073,6 +1181,9 @@ class MyPolicy(BasePolicy):
         self._policy.reset()
         self._previous_action = None
         self._step_index = 0
+        # RTC の持ち物も捨てる。**前エピソードの計画を手がかりにしてはいけない。**
+        self._rtc_queue.clear()
+        self._rtc_previous_tail = None
 
     def _build_batch(self, obs: dict[str, np.ndarray]) -> dict:
         """評価パイプラインの観測を、モデルが期待する batch へ変換する。"""
