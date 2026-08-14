@@ -662,6 +662,72 @@ hf download <HFユーザー名>/pi05_full_runpod \
 **9.4GBで16分。`scp`の4分の1以下である。**
 しかも**中身が同じ部分は送り直さない**ので、歩数を変えて何度も持ち帰るときに差が開く。
 
+### 画像を見る側が本当に動いたかを確かめる —— **`config.json`では足りない**
+
+**`freeze_vision_encoder: false`は「そう指定した」記録であって、
+「重みが動いた」証拠ではない。** 確かめるには**重みそのものを突き合わせる。**
+素のπ0.5(`lerobot/pi05_libero_base`。14GBが`$HF_HOME`にある)を挟んで三つ巴で見る。
+
+| | 素 → 段1 | 素 → **RunPod** |
+|---|---|---|
+| **画像を見る側**(437個・4.1億パラメータ) | **1ビットも違わない**＝**段1は本当に凍らせていた** | **437個すべて違う。動いた割合0.34%** |
+| 画像→言語のつなぎ | 1ビットも違わない | **違う。1.02%** |
+
+まとまりごとの動いた量(段1 → RunPod)。
+
+| まとまり | 動いた割合(RMS) |
+|---|---|
+| **画像→言語のつなぎ** | **1.02%** |
+| **画像を見る側 vision_tower** | **0.34%** |
+| 言語側 gemma_2b | 0.08% |
+| 行動を作る側 gemma_expert | 0.05% |
+
+**画像側が行動側の4〜20倍動いている。** 段1で24,000歩ぶん一度も触られなかった
+側なので、そうなるのが筋である。
+
+**「保存し直したから全部違って見えるだけ」ではない。** 動かなかった重みが
+9個あり、その内訳が理屈と合う。
+
+| 最後の層(`layers.17`)の中身 | 結果 |
+|---|---|
+| `k_proj` / `v_proj` | **動いた** |
+| `q_proj` / `o_proj` / `mlp`の3つ | **動いていない** |
+| `lm_head`(言語を出す頭)2つ | **動いていない** |
+
+**行動を作る側が最後の層から受け取るのはKとVだけ**なので、同じ層の残りには
+勾配が流れない。**流れる所だけが動き、流れない所は1ビットも動いていない**
+——この比較は本物の学習を追えている。
+
+```bash
+timeout 400 python3 - <<'PY'
+import json, struct
+import numpy as np
+def open_st(p):
+    f=open(p,'rb'); n=struct.unpack('<Q',f.read(8))[0]
+    h=json.loads(f.read(n)); h.pop('__metadata__',None); return f,8+n,h
+def tens(f,o,m):
+    s,e=m['data_offsets']; f.seek(o+s); b=f.read(e-s)
+    if m['dtype']=='F32': return np.frombuffer(b,dtype=np.float32)
+    return (np.frombuffer(b,dtype=np.uint16).astype(np.uint32)<<16).view(np.float32)
+f1,o1,h1 = open_st('work/artifacts/model_weights_pi05_024000/model.safetensors')
+f2,o2,h2 = open_st('work/train/pi05_full_runpod/002000/model.safetensors')
+ks=[k for k in h1 if 'vision_tower' in k]
+num=den=0.0
+for k in ks:
+    a=tens(f1,o1,h1[k]); b=tens(f2,o2,h2[k])
+    num+=float(((b-a)**2).sum()); den+=float((a**2).sum())
+print(len(ks), f'{100*np.sqrt(num/den):.2f}%')
+PY
+```
+
+**素の重みと比べるときは名前がずれる。** 素は`paligemma_with_expert.…`で、
+学習が吐いた側は先頭に`model.`が付く(`model.paligemma_with_expert.…`)。
+**先頭6文字を落とせば対応する。** 言語側まで全部比べると14GBを読むので数分かかる
+——**画像側だけなら1分で済む。**
+
+> **0.34%が「光に強くなるのに足りる量か」は、この数字からは分からない。**
+> 動いたことは確実だが、動いた向きが良いかどうかは**評価しか答えない。**
+
 ### この重みで何を狙っているか
 
 **段1は画像を見る側を凍らせて学習した。この回だけがそこを動かしている。**
