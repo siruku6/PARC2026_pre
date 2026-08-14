@@ -120,7 +120,16 @@
 #          n=2 が良かったのはモデルが弱く誤差の蓄積を頻繁に打ち切る必要が
 #          あったためと読めるので、**正規化で 2 本が解けた今、上げ側を試す価値がある。**
 #          → **落ちたら 3.6.1（0.184）に戻す。** 3.6.1 は最終提出の床として残す。
-__version__ = "3.7.0"
+#   3.8.0  **π0.5 のチェックポイントも同じサーバーで動くようにした。**
+#          切り替えはチェックポイント自身の `config.json` の `type` を見るだけで、
+#          **SmolVLA の道は 1 行も変えていない**（保険の提出物を壊さないため。
+#          `type` が `smolvla` なら 3.7.0 と同じ経路をそのまま通る）。
+#          足したものは 3 つだけである。
+#          - `_build_pi05`：**RAM 18GB を要求しない読み込み**（理由はその docstring）
+#          - `n_action_steps` の既定を π0.5 では 10 に（学習時の値。SmolVLA は 8 のまま）
+#          - π0.5 では埋め込みでの指示文の寄せを切る（SmolVLA の VLM を触る実装で、
+#            π0.5 には無い。文字列での寄せはそのまま効く）
+__version__ = "3.8.0"
 
 import argparse
 import math
@@ -437,8 +446,69 @@ class InstructionNormalizer:
         return cleaned, "unchanged", scores[best]
 
 
+def _no_weight_init():
+    """重みのランダム初期化を飛ばす入れ物を返す（π0.5 の起動を速くするため）。
+
+    **採点ハーネスはサーバーが 120 秒で繋がらないと諦める**
+    （`pipeline/remote_policy.py` の `wait_for_server(timeout=120.0)`）。
+    π0.5 は 41 億個のパラメータを持ち、**その乱数での初期化だけで CPU 1 コア
+    300 秒級**かかる（手元の実測。読み込み全体は 352 秒だった）。
+
+    **初期化した値は 1 つも使わない。** 直後に `model.safetensors` の値で
+    全部上書きし、1 つでも欠けていれば `_build_pi05` が落とすからである。
+    だから初期化そのものを飛ばす。確保だけは行われるので、メモリの山は変わらない。
+
+    **飛ばして安全なことは測って確かめてある**（2026-08-14、CPU 1 コア）。
+
+    | 測ったもの | 飛ばす | 飛ばさない |
+    |---|---|---|
+    | 組み立ての時間 | **3.2 秒** | 264.3 秒 |
+    | チェックポイントに無い buffer 6 個 | **6 個とも完全に一致** | （基準） |
+
+    つまり rotary の `inv_freq` のように模型自身が計算して作る値は、
+    初期化を飛ばしても同じものが入る。念のため `_build_pi05` 側でも
+    有限かどうかを見ている。
+
+    `transformers` が持っている仕掛けを使う。**版によって置き場所が違い、
+    採点環境の版は分からない**ので、2 か所を順に探し、どちらも無ければ
+    「何もしない入れ物」を返す（その場合は遅いだけで、動きは変わらない）。
+
+    | 版 | 置き場 |
+    |---|---|
+    | 5.x | `transformers.initialization.no_init_weights`（手元の 5.5.4 で確認） |
+    | 4.x | `transformers.modeling_utils.no_init_weights` |
+
+    Returns
+    -------
+    context : 入れ物
+        `with` に渡せるもの。
+    """
+    import contextlib
+    import importlib
+
+    for module_name in ("transformers.initialization", "transformers.modeling_utils"):
+        try:
+            module = importlib.import_module(module_name)
+        except ImportError:
+            continue
+        factory = getattr(module, "no_init_weights", None)
+        if factory is not None:
+            return factory()
+
+    print("[parc] no_init_weights が見つからない。初期化を飛ばさずに読む"
+          "（遅いだけで挙動は同じ）", flush=True)
+    return contextlib.nullcontext()
+
+
 class MyPolicy(BasePolicy):
-    """同梱した LeRobot v0.6.0 で SmolVLA を動かす。
+    """同梱した LeRobot v0.6.0 で SmolVLA、または π0.5 を動かす。
+
+    **どちらを動かすかは `model_weights/config.json` の `type` で決まる**
+    （版 3.8.0）。置いた重みが SmolVLA なら、3.7.0 までと 1 行も違わない道を
+    通る。π0.5 のときだけ `_build_pi05` を通り、埋め込みでの指示文の寄せを
+    切る。**どちらの場合も `model_weights/vlm/` からトークナイザを読む**
+    （SmolVLA は SmolVLM の、π0.5 は paligemma のもの。置き場を共通に
+    してあるので、評価スクリプトも提出物の組み立ても分岐しない）。
 
     採点環境は Python 3.10 固定で LeRobot（requires-python >= 3.12）を
     pip install できないため、ソースを vendor/ に同梱して sys.path から読む。
@@ -479,7 +549,6 @@ class MyPolicy(BasePolicy):
 
         from lerobot.configs import PreTrainedConfig
         from lerobot.policies.factory import make_pre_post_processors
-        from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
         from lerobot.processor import PolicyProcessorPipeline
         from lerobot.processor.env_processor import LiberoProcessorStep
 
@@ -487,13 +556,24 @@ class MyPolicy(BasePolicy):
         weights = here / "model_weights"
         self._device = "cuda" if torch.cuda.is_available() else "cpu"
 
+        # **`from_pretrained` より前に factory を import しておくこと。**
+        # 設定の型は「選択肢クラス」として登録されており、登録は
+        # `lerobot.policies.factory` を読み込んだ時に起きる。順番を入れ替えると
+        # π0.5 のチェックポイントで
+        # `Couldn't find a choice class for 'pi05'` になって起動できない（実測）。
         config = PreTrainedConfig.from_pretrained(weights)
         config.device = self._device
-        # VLM の重みはチェックポイントに含まれる。True のままだと Hub へ
-        # 取りに行き、通信が遮断された採点環境では起動に失敗する。
-        config.load_vlm_weights = False
-        # 設定とトークナイザは同梱物から読む（本体の重みは含めていない）。
-        config.vlm_model_name = str(weights / "vlm")
+
+        # **どちらの模型を積んでいるかは、チェックポイント自身に聞く。**
+        # 置いてある重みが SmolVLA なら 3.7.0 と同じ道をそのまま通る（版 3.8.0）。
+        self._kind = str(config.type)
+
+        if self._kind != "pi05":
+            # VLM の重みはチェックポイントに含まれる。True のままだと Hub へ
+            # 取りに行き、通信が遮断された採点環境では起動に失敗する。
+            config.load_vlm_weights = False
+            # 設定とトークナイザは同梱物から読む（本体の重みは含めていない）。
+            config.vlm_model_name = str(weights / "vlm")
 
         # 1 回の推論で作った chunk のうち、何ステップ分を実行するか。
         #
@@ -532,9 +612,27 @@ class MyPolicy(BasePolicy):
         # **版 3.7.0 で 8 まで伸ばす。** 見込みは 1 歩 0.123 秒 → 300 歩の 1 本が
         # 37 秒 → **1 時間で 97 本**（n=5 は 48 秒・74 本）。`chunk_size` は 50 なので
         # 8 は範囲内。**落ちたら 3.6.1（n=5・0.184）に戻す。**
-        config.n_action_steps = int(os.environ.get("PARC_N_ACTION_STEPS", "8"))
+        #
+        # **π0.5 の既定は 10 にしてある**（学習時の値。`chunk_size` は 50）。
+        # SmolVLA の既定は 8 のままである。つまみの名前は共通なので、
+        # `PARC_N_ACTION_STEPS` を渡せばどちらも同じように上下できる。
+        config.n_action_steps = int(os.environ.get(
+            "PARC_N_ACTION_STEPS", "10" if self._kind == "pi05" else "8"
+        ))
 
-        self._policy = SmolVLAPolicy.from_pretrained(weights, config=config)
+        if self._kind == "pi05":
+            # flow matching を何回刻むか。**1 回の推論の秒数はほぼこれに比例する。**
+            # `n_action_steps` は「推論と推論の間隔」を変えるだけで 1 回の秒数は
+            # 変えないので、**`/act` の 10 秒制限に効くのはこちらだけ**である。
+            # 既定はチェックポイントの値（10）のまま。減らしたときの質は未測定。
+            steps = os.environ.get("PARC_NUM_INFERENCE_STEPS")
+            if steps:
+                config.num_inference_steps = int(steps)
+            self._policy = self._build_pi05(config, weights)
+        else:
+            from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
+
+            self._policy = SmolVLAPolicy.from_pretrained(weights, config=config)
         self._policy.to(self._device)
         self._policy.eval()
 
@@ -568,6 +666,14 @@ class MyPolicy(BasePolicy):
         # **差が無く、時間だけ 2.7 倍になった。版 3.5.0 で 1 に戻した。**
         self._samples = int(os.environ.get("PARC_SAMPLES", "1"))
         if self._samples > 1:
+            # **π0.5 には `_get_action_chunk` が無い**（包む先が違う）。
+            # 黙って素の挙動で走ると「複数引いたつもり」の結果を比べることに
+            # なるので、ここで止める。
+            if self._kind == "pi05":
+                raise SystemExit(
+                    "PARC_SAMPLES>1 は π0.5 では未対応である"
+                    "（_install_chunk_sampler が包む _get_action_chunk が無い）"
+                )
             self._install_chunk_sampler()
 
         self._previous_action: np.ndarray | None = None
@@ -579,7 +685,10 @@ class MyPolicy(BasePolicy):
         self._normalizer: InstructionNormalizer | None = None
         if os.environ.get("PARC_NORMALIZE_INSTRUCTION", "1") != "0":
             self._normalizer = InstructionNormalizer()
-            use_embedding = os.environ.get(
+            # **π0.5 では埋め込みでの寄せを切る。** `_embed_instructions` は
+            # SmolVLA の `model.vlm_with_expert` を直に触る実装で、π0.5 には
+            # その属性が無い。文字列での寄せ（lexical）はそのまま効く。
+            use_embedding = self._kind != "pi05" and os.environ.get(
                 "PARC_NORM_EMBED", "1" if _USE_EMBEDDING else "0"
             ) != "0"
             if use_embedding:
@@ -589,7 +698,9 @@ class MyPolicy(BasePolicy):
         # 分からず、所要時間から逆算して推定するしかなかった。ここに出しておけば
         # 提出物とスコアの対応が後から確実に辿れる。
         print(
-            f"[parc] policy_server {__version__}  device={self._device}  "
+            f"[parc] policy_server {__version__}  model={self._kind}  "
+            f"device={self._device}  "
+            f"num_inference_steps={getattr(self._policy.config, 'num_inference_steps', '-')}  "
             f"n_action_steps={self._n_action_steps}  ema_alpha={self._ema_alpha}  "
             f"blend_steps={self._blend_steps}  samples={self._samples}  "
             f"normalize={self._normalize_mode()}",
@@ -598,6 +709,112 @@ class MyPolicy(BasePolicy):
 
         self._instruction = ""
         self._warm_up()
+
+    def _build_pi05(self, config, weights):
+        """π0.5 のチェックポイントを、**RAM 18GB を要求せずに**読む。
+
+        LeRobot 本体の `PI05Policy.from_pretrained` は 2 か所で山を作る。
+
+        | 段階 | 要る量 | なぜ |
+        |---|---|---|
+        | 組み立て | 16.6 GB | PaliGemma を**fp32 で作ってから**bf16 へ落とす作りである |
+        | 読み込み | ＋8.7 GB | 8.7 GB を丸ごと辞書にしてから写すため、模型と辞書が同時に生きる |
+
+        **採点環境の host RAM は非公開である。** 足りなければ起動に失敗し、
+        推論の中身と関係なく 0 点になる。そこで 2 つ変える。
+
+        1. 最初から bf16 の既定 dtype で組む（fp32 の 16.6 GB を通らない）
+        2. safetensors を**1 テンソルずつ** `param.data` へ差し替える。
+           **代入なのでチェックポイント側の dtype がそのまま入り**、
+           fp32 で保存されている vision_tower や layernorm は fp32 に戻る
+           ——**出来上がりは本体の道と同じ dtype の並びになる。**
+
+        ピークは 10 GB 前後に下がる。同時に生きるのは模型＋最大 1 テンソル
+        （0.98 GB の embed_tokens）だけである。
+
+        **読めたことを数で確かめる。** 本体の `from_pretrained` は読み込みに
+        失敗しても `Returning model without loading pretrained weights` と出して
+        **初期化したままの模型を返す**ので、起動しただけでは学習の成果を
+        使っているとは言えない。1 つでも欠けたらここで落とす。
+
+        Parameters
+        ----------
+        config : PreTrainedConfig
+            チェックポイントから読んだ設定（`device` と `n_action_steps` は
+            呼び出し側で入れてある）。
+        weights : Path
+            `model_weights` ディレクトリ。
+
+        Returns
+        -------
+        policy : PI05Policy
+            重みを写し終えた方策（`to` と `eval` は呼び出し側で行う）。
+
+        Reads:
+          - <weights>/model.safetensors
+        """
+        import time
+
+        from safetensors import safe_open
+
+        from lerobot.policies.pi05.modeling_pi05 import PI05Policy
+
+        torch = self._torch
+        started = time.perf_counter()
+
+        # 学習コンテナの中のパスが残っている。π0.5 は PaliGemma を設定から
+        # 組むので参照されないが、誤解を生むので消しておく。
+        config.pretrained_path = None
+
+        default_dtype = torch.bfloat16 if config.dtype == "bfloat16" else torch.float32
+        previous_dtype = torch.get_default_dtype()
+        torch.set_default_dtype(default_dtype)
+        try:
+            with _no_weight_init():
+                policy = PI05Policy(config)
+        finally:
+            torch.set_default_dtype(previous_dtype)
+
+        parameters = dict(policy.named_parameters())
+        targets = {**parameters, **dict(policy.named_buffers())}
+        copied: set[str] = set()
+        with safe_open(weights / "model.safetensors", framework="pt", device="cpu") as reader:
+            for key in reader.keys():
+                target = targets.get(key)
+                if target is None:
+                    continue
+                tensor = reader.get_tensor(key)
+                if tuple(tensor.shape) != tuple(target.shape):
+                    raise RuntimeError(
+                        f"重みの形が合わない: {key} "
+                        f"{tuple(tensor.shape)} != {tuple(target.shape)}"
+                    )
+                target.data = tensor
+                copied.add(key)
+
+        missing = sorted(set(parameters) - copied)
+        if missing:
+            raise RuntimeError(
+                f"チェックポイントに無い重みが {len(missing)} 個ある"
+                f"（初期値のまま推論することになる）: {missing[:3]}"
+            )
+
+        # **初期化を飛ばした代償の確認である。** チェックポイントに入っていない
+        # buffer（rotary の inv_freq など 6 個）は、模型自身の計算で作られるので
+        # 初期化を飛ばしても正しく埋まる——**はずである。** もし `torch.nn.init`
+        # 経由で作られていれば、飛ばしたぶん**中身が未定義のまま**残る。
+        # 数が少ないのでここで見ておく。重み本体は全部上書き済みなので見ない。
+        broken = [name for name, buffer in policy.named_buffers()
+                  if name not in copied and buffer.numel() > 0
+                  and not torch.isfinite(buffer).all()]
+        if broken:
+            raise RuntimeError(
+                f"初期化を飛ばしたせいで壊れた buffer がある: {broken[:3]}"
+            )
+
+        print(f"[parc] pi05 の重みを {len(copied)} 個読んだ"
+              f"（{time.perf_counter() - started:.1f} 秒）", flush=True)
+        return policy
 
     def _embed_instructions(self, texts: list[str]) -> np.ndarray:
         """同梱した SmolVLM の言語側で文を埋め込む（長さ 1 に正規化して返す）。

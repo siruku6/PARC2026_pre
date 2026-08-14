@@ -13,10 +13,18 @@ Omnicampus へ出す zip は `policy_server.py` が**ルート直下**に来る�
 
 実行はどのディレクトリからでもよい。
 
+重みだけは `--weights` で別の場所から取れる（zip の中の名前は
+`model_weights/` に固定される）。**π0.5 と SmolVLA を入れ替えて出すときに、
+本物のディレクトリを退避させずに済ませるため**である。
+
+    python3 solution/tools/build_submission.py \\
+        --weights work/artifacts/model_weights_pi05_024000 \\
+        --output work/submission_pi05.zip
+
 Reads:
   - solution/policy_server.py
   - solution/requirements.txt
-  - work/artifacts/model_weights/**
+  - work/artifacts/model_weights/**（`--weights` で差し替え可）
   - work/artifacts/vendor/**
 Generates:
   - work/submission.zip
@@ -68,6 +76,15 @@ def _parse_args() -> argparse.Namespace:
         help="重みと同梱ソースの置き場（既定: work/artifacts/）",
     )
     parser.add_argument(
+        "--weights",
+        type=Path,
+        default=None,
+        help="重みの置き場（既定: <artifacts>/model_weights）。"
+             "**zip の中では必ず model_weights/ という名前になる。** "
+             "model_weights_pi05_024000 のように別名で置いた重みを、"
+             "本物を退避させずにそのまま固めるためにある",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=_DEFAULT_OUTPUT,
@@ -107,11 +124,28 @@ def _check_requirements(path: Path) -> None:
             )
 
 
-def _collect_entries(solution: Path, artifacts: Path) -> list[tuple[Path, str]]:
+def _collect_entries(solution: Path, artifacts: Path,
+                     weights: Path | None = None) -> list[tuple[Path, str]]:
     """zip に入れる (実ファイル, zip 内のパス) の一覧を作る。
 
     足りないものがあれば、zip を作る前に例外にする。中身が欠けた zip を
     提出してしまうと、採点 1 回分を無駄にすることになる。
+
+    Parameters
+    ----------
+    solution : Path
+        `policy_server.py` と `requirements.txt` の置き場。
+    artifacts : Path
+        同梱ソース（`vendor/`）の置き場。`weights` を省いたときは
+        重みもここの `model_weights/` から取る。
+    weights : Path | None
+        重みの置き場。**zip の中の名前は `model_weights/` に固定する。**
+        `MyPolicy` が自分の隣の `model_weights` しか見ないためである。
+
+    Returns
+    -------
+    entries : list[tuple[Path, str]]
+        (実ファイル, zip 内のパス) の一覧。
     """
     entries: list[tuple[Path, str]] = []
 
@@ -121,8 +155,11 @@ def _collect_entries(solution: Path, artifacts: Path) -> list[tuple[Path, str]]:
             raise FileNotFoundError(f"必須ファイルがありません: {path}")
         entries.append((path, name))
 
-    for name in _ARTIFACT_DIRS:
-        directory = artifacts / name
+    sources = {name: artifacts / name for name in _ARTIFACT_DIRS}
+    if weights is not None:
+        sources["model_weights"] = weights
+
+    for name, directory in sources.items():
         if not directory.is_dir():
             raise FileNotFoundError(
                 f"生成物がありません: {directory}"
@@ -135,7 +172,7 @@ def _collect_entries(solution: Path, artifacts: Path) -> list[tuple[Path, str]]:
                 continue
             if path.suffix in _EXCLUDE_SUFFIXES:
                 continue
-            entries.append((path, str(path.relative_to(artifacts))))
+            entries.append((path, f"{name}/{path.relative_to(directory)}"))
 
     return entries
 
@@ -216,8 +253,10 @@ def main() -> None:
     artifacts: Path = args.artifacts.resolve()
     output: Path = args.output.resolve()
 
+    weights: Path | None = args.weights.resolve() if args.weights else None
+
     _check_requirements(solution / "requirements.txt")
-    entries = _collect_entries(solution, artifacts)
+    entries = _collect_entries(solution, artifacts, weights)
     _write_zip(output, entries)
     _verify_zip(output, entries)
 
@@ -227,6 +266,7 @@ def main() -> None:
 
     print(f"[build] コード   {solution}")
     print(f"[build] 生成物   {artifacts}")
+    print(f"[build] 重み     {weights or artifacts / 'model_weights'}")
     print(f"[build] 出力     {output}")
     print(f"[build] {len(entries)} files / {output.stat().st_size / 1e6:.0f} MB")
     print(f"[build] sha256 {checksum}")
