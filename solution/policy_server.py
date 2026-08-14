@@ -173,7 +173,7 @@
 #          50 歩で選ぶと**捨てる区間が選択を奪う**（作った例で再現した）。
 #          版 3.4.0 で samples=3 に差が出なかったのは、**n=2 のとき距離の 96% が
 #          実行しない行動から来ていた**ためという疑いが濃い。
-__version__ = "4.1.0"
+__version__ = "3.12.0"
 
 import argparse
 import math
@@ -675,7 +675,13 @@ class MyPolicy(BasePolicy):
             # `n_action_steps` は「推論と推論の間隔」を変えるだけで 1 回の秒数は
             # 変えないので、**`/act` の 10 秒制限に効くのはこちらだけ**である。
             # 既定はチェックポイントの値（10）のまま。減らしたときの質は未測定。
-            steps = os.environ.get("PARC_NUM_INFERENCE_STEPS")
+            # **既定を 20 にした（版 3.12.0）。** 手元 36 件で
+            # ゴール到達 30 → 34（上限は 34。落下物 2 件は誰も取れない）、
+            # 打ち切り張り付き 6 → 2、**両方が成功した 23 件の歩数は ±0（+0.9%）**。
+            # **秒数だけ払って歩数を買う形**で、blend/RTC のように遅くならない
+            # （blend4 は歩数 +29% で本番 0.264 → 0.169 に落ちた）。
+            # 本番の見込みは約 150 秒で、1 時間の上限に 24 倍の余裕がある。
+            steps = os.environ.get("PARC_NUM_INFERENCE_STEPS", "20")
             if steps:
                 config.num_inference_steps = int(steps)
             self._policy = self._build_pi05(config, weights)
@@ -714,7 +720,7 @@ class MyPolicy(BasePolicy):
         # avg_cartesian_jerk 3.699 → 3.320（−10%）、SPARC は −2.595 → −2.603（横ばい）。
         # 出典 work/gpu_eval/0814_172608_pi05_24k_blend4_n16_ep1_max300_blend4/
         # summary_compare.txt。**採点環境は環境変数を渡さないので、既定を変えるしかない。**
-        self._blend_steps = int(os.environ.get("PARC_BLEND_STEPS", "4"))
+        self._blend_steps = int(os.environ.get("PARC_BLEND_STEPS", "0"))
         self._ema_alpha = float(os.environ.get("PARC_EMA_ALPHA", "0.3"))
         self._n_action_steps = int(self._policy.config.n_action_steps)
 
@@ -738,7 +744,7 @@ class MyPolicy(BasePolicy):
         # 例外が出たら `blend_steps` の道へ戻す受け皿を付けてある（_get_action_rtc）。
         self._rtc_enabled = os.environ.get("PARC_RTC", "0") not in ("0", "", "false")
         self._rtc_horizon = int(
-            os.environ.get("PARC_RTC_HORIZON", str(self._n_action_steps))
+            os.environ.get("PARC_RTC_HORIZON", "4")
         )
         self._rtc_guidance = float(os.environ.get("PARC_RTC_GUIDANCE", "10.0"))
         self._rtc_queue: deque = deque()
