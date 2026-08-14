@@ -52,23 +52,37 @@
 
 ### Volume Diskは60GBでは足りない——**150GBにすること**
 
-3節はローカルと同じ`train_expert_only`を前提に60GBと書いていたが、
-**フルパラメータ学習ではチェックポイントが大きくなる。**
+ローカルと同じ`train_expert_only`(凍結した縮小版)ならチェックポイント1個は
+11GBなので60GBでも回るが、**フルパラメータ学習では1個25GBになり、60GBでは
+2個も置けずに落ちる**(この節に合わせて3節も150GBに直した)。
 
-| | ローカル(expert only) | フルパラメータ(推定) |
+| | ローカル(expert only) | フルパラメータ(RunPodで実測) |
 |---|---|---|
 | 学習するパラメータ | 693M | 4.14B |
-| `pretrained_model` | **8.7GB**(実測。全パラメータを保存するので変わらない) | 8.7GB |
-| `training_state` | **2.1GB**(実測。1パラメータあたり3.0バイト) | **約12GB**(同じ比率での推定) |
-| **1個あたり** | **11GB** | **約21GB** |
+| `pretrained_model` | **8.7GB**(実測。全パラメータを保存するので変わらない) | 8.7GB(同じ) |
+| `training_state` | **2.1GB**(実測。1パラメータあたり3.0バイト) | **約16GB**(下の25GBから8.7GBを引いた値。**直接は測っていない**) |
+| **1個あたり** | **11GB** | **約25GB**(実測) |
 
-**合計の見積もり: HFキャッシュ約45GB(データ30＋初期重み14)＋
-チェックポイント2個で42GB ＝ 約87GB。** 余裕を見て**150GB**にする
-($0.10/GB/月なので、1日なら数十円の差にしかならない)。
+**25GBの測り方(2026-08-14 11時台)**: Podのディスク使用量が、500歩の保存の
+直前で**30GB**、保存の直後で**55GB**。その差が1個ぶんである。
+**当初の推定は21GBだったので、2割ほど大きい方に外れた。**
 
-**`training_state`の12GBは推定である。** 8節の20歩の確認が終わった直後に
-`du -sh /workspace/out/pi05_small_check/checkpoints/*/*` で実測し、
-足りなければその場でVolumeを増やすこと。
+Volume Diskの中身は、上と合わせてこうなる。
+
+| 中身 | 量 |
+|---|---|
+| 初期重み＋データセット(`/workspace/hf_home`) | **合わせて30GB**(実測)。**見積もりは45GBだったので、こちらは小さい方に外れた** |
+| 間引いて2個残したチェックポイント | 25GB×2＝**50GB** |
+| 間引きが古い1個を消す前、一瞬だけ3個ある状態 | 25GB×3＝**75GB** |
+| **最大** | **105GB** |
+
+**150GBで足りる**(45GB余る)。$0.10/GB/月なので、1日なら数十円の差にしかならない。
+**60GBではチェックポイントを2個置けずに落ちる。**
+
+**`hf_home`の30GBの内訳(初期重み14GB＋データセット16GBのはず)は測っていない。**
+気になるときは`du -sh /workspace/hf_home/*`で見る。
+`training_state`と`pretrained_model`の分かれ方も同じく未実測で、
+`du -sh /workspace/out/<run-name>/checkpoints/*/*`で見られる。
 
 ### 持ち帰りは、本番を待たずに一度試しておく
 
@@ -165,10 +179,24 @@ RunPodのストレージは3種類ある。
 ### サイズの目安
 
 - **Container Disk: 20GB程度**(OS・pip/aptで入れたパッケージ分だけで足りる)
-- **Volume Disk: 60GB以上。** 内訳はおおよそ、初期重み(実測11GB)＋
-  データセット(全部使うと約16GB。[train.py](../../solution/train/train.py)の
-  docstringに実測値がある)＋間引いて残す直近2チェックポイント(11GB×2=22GB)
-  ＋lerobot本体やpipのキャッシュ数GBで、合計55GB前後になる
+- **Volume Disk: 150GB。** フルパラメータ学習では最大105GB使う(実測。内訳は
+  [0節の表](#volume-diskは60gbでは足りない150gbにすること))。
+  `train_expert_only`の縮小版だけなら60GBでも足りるが、**このドキュメントが
+  扱うフルパラメータ学習では落ちる**
+
+### 使用量は`du`で見る——**Network Volumeでは`df`が使えない**
+
+Network Volumeを付けた場合、`/workspace`はRunPodのネットワーク越しの共有
+ストレージになる。**`df`はクラスタ全体の容量を出すので、自分が何GB使ったかは
+分からない**(2026-08-14の実測。`mfs#ca-mtl-3.runpod.net:9421  755T  425T  330T`
+と出た)。
+
+```bash
+du -sh /workspace/hf_home /workspace/out   # 自分の使用量はこちらで見る
+```
+
+11節の間引きスクリプトがログに出す「ディスク空き」も同じ理由で無意味な数字に
+なるが、**削除の判断は個数で行っているので動作には影響しない。**
 
 ### Pod作成時に、環境変数でデータの置き場所を`/workspace`へ向ける
 
@@ -258,7 +286,7 @@ cat ~/.ssh/id_ed25519.pub
 
 1. RunPodの「Templates」→「New Template」で、4節でpushしたイメージ名
    (`<ユーザー名>/parc2026-train-pi05:v1`)を指定する。
-2. **Container Diskは20GB程度、Volume Diskは60GB以上**にする(3節)。
+2. **Container Diskは20GB程度、Volume Diskは150GB**にする(3節)。
 3. **「Environment Variables」に`OUTPUT_ROOT=/workspace/out`と
    `HF_HOME=/workspace/hf_home`を追加する**(3節)。
 4. **「Expose TCP Ports」に`22`を追加する。** これが無いとRunPod側が
@@ -305,7 +333,7 @@ RunPodのSSHには、公開IPを使う「Full SSH」と、RunPodのサーバを�
 
 1. 「Deploy」→「GPU Pod」で、テンプレートは公式の**「RunPod PyTorch」系**
    (SSHが最初から使える状態で入っている)を選ぶ。
-2. **Container Diskは20GB程度、Volume Diskは60GB以上**にする(3節)。
+2. **Container Diskは20GB程度、Volume Diskは150GB**にする(3節)。
 3. **「Environment Variables」に`OUTPUT_ROOT=/workspace/out`と
    `HF_HOME=/workspace/hf_home`を追加する**(3節)。設定し忘れた場合は、
    接続後に`export`で代用できる。
@@ -424,9 +452,13 @@ python /opt/pi05/train_pi05.py --run-name pi05_full --steps 30000 --batch-size 6
 
 ## 11. チェックポイントの間引き——**そのまま貼れる形**
 
-チェックポイント1個は**フルパラメータ学習だと約21GB**(0節の推定)で、
+チェックポイント1個は**フルパラメータ学習だと約25GB**(0節の実測)で、
 LeRobotは古いものを自動で消さない。**放っておくと必ずディスクが尽きて
 学習が落ちる。**
+
+`--save-freq`の既定は500なので、500歩ごとに25GB増える。Volume Disk 150GBで、
+学習開始時点の使用量が30GB(初期重み＋データセット)なら、**2500歩の保存の
+途中で尽きる**(30＋25×5＝155GB)。間引きを入れれば80GB前後で安定する。
 
 ### **RunPodでは`crontab`は使えない。`nohup`の形を使う**
 
@@ -504,7 +536,9 @@ scp -P <port> -i ~/.ssh/id_ed25519 -r \
 `<IP>`と`<port>`は、Connectタブに出る**公開IP側**(Full SSH)のもの。
 RunPodのサーバを経由するBasic SSHのホスト名を使うとscpは動かない(5.3)。
 
-**11GBを転送するので回線次第で時間がかかる。** 途中で切れてやり直したくない
+**`pretrained_model`だけで8.7GBを転送するので回線次第で時間がかかる**
+(`training_state`まで持ち帰る必要は無い。評価に使うのは`pretrained_model`である)。
+途中で切れてやり直したくない
 場合、あるいはscpが通らない場合は、Hugging Face Hubへ上げる方法もある
 (7節で`hf auth login`は済んでいる前提)。
 
@@ -520,15 +554,22 @@ huggingface-cli upload <自分のHFユーザー名>/pi05_full_runpod \
 課金を止めること。** Volume Diskは3節の表のとおりStopでは消えないが、
 **Terminateすると消える**ので、Terminateする前には必ず持ち帰りを終えること。
 
+## 確認できたこと(2026-08-14 に道Aで実際に動かして)
+
+| 事柄 | 結果 |
+|---|---|
+| sshdとtmuxを足したDockerfileがビルドできるか | **できた。** Docker Hubへpushし、そのイメージのPodが動いた |
+| Docker Hubのカスタムイメージが「New Template」でそのまま認識されるか | **された** |
+| `/workspace`にボリュームを付けたとき、イメージの`/opt/pi05/`の中身が隠れないか | **隠れない。** Podの中で`/opt/pi05/prune_checkpoints.sh`をそのまま実行できた |
+| フルパラメータ学習が実際に始まるか | **始まった。** 500歩まで到達し、チェックポイントが保存された(1個25GB) |
+| `runpod_ssh_start.sh`で起動したコンテナにSSHで入れるか(公開鍵が`PUBLIC_KEY`で渡ってくるか、割り当てられたポートが22に向くか) | **入れた。** 「Expose TCP Ports」に`22`を足しておけば、Connectタブの公開IPとポートでそのまま入れる |
+
 ## まだ確認していないこと
 
 | 事柄 | 確かめ方 |
 |---|---|
-| sshdとtmuxを足したDockerfileが実際にビルドできるか(このマシンでは`docker build`の実行が許可されていないため未確認) | 4節のコマンドでビルドしたあと、下の「ビルドできたか確かめる」を実行する |
-| Docker Hubへpushしたカスタムイメージが、RunPodの「New Template」画面でそのまま認識されるか | 実際にテンプレートを作って試す |
-| Volume Diskを`/workspace`に付けたとき、イメージの`/opt/pi05/`の中身(`/workspace`の外)が本当に影響を受けないか | 実際にPodを作って`ls /opt/pi05/`を確認する |
-| `runpod_ssh_start.sh`で起動したコンテナに、実際にSSHで入れるか(公開鍵が`PUBLIC_KEY`で渡ってくるか、割り当てられたポートが22に向くか) | デプロイ後に`ssh root@<IP> -p <port>`を試す。Logsの`[runpod_ssh_start]`行も見る |
+| scpの実効速度(`pretrained_model`の8.7GBに何分かかるか) | 本番を待たず、500歩のチェックポイントで12節のscpを1回測る |
 | `sleep infinity`で待っているコンテナで、Web Terminalも問題なく開けるか | デプロイ後に実際に押してみる |
 | 80GBで本当にbatch_size=64、あるいはそれ以上が収まるか | 9節の実測 |
-| `huggingface-cli upload`が、11GB級のディレクトリでも問題なく完走するか(タイムアウト・分割の有無) | 実際にアップロードして試す |
+| `huggingface-cli upload`が、8.7GB級のディレクトリでも問題なく完走するか(タイムアウト・分割の有無) | 実際にアップロードして試す |
 | フルパラメータ学習が、train_expert_onlyより実際にスコアで勝るか | 両方のチェックポイントをpolicy_server.py経由で評価して比べる以外に確かめる方法が無い |
