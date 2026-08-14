@@ -173,7 +173,7 @@
 #          50 歩で選ぶと**捨てる区間が選択を奪う**（作った例で再現した）。
 #          版 3.4.0 で samples=3 に差が出なかったのは、**n=2 のとき距離の 96% が
 #          実行しない行動から来ていた**ためという疑いが濃い。
-__version__ = "3.12.0"
+__version__ = "4.4.0"
 
 import argparse
 import math
@@ -732,7 +732,7 @@ class MyPolicy(BasePolicy):
         # n=2 は 2 歩ごとに引き直すので、外れを引いてもすぐ打ち消される。
         # **外れを 16 歩ぶん引きずるのは n が大きいときだけ**で、そこは未測定。
         # π0.5 は n=16 なので、軸を開け直して測る。
-        self._samples = int(os.environ.get("PARC_SAMPLES", "1"))
+        self._samples = int(os.environ.get("PARC_SAMPLES", "3"))
         if self._samples > 1:
             self._install_chunk_sampler()
 
