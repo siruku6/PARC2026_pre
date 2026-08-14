@@ -662,6 +662,12 @@ hf download <HFユーザー名>/pi05_full_runpod \
 **9.4GBで16分。`scp`の4分の1以下である。**
 しかも**中身が同じ部分は送り直さない**ので、歩数を変えて何度も持ち帰るときに差が開く。
 
+> **`hf upload`が403で止まったら
+> [08_hf_transfer_troubleshooting.md](08_hf_transfer_troubleshooting.md)。**
+> 8/14の夜に実際に踏んだ。**`hf auth whoami`が通ることは書ける証拠にならない**
+> ——`hf upload`は送る前に必ず「リポジトリを作る」APIを叩き、
+> そこが権限で断られている。
+
 ### 学習ログの読み —— **段1は止まっていて、ここで頭打ちが破れた**
 
 ログは**Podの`/workspace/out/pi05_full.log`**にある(`OUTPUT_ROOT`の直下、

@@ -35,6 +35,7 @@
 | [howto/02_build_submission.md](howto/02_build_submission.md) | zip を作って出すとき |
 | **[howto/03_gpu_eval.md](howto/03_gpu_eval.md)** | **評価を回すとき（GPU マシン。放っておける）** |
 | **[howto/05_scripted_demos.md](howto/05_scripted_demos.md)** | **手本を台本で作るとき（撮影は手元の Mac の Docker。GPU が要るのは学習だけ）** |
+| **[howto/08_hf_transfer_troubleshooting.md](howto/08_hf_transfer_troubleshooting.md)** | **借りた GPU マシンから重みを運ぶとき。`hf upload` が 403 で止まったら** |
 | **[solution/colab_eval/](solution/colab_eval/README.md)** | **評価を回すとき（Colab。貼るのは `colab_eval.py` の呼び出し 8 行）** |
 | [solution/COLAB.md](solution/COLAB.md) | Colab で学習を回すとき |
 | [strategy/05_実測結果.md](strategy/05_実測結果.md) | 判断する前。数字はすべてここ |
