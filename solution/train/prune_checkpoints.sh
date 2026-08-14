@@ -2,7 +2,8 @@
 # 学習中のチェックポイントを、新しい方から KEEP 個だけ残して間引き続ける。
 #
 # LeRobot の save_checkpoint は古いチェックポイントを消さない（GitHub上の
-# train_utils.py で確認済み）。pi05 は1個 11GB あるため、save_freq=500 の
+# train_utils.py で確認済み）。pi05 は1個 11GB（train_expert_only）〜
+# 25GB（フルパラメータ。2026-08-14 に RunPod で実測）あるため、save_freq=500 の
 # ままだと数十個で数百GBに達し、ディスクが尽きて学習が落ちる。
 #
 # 使い方は3通り。**どれも同じスクリプトで、--once を付けるかどうかだけが違う。**

@@ -128,6 +128,23 @@ _CATEGORY_MARKERS: tuple[tuple[str, str], ...] = (
 # （`--per-cell 3`）ので、3 回は「同じタスクの全エピソードで揃った」に当たる。
 _ENVIRONMENT_REPEAT_MINIMUM = 3
 
+# 回数に頼らずに環境由来と決める条件（下の 2 つを同時に満たすとき）。
+#
+# **回数だけの判定は 1 タスク 1 本の一覧では発火しない。** 36 件の一覧
+# （`compe/val/EVAL_TASKS.csv`）は 1 タスク 1 本しか回さないため、
+# 同じ変位が 3 回そろうには**別のタスク 3 件**が同じ落下物を持つ必要がある。
+# 実際には LIVING_ROOM_SCENE2 の 2 件しか無く、`ketchup_1=544.6mm` が
+# 2 回どまりで見逃された（2026-08-14。π0.5 n=10 / n=16 / weak3x の
+# **3 つの別モデルで 0.1mm も違わず同じ値**が出ていた）。
+#
+# **1 歩で 10cm 動かすのは方策には物理的に無理である。** 制御周期は 0.05 秒
+# （`pipeline/total_score.py` の `control_dt`）で、手先が 1 歩に進む距離は
+# 成功した回で平均 5mm 前後（`rollout_recorder.py` の `_TAIL_STALL_M` の根拠）。
+# 1〜2 歩目で 100mm 超の変位が付いた物体は、**落下の続きが変位に化けたもの**
+# と断定できる。**回数の一致を待たずに落とせる。**
+_IMPOSSIBLE_COLLISION_STEPS = 2
+_IMPOSSIBLE_DISPLACEMENT_MM = 100.0
+
 # 早すぎる衝突を疑う歩数。**判定には使わず、報告だけする。**
 # 方策が本当に早く衝突することもあるので、これだけでは決められない。
 _EARLY_COLLISION_STEPS = 20
@@ -738,8 +755,17 @@ def _report_categories(lines: list[str], episodes: list[dict],
 def _environment_offenders(episodes: list[dict]) -> set[tuple[str, str]]:
     """環境側で最初から動いている疑いのある (物体名, 変位) を集める。
 
-    **判定は「同じ変位が何度も出たか」だけで行う。** 物体の名前では決めない
-    ——同じ物体でも、方策がぶつける回と環境が落とす回があるからである。
+    **物体の名前では決めない。** 同じ物体でも、方策がぶつける回と環境が
+    落とす回があるからである。代わりに次の 2 つの道で拾う。
+
+    | 道 | 決め手 | 効く場面 |
+    |---|---|---|
+    | 回数 | 同じ変位が `_ENVIRONMENT_REPEAT_MINIMUM` 回そろった | 1 タスクを何本も回す 84 件の一覧 |
+    | **物理** | **1〜2 歩目で 100mm 超動いた** | **1 タスク 1 本の 36 件の一覧** |
+
+    **物理の道が要る理由。** 36 件は 1 タスク 1 本なので、回数の道は
+    「別のタスク 3 件が同じ落下物を持つ」ときしか発火しない。2 件どまりで
+    `ketchup_1=544.6mm` を見逃した実例がある（定数のところに記録した）。
 
     Parameters
     ----------
@@ -756,10 +782,21 @@ def _environment_offenders(episodes: list[dict]) -> set[tuple[str, str]]:
         for episode in episodes
         for name, millimetres in episode["offenders"].items()
     )
-    return {
+    suspicious = {
         key for key, times in counts.items()
         if times >= _ENVIRONMENT_REPEAT_MINIMUM
     }
+
+    # **1 歩で 10cm は方策には出せない。** 回数の一致を待たずに落とす。
+    for episode in episodes:
+        first_step = episode.get("first_collision_step")
+        if first_step is None or first_step > _IMPOSSIBLE_COLLISION_STEPS:
+            continue
+        for name, millimetres in episode["offenders"].items():
+            if millimetres > _IMPOSSIBLE_DISPLACEMENT_MM:
+                suspicious.add((name, f"{millimetres:.1f}"))
+
+    return suspicious
 
 
 def _policy_offenders(
@@ -813,7 +850,7 @@ def _report_collision_source(lines: list[str], episodes: list[dict]) -> None:
 
     lines.append(f"  衝突した回 {len(collided)} 件 / 全 {total} 件")
     lines.append(f"  ├ 環境由来だけ            {by_environment_only:>4}"
-                 "  （同じ変位が繰り返し出ている物体しか動いていない）")
+                 "  （落下中の物体しか動いていない）")
     lines.append(f"  └ **方策由来を含む        {len(by_policy):>4}**"
                  "  ← 衝突対策で拾えるのはこの分")
     lines.append("")
@@ -825,7 +862,9 @@ def _report_collision_source(lines: list[str], episodes: list[dict]) -> None:
     if environment:
         lines.append("")
         lines.append("  環境由来と見た物体（同じ変位が "
-                     f"{_ENVIRONMENT_REPEAT_MINIMUM} 回以上）:")
+                     f"{_ENVIRONMENT_REPEAT_MINIMUM} 回以上、または "
+                     f"{_IMPOSSIBLE_COLLISION_STEPS} 歩以内で "
+                     f"{_IMPOSSIBLE_DISPLACEMENT_MM:.0f}mm 超）:")
         for name, value in sorted(environment):
             lines.append(f"    {name}={value}mm")
         lines.append("  → 原因は `pipeline/rollout.py` が初期位置を捉える前に")
