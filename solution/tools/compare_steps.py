@@ -17,6 +17,10 @@ import argparse
 import pathlib
 import re
 
+# 採点環境の 1 エピソードの上限。配布キットの既定は 600 だが、採点ログでは
+# 複数の提出で「ちょうど 300」が現れるため、本番の上限は 300 である。
+_MAX_STEPS = 300
+
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -91,8 +95,9 @@ def _print_totals(
     """合計歩数と成功件数、そして「成功した回だけの歩数」を出す。
 
     打ち切り（300 歩）が混ざると合計が天井に張り付くため、
-    **両方が成功した回に絞った歩数**も併せて出す。ここがいちばん素直に
-    「速くなったか」を映す。
+    **基準の回で完走していた件に絞った歩数**も併せて出す。**これがいちばん
+    素直に「遅くなっていないか」を映す。**打ち切りに達していた件は、救われると
+    大きく減るため、全体の合計では減速と相殺されて見えなくなる。
     """
     base_total = sum(left[1] for _, _, left, _ in rows)
     other_total = sum(right[1] for _, _, _, right in rows)
@@ -104,6 +109,14 @@ def _print_totals(
     base_both = sum(left[1] for left, _ in both)
     other_both = sum(right[1] for _, right in both)
 
+    # **基準の回で打ち切りに達していなかった件だけを見る。**
+    # 「両方が成功した件」だけでは、比べる回で失敗に転じた件が除外され、
+    # 減速を見落とす。版 3.10.0 では全体 +0.3% / 両方成功 +1.6% に対し、
+    # この指標が +13.1% で、唯一悪化を捉えていた。
+    finished = [(left, right) for _, _, left, right in rows if left[1] < _MAX_STEPS]
+    base_finished = sum(left[1] for left, _ in finished)
+    other_finished = sum(right[1] for _, right in finished)
+
     def _ratio(before: int, after: int) -> str:
         if before == 0:
             return "—"
@@ -112,9 +125,12 @@ def _print_totals(
     print(f"成功件数          {base_label} {base_wins:3}  /  {other_label} {other_wins:3}")
     print(f"合計歩数          {base_label} {base_total:5}  /  {other_label} {other_total:5}"
           f"  {_ratio(base_total, other_total)}")
-    print(f"**両方が成功した {len(both):2} 件だけの歩数**  "
+    print(f"両方が成功した {len(both):2} 件だけの歩数        "
           f"{base_label} {base_both:5}  /  {other_label} {other_both:5}"
           f"  {_ratio(base_both, other_both)}")
+    print(f"**基準で完走していた {len(finished):2} 件の歩数**  "
+          f"{base_label} {base_finished:5}  /  {other_label} {other_finished:5}"
+          f"  {_ratio(base_finished, other_finished)}")
     print()
     print("**歩数が減っていれば良い。** 本番で効くと確認できている量はこれだけである")
     print("（版 3.10.0 は歩数 +29% で総合スコアが 0.264 → 0.169 に落ちた）。")
