@@ -46,7 +46,7 @@ strong { font-weight: 600; }
 <h3>1.3 配布 notebook が凍結している視覚エンコーダまで学習した</h3>
 <p>配布された学習用 notebook は <code>freeze_vision_encoder=true</code>・<code>train_expert_only=true</code> で 行動側のみを更新する。<strong>1 回目の学習</strong>はこれに倣ったが、<strong>18,000 ステップ以降 loss が 0.2375 → 0.2352 → 0.2360 と頭打ちになった。</strong>残存誤差が凍結側にある可能性を考え、 <strong>2 回目の学習</strong>では視覚エンコーダを含む全パラメータを解いた。<strong>loss は 0.2100 まで低下し （−11%）、打ち切り時点でも下降が続いていた。</strong>本番スコアは 0.264 → 0.485、合計ステップ数は 13% 減少した。</p>
 <h3>1.4 その他</h3>
-<ul><li><strong>指示文の正規化</strong>: 学習データの指示文 40 種はすべて小文字で <code>pick up the …</code>（21 種） などの形だが、配布された評価用タスクが渡す文は <code>Pick the akita black bowl …</code> のように 大文字始まりで語も異なる。<strong>非公開タスクにも同じ書き換えが適用されていると推測し</strong>、 受け取った文を学習データ側の 40 種のうち最も近いものへ寄せた。<strong>重みを変えずに 0.166 → 0.181。</strong>採点ログでは 8 エピソードすべてが「寄せた」と記録され、推測を裏づけた。</li></ul>
+<ul><li><strong>指示文の正規化</strong>: 学習データの指示文 40 種はすべて小文字で <code>pick up the …</code>（21 種） などの形だが、配布された評価用タスクが渡す文は <code>Pick the akita black bowl …</code> のように 大文字始まりで語も異なる。<strong>非公開タスクにも同じ書き換えが適用されていると推測し</strong>、 受け取った文を学習データ側の 40 種のうち最も近いものへ寄せた。<strong>重みを変えずに 0.166 → 0.181。</strong></li></ul>
 <hr>
 <h2>2. モデル情報</h2>
 <p><strong>左列は予選ルール p14 の項目名をそのまま用いた。</strong></p>
