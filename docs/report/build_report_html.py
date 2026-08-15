@@ -25,7 +25,7 @@ _PAGE_STYLE = """
 * { box-sizing: border-box; }
 body {
     font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
-    font-size: 8.6pt; line-height: 1.5; color: #111; margin: 0;
+    font-size: {BODY_FONT_SIZE}; line-height: {LINE_HEIGHT}; color: #111; margin: 0;
 }
 h1 { font-size: 13pt; margin: 0 0 2mm; border-bottom: 1.4pt solid #111;
      padding-bottom: 1mm; }
@@ -36,10 +36,13 @@ h3 { font-size: 9pt; margin: 3mm 0 1.2mm; display: table;
 p, li { margin: 0 0 1.2mm; }
 ul { margin: 0 0 1.5mm; padding-left: 5mm; }
 table { border-collapse: collapse; width: 100%; margin: 1mm 0 2mm;
-        font-size: 8.1pt; }
+        font-size: {TABLE_FONT_SIZE}; }
 th, td { border: 0.4pt solid #999; padding: 0.7mm 1.4mm; text-align: left;
          vertical-align: top; }
 th { background: #f0f0f0; font-weight: 600; }
+/* 表の 1 列目（項目名）の幅。広げると項目名の折り返しが減って行数が縮むが、
+   広げすぎると 2 列目以降が折り返して逆に増える。--first-column-width で調整する。 */
+th:first-child, td:first-child { width: {FIRST_COLUMN_WIDTH}; }
 code { font-family: "SF Mono", Consolas, monospace; font-size: 7.8pt;
        background: #f4f4f4; padding: 0 0.6mm; }
 pre { background: #f4f4f4; border: 0.4pt solid #ccc; padding: 1.2mm;
@@ -60,6 +63,19 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output", default="docs/report/qualifier_report.html",
         help="書き出す HTML のパス",
+    )
+    parser.add_argument(
+        "--first-column-width", default="26%",
+        help="表の 1 列目の幅。項目名の折り返しを減らしたいときに広げる（既定 26%%）",
+    )
+    parser.add_argument(
+        "--body-font-size", default="8.6pt", help="本文の文字サイズ（既定 8.6pt）",
+    )
+    parser.add_argument(
+        "--table-font-size", default="8.1pt", help="表の文字サイズ（既定 8.1pt）",
+    )
+    parser.add_argument(
+        "--line-height", default="1.5", help="行間（既定 1.5）",
     )
     return parser.parse_args()
 
@@ -169,13 +185,21 @@ def main() -> None:
     source_path = pathlib.Path(args.source)
     output_path = pathlib.Path(args.output)
 
+    style = (_PAGE_STYLE
+             .replace("{FIRST_COLUMN_WIDTH}", args.first_column_width)
+             .replace("{BODY_FONT_SIZE}", args.body_font_size)
+             .replace("{TABLE_FONT_SIZE}", args.table_font_size)
+             .replace("{LINE_HEIGHT}", args.line_height))
+
     body = _render_document(source_path.read_text())
     output_path.write_text(
         "<!doctype html>\n<html lang=\"ja\"><head><meta charset=\"utf-8\">\n"
         "<title>PARC2026 予選レポート</title>\n"
-        f"<style>{_PAGE_STYLE}</style></head>\n<body>\n{body}\n</body></html>\n"
+        f"<style>{style}</style></head>\n<body>\n{body}\n</body></html>\n"
     )
     print(f"書き出した: {output_path}")
+    print(f"  1 列目の幅 {args.first_column_width} / 本文 {args.body_font_size}"
+          f" / 表 {args.table_font_size} / 行間 {args.line_height}")
     print("ブラウザで開いて「PDF に書き出す」を選ぶ。**ページ数をその場で確認できる。**")
 
 
