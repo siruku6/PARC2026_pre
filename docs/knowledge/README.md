@@ -39,7 +39,10 @@
 | [07_local_eval_cannot_rank.md](07_local_eval_cannot_rank.md) | 手元評価は本番の順位を付けられない | 1, 2, 3, 4 |
 | [08_chunk_length_follows_model_strength.md](08_chunk_length_follows_model_strength.md) | **chunk 長の最適値はモデルが強くなるほど大きくなる**（n=2 → 16） | 1, 2, 3, 4 |
 | [09_two_stage_training.md](09_two_stage_training.md) | **2 段学習。行動側で頭打ちにしてから凍結を解く** | 1, 4 |
+| [10_deciding_under_deadline.md](10_deciding_under_deadline.md) | **閾値がある勝負での危険の取り方。運ぶと出すを切り離す** | 2, 3, 4 |
+| [11_primary_sources.md](11_primary_sources.md) | **1 次資料の当たり方。踏んだ 4 件の間違い** | 2, 3 |
+| [12_workbench_accidents.md](12_workbench_accidents.md) | ディスク満杯・並行実行・大容量の運び方 | 2, 3 |
 
-**レポート（成果物 1）の必須欄 4 節は、これで全部埋まった。**
-次は 2 ページに収める下書きを作る。
+**成果物 1（レポート）は 8/15 に提出済み。**`../report/qualifier_report.md`。
+**次は成果物 2（Claude skill 化）。**06〜12 の「Claude 側 / 人間側」の欄が材料になる。
 
