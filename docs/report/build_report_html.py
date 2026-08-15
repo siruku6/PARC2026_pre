@@ -79,6 +79,9 @@ def _render_inline(text: str) -> str:
     escaped = html.escape(text)
     escaped = re.sub(r"`([^`]+)`", r"<code>\1</code>", escaped)
     escaped = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", escaped)
+    # 表のセル内で改行したいときだけ <br> を許す。
+    # それ以外のタグは escape したままにする（意図しない HTML を混ぜないため）。
+    escaped = escaped.replace("&lt;br&gt;", "<br>")
     return escaped
 
 
