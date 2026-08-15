@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<title>PARC2026 予選レポート</title>
+<style>
+@page { size: A4; margin: 14mm 13mm; }
+* { box-sizing: border-box; }
+body {
+    font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+    font-size: 8.6pt; line-height: 1.5; color: #111; margin: 0;
+}
+h1 { font-size: 13pt; margin: 0 0 2mm; border-bottom: 1.4pt solid #111;
+     padding-bottom: 1mm; }
+h2 { font-size: 10pt; margin: 3.5mm 0 1.5mm; border-left: 3pt solid #111;
+     padding-left: 2mm; }
+h3 { font-size: 9pt; margin: 2.5mm 0 1mm; }
+p, li { margin: 0 0 1.2mm; }
+ul { margin: 0 0 1.5mm; padding-left: 5mm; }
+table { border-collapse: collapse; width: 100%; margin: 1mm 0 2mm;
+        font-size: 8.1pt; }
+th, td { border: 0.4pt solid #999; padding: 0.7mm 1.4mm; text-align: left;
+         vertical-align: top; }
+th { background: #f0f0f0; font-weight: 600; }
+code { font-family: "SF Mono", Consolas, monospace; font-size: 7.8pt;
+       background: #f4f4f4; padding: 0 0.6mm; }
+pre { background: #f4f4f4; border: 0.4pt solid #ccc; padding: 1.2mm;
+      margin: 1mm 0 2mm; font-size: 7.4pt; line-height: 1.35; overflow: hidden; }
+pre code { background: none; padding: 0; }
+hr { border: none; border-top: 0.4pt solid #ccc; margin: 2.5mm 0; }
+strong { font-weight: 600; }
+</style></head>
+<body>
+<h1>PARC2026 予選レポート</h1>
+<p><strong>提出モデル: <code>policy_server</code> 4.2.0 ／ ベースモデル: π₀.₅ (Pi05)</strong></p>
+<hr>
+<h2>1. 学習・推論時の工夫点および試行錯誤</h2>
+<h3>1.1 総合スコアと最も強く相関したのは「エピソードのステップ数」だった</h3>
+<p>提出ごとの採点ログから、8 エピソードの合計ステップ数（<code>/act</code> の呼び出し回数）と 総合スコアを取り出したところ、<strong>両者に強い負の相関があった（15 提出で r = −0.87）</strong>。 評価タスク・初期状態・乱数シードは提出間で固定されているため、下表の各行は <strong>1 つの要素だけを変えた対照</strong>である。</p>
+<table><thead><tr><th>変えた要素</th><th>合計ステップ数</th><th>総合スコア</th></tr></thead><tbody><tr><td>Action chunk 長 10 → <strong>16</strong></td><td>1,428 → <strong>1,142（−20%）</strong></td><td>0.177 → <strong>0.264</strong></td></tr><tr><td>chunk 境界の平滑化を追加</td><td>1,142 → <strong>1,471（+29%）</strong></td><td>0.264 → <strong>0.169</strong></td></tr><tr><td>指示文の正規化を追加（<strong>重みは不変</strong>）</td><td>1,922 → <strong>1,617（−16%）</strong></td><td>0.166 → <strong>0.181</strong></td></tr><tr><td><strong>重みを全パラメータ学習後のものへ</strong></td><td>1,142 → <strong>991（−13%）</strong></td><td><strong>0.264 → 0.485</strong></td></tr></tbody></table>
+<p>打ち切りは 300 ステップで、成功エピソードは参照デモの 0.96 倍のステップ数を要していた。 <strong>方策に時間的余裕がなく、わずかな遅延がそのまま未完了に変わる。</strong>一方で実行時間は 1 時間の上限に対し 32 倍の余裕があり（110 秒）、制約になっていない。<strong>「ステップ数」と 「実時間」は別の量である。</strong>この区別で施策の採否が一意に定まった。</p>
+<ul><li><strong>採らない（ステップ数が増える）</strong>: chunk 境界の平滑化と Real-Time Chunking。 いずれも境界で直前の計画へ引き戻す機構で、動作が前進しない。RTC は自己評価で 成功 8→4・ステップ数 +39.5% となったため提出しなかった。</li><li><strong>採る（実時間のみ消費）</strong>: 推論ステップ数の増加、chunk の複数サンプリング。</li></ul>
+<h3>1.2 自己評価の成功率では、提出物の優劣を判定できなかった</h3>
+<p>自己評価（36 タスク）で <strong>ともに 25→28 件へ改善</strong>した 2 つの変更が、本番では <strong>0.169 と 0.485</strong> に分かれた。総合スコアは成功率のみで決まらず重み設定も非公開のため、 <strong>成功率は代理指標にならない。</strong>ステップ数に切り替えて初めて両者を事前に区別できた。</p>
+<h3>1.3 Action chunk 長の最適値は、モデルの能力とともに大きくなった</h3>
+<table><thead><tr><th>モデル</th><th>最適な chunk 長</th><th>根拠</th></tr></thead><tbody><tr><td>SmolVLA (0.4B)</td><td><strong>2〜5</strong></td><td>50→10→5→2 で単調改善、1 で悪化（0.166→0.080）</td></tr><tr><td><strong>π₀.₅ (4.14B)</strong></td><td><strong>16</strong></td><td>10→16 で 0.177→0.264。32 は自己評価で 36 件中 13 件が打ち切り</td></tr></tbody></table>
+<p>短すぎる chunk は境界ごとに別のモードを引いて動作が不連続になり、長すぎる chunk は 開ループ区間が伸びて応答性を失う。<strong>モデルを差し替えたら chunk 長は測り直す。</strong> 前モデルの最適値 2 を流用していれば 0.264 には届かなかった。</p>
+<h3>1.4 学習は 2 段構成とし、行動側の頭打ちを確認してから凍結を解いた</h3>
+<p>段 1（行動側のみ更新）は 18,000 ステップ以降 loss が 0.2375 → 0.2352 → 0.2360 と頭打ちに なった。<strong>視覚エンコーダを含む全パラメータを解いた段 2 で 0.2100 へ低下し（−11%）、 打ち切り時点でも下降が続いていた。</strong>残存誤差が凍結側にあったと解釈できる。本番スコアは 0.264 → 0.485、合計ステップ数は 13% 減少した。</p>
+<h3>1.5 その他</h3>
+<ul><li><strong>指示文の正規化</strong>: 評価が与える指示文が学習データの表記と異なるため、学習データ側の 40 種のうち最も近い表記へ寄せた。<strong>重みを変えずに 0.166 → 0.181。</strong></li><li><strong>自己評価の上限</strong>: 初期状態の復元直後に物体が落下し、方策の動作前に衝突判定が成立する 事例が 2 件あった（複数モデルで変位が同一）。方策側では回避できないため、自己評価の 上限を 34/36 として扱った。</li></ul>
+<hr>
+<h2>2. モデル情報</h2>
+<table><thead><tr><th>項目</th><th>内容</th></tr></thead><tbody><tr><td>モデル名・バージョン</td><td><code>policy_server</code> <strong>4.2.0</strong></td></tr><tr><td>ベースモデル名</td><td><strong>π₀.₅ (Pi05)</strong>（Physical Intelligence／LeRobot 実装）</td></tr><tr><td>ベース重みの入手元</td><td>Hugging Face <strong><code>lerobot/pi05_libero_base</code></strong></td></tr><tr><td>重みの revision</td><td><strong><code>a217bfd3b14673cf2ce597e69997ab21866438dd</code></strong></td></tr><tr><td>提出 zip の SHA-256</td><td><strong><code>5cf6b9836f46805ba10bdde93ead02913c65d050adfb20d6800a3788b4cdb9ee</code></strong></td></tr><tr><td>チェックポイントの SHA-256</td><td><code>0c5d542e0052863a7d2caba141c076003b82d3156cd355654e4ba72cc8edfe6d</code>（<code>model.safetensors</code>）</td></tr><tr><td>モデル構成</td><td>Vision-Language-Action。総パラメータ <strong>4,143,404,816</strong>（safetensors テンソル 813 個）</td></tr><tr><td>推論方式</td><td><strong>Flow matching</strong>、ノイズ除去 <strong>10 ステップ</strong></td></tr><tr><td><strong>Action chunk</strong></td><td><strong>有り。長さ 50 を生成し、先頭 16 ステップを実行して再生成</strong></td></tr><tr><td>後処理</td><td>直前行動との EMA 平滑化（係数 0.3、姿勢 6 次元のみ。グリッパは対象外）、指示文の正規化</td></tr></tbody></table>
+<p>推論時の構成は、採点ログの先頭行として出力される。</p>
+<pre><code>policy_server 4.2.0  model=pi05  num_inference_steps=10  n_action_steps=16
+ema_alpha=0.3  blend_steps=0  samples=1  rtc=off  normalize=on</code></pre>
+<hr>
+<h2>3. 学習情報</h2>
+<table><thead><tr><th>項目</th><th>段 1</th><th>段 2（提出モデル）</th></tr></thead><tbody><tr><td>学習データ</td><td><code>lerobot/libero_plus</code> rev <code>f3f49f426d75030177b18778374005bc12ccd588</code></td><td>同左</td></tr><tr><td>データ規模</td><td><strong>14,347 エピソード／2,238,036 フレーム／40 タスク</strong>（独自収集・生成データなし）</td><td>同左</td></tr><tr><td>学習方法の区分</td><td><strong>Full fine-tuning</strong>（LoRA・adapter は不使用）</td><td><strong>Full fine-tuning</strong></td></tr><tr><td>出発点</td><td><code>lerobot/pi05_libero_base</code></td><td>段 1 の 24,000 ステップ</td></tr><tr><td><strong>学習対象パラメータ</strong></td><td><strong>行動側のみ 693,422,112</strong></td><td><strong>全パラメータ 4,143,404,816</strong></td></tr><tr><td>学習ステップ数</td><td><strong>24,000</strong>（batch 16、0.172 epoch）</td><td><strong>3,000</strong>（batch 64、0.086 epoch）</td></tr><tr><td>最適化</td><td>AdamW、betas (0.9, 0.95)、weight decay 0.01、grad clip 1.0</td><td>同左</td></tr><tr><td>学習率</td><td>2.5e-5 → 2.5e-6（cosine decay、warmup 1,000）</td><td>5e-6 → 2.5e-6（同形式）</td></tr><tr><td>乱数シード</td><td>42</td><td>42</td></tr><tr><td>計算資源</td><td>H100 (20GB)、9 時間 31 分</td><td>A100 80GB PCIe、8 時間 33 分</td></tr></tbody></table>
+<p>2 段合計で 576,000 フレーム（データ全体の <strong>0.257 epoch</strong>）のみを使用した。</p>
+<hr>
+<h2>4. 権利関係</h2>
+<table><thead><tr><th>対象</th><th>ライセンス</th></tr></thead><tbody><tr><td>ベースモデル <code>lerobot/pi05_libero_base</code></td><td><strong>Gemma Terms of Use</strong>（モデルカードの <code>license: gemma</code>）</td></tr><tr><td>学習データ <code>lerobot/libero_plus</code></td><td><strong>明示的なライセンス表記なし。</strong>上流の LIBERO-plus にも LICENSE の記載がない。基盤である LIBERO は MIT License (Copyright (c) 2023 Lifelong Robot Learning) であり、LIBERO 由来部分にはこれが及ぶ</td></tr><tr><td>提出物に含む第三者コード</td><td><strong>LeRobot v0.6.0 — Apache License 2.0。</strong>提出物には同ライブラリのソース 527 ファイルを同梱しており、各ファイルの著作権表示およびライセンスヘッダは保持している（Python ファイル 487 件中 477 件）。<strong>LICENSE ファイル本体は同梱していない</strong></td></tr><tr><td>提出物のうち自作部分</td><td><code>policy_server.py</code>、<code>requirements.txt</code></td></tr></tbody></table>
+</body></html>
