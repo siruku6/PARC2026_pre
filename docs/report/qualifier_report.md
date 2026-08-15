@@ -92,7 +92,7 @@ ema_alpha=0.3  blend_steps=0  samples=1  rtc=off  normalize=on
 |---|---|---|
 | 学習データ | `lerobot/libero_plus` rev `f3f49f426d75030177b18778374005bc12ccd588` | 同左 |
 | データ規模 | **14,347 エピソード／2,238,036 フレーム／40 タスク**（独自収集・生成データなし） | 同左 |
-| 学習方法の区分 | **Full fine-tuning**（LoRA・adapter は不使用） | **Full fine-tuning** |
+| 学習方法の区分 | **部分 fine-tuning**（重みを直接更新。**LoRA・adapter は不使用**） | **Full fine-tuning**（同上） |
 | 出発点 | `lerobot/pi05_libero_base` | 段 1 の 24,000 ステップ |
 | **学習対象パラメータ** | **行動側のみ 693,422,112** | **全パラメータ 4,143,404,816** |
 | 学習ステップ数 | **24,000**（batch 16、0.172 epoch） | **3,000**（batch 64、0.086 epoch） |

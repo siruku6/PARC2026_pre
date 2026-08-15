@@ -23,7 +23,7 @@
 | | **段 1** | **段 2（提出したもの）** |
 |---|---|---|
 | 出発点 | `lerobot/pi05_libero_base`（rev `a217bfd3…`） | **段 1 の 24,000 歩** |
-| 区分 | **Full fine-tuning（LoRA・adapter は不使用）** | **Full fine-tuning** |
+| 区分 | **部分 fine-tuning**（重みを直接更新。LoRA・adapter は不使用） | **Full fine-tuning**（同上） |
 | **学習対象** | **行動側（action expert）のみ**。`freeze_vision_encoder=true` / `train_expert_only=true` | **全パラメータ**。`freeze_vision_encoder=false` / `train_expert_only=false` |
 | **更新したパラメータ数** | **693,422,112（693M）** | **4,143,404,816（4.14B）＝全部** |
 | モデル全体のパラメータ数 | 4,143,404,816（両段とも同じ） | 同左 |
@@ -37,8 +37,40 @@
 
 **2 段合わせて 576,000 フレーム＝データ全体の 0.257 epoch しか引いていない。**
 
-**LoRA・adapter は使っていない。** どちらの段も重みを直接更新する Full fine-tuning
-である（初期に SmolVLA + LoRA も試したが、本番スコアが悪化したため採らなかった）。
+## 「範囲」と「方式」は別の軸である
+
+**「視覚エンコーダを凍結した＝軽量な学習（LoRA）」ではない。**2 つの軸を分けて書く。
+
+| 軸 | 段 1 | 段 2 |
+|---|---|---|
+| **どの範囲を更新したか** | **一部**（693,422,112 / 4,143,404,816 ＝ 16.7%） | 全部 |
+| **どう更新したか** | **重みを直接更新** | 重みを直接更新 |
+
+**LoRA は「どう更新するか」の方式**で、低ランクの追加行列を挟み元の重みは固定する。
+その場合 `lora_A` / `lora_B` 等のテンソルが増えるが、**813 個のまま増えていない。**
+
+```bash
+# 設定と重みの両方から確かめる
+python3 -c "
+import json
+for p in ('work/artifacts/model_weights_pi05_024000/train_config.json',
+          'work/train/pi05_full_runpod/003000/train_config.json'):
+    c = json.load(open(p))
+    print(p.split('/')[-2], 'peft=', c.get('peft'), 'use_peft=', c['policy'].get('use_peft'))"
+
+python3 -c "
+import json, struct
+for p in ('work/artifacts/model_weights_pi05_024000/model.safetensors',
+          'work/artifacts/pi05_rp3000/model.safetensors'):
+    with open(p,'rb') as f:
+        h = json.loads(f.read(struct.unpack('<Q', f.read(8))[0]))
+    h.pop('__metadata__', None)
+    print(len(h), [k for k in h if 'lora' in k.lower()] or 'lora なし')"
+```
+
+> **このコンペの初期に試した SmolVLA では、実際に LoRA を使っている**
+> （版 1.0.0「LoRA 20,000 歩」・本番 0.016）。**π0.5 の 2 段とは別物なので、
+> レポートでは書き分ける。**
 
 ## 段 2 で loss が動いた
 
