@@ -9,7 +9,7 @@
 |---|---|---|
 | **ベースモデルのライセンス** | **Gemma Terms of Use**（HF のカードで `license: gemma`） | HF `lerobot/pi05_libero_base` rev `a217bfd3…` のカード metadata |
 | **学習データのライセンス** | **MIT License** | HF `Sylvest/LIBERO-plus`（原典・作者本人の配布）のカードに `license: mit` |
-| **第三者コードのライセンス** | **LeRobot v0.6.0 — Apache License 2.0** | 同梱ソースのファイル冒頭のヘッダ（487 ファイル中 **477** に保持） |
+| **第三者コードのライセンス** | **LeRobot v0.6.0 — Apache License 2.0** | 同梱ソースのファイル冒頭のヘッダ（**配布元のまま保持。剥がしていない**） |
 
 ## 【8/15 訂正】学習データは MIT である —— 見る場所が 3 つに分かれていた
 
@@ -48,11 +48,13 @@ print(HfApi().repo_info('Sylvest/LIBERO-plus', repo_type='dataset').card_data.ge
 > 留保される点に留意すること。（中略）なお LIBERO-plus は LIBERO（MIT）を基盤とする
 > 派生物であり、LIBERO 由来部分には LIBERO の MIT License が及ぶ。」
 
-**我々が学習に使ったのは `lerobot/libero_plus`**（LIBERO-plus を LeRobot 形式に
-直したもの）で、**こちらのカードにもライセンス欄が無い。**上流と同じ状態である。
+**この記載は GitHub 側だけを見たものである。**上の【8/15 訂正】のとおり、
+**原典の HuggingFace 配布（`Sylvest/LIBERO-plus`）には `license: mit` が明示されている。**
+我々が学習に使った `lerobot/libero_plus` はその LeRobot 形式版で、
+カードにライセンス欄が写されていないだけである。
 
-**レポートにはこの状態をそのまま書く。**「MIT」と書いてはいけない —— LIBERO 由来の
-部分に MIT が及ぶだけで、LIBERO-plus 全体が MIT なのではない。
+**レポートには MIT と書く。**根拠は原典のカードであり、運営の
+`THIRD_PARTY_LICENSES.md` ではない。
 
 ## 提出物に入っている第三者コード
 
@@ -80,8 +82,14 @@ print([n for n in z.namelist() if 'licen' in n.lower()] or 'LICENSE は 1 つも
 ```
 
 **Apache-2.0 は再配布時にライセンス本文の同梱を求める（第 4 条）。**
-提出物にはファイル単位の著作権表示とライセンスヘッダは残っている（477/487）が、
+提出物にはファイル単位の著作権表示とライセンスヘッダが残っているが、
 **`LICENSE` ファイルそのものが入っていない。**
+
+> **「487 件中 477 件に保持」という比率は書かない。**ヘッダが無い 10 件は
+> **配布元がもともと付けていないもの**である（protobuf/gRPC の自動生成 2 件、
+> 別権利者の表示がある 1 件、4〜15 行の再輸出や `__init__.py` など）。
+> **比率を出すと「残り 10 件は？」を招くが、答えは「こちらは何もしていない」である。**
+> **「配布元のまま保持している」と書けば正確で、論点もぶれない。**
 
 | | |
 |---|---|
