@@ -8,10 +8,33 @@
 | 欄 | 値 | 出典 |
 |---|---|---|
 | **ベースモデルのライセンス** | **Gemma Terms of Use**（HF のカードで `license: gemma`） | HF `lerobot/pi05_libero_base` rev `a217bfd3…` のカード metadata |
-| **学習データのライセンス** | **明示的なライセンスが無い**（下記） | 運営配布の `THIRD_PARTY_LICENSES.md` ／ HF `lerobot/libero_plus` のカードに `license` 欄が無い |
+| **学習データのライセンス** | **MIT License** | HF `Sylvest/LIBERO-plus`（原典・作者本人の配布）のカードに `license: mit` |
 | **第三者コードのライセンス** | **LeRobot v0.6.0 — Apache License 2.0** | 同梱ソースのファイル冒頭のヘッダ（487 ファイル中 **477** に保持） |
 
-## 学習データのライセンスは「無い」——運営自身がそう書いている
+## 【8/15 訂正】学習データは MIT である —— 見る場所が 3 つに分かれていた
+
+**「ライセンス未記載」は誤りだった。**同じ LIBERO-plus でも、配布物が 3 つあり、
+**表記があるのは原典の HuggingFace だけ**である。
+
+| どこ | ライセンス |
+|---|---|
+| **`Sylvest/LIBERO-plus`（HF・作者本人の配布）** | **`license: mit`。これが原典** |
+| `sylvestf/LIBERO-plus`（GitHub・コード） | LICENSE ファイルが無い |
+| `lerobot/libero_plus`（HF・我々が学習に使ったもの） | カードに `license` 欄が無い（再配布時に書き写されていない） |
+
+**運営の `THIRD_PARTY_LICENSES.md` は GitHub 側だけを見ている。**そのため
+「未記載」と書かれているが、**原典の HF には MIT が明示されている。**
+
+```bash
+.venv/bin/python3 -c "
+from huggingface_hub import HfApi
+print(HfApi().repo_info('Sylvest/LIBERO-plus', repo_type='dataset').card_data.get('license'))"
+```
+
+**教訓: ライセンスは「使った配布物」だけでなく「原典」まで遡って確認する。**
+再配布された形にはライセンスが写されていないことがある。
+
+## 運営の記載（GitHub 側を見たもの）
 
 `THIRD_PARTY_LICENSES.md`（配布リポジトリ直下・`init` コミット・2026-07-30・運営作成）に
 そのまま書いてある。**推測ではない。**
