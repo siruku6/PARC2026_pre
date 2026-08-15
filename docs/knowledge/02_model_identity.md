@@ -68,9 +68,31 @@ grep -m1 'policy_server' outputs/260814_230032_pi0.5_4.2.0.md
 shasum -a 256 submission_4.2.0_rp3000_blend0.zip
 ```
 
-## 未取得
+## 「提出チェックポイントのハッシュ値」に何を書くか
 
-| 欄 | 状態 |
-|---|---|
-| `model.safetensors` 単体の sha256 | 計算中（9.35 GB）。**zip のハッシュがあれば必須欄は満たせる**が、あると親切 |
-| パラメータ数 4.14B の 1 次資料 | 学習ログの出力から取る。**まだ引用元を特定していない** |
+**必須欄が言う「チェックポイント」は、学習されたパラメータのことである。**
+`model_weights/` の 12 ファイルのうち、**学習で内容が変わるのは
+`model.safetensors` だけ**であることを確かめた。
+
+| ファイル | 1 回目 vs 2 回目 | 正体 |
+|---|---|---|
+| **`model.safetensors`** | **違う** | **学習されるパラメータ**（sha256 `0c5d542e…`） |
+| `policy_preprocessor_step_2_normalizer_processor.safetensors` | **完全に同一** | データセットの統計値（mean/std/min/max/count）。学習では更新されない |
+| `policy_postprocessor_step_0_unnormalizer_processor.safetensors` | **完全に同一** | 同上 |
+| `config.json` | 違う | `freeze_vision_encoder` と `train_expert_only` の 2 つだけ（**学習時にしか効かない印**） |
+| `vlm/`（トークナイザ 4 件）・`train_config.json`・`.gitattributes` | 同一 | 学習対象外 |
+
+**したがって `model.safetensors` の sha256 を書けば必須欄を満たす。**
+提出 zip 全体の sha256（`5cf6b983…`）は「提出物そのものの同一性」を示す別の値なので、
+参考として添える。
+
+```bash
+# 学習で変わったのが 1 ファイルだけであることの確かめ方
+for f in policy_preprocessor_step_2_normalizer_processor.safetensors \
+         policy_postprocessor_step_0_unnormalizer_processor.safetensors config.json; do
+    printf '%-64s ' "$f"
+    a=$(sha256sum "work/artifacts/model_weights_pi05_024000/$f" | cut -c1-16)
+    b=$(sha256sum "work/artifacts/pi05_rp3000/$f" | cut -c1-16)
+    [ "$a" = "$b" ] && echo "同一" || echo "違う"
+done
+```

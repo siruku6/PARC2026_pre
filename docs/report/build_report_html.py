@@ -31,7 +31,8 @@ h1 { font-size: 13pt; margin: 0 0 2mm; border-bottom: 1.4pt solid #111;
      padding-bottom: 1mm; }
 h2 { font-size: 10pt; margin: 3.5mm 0 1.5mm; border-left: 3pt solid #111;
      padding-left: 2mm; }
-h3 { font-size: 9pt; margin: 2.5mm 0 1mm; }
+h3 { font-size: 9pt; margin: 3mm 0 1.2mm; display: table;
+     border-bottom: 0.5pt solid #666; padding-bottom: 0.6mm; }
 p, li { margin: 0 0 1.2mm; }
 ul { margin: 0 0 1.5mm; padding-left: 5mm; }
 table { border-collapse: collapse; width: 100%; margin: 1mm 0 2mm;
