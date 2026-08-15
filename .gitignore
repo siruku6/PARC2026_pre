@@ -16,3 +16,5 @@ outputs/
 
 .venv/
 venv/
+# レポートの HTML は md と build_report_html.py から作れる生成物
+docs/report/qualifier_report.html
