@@ -31,7 +31,7 @@ bddl は存在しない（`libero/libero/envs/env_wrapper.py` が `_view_` で�
 `format_result_line` にある**（ここに書式を置くと、直すたびにパッチを
 差し替えることになる）。
 
-5 番目は数字では埋まらない穴である。**本番の 8 本中 4 本が 300 歩を
+5 番目は数字では埋まらない穴である。**本番の 8 本中 4 本が 300 ステップを
 使い切って届いていない**のに、止まっているのか往復しているのか掴めずに
 空振りしているのかが分からない。録画の本体も
 [rollout_recorder.py](rollout_recorder.py) にあり、ここから
@@ -221,7 +221,7 @@ _PATCHES: tuple[tuple[str, str, str, str], ...] = (
     ),
     (
         "pipeline/rollout.py",
-        "1 歩ごとに、方策が見た画像と出した行動を貯める",
+        "1 ステップごとに、方策が見た画像と出した行動を貯める",
         "            action = self.env_manager.apply_action_noise(action, perturbation)\n",
         "            action = self.env_manager.apply_action_noise(action, perturbation)\n"
         "\n"

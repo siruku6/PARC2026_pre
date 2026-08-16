@@ -1,7 +1,7 @@
 # 07. 学習後に変えてよい設定はどれか
 
 `n_action_steps` を 50 から 5 へ縮めるとスコアが 0.058 → 0.1409 になった
-（[../strategy/05_実測結果.md](../strategy/05_実測結果.md)）。**このつまみは重みを
+（[../strategy/05_実測結果.md](../strategy/05_実測結果.md)）。**この設定値は重みを
 学習し直さずに変えている。** そこで当然こう疑いたくなる。
 
 > 学習時は 50 の想定だったのに、推論で 5 にして、重みと食い違わないのか。
@@ -27,15 +27,15 @@ SmolVLA は 1 回の推論で**未来 50 ステップ分の行動列**をまと�
 ```mermaid
 flowchart LR
     O["観測 1 枚"] --> P["1 回の推論"]
-    P --> C["行動 50 歩分<br/>= chunk_size"]
-    C --> E["先頭 5 歩だけ実行<br/>= n_action_steps"]
+    P --> C["行動 50 ステップ分<br/>= chunk_size"]
+    C --> E["先頭 5 ステップだけ実行<br/>= n_action_steps"]
     E --> O
-    C -.->|6〜50 歩目は捨てる| X["未使用"]
+    C -.->|6〜50 ステップ目は捨てる| X["未使用"]
 ```
 
 | | `chunk_size` | `n_action_steps` |
 |---|---|---|
-| 決めているもの | **1 回で何歩分作るか** | 作った分のうち**何歩実行してから作り直すか** |
+| 決めているもの | **1 回で何ステップ分作るか** | 作った分のうち**何ステップ実行してから作り直すか** |
 | 既定値 | 50 | 50 |
 | 学習後に変えて | **駄目** | **よい** |
 
@@ -55,10 +55,10 @@ flowchart LR
 self._queues[ACTION].extend(actions.transpose(0, 1)[: self.config.n_action_steps])
 ```
 
-`actions` は既に生成し終えた 50 歩分で、`[: n_action_steps]` はその**リストのスライス**である。
-モデルはどちらの値でも同じ 50 歩を計算しており、変わるのは**キューへ積む本数**だけである。
+`actions` は既に生成し終えた 50 ステップ分で、`[: n_action_steps]` はその**リストのスライス**である。
+モデルはどちらの値でも同じ 50 ステップを計算しており、変わるのは**キューへ積む本数**だけである。
 キューが空になったら次の推論が走る（`_check_get_actions_condition`）ので、
-5 にすれば 5 歩ごとに観測を見直すことになる。
+5 にすれば 5 ステップごとに観測を見直すことになる。
 
 **学習の経路にはこの値が一度も出てこない。** 損失を計算する
 [`SmolVLAPolicy.forward`](https://github.com/huggingface/lerobot/blob/v0.6.0/src/lerobot/policies/smolvla/modeling_smolvla.py#L358)
@@ -77,7 +77,7 @@ if self.n_action_steps > self.chunk_size:
     raise ValueError(...)
 ```
 
-5 ≤ 50 なので通る。**作った以上の歩数は実行できない**、という当たり前の話である。
+5 ≤ 50 なので通る。**作った以上のステップ数は実行できない**、という当たり前の話である。
 
 ## 変えてはいけない理由：`chunk_size` はモデルの形そのもの
 
@@ -85,7 +85,7 @@ if self.n_action_steps > self.chunk_size:
 
 | 場所 | やっていること | いつ効くか |
 |---|---|---|
-| [configuration_smolvla.py:155](https://github.com/huggingface/lerobot/blob/v0.6.0/src/lerobot/policies/smolvla/configuration_smolvla.py#L155) | `action_delta_indices = range(chunk_size)` — **データセットから 1 サンプルで何歩分読むか** | 学習 |
+| [configuration_smolvla.py:155](https://github.com/huggingface/lerobot/blob/v0.6.0/src/lerobot/policies/smolvla/configuration_smolvla.py#L155) | `action_delta_indices = range(chunk_size)` — **データセットから 1 サンプルで何ステップ分読むか** | 学習 |
 | [modeling_smolvla.py:767](https://github.com/huggingface/lerobot/blob/v0.6.0/src/lerobot/policies/smolvla/modeling_smolvla.py#L767) | `att_masks += [1] * chunk_size` — 注意マスクの長さ | 学習・推論 |
 | [modeling_smolvla.py:805](https://github.com/huggingface/lerobot/blob/v0.6.0/src/lerobot/policies/smolvla/modeling_smolvla.py#L805) | `suffix_out[:, -chunk_size:]` — **損失を取る範囲** | 学習 |
 | [modeling_smolvla.py:827](https://github.com/huggingface/lerobot/blob/v0.6.0/src/lerobot/policies/smolvla/modeling_smolvla.py#L827) | `actions_shape = (bsize, chunk_size, max_action_dim)` — 生成するテンソルの形 | 推論 |
@@ -96,7 +96,7 @@ if self.n_action_steps > self.chunk_size:
 返すかを決める。**`chunk_size` を変えると学習データの形自体が変わる。**
 
 さらに厄介なのは、**変えても例外にならない**点である。行の長さが変わるだけなので
-`from_pretrained()` は通り、生成も走る。50 歩分の教師で育った重みに 20 歩分の
+`from_pretrained()` は通り、生成も走る。50 ステップ分の教師で育った重みに 20 ステップ分の
 入力を流す、という状態が**黙って**成立する。
 
 ## いま何をしているか
@@ -120,11 +120,11 @@ config.n_action_steps = int(os.environ.get("PARC_N_ACTION_STEPS", "5"))   # ← 
 学習側は `chunk_size = n_action_steps = 50` の既定のままである
 （`checkpoints/020000/pretrained_model/train_config.json` で確認）。
 
-## 残っている無駄：学習は 50 歩分すべてを等しく教えている
+## 残っている無駄：学習は 50 ステップ分すべてを等しく教えている
 
-不整合ではないが、**割に合っていない**ところがある。損失は 50 歩分すべてに
+不整合ではないが、**割に合っていない**ところがある。損失は 50 ステップ分すべてに
 等しくかかる（`suffix_out[:, -chunk_size:]` の全体を `F.mse_loss` に通す）のに、
-本番で実行するのは先頭 5 歩だけである。**6〜50 歩目を上手くする学習の労力は、
+本番で実行するのは先頭 5 ステップだけである。**6〜50 ステップ目を上手くする学習の労力は、
 本番では使われない。**
 
 詰めるなら選択肢は 2 つある。

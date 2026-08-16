@@ -2,7 +2,7 @@
 
 **結論：技術的には可能。ただし残り時間・GPU メモリ・推論速度の3点が未検証。**
 [train_pi05.py](../../solution/train/train_pi05.py) を用意したので、まず
-`--smoke-test` で 20GB GPU に載るかを確かめてから本番の歩数へ進むこと。
+`--smoke-test` で 20GB GPU に載るかを確かめてから本番のステップ数へ進むこと。
 
 > 出典はすべて GitHub の v0.6.0 タグそのもの、Hugging Face の API/モデルカード、
 > `nvidia-smi` の実測。リポジトリ内の他の `.md` は出典にしていない。
@@ -32,7 +32,7 @@ SmolVLA と同様 rename_map は要らない見込み——ただし **pi05 側�
 ## SmolVLA と比べて不利な点
 
 1. **パラメータ数がおよそ 9 倍**（pi05 ≈ 2.3B、SmolVLA ≈ 450M）。
-   80GB 前提のレシピを 20GB へ切り詰める調整（VLM 凍結・batch を絞る・
+   80GB 前提のレシピを 20GB へ切り詰める調整（VLM 固定・batch を絞る・
    gradient checkpointing）が要り、載るかは実測するまで分からない。
 2. **libero_plus 向けの公開チェックポイントが無い。** SmolVLA の出発点
    `lerobot/smolvla_libero_plus` は既にこのコンペのデータで一度学習済みだが

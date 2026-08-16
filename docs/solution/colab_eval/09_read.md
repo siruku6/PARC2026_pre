@@ -191,7 +191,7 @@ elif RECORD_DIR:
 def run_label() -> str:
     """設定から、取り違えようのないディレクトリ名を作る。"""
     # **既定値は policy_server.py と一致させる。** ここが 10 のままだったので、
-    # つまみを空にして回した回（実際は n=5）が `n10` と名付けられていた。
+    # 設定値を空にして回した回（実際は n=5）が `n10` と名付けられていた。
     # 名前が実際と食い違うと、後から見て取り違える。
     parts = [f"n{POLICY_ENV.get('PARC_N_ACTION_STEPS', '5')}", f"ep{N_EPISODES}"]
     # **塊の番号を入れる。** 3 つ回すと退避先が 3 つ並ぶが、名前が同じだと
@@ -248,7 +248,7 @@ except Exception as error:
 │   ├── 0812_034512_chunk1.results.txt
 │   ├── 0812_044003_chunk2.results.txt
 │   └── 0812_053455_chunk3.results.txt
-├── 0812_042900_n5_ep1_chunk1/               … 塊 1（つまみ無し・既定の n=5）
+├── 0812_042900_n5_ep1_chunk1/               … 塊 1（設定値無し・既定の n=5）
 ├── 0812_052100_n5_ep1_chunk2/               … 塊 2
 ├── 0812_061500_n5_ep1_chunk3/               … 塊 3
 └── 0810_101500_n5_ep20_all_ema_alpha03/     … 84 件を一度に・EMA 0.3

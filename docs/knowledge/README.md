@@ -32,14 +32,14 @@
 |---|---|---|
 | [01_report_requirements.md](01_report_requirements.md) | **レポートの必須欄**（予選 PDF p14・p23 から） | 1 |
 | [02_model_identity.md](02_model_identity.md) | モデル名・ベース・revision・ハッシュ・推論方式・chunk 長 | 1, 4 |
-| [03_training_info.md](03_training_info.md) | 学習データ・歩数・学習対象・ハイパーパラメータ | 1, 4 |
+| [03_training_info.md](03_training_info.md) | 学習データ・ステップ数・学習対象・ハイパーパラメータ | 1, 4 |
 | [04_licenses.md](04_licenses.md) | 権利関係（ベースは gemma・データは未記載・同梱コードは Apache-2.0） | 1 |
-| [05_score_history.md](05_score_history.md) | **採点ログ 16 本から抜いた全記録**（版・設定・歩数・秒・スコア） | 1, 4 |
-| [06_step_count_drives_score.md](06_step_count_drives_score.md) | **歩数が最も強い説明変数（r = −0.87）。悪くする要素と良くする要素** | 1, 2, 3, 4 |
+| [05_score_history.md](05_score_history.md) | **採点ログ 16 本から抜いた全記録**（版・設定・ステップ数・秒・スコア） | 1, 4 |
+| [06_step_count_drives_score.md](06_step_count_drives_score.md) | **ステップ数が最も強い説明変数（r = −0.87）。悪くする要素と良くする要素** | 1, 2, 3, 4 |
 | [07_local_eval_cannot_rank.md](07_local_eval_cannot_rank.md) | 手元評価は本番の順位を付けられない | 1, 2, 3, 4 |
 | [08_chunk_length_follows_model_strength.md](08_chunk_length_follows_model_strength.md) | **chunk 長の最適値はモデルが強くなるほど大きくなる**（n=2 → 16） | 1, 2, 3, 4 |
-| [09_two_stage_training.md](09_two_stage_training.md) | **2 段学習。行動側で頭打ちにしてから凍結を解く** | 1, 4 |
-| [10_deciding_under_deadline.md](10_deciding_under_deadline.md) | **閾値がある勝負での危険の取り方。運ぶと出すを切り離す** | 2, 3, 4 |
+| [09_two_stage_training.md](09_two_stage_training.md) | **2 段学習。行動側で頭打ちにしてから固定を解除する** | 1, 4 |
+| [10_deciding_under_deadline.md](10_deciding_under_deadline.md) | **線を超えないと意味がない勝負での危険の取り方。運ぶと出すを切り離す** | 2, 3, 4 |
 | [11_primary_sources.md](11_primary_sources.md) | **1 次資料の当たり方。踏んだ 4 件の間違い** | 2, 3 |
 | [12_workbench_accidents.md](12_workbench_accidents.md) | ディスク満杯・並行実行・大容量の運び方 | 2, 3 |
 

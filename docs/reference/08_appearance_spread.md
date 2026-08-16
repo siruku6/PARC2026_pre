@@ -115,7 +115,7 @@ LIBERO-plus のカテゴリ 7 つのうち、名前で見分けが付くもの�
 
 | 案 | 中身 | 得 | 損 |
 |---|---|---|---|
-| **A. 全部録画して撮り直す** | `PARC_RECORD_WHICH=all` で 84 件を再評価し、成功も残す | 実際にモデルへ渡った画面そのもの。歩数の重みも本番どおり | **評価 1 本（2.3 時間）を使う。** GPU 枠が要る |
+| **A. 全部録画して撮り直す** | `PARC_RECORD_WHICH=all` で 84 件を再評価し、成功も残す | 実際にモデルへ渡った画面そのもの。ステップ数の重みも本番どおり | **評価 1 本（2.3 時間）を使う。** GPU 枠が要る |
 | **B. 変種の初期状態から画像を作る** | 方策を動かさず、変種の初期画面だけを描く | GPU 評価が要らない。母集団を広く取れる | 描画（osmesa）の配線が別に要る。1 コマ目だけで動きは見ない |
 
 どちらでも、このスクリプト（`solution/tools/measure_appearance.py`）の測り方は
@@ -141,7 +141,7 @@ python3 solution/tools/measure_appearance.py <dir> --markdown
 python3 solution/tools/measure_appearance.py <dir> --include-text-band
 ```
 
-**焼かれた文字を外している。** 録画には歩数やカメラ名が白い文字で焼かれている
+**焼かれた文字を外している。** 録画にはステップ数やカメラ名が白い文字で焼かれている
 （[rollout_recorder.py](../../solution/tools/rollout_recorder.py) の `_annotate`。
 上端 y=18、下端 y=高さ-30 と高さ-10）。この帯を残すと明るさが +0.008、
 コントラストが最大 +0.027 水増しされるので、既定では上下の帯を切り落とす。

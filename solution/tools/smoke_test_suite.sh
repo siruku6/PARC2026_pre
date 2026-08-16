@@ -13,7 +13,7 @@
 #
 # ホストから実行する。イメージは `docker build -t parc2026 .` で作ったもの。
 #
-#   bash solution/tools/smoke_test_suite.sh              # 5 タスク・20 歩
+#   bash solution/tools/smoke_test_suite.sh              # 5 タスク・20 ステップ
 #   TASKS=7 MAX_STEPS=40 bash solution/tools/smoke_test_suite.sh
 #   RECORD=1 bash solution/tools/smoke_test_suite.sh     # 録画の配線も確かめる
 #

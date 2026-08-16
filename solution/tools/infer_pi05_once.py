@@ -71,14 +71,14 @@
 `--steps` の既定は 12 で、**チェックポイントの `n_action_steps`（10）を必ず 1 度
 またぐ**ようにしてある。またいだ歩でだけ推論が走り、それ以外は作った列を順に
 出すだけなので、時間の出方が 2 通りあることが表に出る。CPU で試すときは
-`--steps 2`（重い 1 歩 ＋ 軽い 1 歩）で十分である。
+`--steps 2`（重い 1 ステップ ＋ 軽い 1 ステップ）で十分である。
 
 Reads:
   - <weights>/config.json, model.safetensors, policy_pre/postprocessor*
   - $HF_HOME/hub/models--google--paligemma-3b-pt-224（**トークナイザだけ**。
     VLM 本体の重みはチェックポイントに入っているので取りに行かない）
 Generates:
-  - 標準出力に、1 歩ごとの所要時間と行動の値（異常があれば終了コード 1）
+  - 標準出力に、1 ステップごとの所要時間と行動の値（異常があれば終了コード 1）
 """
 
 from __future__ import annotations
@@ -125,7 +125,7 @@ def _parse_args() -> argparse.Namespace:
                         help="get_action を何回呼ぶか（既定 12。n_action_steps=10 を"
                              "またぐので、推論が走る歩と走らない歩の両方が出る）")
     parser.add_argument("--n-action-steps", type=int, default=0,
-                        help="1 回の推論で作った列を何歩ぶん使うか。"
+                        help="1 回の推論で作った列を何ステップぶん使うか。"
                              "0 ならチェックポイントの値（10）のまま")
     parser.add_argument("--num-inference-steps", type=int, default=0,
                         help="flow matching の刻み数。0 なら設定のまま（既定 10）")
@@ -180,7 +180,7 @@ def _resolve_tokenizer(requested: str) -> str:
 
 def _read_config(weights: Path, device: str, n_action_steps: int,
                  num_inference_steps: int):
-    """チェックポイントの設定を読み、呼び出し側のつまみで上書きして返す。
+    """チェックポイントの設定を読み、呼び出し側の設定値で上書きして返す。
 
     Parameters
     ----------
@@ -441,7 +441,7 @@ def _peak_memory_gb(device: str) -> float:
 
 def _run_steps(policy, preprocessor, postprocessor, env_preprocessor,
                instruction: str, steps: int, torch_module) -> list[np.ndarray]:
-    """行動を `steps` 歩ぶん出し、1 歩ごとの時間を表にして出す。
+    """行動を `steps` 歩ぶん出し、1 ステップごとの時間を表にして出す。
 
     Parameters
     ----------

@@ -2,13 +2,13 @@
 # GPU マシンで検証用スイートを流す。**放っておける形で回す。**
 #
 # Colab には 3 つの困りごとがあった。
-#   - 見ていないと切れる（学習は 9,100 歩で切れた）
+#   - 見ていないと切れる（学習は 9,100 ステップで切れた）
 #   - `/content` は消えるので Drive へ逃がす仕掛けが要る
 #   - GPU が当たるかどうかが運次第
 # GPU マシンなら 3 つとも消える。**しかも Colab より速い**（下の「なぜ速いか」）。
 #
 # ホスト（GPU マシン）で直接実行する。Docker は使わない。
-# 配布 Dockerfile は CPU 描画（osmesa）で固定されており、**1 歩 300 ms** で
+# 配布 Dockerfile は CPU 描画（osmesa）で固定されており、**1 ステップ 300 ms** で
 # 84 件が 16 時間になる。EGL で GPU 描画にすれば 39 ms で済む。
 #
 #   bash solution/tools/run_gpu_eval.sh --check     # 5 分。配線だけ確かめる
@@ -22,7 +22,7 @@
 #   N_EPISODES=1   **タスクあたり**の本数。84 件あるので 1 のままにする
 #   PER_CELL=3     スイート × カテゴリあたりの本数（CSV 全体で 84 件）
 #   RECORD=1       ロールアウトを mp4 に撮る（既定で有効。失敗した回だけ）
-#   PARC_*         推論のつまみ。空なら policy_server.py の既定が効く
+#   PARC_*         推論の設定値。空なら policy_server.py の既定が効く
 #
 # Reads:
 #   - solution/policy_server.py, solution/tools/*.py
@@ -102,7 +102,7 @@ echo "===== 1/6 GPU 描画（EGL）を確かめる ====="
 # **ここが最大の罠である。** libglvnd は「どのベンダ実装を使うか」を
 # egl_vendor.d の JSON で決める。NVIDIA の登録が無いと Mesa の
 # ソフトウェア実装を掴み、**例外も警告も出さずに 11 倍遅くなる。**
-# Colab で実際に踏んだ（1 歩 300 ms のまま 84 件を流すと 16 時間になる）。
+# Colab で実際に踏んだ（1 ステップ 300 ms のまま 84 件を流すと 16 時間になる）。
 export MUJOCO_GL=egl
 ICD=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
 if [ ! -f "$ICD" ]; then
@@ -142,7 +142,7 @@ fi
 echo "  キット: $KIT_DIR"
 
 # EGL が本当に GPU を掴んだかを、**測って**確かめる。
-# ソフトウェア描画だと 1 歩あたり 10 倍近く遅い。ここで分かれば 90 分を無駄にしない。
+# ソフトウェア描画だと 1 ステップあたり 10 倍近く遅い。ここで分かれば 90 分を無駄にしない。
 echo "  描画の速さを測る（ソフトウェア描画の取りこぼしを防ぐ）"
 MUJOCO_GL=egl PYTHONPATH="$KIT_DIR/LIBERO-plus:$KIT_DIR:$KIT_DIR/compe" \
     "$KIT_PYTHON" - <<'PY'
@@ -225,7 +225,7 @@ fi
 for name in PARC_N_ACTION_STEPS PARC_SAMPLES PARC_BLEND_STEPS PARC_EMA_ALPHA; do
     if [ -n "$(eval "printf '%s' \"\${$name:-}\"")" ]; then
         export "$name"
-        echo "  つまみ: $name=$(eval "printf '%s' \"\$$name\"")"
+        echo "  設定値: $name=$(eval "printf '%s' \"\$$name\"")"
     fi
 done
 
@@ -276,7 +276,7 @@ else
 fi
 
 # **全部をログへ流し込むと、画面が何時間も無言になる。**
-# キットは 50 歩ごとに `[進捗]` を出しているので、
+# キットは 50 ステップごとに `[進捗]` を出しているので、
 # **それを画面へ、全文はログへ**という形にする（`-u` と `--line-buffered`
 # が無いと数分ぶん溜まってから出る）。終了コードは python のものを使う。
 set +e

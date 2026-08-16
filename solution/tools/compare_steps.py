@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""2 つの評価の回を、**歩数**で 1 件ずつ突き合わせる。
+"""2 つの評価の回を、**ステップ数**で 1 件ずつ突き合わせる。
 
-本番で効いたと確認できている量は歩数だけである（版 3.10.0 は歩数が
+本番で効いたと確認できている量はステップ数だけである（版 3.10.0 はステップ数が
 +29% になって総合スコアが 0.264 → 0.169 に落ちた）。秒数は 1 時間の上限に
 対して 15 倍以上の余裕があるので、判断には使わない。
 
-`summarize_gpu_eval.py` は成功率と滑らかさを出すが、**歩数の合計を
+`summarize_gpu_eval.py` は成功率と滑らかさを出すが、**ステップ数の合計を
 1 件ずつ対にして出さない**ため、この道具を足した。
 
 Reads:
@@ -34,7 +34,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _read_results(run_dir: pathlib.Path) -> dict[str, tuple[str, int]]:
-    """`eval.log` の `[結果]` 行から、タスク名 → (見出し, 歩数) を作る。
+    """`eval.log` の `[結果]` 行から、タスク名 → (見出し, ステップ数) を作る。
 
     Parameters
     ----------
@@ -44,7 +44,7 @@ def _read_results(run_dir: pathlib.Path) -> dict[str, tuple[str, int]]:
     Returns
     -------
     results : dict[str, tuple[str, int]]
-        タスク名をキーに、`成功`／`衝突`／`未完了` と歩数を持つ。
+        タスク名をキーに、`成功`／`衝突`／`未完了` とステップ数を持つ。
     """
     text = (run_dir / "eval.log").read_text(errors="replace")
     results: dict[str, tuple[str, int]] = {}
@@ -64,7 +64,7 @@ def _print_table(
     base_label: str,
     other_label: str,
 ) -> None:
-    """共通するタスクだけを、歩数の差が大きい順に並べて出す。"""
+    """共通するタスクだけを、ステップ数の差が大きい順に並べて出す。"""
     shared = sorted(set(base) & set(other))
     rows = []
     for name in shared:
@@ -76,7 +76,7 @@ def _print_table(
     print(f"共通するタスク {len(shared)} 件"
           f"（{base_label} {len(base)} 件 / {other_label} {len(other)} 件）")
     print()
-    print(f"{'タスク':46} {base_label:>16} {other_label:>16} {'歩数差':>8}")
+    print(f"{'タスク':46} {base_label:>16} {other_label:>16} {'ステップ数差':>8}")
     print("-" * 92)
     for delta, name, left, right in rows:
         mark = "" if left[0] == right[0] else "  ←変わった"
@@ -92,10 +92,10 @@ def _print_totals(
     base_label: str,
     other_label: str,
 ) -> None:
-    """合計歩数と成功件数、そして「成功した回だけの歩数」を出す。
+    """合計ステップ数と成功件数、そして「成功した回だけのステップ数」を出す。
 
-    打ち切り（300 歩）が混ざると合計が天井に張り付くため、
-    **基準の回で完走していた件に絞った歩数**も併せて出す。**これがいちばん
+    打ち切り（300 ステップ）が混ざると合計が天井に張り付くため、
+    **基準の回で完走していた件に絞ったステップ数**も併せて出す。**これがいちばん
     素直に「遅くなっていないか」を映す。**打ち切りに達していた件は、救われると
     大きく減るため、全体の合計では減速と相殺されて見えなくなる。
     """
@@ -123,17 +123,17 @@ def _print_totals(
         return f"{(after / before - 1) * 100:+.1f}%"
 
     print(f"成功件数          {base_label} {base_wins:3}  /  {other_label} {other_wins:3}")
-    print(f"合計歩数          {base_label} {base_total:5}  /  {other_label} {other_total:5}"
+    print(f"合計ステップ数          {base_label} {base_total:5}  /  {other_label} {other_total:5}"
           f"  {_ratio(base_total, other_total)}")
-    print(f"両方が成功した {len(both):2} 件だけの歩数        "
+    print(f"両方が成功した {len(both):2} 件だけのステップ数        "
           f"{base_label} {base_both:5}  /  {other_label} {other_both:5}"
           f"  {_ratio(base_both, other_both)}")
-    print(f"**基準で完走していた {len(finished):2} 件の歩数**  "
+    print(f"**基準で完走していた {len(finished):2} 件のステップ数**  "
           f"{base_label} {base_finished:5}  /  {other_label} {other_finished:5}"
           f"  {_ratio(base_finished, other_finished)}")
     print()
-    print("**歩数が減っていれば良い。** 本番で効くと確認できている量はこれだけである")
-    print("（版 3.10.0 は歩数 +29% で総合スコアが 0.264 → 0.169 に落ちた）。")
+    print("**ステップ数が減っていれば良い。** 本番で効くと確認できている量はこれだけである")
+    print("（版 3.10.0 はステップ数 +29% で総合スコアが 0.264 → 0.169 に落ちた）。")
 
 
 def main() -> None:

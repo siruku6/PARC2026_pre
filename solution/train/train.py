@@ -8,16 +8,16 @@
 | 設定 | 出発点の重み | いまの既定 | 8/11 までの既定 |
 |---|---|---|---|
 | データ | **全 14,347 本**（`episodes=None`） | **全部** | 200 本（40 タスク × 5） |
-| 歩数 × バッチ | 20,000 × 32 | 20,000 × 32 | 20,000 × **8** |
+| ステップ数 × バッチ | 20,000 × 32 | 20,000 × 32 | 20,000 × **8** |
 | `optimizer_lr` | 1e-4 | 1e-4 | **3e-4** |
 | `scheduler_warmup_steps` | 1,000 | 1,000 | **100** |
 | `scheduler_decay_lr` | 2.5e-6 | 2.5e-6 | **3e-5** |
 | 画像拡張 | **無効** | **無効** | **有効** |
 
-**8/11 までの既定で 20,000 歩まわしたら、本番スコアが 0.1409 から 0.016 へ
+**8/11 までの既定で 20,000 ステップまわしたら、本番スコアが 0.1409 から 0.016 へ
 落ちた**（8.8 倍の悪化）。
 
-**上の表のうち、一次情報で裏が取れるのは学習率・warmup・最後の学習率・歩数だけである。**
+**上の表のうち、一次情報で裏が取れるのは学習率・warmup・最後の学習率・ステップ数だけである。**
 それらは重みの `config.json` に残る（`optimizer_lr=3e-4`、
 `scheduler_warmup_steps=100`、`scheduler_decay_steps=20000`）。
 **データの本数とバッチ数は残らない。** あの回は学習マシンから `merged_model/` だけを
@@ -38,17 +38,17 @@ LoRA を外して全パラメータ学習にする。
 Colab と違い、出力はホストのディレクトリに残るため Drive 同期は要らない。
 中断しても `--resume` で続きから始められる。
 
-    python train.py                          # 出発点と同じ条件で 20,000 歩
+    python train.py                          # 出発点と同じ条件で 20,000 ステップ
     python train.py --steps 5000             # まず短く回して速さを測る
     python train.py --batch-size 16          # VRAM が足りないとき
     python train.py --episodes-per-task 5    # 少ないデータで試す（**悪化の再現**）
     python train.py --resume                 # 直近のチェックポイントから
 
-    # LoRA を VLM の q/v まで広げ、歩数を 3 倍にする（8/12 の本命）
+    # LoRA を VLM の q/v まで広げ、ステップ数を 3 倍にする（8/12 の本命）
     python train.py --run-name vlm_lora32_60k --peft-scope vlm \
         --lora-r 32 --lora-alpha 32 --steps 60000
 
-    # 苦手タスクの割合を 3 倍にし、300 歩を超える手本を落とす（8/11 の本命）
+    # 苦手タスクの割合を 3 倍にし、300 ステップを超える手本を落とす（8/11 の本命）
     python train.py --run-name weak3x_max300 --max-demo-steps 300 \
         --emphasize-tasks \
           "put the bowl on top of the cabinet" \
@@ -107,8 +107,8 @@ _BRIGHTNESS_COLUMN = "stats/observation.images.front/mean"
 # 学習される重みは 37 層 742,656 個（0.17%）から **93 層 4,303,360 個（r=32 で
 # 0.96%）** になる。**この数は起動直後の `num_learnable_params=` で確かめられる。**
 #
-# 根拠は 2 つ。π0 で当て先を切り分けた研究（arXiv:2607.10172）は VLM を凍結すると
-# 成功率 0.76 → 0.15、視覚エンコーダの凍結で 0.14 まで落ちるとし、「r=16〜32 を
+# 根拠は 2 つ。π0 で当て先を切り分けた研究（arXiv:2607.10172）は VLM を固定すると
+# 成功率 0.76 → 0.15、視覚エンコーダの固定で 0.14 まで落ちるとし、「r=16〜32 を
 # VLM と action expert に均等に当てよ」を推奨している。LIBERO-plus で測った
 # VLA-GSE（arXiv:2605.06175）は逆に全パラメータ学習が忘却で PEFT に負ける
 # （74.9%）とし、**2.51% を学習する帯**を良しとしている。0.17% はどちらの
@@ -125,7 +125,7 @@ _PEFT_TARGETS_VLM = (
 )
 
 # **視覚エンコーダを外した版。** 20 GB では上の `vlm` が入らなかった（8/12、
-# 1 歩も進まず OutOfMemory）。**入らない理由は当て先の数ではなく、順番である。**
+# 1 ステップも進まず OutOfMemory）。**入らない理由は当て先の数ではなく、順番である。**
 #
 #   視覚エンコーダ ──→ 言語（VLM の 16 層）──→ action expert ──→ 損失
 #
@@ -171,10 +171,10 @@ def _parse_args() -> argparse.Namespace:
                              "**得意タスクを間引いて実現する** —— LeRobot は"
                              "エピソード番号を集合として扱うため、重複させても効かない")
     parser.add_argument("--max-demo-steps", type=int, default=0,
-                        help="手本がこの歩数を超えるエピソードを使わない。**0 なら落とさない。**"
+                        help="手本がこのステップ数を超えるエピソードを使わない。**0 なら落とさない。**"
                              "300 を渡すと 401 本（フレームの 6.3%%）が落ちる —— "
-                             "**上限 300 歩の採点では再現できないことが証明済み**である"
-                             "（成功した回は手本の 0.95 倍の歩数で終わっている）")
+                             "**上限 300 ステップの採点では再現できないことが証明済み**である"
+                             "（成功した回は手本の 0.95 倍のステップ数で終わっている）")
     # **検証専用にするタスクを学習から外す。** 摂動版は元のタスクの実演を
     # 共有するため、変種の id を抜いても同じ指示文の別の変種が学習に残る。
     # **指示文で丸ごと外さないと、手元の検証は「覚えた度合い」を測ってしまう。**
@@ -384,7 +384,7 @@ def _select_emphasized_episodes(
     """苦手タスクの割合を上げ、長すぎる手本を落としてエピソードを選ぶ。
 
     **引ける回数が足りないのであって、データは足りていない。**
-    20,000 歩 × バッチ 32 = 640,000 回しか引けず、全体は約 219 万フレームなので
+    20,000 ステップ × バッチ 32 = 640,000 回しか引けず、全体は約 219 万フレームなので
     **1 コマあたり 0.29 回**しか見られない。**苦手タスクにも 370〜445 本あり、
     その 7 割は一度も見られていない。** だから「苦手タスクの、まだ見ていない
     コマ」を増やすのは筋が通る。
@@ -393,8 +393,8 @@ def _select_emphasized_episodes(
     `episode_index.isin(episodes)` で**集合として**扱う（`datasets/io_utils.py`）。
     **だから得意タスクを間引いて割合を上げる。**
 
-    `max_demo_steps` を超える手本は落とす。**上限 300 歩の採点では再現できない
-    ことが証明済み**で（成功した回は手本の 0.95 倍の歩数で終わっている）、
+    `max_demo_steps` を超える手本は落とす。**上限 300 ステップの採点では再現できない
+    ことが証明済み**で（成功した回は手本の 0.95 倍のステップ数で終わっている）、
     学習枠を使う意味がないうえ、遅い動きを教えてしまう。
 
     Parameters
@@ -406,9 +406,9 @@ def _select_emphasized_episodes(
     multiplier : float
         そのタスクの割合を何倍にするか。
     max_demo_steps : int
-        手本の歩数の上限。**0 なら落とさない。**
+        手本のステップ数の上限。**0 なら落とさない。**
     draws : int
-        学習で引く回数（歩数 × バッチ）。1 コマを何回見るかの表示に使う。
+        学習で引く回数（ステップ数 × バッチ）。1 コマを何回見るかの表示に使う。
 
     holdout : list[str]
         検証専用にするタスクの指示文。空なら何も外さない。
@@ -767,7 +767,7 @@ def _resolve_dataset_root(dataset_root: Path | None) -> Path:
     counts = frame["task"].value_counts()
     print(f"[train] 渡されたデータセットを使う: {root}")
     print(f"[train]   {len(frame):,} 本 / {frame['task'].nunique()} タスク")
-    print(f"[train]   1 本あたりの歩数 {int(frame['length'].min())}〜"
+    print(f"[train]   1 本あたりのステップ数 {int(frame['length'].min())}〜"
           f"{int(frame['length'].max())}（中央 {int(frame['length'].median())}）")
     print(f"[train]   本数の少ないタスク 3 つ: "
           f"{[(name, int(value)) for name, value in counts.tail(3).items()]}")
@@ -864,22 +864,22 @@ def _select_without_holdout(dataset_root: Path, holdout: list[str]) -> list[int]
 
 
 def _warn_if_schedule_mixed(args: argparse.Namespace) -> None:
-    """学習率と歩数が、信用できる 2 つの条件のどちらにも当てはまらないなら言う。
+    """学習率とステップ数が、信用できる 2 つの条件のどちらにも当てはまらないなら言う。
 
     一次情報で分かっている条件は 2 つだけである。
 
-    | 出典 | 学習率 / warmup / 最後 | 歩数 |
+    | 出典 | 学習率 / warmup / 最後 | ステップ数 |
     |---|---|---|
     | 出発点の重みの `train_config.json` | 1e-4 / 1,000 / 2.5e-6 | 20,000 |
     | 配布ノートブック（`examples/` の LoRA ノート） | 3e-4 / 100 / 3e-5 | 3,000 |
 
     **8/11 に本番 0.1409 → 0.016 と 8.8 倍悪化した回は、後者の学習率で
-    前者の歩数を回していた**（重みの `config.json` に `optimizer_lr=3e-4`、
+    前者のステップ数を回していた**（重みの `config.json` に `optimizer_lr=3e-4`、
     `scheduler_warmup_steps=100`、`scheduler_decay_steps=20000` が残っている）。
     **この組み合わせを認めている出典は無い。**
     経緯は `docs/reference/11_training_schedule.md`。
 
-    止めはしない。**歩数を減らして試す使い方は正しい**ので、
+    止めはしない。**ステップ数を減らして試す使い方は正しい**ので、
     判断は渡す側に残す。
 
     Parameters

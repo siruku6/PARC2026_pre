@@ -2,7 +2,7 @@
 
 > **いまは [`ce.setup_policy()`](../../../solution/tools/colab_eval.py) が全部やる。**
 > **コードの正はそちらである。** このページは**何が起きているかと、その理由**を
-> 残す。**`PARC_*` の 4 つのつまみの表（下）はここにしかない。**
+> 残す。**`PARC_*` の 4 つの設定値の表（下）はここにしかない。**
 
 Colab のシステム Python（3.12）に、`policy_server.py` が要るものだけ足す。
 LeRobot は学習用ノートブックと同じ手順で入れる。
@@ -119,9 +119,9 @@ run(check, tail=20)
 | 場所 | `solution/policy_server.py` |
 | 提出物との関係 | **完全に同一**。zip はこのファイルをルート直下に入れているだけ |
 | Colab での違い | `vendor/` が無いので、同梱版ではなくインストール済みの LeRobot を使う |
-| つまみ | `PARC_*` の 4 つ。**`PARC_N_ACTION_STEPS` と `PARC_EMA_ALPHA` は既定で有効**（下表） |
+| 設定値 | `PARC_*` の 4 つ。**`PARC_N_ACTION_STEPS` と `PARC_EMA_ALPHA` は既定で有効**（下表） |
 
-## `PARC_*` の 4 つのつまみ
+## `PARC_*` の 4 つの設定値
 
 `policy_server.py` が読む環境変数はこれで全部である
 （`HF_HUB_OFFLINE` などのキャッシュ関連を除く）。**`POLICY_ENV` に書かなければ

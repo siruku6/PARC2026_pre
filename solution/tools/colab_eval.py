@@ -866,7 +866,7 @@ def _start_server(plan: EvalPlan) -> subprocess.Popen[bytes]:
         cwd=str(SUBMISSION_DIR), env=_server_env(plan),
         stdout=log, stderr=subprocess.STDOUT,
     )
-    print(f"サーバー起動 (pid={server.pid})  つまみ: {plan.policy_env or '既定'}")
+    print(f"サーバー起動 (pid={server.pid})  設定値: {plan.policy_env or '既定'}")
 
     for elapsed in range(300):
         if _health_answers(plan.port):
@@ -1230,7 +1230,7 @@ def run(
     print(f"  タスク  {_count_tasks(plan.tasks_csv)} 件（{plan.tasks_csv}）")
     print(f"  1 タスクあたり {plan.n_episodes} 本 / 打ち切り {plan.max_steps} 歩"
           + (f" / **疎通確認 {plan.max_tasks} タスクだけ**" if plan.max_tasks else ""))
-    print(f"  つまみ  {plan.policy_env or '既定（n_action_steps=5 / ema_alpha=0.3）'}")
+    print(f"  設定値  {plan.policy_env or '既定（n_action_steps=5 / ema_alpha=0.3）'}")
     print(f"  出力先  {plan.results_dir}")
     print(f"  録画    {plan.record_dir or '（撮らない）'}")
     print(f"  名前    {plan.label}")

@@ -18,7 +18,7 @@
 1 コマは左が広い視野（front）、右が手先（wrist）の 2 枚を横に並べたものなので、
 左右に分けて測る。**明るさ・背景の摂動は広い視野に出る**ので front を主に見る。
 
-**焼かれた文字は外す。** 録画には歩数やカメラ名が白い文字で焼かれている
+**焼かれた文字は外す。** 録画にはステップ数やカメラ名が白い文字で焼かれている
 （`rollout_recorder._annotate`。上端 y=18、下端 y=高さ-30・高さ-10）。この文字が
 コントラストを最大 0.03 ほど水増しするので、既定では上下の文字帯を切り落として
 測る（`--include-text-band` で切らずに測れる）。
@@ -53,7 +53,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-# ファイル名の形： <結末>_<タスク名[:70]>_ep<N>_<歩数>steps.mp4
+# ファイル名の形： <結末>_<タスク名[:70]>_ep<N>_<ステップ数>steps.mp4
 # （rollout_recorder.py の `_write` が付ける）。
 _NAME_RE = re.compile(
     r"^(?P<outcome>成功|衝突|未完了)_(?P<task>.+)_ep(?P<ep>\d+)_(?P<steps>\d+)steps$"

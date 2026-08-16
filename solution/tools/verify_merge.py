@@ -45,7 +45,7 @@ _BASE_MODEL_REVISION = "7bb70aa5bc92b82c9239142775d3a173103567ff"
 _EXPECTED_LORA_TARGETS = ("q_proj", "k_proj", "v_proj", "o_proj")
 
 # 相対変化量がこれ未満なら「学習が反映されていない」と見る。
-# LoRA r=16 / alpha=16 を 15,000 歩まわした場合、対象層は 1e-3 の桁で動く。
+# LoRA r=16 / alpha=16 を 15,000 ステップまわした場合、対象層は 1e-3 の桁で動く。
 _MIN_RELATIVE_CHANGE = 1e-5
 
 # これを超えたら壊れている可能性を疑う（初期重みと同じ大きさだけ動いた）。

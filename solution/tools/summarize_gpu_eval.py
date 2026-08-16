@@ -50,7 +50,7 @@ import re
 import unicodedata
 from pathlib import Path
 
-# `[結果] <タスク> ep<N>: <結末> <歩数> steps  ゴール 到達  経路 1.12m …
+# `[結果] <タスク> ep<N>: <結末> <ステップ数> steps  ゴール 到達  経路 1.12m …
 _RESULT_RE = re.compile(
     r"\[結果\] (?P<task>\S+) ep(?P<episode>\d+): "
     r"(?P<outcome>\S+) (?P<steps>\d+) steps(?P<detail>.*)"
@@ -69,7 +69,7 @@ _DISPLACEMENT_RE = re.compile(r"変位 ([\d.]+)m")
 _MOTION_RE = re.compile(r"\s(静止|往復|固まった)(?:\s|$)")
 _FIRST_COLLISION_RE = re.compile(r"初衝突 (\d+) 歩")
 
-# 終盤 50 歩の経路長。**全体の変位では「動いてから固まった」を捉えられない。**
+# 終盤 50 ステップの経路長。**全体の変位では「動いてから固まった」を捉えられない。**
 _TAIL_PATH_RE = re.compile(r"終盤\d+歩 ([\d.]+)m")
 
 # グリッパを何回開閉したか。**本番の悪化を検知できた唯一の指標である。**
@@ -118,9 +118,9 @@ _CATEGORY_MARKERS: tuple[tuple[str, str], ...] = (
 # `ketchup_1=544.6mm` が 6 回そろって出た）。
 #
 # 原因は採点ハーネス側にある。`pipeline/rollout.py` は初期位置を捉える前に
-# **10 歩しか落ち着かせない**ため、**まだ落下中の物体は空中の位置が
+# **10 ステップしか落ち着かせない**ため、**まだ落下中の物体は空中の位置が
 # 「初期位置」として記録される。** 残りの落下がそのまま変位に化ける。
-# 映像でも、ケチャップの瓶が 3 本すべて **4 歩目**に画面の上から入ってきた。
+# 映像でも、ケチャップの瓶が 3 本すべて **4 ステップ目**に画面の上から入ってきた。
 #
 # **3 回にした理由。** 2 回では偶然の一致がありうる（変位を 0.1mm に丸めて
 # 比べているため）。4 回以上にすると、6 回出た実例のような明らかな組しか
@@ -137,15 +137,15 @@ _ENVIRONMENT_REPEAT_MINIMUM = 3
 # 2 回どまりで見逃された（2026-08-14。π0.5 n=10 / n=16 / weak3x の
 # **3 つの別モデルで 0.1mm も違わず同じ値**が出ていた）。
 #
-# **1 歩で 10cm 動かすのは方策には物理的に無理である。** 制御周期は 0.05 秒
-# （`pipeline/total_score.py` の `control_dt`）で、手先が 1 歩に進む距離は
+# **1 ステップで 10cm 動かすのは方策には物理的に無理である。** 制御周期は 0.05 秒
+# （`pipeline/total_score.py` の `control_dt`）で、手先が 1 ステップに進む距離は
 # 成功した回で平均 5mm 前後（`rollout_recorder.py` の `_TAIL_STALL_M` の根拠）。
-# 1〜2 歩目で 100mm 超の変位が付いた物体は、**落下の続きが変位に化けたもの**
+# 1〜2 ステップ目で 100mm 超の変位が付いた物体は、**落下の続きが変位に化けたもの**
 # と断定できる。**回数の一致を待たずに落とせる。**
 _IMPOSSIBLE_COLLISION_STEPS = 2
 _IMPOSSIBLE_DISPLACEMENT_MM = 100.0
 
-# 早すぎる衝突を疑う歩数。**判定には使わず、報告だけする。**
+# 早すぎる衝突を疑うステップ数。**判定には使わず、報告だけする。**
 # 方策が本当に早く衝突することもあるので、これだけでは決められない。
 _EARLY_COLLISION_STEPS = 20
 
@@ -434,7 +434,7 @@ def _parse_log(log_path: Path) -> tuple[list[dict], list[tuple[str, str]], int |
         `task` / `episode` / `outcome` / `steps` / `offenders` を持つ辞書の列。
         2026-08-11 以降のログはさらに `goal`（bool）・`path_m`・
         `displacement_m`・`motion`・`first_collision_step`・
-        **`tail_path_m`（終盤 50 歩の経路長）・`grip_toggles`（グリッパの開閉数）**
+        **`tail_path_m`（終盤 50 ステップの経路長）・`grip_toggles`（グリッパの開閉数）**
         を持つ。**古いログでは鍵そのものが無い**（None を入れない）。
     exceptions : list[tuple[str, str]]
         (タスク名, 例外の内容)。パッチが例外を握った回。
@@ -518,7 +518,7 @@ def _goal_reached(episode: dict, cap: int) -> bool:
     パッチが `ゴール 到達` を出す前のログでは、打ち切り前に終わったこと
     （`steps < 上限`）でしか判定できない。ループの抜け道は `done` だけなので
     （`pipeline/rollout.py` の `if done: break`）、**上限が分かっていれば
-    推定は正確**である。上限は「観測された最大歩数」で置く。決め打ちにすると
+    推定は正確**である。上限は「観測された最大ステップ数」で置く。決め打ちにすると
     `MAX_STEPS` を変えた回で静かに壊れる。
     """
     if "goal" in episode:
@@ -547,7 +547,7 @@ def _report_outcomes(lines: list[str], episodes: list[dict]) -> None:
     goals = [episode for episode in episodes if _goal_reached(episode, cap)]
     collided_after_goal = [e for e in goals if e["offenders"]]
     estimated = "" if all("goal" in e for e in episodes) else \
-        f"（{sum(1 for e in episodes if 'goal' not in e)} 件は歩数から推定）"
+        f"（{sum(1 for e in episodes if 'goal' not in e)} 件はステップ数から推定）"
     lines.append("")
     lines.append(f"  ゴール到達率 {len(goals) / total:.3f}  ({len(goals)}/{total}){estimated}")
     lines.append(
@@ -578,7 +578,7 @@ def _report_outcomes(lines: list[str], episodes: list[dict]) -> None:
     if successful_steps:
         middle = successful_steps[len(successful_steps) // 2]
         lines.append(
-            f"  成功した回の歩数  最小 {successful_steps[0]} / "
+            f"  成功した回のステップ数  最小 {successful_steps[0]} / "
             f"中央 {middle} / 最大 {successful_steps[-1]}  （上限は {cap}）"
         )
 
@@ -680,15 +680,15 @@ def _report_grip(lines: list[str], episodes: list[dict]) -> None:
 def _report_timeout_kinds(lines: list[str], episodes: list[dict]) -> None:
     """未完了を「固まった」と「空回り」に割る。**打つ手が正反対である。**
 
-    終盤 50 歩の経路長で分ける。**全体の変位では「動いてから固まった」回を
-    取りこぼす**（前半で 0.31m 動いてから 200 歩固まった回を実際に見逃した）。
+    終盤 50 ステップの経路長で分ける。**全体の変位では「動いてから固まった」回を
+    取りこぼす**（前半で 0.31m 動いてから 200 ステップ固まった回を実際に見逃した）。
     """
     timeouts = [e for e in episodes if e["outcome"] == "未完了" and "tail_path_m" in e]
     if not timeouts:
         return
 
     lines.append("")
-    lines.append("=== 未完了の内訳（終盤 50 歩の移動量で割る）===")
+    lines.append("=== 未完了の内訳（終盤 50 ステップの移動量で割る）===")
     bands = (
         (0.0, 0.03, "**固まっている**（<0.03m）"),
         (0.03, 0.10, "わずかに動く（0.03〜0.10m）"),
@@ -761,7 +761,7 @@ def _environment_offenders(episodes: list[dict]) -> set[tuple[str, str]]:
     | 道 | 決め手 | 効く場面 |
     |---|---|---|
     | 回数 | 同じ変位が `_ENVIRONMENT_REPEAT_MINIMUM` 回そろった | 1 タスクを何本も回す 84 件の一覧 |
-    | **物理** | **1〜2 歩目で 100mm 超動いた** | **1 タスク 1 本の 36 件の一覧** |
+    | **物理** | **1〜2 ステップ目で 100mm 超動いた** | **1 タスク 1 本の 36 件の一覧** |
 
     **物理の道が要る理由。** 36 件は 1 タスク 1 本なので、回数の道は
     「別のタスク 3 件が同じ落下物を持つ」ときしか発火しない。2 件どまりで
@@ -787,7 +787,7 @@ def _environment_offenders(episodes: list[dict]) -> set[tuple[str, str]]:
         if times >= _ENVIRONMENT_REPEAT_MINIMUM
     }
 
-    # **1 歩で 10cm は方策には出せない。** 回数の一致を待たずに落とす。
+    # **1 ステップで 10cm は方策には出せない。** 回数の一致を待たずに落とす。
     for episode in episodes:
         first_step = episode.get("first_collision_step")
         if first_step is None or first_step > _IMPOSSIBLE_COLLISION_STEPS:
@@ -826,7 +826,7 @@ def _policy_offenders(
 def _report_collision_source(lines: list[str], episodes: list[dict]) -> None:
     """衝突を「方策由来」と「環境由来」に割る。**衝突対策に手を入れるかを決める。**
 
-    **本番のスコアには環境由来の分も乗る。** 落ち着かせる 10 歩は採点側の
+    **本番のスコアには環境由来の分も乗る。** 落ち着かせる 10 ステップは採点側の
     コードなので、こちらでは直せない。**だからここで出す「方策の衝突率」は
     スコアの予測ではなく、対策の効き目を測るための数字である。**
 
@@ -868,7 +868,7 @@ def _report_collision_source(lines: list[str], episodes: list[dict]) -> None:
         for name, value in sorted(environment):
             lines.append(f"    {name}={value}mm")
         lines.append("  → 原因は `pipeline/rollout.py` が初期位置を捉える前に")
-        lines.append("    **10 歩しか落ち着かせない**ことである（採点側のコード）")
+        lines.append("    **10 ステップしか落ち着かせない**ことである（採点側のコード）")
 
     # **早すぎる衝突は補強材料である。判定には使っていない。**
     # 環境由来なら方策が届く前にぶつかるので、初衝突の歩が小さく出る。

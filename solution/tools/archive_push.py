@@ -76,7 +76,7 @@ def _parse_args() -> argparse.Namespace:
         dest="folder",
         required=True,
         help="退避先での置き場所（例: smolvla/weak3x_20000）。"
-             "**実行名と歩数が分かる名前にする。**",
+             "**実行名とステップ数が分かる名前にする。**",
     )
     parser.add_argument(
         "--repo-id",
@@ -106,8 +106,8 @@ def _parse_args() -> argparse.Namespace:
         "--step",
         type=int,
         default=None,
-        help="この重みが何歩目か。既定では --origin の数字だけのディレクトリ名から"
-             "読む。**train_config.json の steps は run の予定総歩数であって"
+        help="この重みが何ステップ目か。既定では --origin の数字だけのディレクトリ名から"
+             "読む。**train_config.json の steps は run の予定総ステップ数であって"
              "これではない。**",
     )
     parser.add_argument("--score", default=None, help="評価の成功率（例: 0.722）")
@@ -260,11 +260,11 @@ def _build_entry(args: argparse.Namespace, source: Path,
 
 
 def _read_step(origin: str) -> int | None:
-    """学習実行の場所から、この重みが何歩目かを読む。
+    """学習実行の場所から、この重みが何ステップ目かを読む。
 
-    lerobot は `checkpoints/024000/` のように歩数をディレクトリ名にする。
-    **`train_config.json` の `steps` は run の予定総歩数**であって、途中で
-    取り出した重みの歩数ではない。混同すると 500 歩の重みが 24000 歩に見える。
+    lerobot は `checkpoints/024000/` のようにステップ数をディレクトリ名にする。
+    **`train_config.json` の `steps` は run の予定総ステップ数**であって、途中で
+    取り出した重みのステップ数ではない。混同すると 500 ステップの重みが 24000 ステップに見える。
 
     Parameters
     ----------
@@ -283,7 +283,7 @@ def _read_step(origin: str) -> int | None:
 
 
 def _format_steps(entry: dict) -> str:
-    """歩数の欄を、予定総歩数と混ざらない書き方に整える。"""
+    """ステップ数の欄を、予定総ステップ数と混ざらない書き方に整える。"""
     step = entry.get("step")
     planned = entry.get("planned_steps")
     if step is not None and planned is not None:
@@ -317,7 +317,7 @@ def _render_provenance(entry: dict) -> str:
     if entry.get("step") is not None:
         lines.append(f"- この重みは {entry['step']} 歩目")
     if entry.get("planned_steps") is not None:
-        lines.append(f"- その学習実行の予定総歩数: {entry['planned_steps']}")
+        lines.append(f"- その学習実行の予定総ステップ数: {entry['planned_steps']}")
     if entry["dataset"]:
         lines.append(f"- 学習データ: `{entry['dataset']}`")
     if entry["base_model"]:
@@ -333,7 +333,7 @@ def _render_provenance(entry: dict) -> str:
         lines += [
             "",
             f"**{_TRAIN_CONFIG_NAME} が無い。** 設定の一次資料が手元に残って"
-            "いないため、上の歩数や学習データは埋まっていない。",
+            "いないため、上のステップ数や学習データは埋まっていない。",
         ]
     if entry["note"]:
         lines += ["", entry["note"]]
@@ -361,11 +361,11 @@ def _render_readme(index: list[dict], repo_id: str) -> str:
         "**成功率は実行ごとに分母が違う。** 数字だけを並べて比べると誤る。"
         "必ず右の実測ログを見て、同じ条件どうしか確かめること。",
         "",
-        "歩数の欄が `500 / 予定 24000` の形になっているものは、**24000 歩回す"
-        "つもりだった学習の 500 歩目**である。`train_config.json` の `steps` は"
+        "ステップ数の欄が `500 / 予定 24000` の形になっているものは、**24000 ステップ回す"
+        "つもりだった学習の 500 ステップ目**である。`train_config.json` の `steps` は"
         "予定の方なので、そこだけ見ると取り違える。",
         "",
-        "| フォルダ | 歩数 | 学習データ | 成功率 | 実測ログ | 手元の置き場 | 設定 | 上げた日 |",
+        "| フォルダ | ステップ数 | 学習データ | 成功率 | 実測ログ | 手元の置き場 | 設定 | 上げた日 |",
         "|---|---|---|---|---|---|---|---|",
     ]
     rows = []
@@ -395,7 +395,7 @@ def _render_readme(index: list[dict], repo_id: str) -> str:
         "",
         "```bash",
         "python solution/tools/archive_push.py <重みのディレクトリ> \\",
-        "    --as <実行名>/<歩数> \\",
+        "    --as <実行名>/<ステップ数> \\",
         "    --train-config <たどった学習実行>/train_config.json \\",
         "    --score <成功率> --score-n <件数> --score-run <gpu_eval の実行名>",
         "```",
@@ -412,7 +412,7 @@ def _print_plan(entry: dict, files: list[tuple[Path, str]],
     print(f"[archive] 退避先の置き場  {entry['folder']}")
     print(f"[archive] 手元の置き場    {entry['local_path']}")
     print(f"[archive] 作った学習実行  {entry['origin']}")
-    print(f"[archive] 歩数            {_format_steps(entry)}")
+    print(f"[archive] ステップ数            {_format_steps(entry)}")
     print(f"[archive] 学習データ      {entry['dataset']}")
     print(f"[archive] sha256          {entry['sha256_model']}")
     print(f"[archive] 設定            "

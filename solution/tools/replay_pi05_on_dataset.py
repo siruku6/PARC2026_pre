@@ -19,7 +19,7 @@
 
 | `--mode` | 何をするか | 推論の回数 |
 |---|---|---|
-| `chunk`（既定） | ある 1 フレームから**先 50 歩ぶんを一気に予測**し、その先の正解と並べる | **1 回** |
+| `chunk`（既定） | ある 1 フレームから**先 50 ステップぶんを一気に予測**し、その先の正解と並べる | **1 回** |
 | `stream` | 本番と同じく `n_action_steps`（10）歩ごとに予測し直す | フレーム数 ÷ 10 |
 
 **CPU では 1 推論に 3 分以上かかる**（このマシンで 195 秒／1 コア、
@@ -30,7 +30,7 @@ GPU が空いてから `stream` に進むのが安い。
 
 学習に使ったイメージの中で動かす（ホストに torch も lerobot も無い）。
 
-    # 実データ 1 フレームから先 50 歩を予測して動画にする（推論 1 回・約 10 分）
+    # 実データ 1 フレームから先 50 ステップを予測して動画にする（推論 1 回・約 10 分）
     docker run --rm -it --memory=13g --cpus=1 \\
         --user "$(id -u):$(id -g)" \\
         -v "$PWD:/repo" -v "$HOME/.cache/huggingface:/hf_home" \\
@@ -111,8 +111,8 @@ def _parse_args() -> argparse.Namespace:
                         help="指示文の前方一致。最初に当たったエピソードを使う")
     parser.add_argument("--mode", type=str, default="chunk",
                         choices=("chunk", "stream"),
-                        help="chunk（既定）は推論 1 回で先 50 歩を予測。"
-                             "stream は本番と同じく 10 歩ごとに予測し直す")
+                        help="chunk（既定）は推論 1 回で先 50 ステップを予測。"
+                             "stream は本番と同じく 10 ステップごとに予測し直す")
     parser.add_argument("--start-frame", type=int, default=0,
                         help="エピソードの何フレーム目から始めるか")
     parser.add_argument("--frames", type=int, default=0,
@@ -305,7 +305,7 @@ def _run_replay(policy, preprocessor, postprocessor, frames: dict[str, list],
                 torch_module) -> tuple[np.ndarray, list[float]]:
     """実フレームを順に流し、各歩の行動と所要時間を返す。
 
-    `select_action` は内部にキューを持つので、**素直に 1 歩ずつ呼べば本番と
+    `select_action` は内部にキューを持つので、**素直に 1 ステップずつ呼べば本番と
     同じ切り替わり方**になる。重い推論が走るのは `n_action_steps` 歩ごとの
     1 回だけで、残りは作り置きを出すだけである（そこは 0.01 秒で終わる）。
 
@@ -481,7 +481,7 @@ def _resolve_length(mode: str, frames: int, chunk_size: int,
     """何フレームぶん流すかを決める。
 
     `chunk` は「1 回の推論で作った列を全部見る」ので `chunk_size`、
-    `stream` は既定で 30 歩（推論 3 回）にしてある。
+    `stream` は既定で 30 ステップ（推論 3 回）にしてある。
     """
     if frames > 0:
         return min(frames, available)
@@ -563,10 +563,10 @@ def main() -> None:
         production_steps = int(policy.config.n_action_steps)
     n_action_steps = production_steps
 
-    # chunk では作り置きの列を 50 歩ぜんぶ使いたいので、その場で伸ばす。
+    # chunk では作り置きの列を 50 ステップぜんぶ使いたいので、その場で伸ばす。
     # **`_run_replay` の中の `policy.reset()` より前に書き換えること。**
     # `reset` が `deque(maxlen=n_action_steps)` を作り、`select_action` は
-    # `[:, :n_action_steps]` で切るので、後から変えても 10 歩しか残らない
+    # `[:, :n_action_steps]` で切るので、後から変えても 10 ステップしか残らない
     # （lerobot v0.6.0 の PI05Policy.reset / select_action 実測）。
     if args.mode == "chunk":
         n_action_steps = chunk_size

@@ -92,8 +92,8 @@ def _parse_args() -> argparse.Namespace:
                         default=",".join(_PRODUCTION_CATEGORIES),
                         help="使う摂動カテゴリ。**読点で区切る**")
     parser.add_argument("--max-demo-steps", type=int, default=300,
-                        help="未使用の実演がこの歩数を超える指示文は候補から外す。"
-                             "**採点は 300 歩で打ち切るため**")
+                        help="未使用の実演がこのステップ数を超える指示文は候補から外す。"
+                             "**採点は 300 ステップで打ち切るため**")
     parser.add_argument("--output", type=Path,
                         default=_REPO_ROOT / "compe/val/EVAL_TASKS.csv")
     # **置き場は libero の設定（`~/.libero/config.yaml`）から決まる。**
@@ -132,7 +132,7 @@ def _load_used(path: Path) -> set[int]:
 
 
 def _load_episodes(path: Path) -> list[dict]:
-    """エピソードのメタデータを読み、指示文・歩数・明るさだけ返す。"""
+    """エピソードのメタデータを読み、指示文・ステップ数・明るさだけ返す。"""
     if not path.is_file():
         raise SystemExit(f"[eval] メタデータがありません: {path}")
 
@@ -174,7 +174,7 @@ def _novel_by_instruction(
     used : set[int]
         学習に使ったエピソード番号。
     max_demo_steps : int
-        未使用の実演の歩数の上限。**採点の打ち切りを超える実演は数えない。**
+        未使用の実演のステップ数の上限。**採点の打ち切りを超える実演は数えない。**
 
     Returns
     -------

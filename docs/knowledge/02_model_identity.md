@@ -16,7 +16,7 @@
 | 提出 zip のファイル名 | `submission_4.2.0_rp3000_blend0.zip`（541 ファイル・9,378 MB） |
 | モデル構成 | π₀.₅（VLM は PaliGemma 系、行動側は flow matching の action expert）。**パラメータ 4.14B**・safetensors のテンソル **813 個** |
 | 推論方式 | **flow matching**。ノイズ除去 **10 段**（`num_inference_steps`） |
-| **Action chunk** | **有り。chunk は 50 歩ぶん生成し、先頭 16 歩だけ実行して作り直す** |
+| **Action chunk** | **有り。chunk は 50 ステップぶん生成し、先頭 16 ステップだけ実行して作り直す** |
 
 ## Action chunk の書き方に注意
 

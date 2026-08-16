@@ -8,7 +8,7 @@
 **そこで、答えが分かっている提出を手元でも実行し、順序が一致するかを見る。**
 一致すれば、その検証集合を提出前の判断に使える。一致しなければ使えない。
 
-    # 1 組だけ見る（エピソードごとの歩数を並べる）
+    # 1 組だけ見る（エピソードごとのステップ数を並べる）
     python3 solution/tools/compare_with_production.py \\
         --pair outputs/0812_base_t1=outputs/prod_eval_results/260810_評価結果_ema=0.3あり.md
 
@@ -19,10 +19,10 @@
 
 採点ログから読むのは `POST /reset` と `POST /act` の回数である。
 **評価パイプラインは 1 エピソードの開始ごとに `/reset` を 1 回投げ、
-1 歩ごとに `/act` を 1 回投げる。** そのため
+1 ステップごとに `/act` を 1 回投げる。** そのため
 
 - `/reset` の回数 = エピソード本数
-- ある `/reset` から次の `/reset` までの `/act` の回数 = そのエピソードの歩数
+- ある `/reset` から次の `/reset` までの `/act` の回数 = そのエピソードのステップ数
 
 Reads:
   - <手元の出力>/eval.log（`[結果]` 行。解析は summarize_gpu_eval と共通）
@@ -54,11 +54,11 @@ _SCORE_RE = re.compile(r"総合スコア ([\d.]+)")
 _ELAPSED_RE = re.compile(r"合計時間: ([\d.]+)秒")
 _VERSION_RE = re.compile(r"\[parc\] policy_server (\S+)")
 
-# 判定に使う許容差。**歩数がこれを超えて食い違ったら並べて示す。**
+# 判定に使う許容差。**ステップ数がこれを超えて食い違ったら並べて示す。**
 _STEP_TOLERANCE = 10
 
 # **本番スコアがこの差の中なら同順として扱う。**
-# 採点環境は 8 エピソードで、うち 1〜4 本目は 3 種類の重みすべてが 300 歩に
+# 採点環境は 8 エピソードで、うち 1〜4 本目は 3 種類の重みすべてが 300 ステップに
 # 張り付いた。**差が付くのは残り 4 本だけである。**
 # 実際、素（0.1409）とλ=0.25（0.095）の違いは 1 本の結末が変わった分で、
 # 差は 0.046 しかない。**この 2 つの順序を再現できたことを根拠に代理集合を
@@ -76,7 +76,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--tolerance", type=int, default=_STEP_TOLERANCE,
-        help=f"歩数の差をどこから食い違いとみなすか（既定 {_STEP_TOLERANCE}）",
+        help=f"ステップ数の差をどこから食い違いとみなすか（既定 {_STEP_TOLERANCE}）",
     )
     parser.add_argument(
         "--score-tie", type=float, default=_SCORE_TIE,
@@ -87,7 +87,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _read_production(log_path: Path) -> dict:
-    """採点ログから、エピソードごとの歩数とスコアを取り出す。
+    """採点ログから、エピソードごとのステップ数とスコアを取り出す。
 
     `/reset` より前の `/act` は数えない。**評価が始まる前の疎通確認を
     1 エピソード目に混ぜないため。**
@@ -100,7 +100,7 @@ def _read_production(log_path: Path) -> dict:
     Returns
     -------
     result : dict
-        `steps`（エピソードごとの歩数）、`score`、`elapsed_sec`、`version`。
+        `steps`（エピソードごとのステップ数）、`score`、`elapsed_sec`、`version`。
         読めなかった値は入れない。
     """
     text = log_path.read_text(encoding="utf-8", errors="replace")
@@ -130,10 +130,10 @@ def _read_production(log_path: Path) -> dict:
 
 
 def _read_local(output_dir: Path) -> dict:
-    """手元の評価結果から、エピソードごとの歩数とスコアを取り出す。
+    """手元の評価結果から、エピソードごとのステップ数とスコアを取り出す。
 
-    歩数は `eval.log` の `[結果]` 行から読む。**JSON にはエピソードごとの
-    歩数が入っていない**（`metrics` は集計値だけである）。
+    ステップ数は `eval.log` の `[結果]` 行から読む。**JSON にはエピソードごとの
+    ステップ数が入っていない**（`metrics` は集計値だけである）。
 
     Parameters
     ----------
@@ -188,9 +188,9 @@ def _at_cap(steps: list[int], cap: int | None) -> int:
     Parameters
     ----------
     steps : list[int]
-        エピソードごとの歩数。
+        エピソードごとのステップ数。
     cap : int | None
-        打ち切りの歩数。`None` なら**観測された最大値**を上限とみなす
+        打ち切りのステップ数。`None` なら**観測された最大値**を上限とみなす
         （採点ログには上限が書かれていないため）。
 
     Returns
@@ -210,7 +210,7 @@ def _format_score(score: float | None) -> str:
 
 
 def _describe(lines: list[str], label: str, data: dict) -> None:
-    """1 回分の内容を 3 行で書く。**歩数が多い回は前後だけ出す。**"""
+    """1 回分の内容を 3 行で書く。**ステップ数が多い回は前後だけ出す。**"""
     steps = data["steps"]
     cap = max(steps) if steps else 0
     version = data.get("version")
@@ -226,11 +226,11 @@ def _describe(lines: list[str], label: str, data: dict) -> None:
         f"スコア {_format_score(data.get('score'))}"
     )
     if len(steps) <= 16:
-        lines.append(f"    歩数 {steps}")
+        lines.append(f"    ステップ数 {steps}")
     else:
         head = ", ".join(str(value) for value in steps[:8])
         tail = ", ".join(str(value) for value in steps[-4:])
-        lines.append(f"    歩数 [{head}, … , {tail}]（{len(steps)} 本のうち先頭 8 と末尾 4）")
+        lines.append(f"    ステップ数 [{head}, … , {tail}]（{len(steps)} 本のうち先頭 8 と末尾 4）")
 
 
 def _compare_pair(lines: list[str], local: dict, production: dict,
@@ -259,7 +259,7 @@ def _compare_pair(lines: list[str], local: dict, production: dict,
 
     if len(prod_steps) == len(local_steps) and prod_steps:
         lines.append("")
-        lines.append("    エピソードごとの歩数")
+        lines.append("    エピソードごとのステップ数")
         lines.append(f"      {'#':>2}  {'採点':>5}  {'手元':>5}  {'差':>5}  結末 / タスク")
         # `outcomes` と `tasks` は `steps` と同じ `episodes` から作るので必ず同じ長さ。
         gaps = 0
@@ -276,7 +276,7 @@ def _compare_pair(lines: list[str], local: dict, production: dict,
         lines.append(f"      `*` は差が {tolerance} 歩を超えた回（{gaps} 本）")
         if gaps > len(prod_steps) // 2:
             notes.append(
-                f"**半分以上の回で歩数が {tolerance} 歩を超えて違う**（{gaps}/{len(prod_steps)}）。"
+                f"**半分以上の回でステップ数が {tolerance} 歩を超えて違う**（{gaps}/{len(prod_steps)}）。"
                 "同じタスクを実行していない可能性がある"
             )
     return notes
@@ -316,7 +316,7 @@ def _report_ordering(lines: list[str], pairs: list[tuple[dict, dict]],
     """本番と手元で順序が食い違わないかを書き、代理として使えるかを返す。
 
     **これが本題である。** ただし**本番スコアの小さな差は順序として使わない。**
-    採点環境は 8 エピソードで、うち 1〜4 本目は 3 種類の重みすべてが 300 歩に
+    採点環境は 8 エピソードで、うち 1〜4 本目は 3 種類の重みすべてが 300 ステップに
     張り付いた。差が付くのは残り 4 本だけで、**素（0.1409）とλ=0.25（0.095）の
     違いは 1 本の結末が変わった分にすぎない。**
 

@@ -41,7 +41,7 @@ _UPLOAD_FILES: tuple[tuple[str, str], ...] = (
     ),
     (
         "solution/tools/colab_eval_config.py",
-        "**編集するのはこのファイルだけ。**重みの場所・塊の数・つまみ・録画。"
+        "**編集するのはこのファイルだけ。**重みの場所・塊の数・設定値・録画。"
         "書き換えたらこれだけ上げ直せば効く（colab_eval.py が毎回読み直す）。",
     ),
     (

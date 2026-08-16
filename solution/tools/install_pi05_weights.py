@@ -19,7 +19,7 @@
     python3 solution/tools/install_pi05_weights.py \\
         work/train/pi05_full_local/checkpoints/024000/pretrained_model
 
-    # 名前を明示する（既定は model_weights_pi05_<歩数>）
+    # 名前を明示する（既定は model_weights_pi05_<ステップ数>）
     python3 solution/tools/install_pi05_weights.py <ckpt> --name pi05_24k
 
 出来たディレクトリはそのまま評価に渡せる。
@@ -74,7 +74,7 @@ def _parse_args() -> argparse.Namespace:
                         help="学習が吐いた pretrained_model ディレクトリ")
     parser.add_argument("--name", type=str, default=None,
                         help="work/artifacts/ の下に作る名前"
-                             "（既定は model_weights_pi05_<歩数>）")
+                             "（既定は model_weights_pi05_<ステップ数>）")
     parser.add_argument("--tokenizer", type=Path, default=None,
                         help="トークナイザの置き場（既定は $HF_HOME から探す）")
     parser.add_argument("--force", action="store_true",
@@ -102,7 +102,7 @@ def _check_checkpoint(checkpoint: Path) -> None:
     missing = [name for name in _REQUIRED_FILES if not (checkpoint / name).is_file()]
     if missing:
         raise SystemExit(f"エラー: {checkpoint} に {' と '.join(missing)} が無い\n"
-                         "  渡すのは checkpoints/<歩数>/pretrained_model である")
+                         "  渡すのは checkpoints/<ステップ数>/pretrained_model である")
 
     config = json.loads((checkpoint / "config.json").read_text(encoding="utf-8"))
     if config.get("type") != "pi05":

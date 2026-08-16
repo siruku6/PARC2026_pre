@@ -59,7 +59,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _load_outcomes(log_path: Path) -> dict[str, tuple[str, int]]:
-    """タスク名 → (結末, 歩数)。
+    """タスク名 → (結末, ステップ数)。
 
     Parameters
     ----------
@@ -79,7 +79,7 @@ def _load_outcomes(log_path: Path) -> dict[str, tuple[str, int]]:
 
 
 def _load_demo_lengths(path: Path) -> dict[str, int]:
-    """指示文 → 手本の歩数（中央値）。読めなければ空。
+    """指示文 → 手本のステップ数（中央値）。読めなければ空。
 
     JSON は `lerobot/libero_plus` の `meta/episodes/*.parquet` の `length` 列から
     作ったもので、40 個の指示文それぞれの `median` / `p90` / `max` を持つ。
@@ -191,7 +191,7 @@ def _report_horizon(rows: list[dict[str, str]], outcomes: dict[str, tuple[str, i
     Parameters
     ----------
     cap : int
-        歩数の上限（`MAX_STEPS`）。ログの最大歩数から決める。
+        ステップ数の上限（`MAX_STEPS`）。ログの最大ステップ数から決める。
     """
     if not demo_lengths:
         print("\n=== 手本の長さとの関係 ===\n  **JSON が無いので測れない**")
@@ -249,7 +249,7 @@ def _report_horizon(rows: list[dict[str, str]], outcomes: dict[str, tuple[str, i
 
     if ratios:
         ordered = sorted(ratios)
-        print(f"\n  成功した回は手本の {statistics.median(ordered):.2f} 倍の歩数"
+        print(f"\n  成功した回は手本の {statistics.median(ordered):.2f} 倍のステップ数"
               f"（n={len(ordered)}、4 分の 3 {ordered[3 * len(ordered) // 4]:.2f}、"
               f"最大 {ordered[-1]:.2f}）")
 
@@ -294,7 +294,7 @@ def main() -> None:
         rows = list(csv.DictReader(stream))
 
     cap = max(steps for _, steps in outcomes.values())
-    print(f"結果 {len(outcomes)} 件 / CSV {len(rows)} 行 / 歩数の上限 {cap}\n")
+    print(f"結果 {len(outcomes)} 件 / CSV {len(rows)} 行 / ステップ数の上限 {cap}\n")
     _report_by_base_task(rows, outcomes)
     _report_by_category(rows, outcomes)
     _report_within_task(rows, outcomes)

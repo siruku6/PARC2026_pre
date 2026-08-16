@@ -39,7 +39,7 @@ LoRA を使う限り学習される重みは変わらない。** 画像側には
 
 一方、出発点の重み `lerobot/smolvla_libero_plus@7bb70aa5` は
 `use_peft=false` / `freeze_vision_encoder=false` / `train_expert_only=false` で、
-**画像を読む側まで含めた全パラメータ**を 20,000 歩・バッチ 32・学習率 1e-4 で
+**画像を読む側まで含めた全パラメータ**を 20,000 ステップ・バッチ 32・学習率 1e-4 で
 学習している（重みに同梱の `train_config.json`）。
 
 **つまり「画像側の学習率を下げる」の実体は、
@@ -240,7 +240,7 @@ SmolVLA の preset は `CosineDecayWithWarmupSchedulerConfig`
 学習を始める前に、**短く回して確かめる**のが安い。
 
 ```bash
-# 5 歩だけ回してグループの内訳と lr を見る
+# 5 ステップだけ回してグループの内訳と lr を見る
 python train.py --run-name lr_split_smoke --steps 5 --save-freq 5 \
     --peft.target-modules '<手順 1 の正規表現>'     # 渡し方は train.py の `--` 以降でもよい
 ```
@@ -316,6 +316,6 @@ diff work/lerobot-src/src/lerobot/optim/optimizers.py \
 | 事柄 | 確かめ方 |
 |---|---|
 | `--peft.target_modules` に渡した正規表現が VLM のどのモジュール名に一致するか | 短く回して、群ごとの重みの本数と、一致したモジュール名を表示させる |
-| 画像側の重みも更新すると VRAM と 1 歩あたりの時間がどれだけ増えるか | 同じ短い回で計測する。**画像側を更新しない場合の 20,000 歩で約 55 分が比較の基準** |
+| 画像側の重みも更新すると VRAM と 1 ステップあたりの時間がどれだけ増えるか | 同じ短い回で計測する。**画像側を更新しない場合の 20,000 ステップで約 55 分が比較の基準** |
 | 1/10 が適切な比率か | 上流の XVLA が使っている値をそのまま流用しただけである。**この構成で測った値ではない** |
 | 画像側に LoRA を挿入した重みを `merge.py` が正しくマージできるか | `merge.py` は `merge_and_unload` を使い、残った `lora_` を検査して例外にする。**対象が増えても仕組みは同じだが、実行して確かめること** |

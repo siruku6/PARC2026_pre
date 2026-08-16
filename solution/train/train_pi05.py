@@ -7,8 +7,8 @@
 
 π0.5 は SmolVLA の約 9 倍のパラメータ数（後述）で、**この環境（GPU 1 枚 20GB、
 `nvidia-smi` 実測）で本当に載るかは未検証**である。まず `--smoke-test` で
-数十歩だけ回し、OOM しないこと・1 歩あたりの時間を確かめてから、
-本番の歩数へ進むこと。
+数十歩だけ回し、OOM しないこと・1 ステップあたりの時間を確かめてから、
+本番のステップ数へ進むこと。
 
 ## 出発点
 
@@ -44,14 +44,14 @@ state=8・action=7 は、このコンペの観測変換（`processor/env_process
    （https://huggingface.co/docs/lerobot/en/pi05 の Training セクション）。
    この環境（20GB）では `--policy.freeze_vision_encoder=true
    --policy.train_expert_only=true --policy.gradient_checkpointing=true` で
-   VLM を凍結し action expert だけを学習する構成が前提になる。
+   VLM を固定し action expert だけを学習する構成が前提になる。
    **それでも 20GB に収まるかは未検証** — 公式の縮小レシピも batch_size=64 を
    使っており、この環境ではもっと下げる必要がある可能性が高い。
 2. **libero_plus 向けの公開チェックポイントが無い。** SmolVLA は
    `lerobot/smolvla_libero_plus`（このコンペのデータで一度学習済み）を出発点に
    できたが、pi05 は素の `lerobot/pi05_libero_base`（通常の LIBERO）からしか
    始められない。分布への適応をゼロからやり直す分だけ、
-   同じ歩数でも到達点は SmolVLA より手前になりやすい
+   同じステップ数でも到達点は SmolVLA より手前になりやすい
    （[docs/reference/01_base_model.md](../../docs/reference/01_base_model.md) 参照）。
 3. **LoRA の対応は未確認。** `train.py` は SmolVLA 向けに `--peft.method_type=LORA`
    を使っているが、pi05 の公式ドキュメントは PEFT に触れていない。
@@ -70,10 +70,10 @@ gated repo のエラーで止まる。
 
 ## 使い方
 
-    # まず数十歩だけ回して、20GB に収まるか・1 歩何秒かを確かめる
+    # まず数十歩だけ回して、20GB に収まるか・1 ステップ何秒かを確かめる
     python train_pi05.py --smoke-test
 
-    # 収まったら本番。歩数はまだ検証していない見積もり値（下記参照）
+    # 収まったら本番。ステップ数はまだ検証していない見積もり値（下記参照）
     python train_pi05.py --run-name pi05_libero_plus_v1 --steps 8000 --batch-size 8
 
     # 再開
@@ -88,10 +88,10 @@ gated repo のエラーで止まる。
         --steps 6000 --batch-size 16 --learning-rate 5e-6 --max-demo-steps 300 \
         --emphasize-tasks "put the bowl on top of the cabinet" ...
 
-**歩数のデフォルト（8,000）は検証済みの数字ではない。** SmolVLA の出発点は
-20,000 歩 × batch 32（640,000 サンプル）だが、pi05 は残り時間で
-1 歩あたりの実測時間を見てから調整すること。ログに出る
-`steps/sec` を見て、残り GPU 時間で何歩回せるか逆算するのが安全。
+**ステップ数のデフォルト（8,000）は検証済みの数字ではない。** SmolVLA の出発点は
+20,000 ステップ × batch 32（640,000 サンプル）だが、pi05 は残り時間で
+1 ステップあたりの実測時間を見てから調整すること。ログに出る
+`steps/sec` を見て、残り GPU 時間で何ステップ回せるか逆算するのが安全。
 
 Reads:
   - lerobot/pi05_libero_base（HF、初期重み。gemma ライセンス）
@@ -153,8 +153,8 @@ def _parse_args() -> argparse.Namespace:
                         help="出発点は SmolVLA の 32 よりずっと小さい 8 から始める"
                              "（未検証。OOM したらさらに下げる）")
     parser.add_argument("--smoke-test", action="store_true",
-                        help="20 歩・batch 2 で動かし、OOM しないこと・"
-                             "1 歩の時間を確かめる。--steps/--batch-size を上書きする")
+                        help="20 ステップ・batch 2 で動かし、OOM しないこと・"
+                             "1 ステップの時間を確かめる。--steps/--batch-size を上書きする")
     parser.add_argument("--episodes-per-task", type=int, default=0,
                         help="train.py と同じ意味。0 なら全エピソード")
     parser.add_argument("--emphasize-tasks", type=str, nargs="*", default=None,
@@ -165,7 +165,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--dataset-root", type=Path, default=None, metavar="DIR")
     parser.add_argument("--init-from", type=Path, default=None, metavar="DIR",
                         help="初期重みに HF の pi05_libero_base ではなく、"
-                             "前の学習の checkpoints/<歩数>/pretrained_model を使う"
+                             "前の学習の checkpoints/<ステップ数>/pretrained_model を使う"
                              "（段を分けた学習の 2 段目。"
                              "docs/talk/handoff_pi05_stage2.md）")
     parser.add_argument("--save-freq", type=int, default=500)
@@ -225,16 +225,16 @@ def _download_base_model() -> Path:
 def _resolve_init_from(path: Path) -> Path:
     """`--init-from` に渡されたディレクトリを検査して返す。
 
-    **段を分けた学習の 2 段目で使う。** `--resume` は同じデータ・同じ歩数の
+    **段を分けた学習の 2 段目で使う。** `--resume` は同じデータ・同じステップ数の
     続きしか出来ない（`_build_resume_command` が前回の `train_config.json` を
     そのまま読み直すため）ので、**データの選び方を変えて続けたいときは
     「前の段の出力を初期重みとして読み直す」形になる。**
 
-    渡すのは `checkpoints/<歩数>/pretrained_model` である。そこには
+    渡すのは `checkpoints/<ステップ数>/pretrained_model` である。そこには
     `config.json`・`model.safetensors`・正規化統計を含む前後処理が揃っており、
     HF から取る初期重みと同じように `--policy.pretrained_path` へ渡せる。
 
-    **`checkpoints/<歩数>` を渡す間違いが起きやすい**（1 階層浅い）ので、
+    **`checkpoints/<ステップ数>` を渡す間違いが起きやすい**（1 階層浅い）ので、
     その場で気付けるよう言い直す。**10 時間の学習を始めた直後に落ちるのは高い。**
 
     **学習率は呼び出し側で明示すること。** 既定のままだと頂点 2.5e-5 に戻り、
@@ -253,7 +253,7 @@ def _resolve_init_from(path: Path) -> Path:
                 if (inner / "config.json").is_file() else "")
         raise SystemExit(
             f"[train_pi05] --init-from に {' と '.join(missing)} が無い: {resolved}\n"
-            "  渡すのは checkpoints/<歩数>/pretrained_model である。" + hint)
+            "  渡すのは checkpoints/<ステップ数>/pretrained_model である。" + hint)
 
     print(f"[train_pi05] 初期重みにローカルのチェックポイントを使う: {resolved}")
     return resolved
@@ -363,7 +363,7 @@ def _run_and_log(command: list[str], log_file) -> int:
     """lerobot-train を動かし、出力を端末とログファイルへ同時に流す。
 
     **ログ側には進捗バーの書き換えを残さない。** tqdm は `\\r` で同じ行を
-    上書きしていくので、そのまま保存すると 24,000 歩ぶんの途中経過
+    上書きしていくので、そのまま保存すると 24,000 ステップぶんの途中経過
     （1回あたり百数十バイト）が全部残って数十MBになる。`\\r` で区切った
     最後の一片だけを書けば、端末に最後に見えていた状態＝`log_freq` ごとの
     `step:` 行だけが残る（`step:` 行は改行で終わるため）。
@@ -471,8 +471,8 @@ def main() -> None:
             f"dtype={args.dtype}、grad_ckpt={args.gradient_checkpointing}）"
         )
         if args.smoke_test:
-            print("[train_pi05] **smoke test** — 20 歩で OOM しないか・"
-                  "1 歩の時間だけを見る。スコアは見ない")
+            print("[train_pi05] **smoke test** — 20 ステップで OOM しないか・"
+                  "1 ステップの時間だけを見る。スコアは見ない")
 
     print("[train_pi05] コマンド: " + shlex.join(command))
     if log_file is None:

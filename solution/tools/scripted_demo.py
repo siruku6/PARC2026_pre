@@ -2,9 +2,9 @@
 """手本より速い軌道を、シミュレータの中で台本から作る。
 
 **学習データの手本より速く動くことはできない。** 方策は手本を真似るので、
-手本が 400 歩かけている動きを 300 歩で終えるようには育たない。実際
-`put both moka pots on the stove` は 146 本すべてが 341 歩以上で、
-**300 歩以下の手本が 1 本も無い**（`libero_plus_episodes.parquet` の `length` 列）。
+手本が 400 ステップかけている動きを 300 ステップで終えるようには育たない。実際
+`put both moka pots on the stove` は 146 本すべてが 341 ステップ以上で、
+**300 ステップ以下の手本が 1 本も無い**（`libero_plus_episodes.parquet` の `length` 列）。
 このタスクは、いまの学習データからは原理的に解けない。
 
 そこで**手本を自分で作る。** 運営 Q&A No.33 が
@@ -14,7 +14,7 @@
 
 やり方は「中継点を順に追う」だけである。**物体の位置はシミュレータが正確に
 持っているので、画像から推測する必要がない。** 掴む・運ぶ・置くの中継点を
-物体の位置から決め、腕をそこへ寄せる行動を毎歩計算する。
+物体の位置から決め、腕をそこへ寄せる行動を1 ステップごとに計算する。
 
     # 1. 場面の寸法を測る（新しいタスクの台本を書く前に必ずやる）
     python3 solution/tools/scripted_demo.py measure \\
@@ -42,7 +42,7 @@
 |---|---|---|
 | 指の開き 対 物体の幅 | 開かなければ掴めない | 本体は 5cm 角、指は 4.8cm しか開かない。**掴めるのは蓋のつまみだけ** |
 | 当たり判定のある什器の上端 | 運搬中にぶつける | コンロ上面 0.9305 に対し運搬中の鍋の底が 0.922。8mm 潜っていた |
-| 1 歩で進む距離 | 歩数の見積もり | OSC の追従の限界で **1 歩 1.25cm**。行動の上限 5cm には届かない |
+| 1 ステップで進む距離 | ステップ数の見積もり | OSC の追従の限界で **1 ステップ 1.25cm**。行動の上限 5cm には届かない |
 
 Reads:
   - <libero-root>/bddl_files/<suite>/<変種>.bddl
@@ -70,9 +70,9 @@ GRIPPER_OPEN = -1.0
 GRIPPER_CLOSE = 1.0
 
 # 目標まであとどれだけの所から減速を始めるか [m]。
-# **1 歩ぶん（腕は 1 歩 1.25cm 進む）に取ると、そこまで全速で動ける。**
-# 差にそのまま比例させると遠いうちから減速し、同じ移動に 171 歩かかった
-# （振り切れる形なら 19 歩）。
+# **1 ステップぶん（腕は 1 ステップ 1.25cm 進む）に取ると、そこまで全速で動ける。**
+# 差にそのまま比例させると遠いうちから減速し、同じ移動に 171 ステップかかった
+# （振り切れる形なら 19 ステップ）。
 BRAKE_WITHIN_STOP = 0.012     # 止まる点。短く詰める
 BRAKE_WITHIN_PASS = 0.045     # 通過してから止まる点。長くかけて速度を残さない
 
@@ -80,7 +80,7 @@ BRAKE_WITHIN_PASS = 0.045     # 通過してから止まる点。長くかけて
 CAMERAS = ("agentview", "robot0_eye_in_hand")
 IMAGE_SIZE = 256
 
-# 方策へ渡す前の空撃ちの歩数。**評価パイプラインと同じにする**
+# 方策へ渡す前の空撃ちのステップ数。**評価パイプラインと同じにする**
 # （`pipeline/rollout.py`）。違うと、腕の出発姿勢が採点時と変わる。
 WARMUP_STEPS = 10
 
@@ -145,7 +145,7 @@ class TurnKnob:
     sweep : float
         手先を動かす角（rad）。関節が回る角そのものではない（滑るぶん多く要る）。
     turn_steps : int
-        回すのに使う歩数。**1 歩ごとに中継点を 1 つ進める。**
+        回すのに使うステップ数。**1 ステップごとに中継点を 1 つ進める。**
     yaw : float
         手首を回す指令。**1.0 が上限**（`output_max` は 0.5 rad）。
     hover_dz : float
@@ -179,30 +179,30 @@ class TaskPlan:
     retreat_z : float
         離したあとに逃げる高さ。
     close_steps : int
-        指を閉じきるのに使う歩数。**何も掴まない状態で 12 歩かかる。**
+        指を閉じきるのに使うステップ数。**何も掴まない状態で 12 ステップかかる。**
     open_steps : int
-        指を開くのに使う歩数。
+        指を開くのに使うステップ数。
     settle_steps : int
-        置いてから指を開くまで、動かずに待つ歩数。**角を丸めて運ぶと
+        置いてから指を開くまで、動かずに待つステップ数。**角を丸めて運ぶと
         到着時に横向きの速度が残る。** そのまま離すと物体を引きずって
         置き場所から外れる（実測で狙いから 2.7cm ずれた）。ここで止める。
     final_settle_steps : int
-        全部置き終わったあと、ゴール判定をする前に待つ歩数。**置いた直後は
+        全部置き終わったあと、ゴール判定をする前に待つステップ数。**置いた直後は
         まだ物体が揺れていて、接触の判定が安定しない。**
     budget_move : int
-        水平に動く 1 段に許す歩数の上限。
+        水平に動く 1 段に許すステップ数の上限。
     budget_descend : int
-        下ろす 1 段に許す歩数の上限。
+        下ろす 1 段に許すステップ数の上限。
     budget_lift : int
-        上げる 1 段に許す歩数の上限。
+        上げる 1 段に許すステップ数の上限。
     blend_radius : float
         通過点をどれだけ手前で見切るか。**大きいほど滑らかだが、角が内側へ
         膨らむ。** 什器の際を通る経路では小さくする。
     smoothing : float
         指令を前回からなます強さ。**既定の 1.0 はなまさない。**
         向きを保つ指令と角の丸めだけでジャークは 18.3 → 12.3 まで下がり、
-        **なましを足すと滑らかさはほとんど変わらないまま歩数だけ増えた**
-        （0.6 で 234 歩・0.35 で 264 歩）。細かく動かしたいときだけ下げる。
+        **なましを足すと滑らかさはほとんど変わらないままステップ数だけ増えた**
+        （0.6 で 234 ステップ・0.35 で 264 ステップ）。細かく動かしたいときだけ下げる。
     """
 
     suite: str
@@ -247,10 +247,10 @@ TASK_PLANS: dict[str, TaskPlan] = {
             # SCENE8 と同じく蓋のつまみ（原点から 7.2cm 上）だけ。
             PickPlace("moka_pot_1", "flat_stove_1_cook_region", (0.0, 0.0),
                       grasp_dz=0.072),
-            # **点けるのは最後にする。** 手首を 50 歩回すと姿勢が戻らず、
+            # **点けるのは最後にする。** 手首を 50 ステップ回すと姿勢が戻らず、
             # **そのあとの動きが届かなくなる**（実測で逃げる誤差 5〜24cm、
-            # 続く「近づく」が 9〜34cm 外れ、3 本のうち 2 本が歩数切れ）。
-            # ゴールは「点いている」と「置いてある」の連言で毎歩見られるので、
+            # 続く「近づく」が 9〜34cm 外れ、3 本のうち 2 本がステップ数切れ）。
+            # ゴールは「点いている」と「置いてある」の連言で1 ステップごとに見られるので、
             # **置いてから点ければ、点いた瞬間に成功が立つ。**
             # ばねが無いので回した角は戻らない（`jnt_stiffness` が 0）。
             TurnKnob("flat_stove_1_button", radius=0.036, height=0.910),
@@ -269,7 +269,7 @@ TASK_PLANS: dict[str, TaskPlan] = {
 class EpisodeRecord:
     """1 本ぶんの結果。
 
-    画像はここに持たない。**歩数ぶんの置き場を先に確保して書き込む**ほうが
+    画像はここに持たない。**ステップ数ぶんの置き場を先に確保して書き込む**ほうが
     複製もピークも半分で済むので、`_Rollout` が持っている（`images()`）。
     """
 
@@ -280,7 +280,7 @@ class EpisodeRecord:
     states: list[np.ndarray] = field(default_factory=list)
     actions: list[np.ndarray] = field(default_factory=list)
     ee_positions: list[np.ndarray] = field(default_factory=list)
-    # 画像は歩数ぶんに切った「眺め」で、複製ではない（`attach_images`）。
+    # 画像はステップ数ぶんに切った「眺め」で、複製ではない（`attach_images`）。
     front: np.ndarray | None = None
     wrist: np.ndarray | None = None
 
@@ -308,7 +308,7 @@ def scoring_rules() -> tuple[float, float, bool]:
     collision_threshold_m : float
         対象外の物体がこれを超えて動いたら失格。
     control_dt : float
-        1 歩の時間。滑らかさの計算に使う。
+        1 ステップの時間。滑らかさの計算に使う。
     collision_enabled : bool
         衝突で失格させるか。
     """
@@ -403,7 +403,7 @@ class SavedEpisode:
 
 
 class _Rollout:
-    """1 本ぶんの実行。手先を中継点へ寄せる行動を毎歩作る。"""
+    """1 本ぶんの実行。手先を中継点へ寄せる行動を1 ステップごとに作る。"""
 
     def __init__(self, env: Any, init_state: np.ndarray, max_steps: int,
                  record_images: bool) -> None:
@@ -421,7 +421,7 @@ class _Rollout:
         self.obs = reset_to(env, init_state)
 
         # 採点と同じ衝突判定。**動かしてよい物体（obj_of_interest）は外す。**
-        # 毎歩ぶん回すので、鍵と初期位置を (N, 3) に積んで 1 回の引き算で済ます。
+        # 毎ステップぶん回すので、鍵と初期位置を (N, 3) に積んで 1 回の引き算で済ます。
         interest = set(env.obj_of_interest)
         watched = [key for key in self.obs
                    if key.endswith("_pos")
@@ -463,7 +463,7 @@ class _Rollout:
         同梱 LeRobot の `LiberoProcessorStep` も同じ式（`2·acos(w)`・
         折り返し無し）である。**自分で書くと折り返しの扱いが必ずずれる**
         —— Panda の下向き把持は `w ≈ 0` に居るので符号が絶えず反転し、
-        折り返す実装では state の 3〜5 番目が 1 歩で 2π ぶん飛ぶ。
+        折り返す実装では state の 3〜5 番目が 1 ステップで 2π ぶん飛ぶ。
         """
         from robosuite.utils.transform_utils import quat2axisangle
 
@@ -487,7 +487,7 @@ class _Rollout:
 
         かといって長さで正規化する（`delta / |delta|`）と、今度は**斜めの
         移動が遅くなる。** 軸ごとに切っていたときは 3 軸とも 1 まで使えるので
-        最大 √3 倍の速さが出ていた。実際それで 210 歩が 292 歩に伸びた。
+        最大 √3 倍の速さが出ていた。実際それで 210 ステップが 292 ステップに伸びた。
 
         **いちばん大きい軸がちょうど振り切れる大きさに揃える。** 向きは
         目標をぴたりと指したまま、使える速度は全部使う。
@@ -502,7 +502,7 @@ class _Rollout:
         """指令を前回からなます。**加加速度（ジャーク）を直に下げる。**
 
         `smoothing` が 1.0 なら何もしない。小さいほど滑らかになるが、
-        追従が遅れるぶん歩数は増える。
+        追従が遅れるぶんステップ数は増える。
         """
         if smoothing >= 1.0:
             return command
@@ -511,7 +511,7 @@ class _Rollout:
         return blended
 
     def _take_step(self, action: np.ndarray) -> bool:
-        """1 歩進める。歩数の上限に達したら False を返す。"""
+        """1 ステップ進める。ステップ数の上限に達したら False を返す。"""
         index = self.record.steps
         self.record.ee_positions.append(self.eef_position.copy())
         self.record.states.append(self._observation_state())
@@ -533,7 +533,7 @@ class _Rollout:
         return self.record.steps < self.max_steps
 
     def attach_images(self) -> None:
-        """溜めた画像を、歩数ぶんに切って結果へ渡す。**複製しない。**"""
+        """溜めた画像を、ステップ数ぶんに切って結果へ渡す。**複製しない。**"""
         if self._front_buffer is None:
             return
         count = min(self.record.steps, self.max_steps)
@@ -549,7 +549,7 @@ class _Rollout:
         必ず片方が古くなるので、こちらは呼び名だけを与える薄い包みにしてある。
 
         **ここは意図的になまさない**（`smoothing` を渡さない）。指令をなますと
-        指令が小さくなる終盤で這い、3.8cm 降りるのに 25 歩使って届かなくなる。
+        指令が小さくなる終盤で這い、3.8cm 降りるのに 25 ステップ使って届かなくなる。
         滑らかにするのは運ぶ区間だけでよい。
         """
         self.follow(label, [target], gripper, blend_radius=0.0,
@@ -610,7 +610,7 @@ class _Rollout:
         """掴んだつまみを、円弧に沿って動かしながら手首も回す。
 
         **`follow` を使わない。** あちらは中継点に近づいたら次へ飛ぶので、
-        回す速さが場面ごとに変わってしまう。ここは**1 歩に中継点 1 つ**を
+        回す速さが場面ごとに変わってしまう。ここは**1 ステップに中継点 1 つ**を
         割り当てて、手先の進みと手首の回りを揃える。
         """
         used = self.record.steps
@@ -703,7 +703,7 @@ def _run_turn_knob(rollout: _Rollout, step: TurnKnob, plan: TaskPlan) -> None:
     """つまみを掴んで回し、離して逃げる。
 
     ```
-    出発 ─▶ つまみの上   ← 構える
+    出発 ─▶ 設定値の上   ← 構える
            ▶ 掴む高さ     ← ここだけ正確に止まる
              掴む
            ⤿ 円弧に沿って動かしながら手首を回す   ← ここで点く
@@ -719,9 +719,9 @@ def _run_turn_knob(rollout: _Rollout, step: TurnKnob, plan: TaskPlan) -> None:
     rollout.move_to("つまみを掴む位置へ", grip_at, GRIPPER_OPEN,
                     tolerance=0.004, budget=plan.budget_descend)
     rollout.hold("つまみを掴む", GRIPPER_CLOSE, plan.close_steps)
-    rollout.turn_arc("つまみを回す", centre, step)
-    rollout.hold("つまみを離す", GRIPPER_OPEN, plan.open_steps)
-    rollout.move_to("つまみから逃げる",
+    rollout.turn_arc("設定値を回す", centre, step)
+    rollout.hold("設定値を離す", GRIPPER_OPEN, plan.open_steps)
+    rollout.move_to("設定値から逃げる",
                     [rollout.eef_position[0], rollout.eef_position[1],
                      plan.retreat_z],
                     GRIPPER_OPEN, tolerance=0.01, budget=plan.budget_lift)
@@ -745,16 +745,16 @@ def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
     plan : TaskPlan
         実行する台本。
     max_steps : int
-        歩数の上限。**本番の打ち切りは 300 である。**
+        ステップ数の上限。**本番の打ち切りは 300 である。**
     record_images : bool
         観測画像も溜めるか。**描画が要るので遅くなる。**
     verbose : bool
-        段ごとの歩数と誤差を印字するか。
+        段ごとのステップ数と誤差を印字するか。
 
     Returns
     -------
     record : EpisodeRecord
-        歩数・成否・行動。画像は `rollout.images()` から取る。
+        ステップ数・成否・行動。画像は `rollout.images()` から取る。
     """
     rollout = _Rollout(env, init_state, max_steps, record_images)
     for step in plan.steps:
@@ -813,8 +813,8 @@ def reset_to(env: Any, init_state: np.ndarray) -> dict[str, np.ndarray]:
     **`measure` と `verify`/`record` で手順が違うと、測った寸法と実際に
     動かす場面がずれる。** 1 か所に置いて両方から呼ぶ。
 
-    空撃ちの歩数は評価パイプラインに合わせている
-    （`pipeline/rollout.py` が方策へ渡す前に `np.zeros` を 10 歩撃つ）。
+    空撃ちのステップ数は評価パイプラインに合わせている
+    （`pipeline/rollout.py` が方策へ渡す前に `np.zeros` を 10 ステップ撃つ）。
     """
     env.reset()
     # **reset のたびに sim は作り直される。** 取り置くと壊れる。
@@ -830,7 +830,7 @@ def reset_to(env: Any, init_state: np.ndarray) -> dict[str, np.ndarray]:
 def _resolve_plan(task: str, smoothing: float | None = None,
                   blend_radius: float | None = None,
                   suite: str | None = None) -> TaskPlan:
-    """台本を引く。滑らかさのつまみだけ、その場で差し替えられる。
+    """台本を引く。滑らかさの設定値だけ、その場で差し替えられる。
 
     **`measure` は台本より先に走る。** 寸法を測ってから台本を書くのに、
     台本が無いと測れないのでは順序が逆になる。`--suite` を渡した場合だけ、
@@ -916,14 +916,14 @@ def _report_goal_sites(env: Any, sim: Any) -> None:
 
 
 def _report_articulation(env: Any, sim: Any) -> None:
-    """関節を持つ什器（コンロのつまみ・引き出し）の状態と、点く境目を出す。
+    """関節を持つ什器（コンロの設定値・引き出し）の状態と、点く境目を出す。
 
     **「点ける」は関節の角度で判定される。** `flat_stove` なら
     `qpos >= 0.5`（`libero/libero/envs/objects/articulated_objects.py` の
     `default_turnon_ranges` の下限）で、**どの関節でもよい**（`turn_on` は
     どれか 1 つが超えれば真を返す）。**見た目ではなくこの値を狙う。**
     """
-    print("\n--- 関節（つまみ・扉）---")
+    print("\n--- 関節（設定値・扉）---")
     found = False
     for name in env.env.obj_body_id:
         obj = env.env.get_object(name) if hasattr(env.env, "get_object") else None
@@ -1010,11 +1010,11 @@ def command_verify(args: argparse.Namespace) -> None:
 
     succeeded = len(lengths) - len(failures)
     print(f"成功 {succeeded}/{len(lengths)}  "
-          f"歩数 中央値 {int(statistics.median(lengths))} "
+          f"ステップ数 中央値 {int(statistics.median(lengths))} "
           f"最小 {min(lengths)} 最大 {max(lengths)}  "
           f"（上限 {args.max_steps}）")
     if failures:
-        print(f"  失敗（番号, 歩数, 衝突）: {failures[:20]}")
+        print(f"  失敗（番号, ステップ数, 衝突）: {failures[:20]}")
     if measured:
         middle = {key: statistics.median(m[key] for m in measured)
                   for key in ("avg_jerk", "rms_jerk", "sparc", "path_length")}
@@ -1080,7 +1080,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--episodes", default=None,
                         help="初期配置の番号をカンマ区切りで。省略時は全部")
     parser.add_argument("--max-steps", type=int, default=300,
-                        help="歩数の上限（既定 300。本番の打ち切りと同じ）")
+                        help="ステップ数の上限（既定 300。本番の打ち切りと同じ）")
     parser.add_argument("--output", type=Path, default=Path("outputs/scripted"),
                         help="record の書き出し先")
     parser.add_argument("--keep-failures", action="store_true",
@@ -1090,7 +1090,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--blend-radius", type=float, default=None,
                         help="通過点を見切る距離 [m]。台本の値を上書きする")
     parser.add_argument("--verbose", action="store_true",
-                        help="1 本目だけ段ごとの歩数を出す")
+                        help="1 本目だけ段ごとのステップ数を出す")
     args = parser.parse_args()
     if args.episodes:
         args.episodes = [int(x) for x in args.episodes.split(",")]

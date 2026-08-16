@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """元の手本と、台本で作った軌道を、同じ画面に並べて見る。
 
-**数字だけでは「なぜ 400 歩かかるのか」が分からない。** 元の手本は人が
+**数字だけでは「なぜ 400 ステップかかるのか」が分からない。** 元の手本は人が
 遠隔操作したもので、迷い・行き過ぎ・持ち直しがそのまま入っている。台本で
-作った軌道はそれが無い。**並べて初めて、削れた歩数の中身が見える。**
+作った軌道はそれが無い。**並べて初めて、削れたステップ数の中身が見える。**
 
 左が元の手本（`lerobot/libero_plus` の実フレーム）、右が台本で作った軌道
 （[scripted_demo.py](scripted_demo.py) の `record` が書いた npz）である。
@@ -315,8 +315,8 @@ def _plot_paths(episodes: list[tuple[str, SavedEpisode]], destination: Path
                 ) -> None:
     """手先の軌跡を 3 面で描く。**ガタつきは動画より図のほうが早く見つかる。**
 
-    左から「上から見た経路」「高さの推移」「1 歩ごとの向きの変化」。
-    3 枚目が肝で、**向きが毎歩何度折れているかがそのままガタつき**である。
+    左から「上から見た経路」「高さの推移」「1 ステップごとの向きの変化」。
+    3 枚目が肝で、**向きが1 ステップごとに何度折れているかがそのままガタつき**である。
     直す前は中央値 6.7 度、直したあとは 2.1 度だった。
 
     Parameters
@@ -355,7 +355,7 @@ def _plot_paths(episodes: list[tuple[str, SavedEpisode]], destination: Path
 
 
 def _heading_change(track: np.ndarray) -> np.ndarray:
-    """1 歩ごとに進む向きが何度折れたか。**これがそのままガタつきである。**"""
+    """1 ステップごとに進む向きが何度折れたか。**これがそのままガタつきである。**"""
     vectors = np.diff(track, axis=0)
     lengths = np.linalg.norm(vectors, axis=1)
     moving = lengths > 1e-4
@@ -365,14 +365,14 @@ def _heading_change(track: np.ndarray) -> np.ndarray:
 
 
 def _report_actions(original_length: int, generated: SavedEpisode) -> None:
-    """歩数と行動の癖を並べて印字する。
+    """ステップ数と行動の癖を並べて印字する。
 
     **台本の行動は振り切れている**（速く動かすため）。元の手本は人の操作なので
     中間の値が多い。**この違いは学習に効きうる**ので数字で出しておく。
     """
     actions = np.asarray(generated.action)
     saturated = float(np.mean(np.abs(actions[:, :3]) > 0.99))
-    print("\n--- 歩数と行動 ---")
+    print("\n--- ステップ数と行動 ---")
     print(f"  元の手本   {original_length:4d} 歩")
     print(f"  台本       {generated.steps:4d} 歩 "
           f"（{generated.steps / original_length:.2f} 倍）")
@@ -419,7 +419,7 @@ def main() -> None:
     rows = _list_originals(args.episodes_parquet, args.task)
     print(f"元の手本 {len(rows)} 本  最短 {rows[0].length} 歩 "
           f"最長 {rows[-1].length} 歩"
-          f"  300 歩以下 {sum(1 for row in rows if row.length <= 300)} 本")
+          f"  300 ステップ以下 {sum(1 for row in rows if row.length <= 300)} 本")
     chosen = _choose_original(args.repo, rows, args.rank, args.original_episode)
     print(f"  → ep{chosen.episode}（{chosen.length} 歩）"
           f" chunk-{chosen.chunk:03d}/file-{chosen.file:03d}"

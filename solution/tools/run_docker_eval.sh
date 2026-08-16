@@ -30,7 +30,7 @@
 #   WEIGHTS        測る重み。既定 work/artifacts/model_weights
 #                  **素の重み（0.1409 の構成）と学習後を比べるときはここを変える**
 #   LABEL          出力先の名前に足す語。どの重みの回か分かるようにする
-#   PARC_*         推論のつまみ。空なら policy_server.py の既定が効く
+#   PARC_*         推論の設定値。空なら policy_server.py の既定が効く
 #
 # Reads:
 #   - solution/policy_server.py, solution/tools/*.py
@@ -183,7 +183,7 @@ for name in PARC_N_ACTION_STEPS PARC_SAMPLES PARC_BLEND_STEPS PARC_EMA_ALPHA \
     value="$(eval "printf '%s' \"\${$name:-}\"")"
     if [ -n "$value" ]; then
         policy_environment+=(-e "$name=$value")
-        echo "  つまみ $name=$value"
+        echo "  設定値 $name=$value"
     fi
 done
 
@@ -224,7 +224,7 @@ kit_environment=(
     # **描画のやり方。既定は `osmesa`（CPU 描画）である。**
     # このマシンの vGPU は `NVIDIA Virtual Compute Server`（計算専用の製品）で、
     # **OpenGL に対応しない。** `egl` にすると「空の場面 1 枚 0.1 ms」という
-    # 速さの測定は通るのに（実質何も描いていない）、**本当の場面で 50〜99 歩目に
+    # 速さの測定は通るのに（実質何も描いていない）、**本当の場面で 50〜99 ステップ目に
     # `read_pixels` で異常終了する**（2026-08-14 に 3 回とも再現）。
     # 詳しくは docs/howto/03_gpu_eval.md「描画は osmesa を使う」。
     # **既定を egl にしていたせいで、この罠に 2 度はまっている。**
@@ -235,7 +235,7 @@ kit_environment=(
     -e "PYTHONFAULTHANDLER=1"
     # **これを渡さないと EGL が使えない。** nvidia-container-runtime は
     # 既定で compute,utility しか通さず、描画（graphics）を落とす。
-    # そのままだと Mesa のソフトウェア実装に落ち、**1 歩 300 ms になる**
+    # そのままだと Mesa のソフトウェア実装に落ち、**1 ステップ 300 ms になる**
     # （84 件で 16 時間。EGL なら 39 ms で 90 分）。
     -e "NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics"
     -e "SERVER_URL=http://$POLICY_HOST:8000"
@@ -247,7 +247,7 @@ kit_environment=(
 )
 
 # **`--ulimit core=0` と `PYTHONFAULTHANDLER=1` は、落ちたときに気づくためにある。**
-# 2026-08-14、評価側が 50 歩目で segfault した。既定のままだとカーネルが
+# 2026-08-14、評価側が 50 ステップ目で segfault した。既定のままだとカーネルが
 # コアダンプを書きに行き（`core_pattern` は apport へのパイプ）、**GPU の
 # メモリを抱えたプロセスのダンプは終わらない。** 結果、`docker ps` では
 # 動いたまま、進捗だけが止まる——落ちたことに 20 分気づけなかった。

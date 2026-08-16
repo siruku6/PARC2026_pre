@@ -219,10 +219,10 @@ docker run --rm \
 rsync -a work/scripted/lerobot/ <GPU マシン>:~/src/PARC2026_pre/work/scripted/lerobot/
 ```
 
-**まず 10 歩だけ回して、起動するかを見る。** 既定の引数では番号選びを通らない
+**まず 10 ステップだけ回して、起動するかを見る。** 既定の引数では番号選びを通らない
 ので学習データのメタデータを取りに行かず、要るのは出発点の重み 869 MB だけである
 （一度学習していれば cache にある）。**8/13 に 1 本のデータセットで通した**
-——`dataset.num_frames=233` / `num_episodes=1` を読み、10 歩を 10 秒、
+——`dataset.num_frames=233` / `num_episodes=1` を読み、10 ステップを 10 秒、
 学習する重みは 743K（LoRA）。
 
 ```bash
@@ -234,7 +234,7 @@ docker run --rm --gpus all \
     --dataset.repo_id=local/scripted_moka --dataset.root=/data/lerobot
 ```
 
-通ったら本番の歩数で回す。`train.py` は `--` の後ろを**最後に**付けるので、
+通ったら本番のステップ数で回す。`train.py` は `--` の後ろを**最後に**付けるので、
 データセットの差し替えは**コード変更なしで通る**（同じ設定を 2 度渡すと後ろが勝つ）。
 
 ```bash
@@ -331,7 +331,7 @@ python solution/tools/install_weights.py work/train/<run 名>/merged_model \
 
 ## 7. 評価する — **既定の 36 件では測れない**
 
-**このタスクは 36 件に入っていない**（146 本すべてが 341 歩以上で、
+**このタスクは 36 件に入っていない**（146 本すべてが 341 ステップ以上で、
 `--max-demo-steps 300` に全部落ちるため）。**このタスクの変種だけを集めた
 一覧が `compe/val/MOKA_TASKS.csv`（8 件）にある**ので、それを渡す
 （作り直すときは `solution/tools/make_task_suite.py`）。
@@ -412,7 +412,7 @@ docker run --rm -v "$PWD/work:/w" --entrypoint chown parc2026-train \
 最後に**足した分のエピソード番号**（`14347〜14391`）が印字される。
 
 ```bash
-# 2. ゲート A：配線を 10 歩で見る（5 分）
+# 2. ゲート A：配線を 10 ステップで見る（5 分）
 docker run --gpus all --rm -v "$PWD/work/train:/out" -v "$PWD/work/merged:/data" \
     -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
     parc2026-train python /workspace/train.py --run-name scripted_mix_smoke \
@@ -431,7 +431,7 @@ docker run --gpus all --rm -v "$PWD/work/train:/out" -v "$PWD/work/merged:/data"
 気付けない（14,347 のままなら足せていない）。
 
 ```bash
-# 3. ゲート B：本番の歩数（20,000 歩・約 2 時間）
+# 3. ゲート B：本番のステップ数（20,000 ステップ・約 2 時間）
 #    2 と同じ引数から --steps / --save-freq / --run-name を差し替えるだけ
 ```
 
@@ -506,7 +506,7 @@ GPU マシンで撮る場合は `nproc` から測り直すこと。
 | 手 | 直列 | 2 並列 |
 |---|---|---|
 | `verify` 50 通り（描画なし） | 153 秒 | — |
-| `record` 1 本 | **111 秒**（233 歩） | **172 秒** |
+| `record` 1 本 | **111 秒**（233 ステップ） | **172 秒** |
 | `record` 50 本 | 約 92 分 | **約 72 分**（実測。45 本が成功） |
 | `record` 変種 4 種で 200 本 | 6.2 時間 | **約 4.8 時間** |
 | `build` 45 本 | **10 分 31 秒**（実測・**14 秒/本**） | — |
@@ -515,7 +515,7 @@ GPU マシンで撮る場合は `nproc` から測り直すこと。
 出来上がりは **45 本で 64 MB**（front 41.2 MB ＋ wrist 23.6 MB）で、
 元の npz 3.8 GB の **1.7%** である。
 
-**`record` の中身は描画が支配的である。** 実測 111 秒 / 233 歩 = 1 歩 476 ms で、
+**`record` の中身は描画が支配的である。** 実測 111 秒 / 233 ステップ = 1 ステップ 476 ms で、
 うち物理は 39 ms しかない。**GPU では描けないので、速くする手は並列だけである。**
 そして**2 コアでの並列は 1.3 倍しか稼げない**（上の 92 分 → 72 分）ので、
 大きく縮めたければコアを増やすしかない。
