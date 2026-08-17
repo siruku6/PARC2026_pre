@@ -15,7 +15,7 @@
 | **提出 zip の sha256** | **`5cf6b9836f46805ba10bdde93ead02913c65d050adfb20d6800a3788b4cdb9ee`** |
 | 提出 zip のファイル名 | `submission_4.2.0_rp3000_blend0.zip`（541 ファイル・9,378 MB） |
 | モデル構成 | π₀.₅（VLM は PaliGemma 系、行動側は flow matching の action expert）。**パラメータ 4.14B**・safetensors のテンソル **813 個** |
-| 推論方式 | **flow matching**。ノイズ除去 **10 段**（`num_inference_steps`） |
+| 推論方式 | **flow matching**。ノイズ除去を **10 回**繰り返す（`num_inference_steps`） |
 | **Action chunk** | **有り。chunk は 50 ステップぶん生成し、先頭 16 ステップだけ実行して作り直す** |
 
 ## Action chunk の書き方に注意
@@ -40,10 +40,10 @@
 
 | 後処理 | 既定 | 効果 |
 |---|---|---|
-| EMA 平滑化 | `ema_alpha=0.3` | 直前の行動を 3 割混ぜる。姿勢 6 次元のみ。**グリッパ（7 次元目）は素通し** |
+| EMA 平滑化 | `ema_alpha=0.3` | 直前の行動を 3 割混ぜる。姿勢 6 次元のみ。**グリッパ（7 次元目）には混ぜず、そのまま渡す** |
 | 指示文の正規化 | `normalize=on` | 評価が渡す文を学習データの 40 種のうち最も近いものへ寄せる |
-| chunk 継ぎ目の平滑化 | **`blend_steps=0`（切ってある）** | 入れると悪化した（[06](06_step_count_drives_score.md)） |
-| chunk の複数サンプリング | **`samples=1`（切ってある）** | — |
+| chunk 継ぎ目の平滑化 | **`blend_steps=0`（無効にしてある）** | 入れると悪化した（[06](06_step_count_drives_score.md)） |
+| chunk の複数サンプリング | **`samples=1`（無効にしてある）** | — |
 | RTC | **`rtc=off`** | 入れると悪化した（[06](06_step_count_drives_score.md)） |
 
 ## 確かめ直すコマンド
@@ -79,7 +79,7 @@ shasum -a 256 submission_4.2.0_rp3000_blend0.zip
 | **`model.safetensors`** | **違う** | **学習されるパラメータ**（sha256 `0c5d542e…`） |
 | `policy_preprocessor_step_2_normalizer_processor.safetensors` | **完全に同一** | データセットの統計値（mean/std/min/max/count）。学習では更新されない |
 | `policy_postprocessor_step_0_unnormalizer_processor.safetensors` | **完全に同一** | 同上 |
-| `config.json` | 違う | `freeze_vision_encoder` と `train_expert_only` の 2 つだけ（**学習時にしか効かない印**） |
+| `config.json` | 違う | `freeze_vision_encoder` と `train_expert_only` の 2 つだけ（**学習時にしか効かない設定**） |
 | `vlm/`（トークナイザ 4 件）・`train_config.json`・`.gitattributes` | 同一 | 学習対象外 |
 
 **したがって `model.safetensors` の sha256 を書けば必須欄を満たす。**

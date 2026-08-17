@@ -17,7 +17,7 @@ for path in sorted(pathlib.Path("outputs").glob("*.md")):
     server = re.search(r"\[parc\] policy_server ([^\n]+)", text)
     score = re.search(r"総合スコア\s*([0-9.]+)", text)
     if score:
-        print(f"{text.count('POST /act'):>5} 歩  {score.group(1):>6}  "
+        print(f"{text.count('POST /act'):>5} ステップ  {score.group(1):>6}  "
               f"{(server.group(1)[:60] if server else '')}  {path.name}")
 EOF
 ```
