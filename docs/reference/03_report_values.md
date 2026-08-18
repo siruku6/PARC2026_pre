@@ -85,8 +85,9 @@ python /workspace/train.py --steps 20000 --batch-size 8
 
 | 項目 | 値 | 出典 |
 |---|---|---|
-| ベースモデルのライセンス | **Apache-2.0** | `lerobot/smolvla_libero_plus` の HuggingFace ページ |
-| 学習データのライセンス | **Apache-2.0**（`lerobot/libero_plus`） | 同 HuggingFace ページ |
+| ベースモデルのライセンス（**最終提出の π0.5**） | **gemma**（Google の Gemma Terms of Use） | `lerobot/pi05_libero_base` の HuggingFace ページ。**再配布は Terms §3.1 の 4 条件を満たす限り可**。この重みを公開していないのはこのため |
+| ベースモデルのライセンス（SmolVLA。3.7.0 まで） | **Apache-2.0** | `lerobot/smolvla_libero_plus` の HuggingFace ページ |
+| 学習データのライセンス | **MIT** | 大もとの [`Sylvest/LIBERO-plus`](https://huggingface.co/datasets/Sylvest/LIBERO-plus) の `license: mit`（API で確認）。**学習に使った `lerobot/libero_plus` にはカードもライセンス表記も無い**ので、そちらを出典にはできない |
 | **提出物に含まれる第三者コードのライセンス** | **LeRobot v0.6.0（Apache-2.0）を `vendor/lerobot/` に同梱** | [THIRD_PARTY_LICENSES.md](../../THIRD_PARTY_LICENSES.md) |
 
 **第三者コードの同梱は必ず該当する。** [02_環境戦略.md](../strategy/02_環境戦略.md) の
