@@ -344,12 +344,32 @@ def _render_provenance(entry: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _render_readme(index: list[dict], repo_id: str) -> str:
+def _load_front_matter(api: HfApi, repo_id: str) -> str:
+    """既にあるモデルカードの YAML 前付けを読む。
+
+    README は毎回作り直すので、ライセンス表記のように**人が書いた前付けは
+    そのまま持ち越さないと消える。**前付けが無ければ空文字を返す。
+    """
+    try:
+        path = api.hf_hub_download(repo_id=repo_id, filename=_README_PATH)
+    except EntryNotFoundError:
+        return ""
+    text = Path(path).read_text(encoding="utf-8")
+    if not text.startswith("---\n"):
+        return ""
+    end = text.find("\n---\n", 3)
+    if end == -1:
+        return ""
+    return text[: end + len("\n---\n")] + "\n"
+
+
+def _render_readme(index: list[dict], repo_id: str,
+                   front_matter: str = "") -> str:
     """索引を、一覧して選べる表として組み直す。"""
     header = [
         f"# {repo_id}",
         "",
-        "PARC2026 の重みの退避先。**`solution/tools/archive_push.py` だけが"
+        "学習した重みの退避先。**`solution/tools/archive_push.py` だけが"
         "ここへ書く。**",
         "",
         "一次資料は [index.json](index.json) である。この README はそこから"
@@ -403,7 +423,7 @@ def _render_readme(index: list[dict], repo_id: str) -> str:
         f"`{_TRAIN_CONFIG_NAME}` を渡さないと**弾かれる**。"
         "これが「どれがどれだか分からない」を防ぐ唯一の仕掛けである。",
     ]
-    return "\n".join(header + rows + footer) + "\n"
+    return front_matter + "\n".join(header + rows + footer) + "\n"
 
 
 def _print_plan(entry: dict, files: list[tuple[Path, str]],
@@ -423,7 +443,8 @@ def _print_plan(entry: dict, files: list[tuple[Path, str]],
 
 def _make_operations(files: list[tuple[Path, str]], folder: str,
                      train_config: Path | None, entry: dict,
-                     index: list[dict], repo_id: str
+                     index: list[dict], repo_id: str,
+                     front_matter: str = ""
                      ) -> list[CommitOperationAdd]:
     """1 回の書き込みにまとめる操作を組む。
 
@@ -441,6 +462,9 @@ def _make_operations(files: list[tuple[Path, str]], folder: str,
         追加後の索引全体。
     repo_id : str
         退避先のリポジトリ。
+    front_matter : str
+        既にあるモデルカードの YAML 前付け。ライセンス表記を消さないために
+        そのまま先頭へ戻す。
 
     Returns
     -------
@@ -475,7 +499,9 @@ def _make_operations(files: list[tuple[Path, str]], folder: str,
     operations.append(
         CommitOperationAdd(
             path_in_repo=_README_PATH,
-            path_or_fileobj=_render_readme(index, repo_id).encode("utf-8"),
+            path_or_fileobj=_render_readme(
+                index, repo_id, front_matter
+            ).encode("utf-8"),
         )
     )
     return operations
@@ -510,7 +536,8 @@ def main() -> None:
     index.append(entry)
 
     operations = _make_operations(
-        files, args.folder, train_config, entry, index, args.repo_id
+        files, args.folder, train_config, entry, index, args.repo_id,
+        _load_front_matter(api, args.repo_id),
     )
     print(f"[archive] {len(operations)} 個を 1 回で書き込みます…")
     api.create_commit(
