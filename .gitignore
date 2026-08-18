@@ -15,7 +15,9 @@ work/
 # 本番採点のログは作り直せない一次資料なので追跡する（docs/knowledge/05 の出典）。
 # 動画やログの生ファイルが混ざったときは、それだけが外れるようにしてある。
 outputs/*
-!outputs/*.md
+!outputs/submission_logs
+outputs/submission_logs/*
+!outputs/submission_logs/*.md
 
 
 .venv/
