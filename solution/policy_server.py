@@ -689,6 +689,50 @@ class MyPolicy(BasePolicy):
             from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
 
             self._policy = SmolVLAPolicy.from_pretrained(weights, config=config)
+
+        # ============================================================
+        # 推論時量子化スイープ（候補 C4: bnb / C5: torchao。work/quant_sweep/
+        # CANDIDATES.md）。**`QUANT_SERVE_MODE` が空のときは何もしない no-op**
+        # ——本番・通常の評価は必ずここを未設定で通るので、既定の挙動は
+        # 1 バイトも変わらない。C1〜C3（学習時候補）と違い、こちらは
+        # **すでにフル精度で読み終えた重みに後掛けする**（再学習が要らない）。
+        #
+        # 実体は solution/tools/quant_serve_bnb.py / quant_serve_torchao.py。
+        # ロジックをここへ埋め込まず薄い分岐だけにしてあるのは、
+        # solution/train/lerobot_train_with_quant.py（C1〜C3 側の分岐）と
+        # 同じ流儀に揃えるため。
+        #
+        # `solution/tools/*.py` はこのファイル自身とは別ディレクトリにある
+        # （提出物の一部ではなく実験用のツールのため）。実行のされ方によって
+        # 隣にある場所が変わるので両方を通しておく——
+        #   - run_docker_eval.sh / run_gpu_eval.sh 経由: quant_serve_*.py を
+        #     policy_server.py と同じ「serve」ディレクトリへコピー・マウントする
+        #     ので `here` 直下にある
+        #   - リポジトリ内から直接 `python solution/policy_server.py` する場合は
+        #     `here / "tools"`（= solution/tools）にある
+        quant_mode = os.environ.get("QUANT_SERVE_MODE", "")
+        if quant_mode:
+            if self._kind != "pi05":
+                raise RuntimeError(
+                    f"QUANT_SERVE_MODE={quant_mode!r} は π0.5 専用の実験的候補で"
+                    f"ある（work/quant_sweep/CANDIDATES.md の C4/C5）。"
+                    f"SmolVLA（config.type={self._kind!r}）では未実装。"
+                )
+            sys.path.insert(0, str(here / "tools"))
+            if quant_mode == "bnb_vision4bit":
+                import quant_serve_bnb
+
+                quant_serve_bnb.apply(self._policy, self._device)
+            elif quant_mode == "torchao_int8":
+                import quant_serve_torchao
+
+                quant_serve_torchao.apply(self._policy, self._device)
+            else:
+                raise ValueError(
+                    f"QUANT_SERVE_MODE の値が不明: {quant_mode!r}"
+                    "（bnb_vision4bit / torchao_int8 のいずれか）"
+                )
+
         self._policy.to(self._device)
         self._policy.eval()
 
@@ -781,7 +825,9 @@ class MyPolicy(BasePolicy):
             f"n_action_steps={self._n_action_steps}  ema_alpha={self._ema_alpha}  "
             f"blend_steps={self._blend_steps}  samples={self._samples}  "
             f"rtc={f'on(horizon={self._rtc_horizon})' if self._rtc_enabled else 'off'}  "
-            f"normalize={self._normalize_mode()}",
+            f"normalize={self._normalize_mode()}  "
+            f"quant_serve={quant_mode or 'off'}"
+            + (f"({os.environ.get('QUANT_SERVE_SCOPE', 'vision_only')})" if quant_mode else ""),
             flush=True,
         )
 

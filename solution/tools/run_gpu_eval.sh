@@ -23,6 +23,15 @@
 #   PER_CELL=3     スイート × カテゴリあたりの本数（CSV 全体で 84 件）
 #   RECORD=1       ロールアウトを mp4 に撮る（既定で有効。失敗した回だけ）
 #   PARC_*         推論の設定値。空なら policy_server.py の既定が効く
+#   QUANT_SERVE_MODE   推論時量子化スイープ（π0.5 専用。work/quant_sweep/
+#                  CANDIDATES.md の C4/C5）。空なら量子化なし（既定）。
+#                  bnb_vision4bit（bitsandbytes）/ torchao_int8（torchao）。
+#                  **$POLICY_PYTHON に bitsandbytes/torchao が入っていないと
+#                  ImportError で落ちる**（意図した fail loudly。
+#                  Dockerfile.pi05 の venv には入っているが、host 直の venv には
+#                  自分で入れないと無い）
+#   QUANT_SERVE_SCOPE  量子化する範囲。既定 vision_only。詳細は
+#                  solution/tools/quant_serve_common.py
 #
 # Reads:
 #   - solution/policy_server.py, solution/tools/*.py
@@ -207,6 +216,7 @@ label="n${PARC_N_ACTION_STEPS:-5}_ep${N_EPISODES}_max${MAX_STEPS}"
 [ -n "${PARC_EMA_ALPHA:-}" ] && label="${label}_ema${PARC_EMA_ALPHA//./}"
 [ -n "${PARC_BLEND_STEPS:-}" ] && label="${label}_blend${PARC_BLEND_STEPS}"
 [ -n "${PARC_SAMPLES:-}" ] && label="${label}_s${PARC_SAMPLES}"
+[ -n "${QUANT_SERVE_MODE:-}" ] && label="${label}_${QUANT_SERVE_MODE}"
 [ -n "$CHECK_ONLY" ] && label="check_${label}"
 
 OUTPUT_DIR="$REPOSITORY_ROOT/work/gpu_eval/$(date +%m%d_%H%M%S)_${label}"
@@ -237,6 +247,15 @@ SERVE_DIR="$OUTPUT_DIR/serve"
 mkdir -p "$SERVE_DIR"
 cp "$REPOSITORY_ROOT/solution/policy_server.py" "$SERVE_DIR/"
 ln -sfn "$WEIGHTS" "$SERVE_DIR/model_weights"
+
+# **推論時量子化スイープ（C4: bnb / C5: torchao。QUANT_SERVE_MODE）の追加ファイル。**
+# run_docker_eval.sh と同じ理由で、policy_server.py の隣へ常にコピーしておく
+# （未設定なら import されないので無害）。$POLICY_PYTHON に bitsandbytes/torchao が
+# 入っていない venv を指すと、実際に QUANT_SERVE_MODE を使ったときに import で
+# 落ちる——それは意図した「fail loudly」であり、ここでは黙って揃えたりしない。
+for _quant_tool in quant_serve_common.py quant_serve_bnb.py quant_serve_torchao.py; do
+    cp "$REPOSITORY_ROOT/solution/tools/$_quant_tool" "$SERVE_DIR/"
+done
 
 SERVER_LOG="$OUTPUT_DIR/server.log"
 ( cd "$SERVE_DIR" && \

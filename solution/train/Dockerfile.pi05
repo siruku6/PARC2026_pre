@@ -40,6 +40,17 @@ ENV HOME=/tmp
 ENV USER=trainer
 ENV LOGNAME=trainer
 
+# **2026-08-22 に実機で踏んだ既知の罠。** torch.compile（inductor）は上記の
+# `USER=trainer` から `/tmp/torchinductor_trainer` という名前でキャッシュ置き場を
+# 決める。このディレクトリは(何が作ったにせよ)一度でも別の uid（典型的には
+# `docker exec` を `-u root` で叩いたときなど）で作られると、既定の `755` の
+# ままでは他の uid が中に書き込めず `PermissionError` で `--policy.compile_model=true`
+# が丸ごと落ちる（`/tmp` 自体は `drwxrwxrwt` だが、その中の個々のディレクトリは
+# 誰が作ったかの権限をそのまま引き継ぐため）。**ビルド時に `/tmp` 自身と同じ
+# `1777`（sticky + 全員書き込み可）で先に作っておけば、誰が後から触っても
+# 同じ問題が起きない。**
+RUN mkdir -p /tmp/torchinductor_trainer && chmod 1777 /tmp/torchinductor_trainer
+
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cu128
 ARG TORCH_VERSION=2.11.0
 ARG TORCHCODEC_VERSION=0.11.1
@@ -67,8 +78,22 @@ RUN pip install --no-cache-dir "torchvision==${TORCHVISION_VERSION}" --index-url
 ARG LEROBOT_TAG=v0.6.0
 RUN git clone --quiet --depth 1 --branch ${LEROBOT_TAG} \
         https://github.com/huggingface/lerobot.git /opt/lerobot \
-    && pip install --no-cache-dir -e "/opt/lerobot[training,pi]" \
-    && pip uninstall -y -q torchao || true
+    && pip install --no-cache-dir -e "/opt/lerobot[training,pi]"
+
+# **量子化スイープ用の追加ライブラリ（work/quant_sweep/PROGRESS.md 参照）。**
+# 以前ここにあった `pip uninstall -y -q torchao` は、2026-08-20 に調べた結果
+# 「現在の [training,pi] 一式は torchao を一切引っ張ってきておらず、
+# 無効化の対象が最初から存在しない」空振りの安全策だったと判明した
+# （理由の記載が無いまま fc976bd から存在。torchao を使うこと自体への実害は無い）。
+#
+# - bitsandbytes は torch/torchcodec と違い libtorch の ABI にリンクしない
+#   （CUDA 11.8〜13.0 まとめて1 wheel、実行時に torch.version.cuda を見て選ぶ）ので
+#   --index-url は不要。
+# - torchao は最新 0.18.0 が torch 2.12（nightly）向けのビルドで、この
+#   torch==2.11.0+cu128 に対しては 0.17.0 が対応版
+#   （github.com/pytorch/ao/issues/2919 の対応表、2026-08-20 確認）。
+RUN pip install --no-cache-dir "bitsandbytes==0.49.2" \
+    && pip install --no-cache-dir "torchao==0.17.0" --index-url ${TORCH_INDEX}
 
 RUN python -c "\
 import torch, torchcodec, torchvision; \
@@ -76,6 +101,15 @@ from torchcodec.decoders import VideoDecoder; \
 torchvision.ops.nms; \
 print(f'torch {torch.__version__} / torchcodec {torchcodec.__version__} '\
       f'/ torchvision {torchvision.__version__} 整合')"
+
+# bitsandbytes/torchao は import できることしか確認できない。CUDA カーネルが
+# 実際に動く（8bit optimizer の step・4bit 量子化・float8 変換）かは GPU が
+# 要るため、本当の確認は GPU 機での smoke test で行う
+# （work/quant_sweep/CANDIDATES.md 参照）。
+RUN python -c "\
+import bitsandbytes, torchao; \
+print(f'bitsandbytes {bitsandbytes.__version__} / torchao {torchao.__version__} import OK'\
+      '（GPU 実行時の確認は別途）')"
 
 # **RunPod で使うための追い足し（ローカル実行には影響しない）。**
 # 1. openssh-server: RunPod の「Basic SSH」は RunPod のサーバを経由する簡易接続で
@@ -115,7 +149,20 @@ WORKDIR /opt/pi05
 # 要らない —— pi05 は LoRA を使わず、train_expert_only のフルパラメータ学習
 # なのでチェックポイントがそのまま提出用になる。
 # runpod_ssh_start.sh は RunPod の Container Start Command から呼ぶ（上記参照）。
-COPY train.py train_pi05.py prune_checkpoints.sh runpod_ssh_start.sh /opt/pi05/
+#
+# quant_optim.py / quant_vision_4bit.py / quant_float8_expert.py は量子化実験の
+# 各候補（work/quant_sweep/CANDIDATES.md 参照）、lerobot_train_with_quant.py は
+# それらを lerobot-train の実行前に import するための薄いラッパー。
+#
+# **`solution/tools/dequantize_bnb4bit_checkpoint.py`（C2 のチェックポイントを評価用に
+# bf16 へ戻す道具）はここには COPY しない。** ビルドコンテキストが `solution/train`
+# なので `../tools/` は参照できない（コンテキスト外）。使うときは
+# `docker exec -i quant_train bash -c 'cat > /tmp/dequantize_bnb4bit_checkpoint.py'`
+# のように都度渡す（2026-08-22、実際にこの方法で C2 の再評価用チェックポイントを
+# 作った。work/quant_sweep/PROGRESS.md 参照）。
+COPY train.py train_pi05.py prune_checkpoints.sh runpod_ssh_start.sh \
+     quant_optim.py quant_vision_4bit.py quant_float8_expert.py \
+     lerobot_train_with_quant.py /opt/pi05/
 
 VOLUME ["/out"]
 ENV OUTPUT_ROOT=/out
