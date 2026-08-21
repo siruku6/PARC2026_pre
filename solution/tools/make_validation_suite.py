@@ -225,7 +225,16 @@ def _resolve_newobj_init(
     LIBERO-plus は専用の初期状態を **`init_files/libero_newobj/<suite>/`** に
     2,400 件持っており、本家の `benchmark/__init__.py` も `_add_` と `_level`
     のときだけそこを見ている（`get_task_init_states`）。
-    **元タスク名への前方一致は使えない。** 変種名そのもののファイルがある。
+    **公式カタログの変種名（`_add_N`単独）には前方一致は要らない**——
+    ファイル名がそのまま変種名と一致する。
+
+    **Camera・Robot Initial States・Sensor Noiseと組み合わせた複合摂動名
+    （`<add系のベース>_view_..._initstate_..._noise_...`）は、この関数が
+    素の`task_id`と完全一致するファイルを探すため、そのままでは見つからない。**
+    物体配置の初期状態はカメラ・ロボット姿勢・ノイズの値に依存しないので、
+    `_view_`より前（＝Objects Layout部分だけ）で探せば同じ初期状態ファイルを
+    再利用できる（`_resolve_bddl`が bddl を`_view_`より前で探すのと同じ理由）。
+    そのため`task_id`自身と`_view_`より前の2通りを、長い方から順に試す。
 
     Returns
     -------
@@ -233,10 +242,12 @@ def _resolve_newobj_init(
         初期状態の置き場からの相対パス（`libero_newobj/<suite>/<変種名>.pruned_init`）。
         **`/` を含めることがパッチ側の分岐の目印になる。** 無ければ None。
     """
-    name = f"{task_id}{_INIT_SUFFIX}"
-    if not (init_states_root / _NEWOBJ_DIR / suite / name).is_file():
-        return None
-    return f"{_NEWOBJ_DIR}/{suite}/{name}"
+    candidates = dict.fromkeys((task_id, task_id.split("_view_")[0]))
+    for candidate_id in candidates:
+        name = f"{candidate_id}{_INIT_SUFFIX}"
+        if (init_states_root / _NEWOBJ_DIR / suite / name).is_file():
+            return f"{_NEWOBJ_DIR}/{suite}/{name}"
+    return None
 
 
 def _resolve_init_state_stem(
