@@ -45,7 +45,7 @@
 は**どこにも控えが無く、消したら作り直せない**が、8/18 にユーザーが「残しておく
 必要はない」と判断した（text40k は weak3x の 2 条件を外していて設定も残らず、
 scripted_mix は 8 件だけで 0.000、lora20k は 0.016）。`smolvla/base` は上流から
-取り直せる。**この判断の印として `work/.archive_pushed` を置いた。**
+取り直せる。**この判断の印として `work/admin/.archive_pushed` を置いた。**
 
 ### 1.2 直近のコミットと 4 ファイルが GitHub に上がっていない
 
@@ -199,11 +199,11 @@ huggingface_hub.errors.BadRequestError:
 **実際に消したのは未提出の 2 本だけ**（3.12.0・3.13.0＝18.76 GB）で、
 畳んだことで blend4 の 9.38 GB も一緒に落ちた。
 
-台本は `work/cleanup_hf.py` にある。**既定では何もせず、何をするかだけ表示する。**
+台本は `work/admin/cleanup_hf.py` にある。**既定では何もせず、何をするかだけ表示する。**
 
 ```bash
-.venv/bin/python work/cleanup_hf.py              # 表示だけ
-CONFIRM=yes .venv/bin/python work/cleanup_hf.py  # 実行
+.venv/bin/python work/admin/cleanup_hf.py              # 表示だけ
+CONFIRM=yes .venv/bin/python work/admin/cleanup_hf.py  # 実行
 ```
 
 **畳むと `parc2026-submission` のコミット 11 本が 1 本になる。**残るのは
@@ -227,7 +227,7 @@ CONFIRM=yes .venv/bin/python work/cleanup_hf.py  # 実行
 | 6 | イメージ 2 本を消す（`sirukufarios/…:v2`・`ubuntu:latest`） | ユーザー | **9.68 GB** | 待ち |
 | 7 | ローカルの zip 3 本を消す | ユーザー | **18.3 GB** | 待ち |
 | 8 | π0.5 の中間チェックポイントを消す（3.2 の表のとおり） | ユーザー | **86.6 GB** | 待ち |
-| 9 | SmolVLA 系のローカル重みと `venv310_check` を消す | ユーザー | **9.5 GB** | 待ち（`work/.archive_pushed` は 8/18 に置いた＝門は開いている） |
+| 9 | SmolVLA 系のローカル重みと `venv310_check` を消す | ユーザー | **9.5 GB** | 待ち（`work/admin/.archive_pushed` は 8/18 に置いた＝門は開いている） |
 | 11 | 「どれがどこにあるか」の表を 1 本足して push | — | 数分 | **済**（`../reference/19_weights_catalog.md`） |
 | 12 | 組み直せる zip 5 本を HF から消し、履歴を畳む | — | 数分 | **済**（38.42 GB まで下がった） |
 
@@ -294,7 +294,7 @@ CONFIRM=yes .venv/bin/python work/cleanup_hf.py  # 実行
 
 | 手 | 空く分 | 確度 | 判断 |
 |---|---|---|---|
-| SmolVLA の HF キャッシュ 2 本 | **2.74 GB** | 高い | **3.2 に書いてあったのに台本から漏れていた。**`work/cleanup_extra.sh` で拾う |
+| SmolVLA の HF キャッシュ 2 本 | **2.74 GB** | 高い | **3.2 に書いてあったのに台本から漏れていた。**`work/admin/cleanup_extra.sh` で拾う |
 | `datasets/parquet` と pip のキャッシュ | **1.47 GB** | 高い | 同上。どちらも使うときに作り直される |
 | `docker builder prune -a --force` | 申告 9.5 GB | **低い**。`--force` は申告どおりに空かなかった | 次に学習イメージを組むとき、キャッシュ無しで丸ごと組み直しになる |
 | 学習イメージ 4 本をまとめて消す | 9.49 GB | 高い（実測済み） | **やらない。**本戦の学習と評価にそのまま使う（2 章） |
