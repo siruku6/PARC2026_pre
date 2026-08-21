@@ -447,7 +447,17 @@ docker run --rm -v "$PWD/work/train:/out" --entrypoint chown parc2026-train \
     -R "$(id -u):$(id -g)" /out/scripted_mix
 cp -r work/train/scripted_mix/merged_model work/artifacts/model_weights_scripted_mix
 cp -r work/artifacts/model_weights_base/vlm work/artifacts/model_weights_scripted_mix/vlm
+
+# **並んでいることを目で確かめる。** model.safetensors と vlm が同じ階層に要る
+ls work/artifacts/model_weights_scripted_mix
 ```
+
+> **やり直すときは、先に置き場を消すこと。** `cp -r A B` は **B が既にあると
+> 「B の中に A を作る」**ので、2 度打つと `model_weights_…/merged_model/…` と
+> 1 段深くなり、**評価が「重みが無い」で落ちる。** 8/13 に踏んだ形はこうだった
+> —— 1 回目の `cp` が 907 MB のところで `Permission denied`（`chown` を
+> `merge.py` の前に打っていた）で落ち、小さい json だけが入り、2 回目が入れ子。
+> **`rm -rf` してから `cp` を打ち直す**のが確実である。
 
 > **【8/13】`compe/val/MOKA_TASKS.csv` は作り直した。前の版は 8 件とも
 > 「初期状態が無い」で落ちる。** `init_states_file` の列が無かったため、評価側が
