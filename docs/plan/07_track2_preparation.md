@@ -36,6 +36,9 @@ Background Textures・Light Conditions（推測を含む）に限定されると
 （[05_perturbation_categories.md](../reference/05_perturbation_categories.md)）。
 
 **Track2 の文言「位置・視点・ノイズ」は、残る 4 軸に字面のまま対応する。**
+（この対応づけ・各カテゴリの中身・自チームの実測は
+[20_track2_perturbation_categories.md](../reference/20_track2_perturbation_categories.md)
+に集約した。以下はその要約。）
 
 | Track2 の文言 | 対応する LIBERO-plus のカテゴリ | 母集団（全 10,030 件中） |
 |---|---|---|
@@ -446,8 +449,8 @@ Claude は `docker run` を実行できないので、番号 1・2 は「回せ�
 
 | 順 | やること | 進み具合 |
 |---|---|---|
-| 1 | Track2 疑似検証スイートで弱点を測る | **スイートは完成**（`compe/val/TRACK2_PROBE.csv`、40 行）。**成績はこれから**——今夜 GPU が空いたら `work/gpu_eval/tonight_0821.sh` が回す |
-| 2 | Tier 0（台本にノイズを混ぜて復帰データを作る） | **実装完了**（`scripted_demo.py --action-noise`）。**σ の決定はこれから**——`work/scripted/sweep_action_noise.sh`（GPU 不要） |
+| 1 | Track2 疑似検証スイートで弱点を測る | **完了・2026-08-22**（`compe/val/TRACK2_PROBE.csv`、40 行を実行）。成功率だけの読みは3.1節の指摘どおり誤りで、**ステップ数で読み直した結果はCamera Viewpoints (+34.6%)・Sensor Noise (+24.4%)が劣化の大きい2カテゴリ**（[09 §3.1](09_demo_perturbation_pipeline.md#31-track2疑似検証スイートの結果2026-08-22-実行08-22-に読み方を訂正)に詳細）。CRT論文の報告よりSensor Noiseの崩れが小さい点を確認するため、高強度版のprobeを準備済み（[09 §3.2](09_demo_perturbation_pipeline.md#32-高強度sensor-noiseの追加実験準備済み実行待ち)） |
+| 2 | Tier 0（台本にノイズを混ぜて復帰データを作る） | **実装完了**（`scripted_demo.py --action-noise`）。**σ=0.05に決定済み**（両タスク共通。[09 §2.1.1](09_demo_perturbation_pipeline.md#211-σスイープの実測結果2026-08-22-実行)）。データ量産はこれから |
 | 3 | 画像の幾何拡張・画質劣化拡張を有効化 | **未着手。次にやる** |
 | 4 | 手首カメラを使っているかの確認 | **閉じた。使っている**（4 節 #3）。稼げる余地は無い |
 | 5 | Tier 1（Camera・Noise の撮り直し） | 未着手。**学習データの variant を避ける安い道は無いと判明**（4 節 #2） |
