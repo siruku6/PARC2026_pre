@@ -30,6 +30,16 @@
         --variant KITCHEN_SCENE8_put_both_moka_pots_on_the_stove_light_2 \\
         --episodes 0,1,2 --output /out/scripted/
 
+    # 4. **ずれてから戻す手本にする**（本選 Track2 向け。DART のやり方）
+    #    送る行動にだけノイズを混ぜ、正解としては混ぜる前を記録する。
+    #    **σ は大きすぎると成功率が落ちて逆効果になる**ので、
+    #    描画しない verify で振ってから決める（1 本 2.4 秒）。
+    for sigma in 0 0.02 0.05 0.10; do
+      python3 solution/tools/scripted_demo.py verify \\
+        --task KITCHEN_SCENE8_put_both_moka_pots_on_the_stove \\
+        --action-noise $sigma
+    done
+
 **描画は CPU（`osmesa`）で行う。** 手元の GPU マシンの vGPU は
 `NVIDIA Virtual Compute Server` で OpenGL に対応せず、`egl` を指定すると
 **空の場面は 0.4 ms で描けるのに、実際の場面で止まる。**
@@ -279,6 +289,12 @@ class EpisodeRecord:
     collision_threshold_m: float = 0.001
     states: list[np.ndarray] = field(default_factory=list)
     actions: list[np.ndarray] = field(default_factory=list)
+    # **実際にシミュレータへ送った行動。** `--action-noise` を使ったときだけ
+    # `actions` と違う（学習データに入れるのは `actions` のほうである）。
+    # 送ったほうも残すのは、**ノイズが本当に効いていたかを後から確かめる**ため。
+    executed_actions: list[np.ndarray] = field(default_factory=list)
+    # 台本に混ぜたノイズの大きさ（標準偏差）。0.0 なら混ぜていない。
+    action_noise: float = 0.0
     ee_positions: list[np.ndarray] = field(default_factory=list)
     # 画像はステップ数ぶんに切った「眺め」で、複製ではない（`attach_images`）。
     front: np.ndarray | None = None
@@ -376,6 +392,22 @@ class SavedEpisode:
         self.steps = int(self._payload["steps"])
         self.success = bool(self._payload["success"])
         self.instruction = str(self._payload["instruction"])
+        # **2026-08-21 より前に書いた npz にはこの 2 つが無い。**
+        # 無い鍵を読むと `KeyError` になるので、既定を置いて読めるままにする
+        # （`action` はノイズを混ぜる前の行動で、そこは昔から変わらない）。
+        self.action_noise = (float(self._payload["action_noise"])
+                             if "action_noise" in self._payload else 0.0)
+
+    @property
+    def action_executed(self) -> np.ndarray:
+        """実際にシミュレータへ送った行動。**学習に使うのは `action` である。**
+
+        `--action-noise` を付けずに作った本、および 2026-08-21 より前に
+        書いた本では `action` と同じものを返す。
+        """
+        if "action_executed" not in self._payload:
+            return self.action
+        return self._payload["action_executed"]
 
     @property
     def front(self) -> np.ndarray:
@@ -406,10 +438,13 @@ class _Rollout:
     """1 本ぶんの実行。手先を中継点へ寄せる行動を1 ステップごとに作る。"""
 
     def __init__(self, env: Any, init_state: np.ndarray, max_steps: int,
-                 record_images: bool) -> None:
+                 record_images: bool, action_noise: float = 0.0,
+                 rng: np.random.Generator | None = None) -> None:
         self.env = env
         self.max_steps = max_steps
         self.record_images = record_images
+        self.action_noise = float(action_noise)
+        self._rng = rng if rng is not None else np.random.default_rng(0)
         threshold, _, collision_enabled = scoring_rules()
         self.record = EpisodeRecord(
             # **採点が衝突を見ない設定なら、こちらも見ない。** 届かない
@@ -417,6 +452,7 @@ class _Rollout:
             collision_threshold_m=threshold if collision_enabled else np.inf)
         self.phases: list[tuple[str, int, float]] = []
         self._last_command = np.zeros(3)
+        self.record.action_noise = self.action_noise
 
         self.obs = reset_to(env, init_state)
 
@@ -510,12 +546,60 @@ class _Rollout:
         self._last_command = blended
         return blended
 
+    def _noisy(self, action: np.ndarray) -> np.ndarray:
+        """送る行動にだけノイズを混ぜる。**記録するのは混ぜる前である。**
+
+        DART（Laskey+ 2017）のやり方をそのまま写している。手本を書いた側に
+        ノイズを混ぜて動かし、**正解としては混ぜる前の行動を記録する。**
+        こうすると台本は「ずれた場所から目標へ戻す」行動を自分で作るので、
+        **成功した軌道だけを集めても復帰のしかたが学習データに入る。**
+        混ぜずに集めた手本は、ずれた状態を一度も通らない
+        （`docs/plan/08_training_data_creation_cautions.md` 4 節）。
+
+        **決めたことが 3 つある。どれも変えると別物になる。**
+
+        1. **なました後に混ぜる**（`_smoothed` は呼び出し側で先に済んでいる）。
+           先に混ぜると `smoothing` の低い側でノイズが吸われ、**指定した
+           大きさが実際に届く大きさと合わなくなる。**
+        2. **混ぜた行動を `_last_command` に戻さない。** 戻すとノイズが次の
+           ステップへ持ち越されて累積し、**毎ステップ独立ではなく片側へ
+           流れる**（DART のノイズは各ステップ独立である）。
+           `_smoothed` は混ぜる前の値で履歴を更新済みなので、ここで何もしなければ
+           そのまま成り立つ。
+        3. **指の開閉（`action[6]`）と手首の向き（`action[3:6]`）には混ぜない。**
+           指に混ぜると掴んでいる物を無作為に落とすだけで、復帰は学べない。
+           向きは台本が閉ループで直していない（`turn_arc` が固定値を入れるだけ）
+           ので、混ぜるとずれが誰にも直されずに溜まり、**手本として誤った
+           正解になる。** 手先の位置（`action[:3]`）は `follow` が観測から
+           毎ステップ引き直すので、ここだけが直される。
+
+        **振り切れている軸では片側にしか効かない。** `_velocity_command` は
+        いちばん大きい軸をちょうど ±1 に揃えるので、運んでいる最中の主軸は
+        すでに端にいる。そこへ足したノイズは、外へ出るぶんが ±1 で切られ、
+        内へ入るぶんだけが残る。**つまり運搬中は「速さが揺らいで遅れる」
+        働きになり、横へ押し出す働きは減速中と目標の近くで強く出る。**
+        これは環境側が受け取る範囲そのものなので避けられない（切らなくても
+        robosuite の制御器が同じところで切る）。**σ を上げても主軸方向の
+        ずれは増えない**ことを、成功率の落ち方を読むときに思い出すこと。
+        """
+        if self.action_noise <= 0.0:
+            return action
+        noisy = action.copy()
+        noisy[:3] = np.clip(
+            noisy[:3] + self._rng.normal(0.0, self.action_noise, size=3),
+            -1.0, 1.0,      # 環境が受け取る範囲。混ぜると 1 を越えうる
+        )
+        return noisy
+
     def _take_step(self, action: np.ndarray) -> bool:
         """1 ステップ進める。ステップ数の上限に達したら False を返す。"""
         index = self.record.steps
         self.record.ee_positions.append(self.eef_position.copy())
         self.record.states.append(self._observation_state())
         self.record.actions.append(action.astype(np.float32))
+        # **観測とノイズ無しの行動を記録してから、混ぜたほうを送る。**
+        action = self._noisy(action)
+        self.record.executed_actions.append(action.astype(np.float32))
         if self._front_buffer is not None and index < self.max_steps:
             # **学習データは 180 度回した向き**である（LeRobot の同名の処理）。
             # 確保済みの置き場へ直に書く（この代入そのものが複製になる）。
@@ -733,7 +817,8 @@ _RUNNERS: dict[type, Any] = {PickPlace: _run_pick_place, TurnKnob: _run_turn_kno
 
 def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
                 max_steps: int = 300, record_images: bool = False,
-                verbose: bool = False) -> EpisodeRecord:
+                verbose: bool = False, action_noise: float = 0.0,
+                noise_seed: int | None = None) -> EpisodeRecord:
     """台本を 1 本ぶん実行し、採点と同じ基準で成否を付ける。
 
     Parameters
@@ -750,13 +835,23 @@ def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
         観測画像も溜めるか。**描画が要るので遅くなる。**
     verbose : bool
         段ごとのステップ数と誤差を印字するか。
+    action_noise : float
+        送る行動の手先の位置（`action[:3]`）に混ぜる正規ノイズの標準偏差。
+        **0.0 なら混ぜない（今までと同じ挙動である）。** 記録する行動は
+        混ぜる前のままなので、**これを上げると「ずれてから戻す」手本になる**
+        （`_Rollout._noisy` に決めたことを書いた）。
+    noise_seed : int | None
+        ノイズの種。**本ごとに違う値を渡すこと。** 同じ値だと初期配置が
+        違っても同じノイズ列を混ぜてしまい、ずれ方の種類が増えない。
 
     Returns
     -------
     record : EpisodeRecord
         ステップ数・成否・行動。画像は `rollout.images()` から取る。
     """
-    rollout = _Rollout(env, init_state, max_steps, record_images)
+    rollout = _Rollout(env, init_state, max_steps, record_images,
+                       action_noise=action_noise,
+                       rng=np.random.default_rng(noise_seed))
     for step in plan.steps:
         _RUNNERS[type(step)](rollout, step, plan)
     rollout.hold("整定", GRIPPER_OPEN, plan.final_settle_steps)
@@ -995,13 +1090,17 @@ def command_verify(args: argparse.Namespace) -> None:
         init_states = init_states[args.episodes]
 
     print(f"=== {variant} — {len(init_states)} 通りの初期配置 ===")
+    if args.action_noise > 0.0:
+        print(f"  行動ノイズ σ={args.action_noise}（送る行動だけに混ぜる）")
     started = time.time()
     lengths: list[int] = []
     failures: list[tuple[int, int, bool]] = []
     measured: list[dict[str, float]] = []
     for index, state in enumerate(init_states):
         record = run_episode(env, state, plan, args.max_steps,
-                             verbose=args.verbose and index == 0)
+                             verbose=args.verbose and index == 0,
+                             action_noise=args.action_noise,
+                             noise_seed=args.noise_seed + index)
         lengths.append(record.steps)
         if not record.success:
             failures.append((index, record.steps, record.collided))
@@ -1029,8 +1128,13 @@ def command_verify(args: argparse.Namespace) -> None:
 def command_record(args: argparse.Namespace) -> None:
     """学習データとして書き出す。**描画するので GPU を使うこと。**
 
+    **`--action-noise` を付けたときも、失敗した本は既定で捨てる。**
+    これは DART のやり方と合っている——欲しいのは「ずれたが戻って成功した」
+    軌道であって、戻れずに終わった軌道ではない。**捨てた本の数は
+    そのまま σ が大きすぎる合図**なので、印字を読むこと。
+
     Generates:
-      - <output>/<変種>_ep<n>.npz
+      - <output>/<変種>_ep<n>.npz（`--action-noise` を付けると `_n<σ>` が入る）
     """
     plan, variant, env, init_states = _setup(args, with_images=True)
     indices = args.episodes if args.episodes else list(range(len(init_states)))
@@ -1038,14 +1142,23 @@ def command_record(args: argparse.Namespace) -> None:
     args.output.mkdir(parents=True, exist_ok=True)
     print(f"=== {variant} — {len(indices)} 本を書き出す ===")
     print(f"  MUJOCO_GL={os.environ.get('MUJOCO_GL', '(未設定)')}")
+    if args.action_noise > 0.0:
+        print(f"  行動ノイズ σ={args.action_noise}"
+              f"（種 {args.noise_seed}＋本の番号）。"
+              "**書き出す行動は混ぜる前である**")
     for index in indices:
         started = time.time()
         record = run_episode(env, init_states[index], plan, args.max_steps,
-                             record_images=True)
+                             record_images=True,
+                             action_noise=args.action_noise,
+                             noise_seed=args.noise_seed + index)
         if not record.success and not args.keep_failures:
             print(f"  ep{index:02d} 失敗（{record.steps} 歩）—— 書き出さない")
             continue
-        destination = args.output / f"{variant}_ep{index:03d}.npz"
+        # **ノイズの大きさを名前に入れる。** 入れないと、σ を変えて作った組が
+        # 同じ名前になって上書きし合う（同じ変種・同じ番号で作るため）。
+        tag = "" if args.action_noise <= 0.0 else f"_n{args.action_noise:g}"
+        destination = args.output / f"{variant}{tag}_ep{index:03d}.npz"
         # **圧縮しない。** これは動画に再エンコードするだけの中継物で、
         # 画像 118 MB を deflate しても 1.7 倍しか縮まないのに 1 本 4.3 秒
         # かかる（50 本で 3.6 分）。disk を使うほうが安い。
@@ -1058,6 +1171,11 @@ def command_record(args: argparse.Namespace) -> None:
             success=record.success,
             steps=record.steps,
             instruction=env.language_instruction,
+            # **学習に使うのは `action` のほうである。** 下の 2 つは
+            # 「ノイズが本当に効いていたか」を後から確かめるためだけに残す。
+            # 鍵が増えても `SavedEpisode` 経由で読む側は影響を受けない。
+            action_executed=np.stack(record.executed_actions),
+            action_noise=record.action_noise,
         )
         print(f"  ep{index:02d} {record.steps} 歩  成功 {record.success}  "
               f"{time.time() - started:.0f} 秒  → {destination.name}")
@@ -1087,6 +1205,14 @@ def _parse_args() -> argparse.Namespace:
                         help="失敗した回も書き出す（見て直すため）")
     parser.add_argument("--smoothing", type=float, default=None,
                         help="指令をなます強さ（1.0 でなまさない）。台本の値を上書きする")
+    parser.add_argument("--action-noise", type=float, default=0.0,
+                        help="送る行動の手先の位置に混ぜる正規ノイズの標準偏差"
+                             "（行動の範囲は ±1）。**記録する行動は混ぜる前の"
+                             "ままなので、ずれてから戻す手本になる**（DART）。"
+                             "0.0 で今までと同じ。**大きすぎると成功率が落ちて"
+                             "逆効果になる**ので、先に verify で振って決めること")
+    parser.add_argument("--noise-seed", type=int, default=0,
+                        help="ノイズの種の基準値。本ごとに番号を足して使う")
     parser.add_argument("--blend-radius", type=float, default=None,
                         help="通過点を見切る距離 [m]。台本の値を上書きする")
     parser.add_argument("--verbose", action="store_true",

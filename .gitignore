@@ -8,8 +8,9 @@ assets.zip
 .DS_Store
 
 # 生成物置き場。重み・同梱ソース・venv・zip はすべて solution/tools/ で再生成できる。
-# 追跡したいファイルは solution/ に置くこと。
-work/
+# 追跡したいファイルは solution/ に置くこと。ディレクトリ構成の説明だけは例外で追跡する。
+work/*
+!work/README.md
 .claude/settings.json
 
 # 本番採点のログは作り直せない一次資料なので追跡する（docs/knowledge/05 の出典）。

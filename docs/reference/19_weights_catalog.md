@@ -166,7 +166,7 @@ work/venv310/bin/python solution/tools/validate_submission.py --static
 ## 何がどこにあるか
 
 **HuggingFace 側は 2026-08-18 に済んでいる。**「このマシン」の欄だけがまだ手つかずで、
-`work/cleanup_postqualifier.sh` を流すと下の姿になる。
+`work/admin/cleanup_postqualifier.sh` を流すと下の姿になる。
 
 **公開しているのは `weak3x_20000` だけである。**最終提出（4.2.0）とその 1 段目
 （24,000 歩）は非公開のままにした。公開の方はコンペとは無関係な

@@ -8,6 +8,7 @@
 | **手を動かす手順** | [howto/](howto/) |
 | **測った数字** | [strategy/05_実測結果.md](strategy/05_実測結果.md) |
 | **次にどこを直して学習するか** | **[plan/04_training_targets.md](plan/04_training_targets.md)** |
+| **本選 Track2（位置・視点・ノイズ）の準備** | **[plan/07_track2_preparation.md](plan/07_track2_preparation.md)** |
 | **これから作るものの設計** | [plan/](plan/) |
 | **提出物のしくみ** | [solution/README.md](solution/README.md) |
 | **次のコンペに持ち越すこと** | [talk/lessons_learned.md](talk/lessons_learned.md) |
@@ -30,7 +31,8 @@
 
 | ファイル | いつ |
 |---|---|
-| [talk/open_items.md](talk/open_items.md) | 作業を始めるとき。手つかずのものが優先順位つきで並ぶ |
+| [talk/open_items.md](talk/open_items.md) | 作業を始めるとき。**本選 Track2 の板**（3,300 文字。8/21 に作り直した） |
+| [talk/archive_qualifier_board.md](talk/archive_qualifier_board.md) | **予選の板の退避先。**他の文書が「`open_items.md` の 29」のように**番号で指しているものはここにある** |
 | [talk/lessons_learned.md](talk/lessons_learned.md) | コンペが終わったあと。**次の 3 日の組み立て方**まで書いてある |
 | [howto/01_retrain.md](howto/01_retrain.md) | 追加学習を回すとき |
 | [howto/02_build_submission.md](howto/02_build_submission.md) | zip を作って出すとき |
@@ -43,6 +45,8 @@
 | **[strategy/06_scripted_demos.md](strategy/06_scripted_demos.md)** | **手本が 300 ステップに収まらないタスクを扱うとき。台本で手本を自分で作る** |
 | **[plan/04_training_targets.md](plan/04_training_targets.md)** | **学習を流す前と、評価が出た直後。**ものさし・天井・候補・外したもの・記録が 1 枚にある |
 | [plan/01_failure_accounting.md](plan/01_failure_accounting.md) | 評価の結果を読むとき。**ゴール到達と衝突の読み分け方** |
+| **[plan/07_track2_preparation.md](plan/07_track2_preparation.md)** | **本選 Track2 に手をつけるとき。摂動 4 カテゴリの中身・関連研究・対策・推奨アクションが 1 枚にある。まず 2.0 節（方針改訂）と 3 節（推奨アクション）** |
+| **[plan/08_training_data_creation_cautions.md](plan/08_training_data_creation_cautions.md)** | **学習用デモを作る前。成功例だけでは復帰を学べない等、データ作成の落とし穴。07 の方針改訂の根拠** |
 | **[reference/19_weights_catalog.md](reference/19_weights_catalog.md)** | **`pi05/full_local_024000` のような名前を見たとき。重みの名前・出した版・中身・置き場所が 1 行に並ぶ** |
 | [reference/04_track1_population.md](reference/04_track1_population.md) | 出題元のデータを確かめるとき |
 | **[reference/05_perturbation_categories.md](reference/05_perturbation_categories.md)** | **摂動 7 カテゴリの中身と、どれが出るか（運営回答の原文つき）** |

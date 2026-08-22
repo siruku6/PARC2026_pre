@@ -93,6 +93,17 @@ gated repo のエラーで止まる。
 1 ステップあたりの実測時間を見てから調整すること。ログに出る
 `steps/sec` を見て、残り GPU 時間で何ステップ回せるか逆算するのが安全。
 
+## 量子化実験（work/quant_sweep/ 参照）
+
+`--optimizer-mode bnb8bit` / `--vision-quant-mode bnb4bit` / `--expert-quant-mode float8`
+で量子化の各候補を試せる（既定はすべて `default` で、指定しない限り今までの挙動と
+一字一句同じ）。詳しくは各候補モジュール（quant_optim.py 等）と
+work/quant_sweep/CANDIDATES.md を参照。C2・C3 は実験的候補 —— 動くかどうかも
+含めて試す前提で用意してある。
+
+    # C1: bitsandbytes の 8-bit AdamW に差し替える
+    python train_pi05.py --run-name pi05_quant_c1 --optimizer-mode bnb8bit --smoke-test
+
 Reads:
   - lerobot/pi05_libero_base（HF、初期重み。gemma ライセンス）
   - lerobot/libero_plus（HF、学習データ。train.py と共有）
@@ -185,6 +196,23 @@ def _parse_args() -> argparse.Namespace:
                              "false: VLM も含めて全学習（80GB 級を想定、まず載らない）")
     parser.add_argument("--dtype", type=str, default="bfloat16",
                         choices=("bfloat16", "float32"))
+    parser.add_argument("--optimizer-mode", type=str, default="default",
+                        choices=("default", "bnb8bit"),
+                        help="量子化実験の候補 C1。default: 変更なし（pi05 の既定 AdamW "
+                             "プリセットのまま）。bnb8bit: bitsandbytes の 8-bit AdamW に"
+                             "差し替える（quant_optim.py。要 bitsandbytes）。"
+                             "work/quant_sweep/CANDIDATES.md 参照")
+    parser.add_argument("--vision-quant-mode", type=str, default="default",
+                        choices=("default", "bnb4bit"),
+                        help="量子化実験の候補 C2。bnb4bit: 凍結中の vision encoder "
+                             "（SigLIP）だけを bnb.nn.Linear4bit に置換する"
+                             "（quant_vision_4bit.py）。実験的 — 動くかどうかも含めて試す候補")
+    parser.add_argument("--expert-quant-mode", type=str, default="default",
+                        choices=("default", "float8"),
+                        help="量子化実験の候補 C3。float8: 学習対象（action expert）の "
+                             "Linear だけを torchao の float8 training に変換する"
+                             "（quant_float8_expert.py）。要 compute capability >= 8.9"
+                             "（この GPU は H100, 9.0 なので満たす）。実験的候補")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--log-file", type=Path, default=None, metavar="FILE",
@@ -259,12 +287,48 @@ def _resolve_init_from(path: Path) -> Path:
     return resolved
 
 
+# 量子化候補のどれかを使うときは "lerobot-train"（console script）の代わりに、
+# 各候補モジュールを import してから呼ぶ薄いラッパーを使う（詳細は
+# lerobot_train_with_quant.py の docstring）。どの候補を有効にするかは
+# 環境変数で伝える（_set_quant_env が main() から呼ばれる）。
+_QUANT_WRAPPER = Path(__file__).resolve().parent / "lerobot_train_with_quant.py"
+
+
+def _uses_quant_wrapper(args: argparse.Namespace) -> bool:
+    return (
+        args.optimizer_mode != "default"
+        or args.vision_quant_mode != "default"
+        or args.expert_quant_mode != "default"
+    )
+
+
+def _command_head(args: argparse.Namespace) -> list[str]:
+    if _uses_quant_wrapper(args):
+        return ["python", str(_QUANT_WRAPPER)]
+    return ["lerobot-train"]
+
+
+def _set_quant_env(args: argparse.Namespace) -> None:
+    """量子化候補モジュールのうちどれを import するかを、子プロセスへ環境変数で伝える。
+
+    lerobot_train_with_quant.py がこれを読んで対応するモジュールを import する。
+    ここでは os.environ を書き換えるだけで、_run_and_log 側の subprocess.Popen は
+    env= を渡さず親の環境をそのまま継承するので、これだけで子プロセスに伝わる。
+    """
+    if args.optimizer_mode == "bnb8bit":
+        os.environ["QUANT_OPTIMIZER_MODE"] = "bnb8bit"
+    if args.vision_quant_mode == "bnb4bit":
+        os.environ["QUANT_VISION_MODE"] = "bnb4bit"
+    if args.expert_quant_mode == "float8":
+        os.environ["QUANT_EXPERT_MODE"] = "float8"
+
+
 def _build_command(
     args: argparse.Namespace, base_model: Path,
     episode_indices: list[int] | None, output_dir: Path,
 ) -> list[str]:
     command = [
-        "lerobot-train",
+        *_command_head(args),
         "--policy.type=pi05",
         f"--policy.pretrained_path={base_model}",
         f"--policy.normalization_mapping={_NORMALIZATION_MAPPING}",
@@ -299,13 +363,34 @@ def _build_command(
     ]
     if episode_indices is not None:
         command.append(f"--dataset.episodes=[{','.join(map(str, episode_indices))}]")
+    if args.optimizer_mode == "bnb8bit":
+        # pi05 は既定で use_policy_training_preset=true になっており、
+        # PI05Config.get_optimizer_preset()/get_scheduler_preset() が AdamWConfig と
+        # そのスケジュールを決め打ちで返す（lerobot/configs/train.py の validate() で
+        # preset を使わないなら optimizer/scheduler を明示しろ、と要求される）。
+        # そのため adamw_bnb8bit を登録するだけでは効かず、preset を明示的に切って
+        # 上書きする必要がある。値は quant_optim.py の docstring 参照。
+        command += [
+            "--use_policy_training_preset=false",
+            "--optimizer.type=adamw_bnb8bit",
+            f"--optimizer.lr={args.learning_rate}",
+            "--scheduler.type=cosine_decay_with_warmup",
+            f"--scheduler.peak_lr={args.learning_rate}",
+            "--scheduler.decay_lr=2.5e-6",
+            "--scheduler.num_warmup_steps=1000",
+            "--scheduler.num_decay_steps=30000",
+        ]
     return command + list(args.extra)
 
 
 def _build_resume_command(args: argparse.Namespace, output_dir: Path,
                           resume_from: Path) -> list[str]:
+    # optimizer/scheduler の上書きは付けない —— --resume は前回の train_config.json を
+    # そのまま読み直すので、量子化候補モジュールが import されて型名さえ解決できれば
+    # 前回選んだ設定がそのまま復元される。ただし --optimizer-mode 等は呼び出しのたびに
+    # 明示し直すこと（train_pi05.py 自体は前回どのモードだったかを覚えていない）。
     return [
-        "lerobot-train",
+        *_command_head(args),
         "--resume=true",
         f"--config_path={resume_from / 'pretrained_model' / 'train_config.json'}",
         f"--output_dir={output_dir}",
@@ -390,6 +475,27 @@ def _run_and_log(command: list[str], log_file) -> int:
 
 def main() -> None:
     args = _parse_args()
+    _set_quant_env(args)
+
+    if args.expert_quant_mode == "float8" and args.batch_size % 16 != 0:
+        # FP8 の Tensor Core 演算は、実行時の活性化テンソルの trailing dimension が
+        # 16 の倍数であることを要求する。これは Linear ごとに違う形で現れる——
+        # action 系の投影は batch_size × chunk_size(50) が、time_mlp 系は
+        # batch_size 単体がその trailing dimension になる（2026-08-20、実機で
+        # batch_size=2 なら "...shape: (32x100)"、batch_size=8 なら
+        # "...shape: (3072x8)" という異なる形の RuntimeError を確認済み——
+        # 後者は 100=2×50 は 16 の倍数だが、8 自体は 16 の倍数でないために失敗した）。
+        # **batch_size 自体が 16 の倍数であれば、両方の形を同時に満たす**
+        # （batch_size×50 も自動的に 16 の倍数になる）。詳細は
+        # quant_float8_expert.py の docstring。データセット読み込み・モデル構築
+        # （数分）を待たずにここで気づけるようにする。
+        raise SystemExit(
+            f"[train_pi05] --expert-quant-mode float8 は --batch-size が 16 の倍数"
+            "であることを要求する（FP8 Tensor Core 演算の trailing dimension 制約）。"
+            f"batch_size={args.batch_size} は条件を満たさない。"
+            "詳しくは solution/train/quant_float8_expert.py の「バッチサイズの制約」参照"
+        )
+
     output_dir: Path = (args.output_root / args.run_name).resolve()
 
     if args.resume:
@@ -468,7 +574,10 @@ def main() -> None:
             f"[train_pi05] 学習開始（{args.steps} 歩、batch {args.batch_size}、"
             f"freeze_vision_encoder={args.freeze_vision_encoder}、"
             f"train_expert_only={args.train_expert_only}、"
-            f"dtype={args.dtype}、grad_ckpt={args.gradient_checkpointing}）"
+            f"dtype={args.dtype}、grad_ckpt={args.gradient_checkpointing}、"
+            f"optimizer_mode={args.optimizer_mode}、"
+            f"vision_quant_mode={args.vision_quant_mode}、"
+            f"expert_quant_mode={args.expert_quant_mode}）"
         )
         if args.smoke_test:
             print("[train_pi05] **smoke test** — 20 ステップで OOM しないか・"

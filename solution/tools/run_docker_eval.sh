@@ -31,6 +31,16 @@
 #                  **素の重み（0.1409 の構成）と学習後を比べるときはここを変える**
 #   LABEL          出力先の名前に足す語。どの重みの回か分かるようにする
 #   PARC_*         推論の設定値。空なら policy_server.py の既定が効く
+#   QUANT_SERVE_MODE   推論時量子化スイープ（π0.5 専用。work/quant_sweep/
+#                  CANDIDATES.md の C4/C5）。空なら量子化なし（既定）。
+#                    bnb_vision4bit … bitsandbytes で 4bit 化（候補 C4）
+#                    torchao_int8   … torchao で int8 weight-only 化（候補 C5）
+#   QUANT_SERVE_SCOPE  量子化する範囲。既定 vision_only（vision_tower +
+#                  multi_modal_projector のみ・安全側）。full にすると
+#                  gemma_expert とパリゲンマ言語側も対象に含める
+#                  （modeling_pi05.py の compute_layer_complete の
+#                  dtype 分岐に当たる、壊れるかどうか込みで試す経路。
+#                  詳細は solution/tools/quant_serve_common.py）
 #
 # Reads:
 #   - solution/policy_server.py, solution/tools/*.py
@@ -95,8 +105,18 @@ done
 # 提出物の requirements.txt が 3 つを「必須」に挙げているのはこのためで、
 # **採点環境では venv に入るが、学習イメージには無い。**
 #
-# 1 度だけ薄い派生イメージを作る。2 回目以降はキャッシュが効く。
-SERVER_IMAGE="${POLICY_IMAGE}-server"
+# 派生イメージを作る。**タグに $POLICY_IMAGE の image ID を含めて、ベースが
+# 変わったら別タグになるようにしてある。** 以前は固定名 "${POLICY_IMAGE}-server"
+# を「無ければ作る」方式にしていたため、bitsandbytes/torchao を Dockerfile.pi05 に
+# 追加して $POLICY_IMAGE を作り直した後も、このサーバー用イメージだけ古い内容の
+# まま何ヶ月でも生き残ってしまい、C4/C5（推論時量子化）の評価が
+# `ModuleNotFoundError: bitsandbytes/torchao` で無言のうちに落ち続けた
+# （2026-08-22、work/quant_sweep/PROGRESS.md 参照）。image ID をタグに含めれば
+# 古いタグはただの不要イメージとして残るだけで実害は無く、ベースが変わった
+# ときだけ確実に作り直される。docker 自体のレイヤーキャッシュが効くので、
+# 実際に変わった分（pip install の1レイヤー）だけしか再実行されない。
+POLICY_IMAGE_ID="$(docker image inspect -f '{{.Id}}' "$POLICY_IMAGE" | cut -d: -f2 | cut -c1-12)"
+SERVER_IMAGE="${POLICY_IMAGE}-server-${POLICY_IMAGE_ID}"
 if ! docker image inspect "$SERVER_IMAGE" >/dev/null 2>&1; then
     echo "  $SERVER_IMAGE を作る（HTTP サーバーの依存 3 つを足すだけ）"
     printf 'FROM %s\nRUN pip install --no-cache-dir "fastapi>=0.68" "uvicorn>=0.15" "msgpack>=1.0"\n' \
@@ -134,6 +154,7 @@ label="n${PARC_N_ACTION_STEPS:-5}_ep${N_EPISODES}_max${MAX_STEPS}"
 [ -n "${PARC_EMA_ALPHA:-}" ] && label="${label}_ema${PARC_EMA_ALPHA//./}"
 [ -n "${PARC_BLEND_STEPS:-}" ] && label="${label}_blend${PARC_BLEND_STEPS}"
 [ -n "${PARC_SAMPLES:-}" ] && label="${label}_s${PARC_SAMPLES}"
+[ -n "${QUANT_SERVE_MODE:-}" ] && label="${label}_${QUANT_SERVE_MODE}"
 [ -n "$CHECK_ONLY" ] && label="check_${label}"
 
 OUTPUT_DIR="$REPOSITORY_ROOT/work/gpu_eval/$(date +%m%d_%H%M%S)_${label}"
@@ -161,6 +182,16 @@ SERVE_DIR="$OUTPUT_DIR/serve"
 mkdir -p "$SERVE_DIR"
 cp "$REPOSITORY_ROOT/solution/policy_server.py" "$SERVE_DIR/"
 
+# **推論時量子化スイープ（C4: bnb / C5: torchao）の追加ファイル。**
+# policy_server.py は「同じディレクトリの隣にあるモジュール」として
+# `import quant_serve_bnb` / `import quant_serve_torchao` する（本体には量子化の
+# ロジックを埋め込んでいない）。`QUANT_SERVE_MODE` が空でも常にコピー・マウント
+# する——未 import なので無害だが、ここを条件分岐にすると
+# 「今回だけ古い版を見ている」を後から見分けられなくなる。
+for _quant_tool in quant_serve_common.py quant_serve_bnb.py quant_serve_torchao.py; do
+    cp "$REPOSITORY_ROOT/solution/tools/$_quant_tool" "$SERVE_DIR/"
+done
+
 # ---------------------------------------------------------------- 2. 後片付け
 
 cleanup() {
@@ -179,7 +210,9 @@ echo "===== 1/5 方策サーバーを起動する（$SERVER_IMAGE）====="
 
 policy_environment=()
 for name in PARC_N_ACTION_STEPS PARC_SAMPLES PARC_BLEND_STEPS PARC_EMA_ALPHA \
-            PARC_NUM_INFERENCE_STEPS; do
+            PARC_NUM_INFERENCE_STEPS QUANT_SERVE_MODE QUANT_SERVE_SCOPE; do
+    # QUANT_SERVE_MODE/QUANT_SERVE_SCOPE は量子化スイープ（work/quant_sweep/）の
+    # 推論時候補 C4/C5 用。policy_server.py 側で解釈する（未設定なら何も変わらない）。
     value="$(eval "printf '%s' \"\${$name:-}\"")"
     if [ -n "$value" ]; then
         policy_environment+=(-e "$name=$value")
@@ -189,6 +222,9 @@ done
 
 docker run -d --name "$POLICY_HOST" --gpus all --network "$NETWORK" \
     -v "$SERVE_DIR/policy_server.py:/app/policy_server.py:ro" \
+    -v "$SERVE_DIR/quant_serve_common.py:/app/quant_serve_common.py:ro" \
+    -v "$SERVE_DIR/quant_serve_bnb.py:/app/quant_serve_bnb.py:ro" \
+    -v "$SERVE_DIR/quant_serve_torchao.py:/app/quant_serve_torchao.py:ro" \
     -v "$WEIGHTS:/app/model_weights:ro" \
     -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
     "${policy_environment[@]}" \
@@ -244,6 +280,10 @@ kit_environment=(
     -e "N_EPISODES=$N_EPISODES"
     -e "PER_CELL=$PER_CELL"
     -e "RECORD=$RECORD"
+    # **既定は失敗した回だけ録画**（`docker_eval_inside.sh`・`rollout_recorder.py`
+    # 双方の既定と同じ "failures"）。少数タスクの見比べで両方とも成功しうる
+    # ときは `PARC_RECORD_WHICH=all` を呼び出し側で渡すと両方録れる。
+    -e "PARC_RECORD_WHICH=${PARC_RECORD_WHICH:-failures}"
 )
 
 # **`--ulimit core=0` と `PYTHONFAULTHANDLER=1` は、落ちたときに気づくためにある。**
