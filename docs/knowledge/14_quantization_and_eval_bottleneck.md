@@ -1,7 +1,8 @@
 # 低精度化で速くなる条件と、評価が何で律速されているか
 
-**これを読むと、「量子化すれば速くなる」がなぜこのリポジトリで2回空振りしたかが分かり、
-次にどこを速くすべきかが決まる。** 2026-08-23 に実測と一次情報で確定した。
+**これを読むと、「量子化すれば速くなる」がこのリポジトリで試した5候補すべて空振りだった
+理由が分かり、次にどこを速くすべきかが決まる。** 2026-08-23 に実測と一次情報で確定した。
+**唯一速くしたのは量子化ではなく `torch.compile` である。**
 
 | 節 | 内容 |
 |---|---|
@@ -23,17 +24,23 @@
 
 | 試したもの | 条件1 | 条件2 | 条件3 | 実測 |
 |---|---|---|---|---|
-| 学習 C3（float8、action expert） | ○ | ○ | ○ | **-53%**（ただし下記のとおり compile の効果） |
+| **学習 C0+compile（低精度化なし・compile だけ）** | **✗** | **○** | **○** | **-53.6%（0.650 秒/step）** |
+| 学習 C3+compile（float8、action expert） | ○ | ○ | ○ | -53%（0.659 秒/step。**float8 の寄与はゼロ**） |
 | 学習 C3（compile なし） | ○ | ✗ | ○ | +10.4%（遅化） |
 | 推論 C4（bnb 4bit、vision encoder） | ✗ | ✗ | ✗ | +13.7%（遅化） |
 | 推論 C5（torchao int8、vision encoder） | ✗ | ✗ | ✗ | -0.6%（実質ゼロ） |
 
-**推論側は3条件を1つも満たしていなかった。** vision encoder は推論1回の63回の計算
-（画像の符号化3回 ＋ action expert 20回×3）のうち3回にしか当たらない。
+**この表でいちばん速いのは、低精度化を1つもしていない行である。** 効いていたのは条件2
+（torch.compile）だけだった。**推論側の2つは3条件を1つも満たしていない。** vision encoder は
+推論1回の63回の計算（画像の符号化3回 ＋ action expert 20回×3）のうち3回にしか当たらない。
 
-> **学習の -53% は量子化の効果ではない。** `C0+compile`（float8 を外して compile だけ）を
-> 一度も測っていないため float8 の寄与は不明である。torchao 公式が報告する float8 学習の
-> 高速化は H100・Llama3-8B で 10〜25%、規模の上限の主張でも 1.25 倍で、**-53%（2.1倍）は
+> **学習の -53% は量子化の効果ではなく torch.compile の効果である。** 2026-08-23 に対照
+> （`C0+compile`、float8 を外して compile だけ）を 200 歩・batch 16 で測ったところ
+> **0.650 秒/step・11.86 GB** で、`C3+compile` の 0.659 秒/step・11.86 GB と、速度は
+> ばらつきの中（9 点が 0.648〜0.661）・メモリは完全一致だった。**「-27% のメモリ削減」も
+> compile の効果で、float8 は速度もメモリも動かしていない**（float8 単体の C3 は 16.26 GB
+> で、量子化なしの 16.27 GB と同じ）。torchao 公式が報告する float8 学習の高速化は
+> H100・Llama3-8B で 10〜25%、規模の上限の主張でも 1.25 倍で、**-53%（2.1倍）は
 > float8 では説明できない。** 公式自身が「行列が小さいと1倍を下回る」と書いており、
 > 実測の +10.4%（遅化）と整合する。
 
@@ -121,6 +128,7 @@ T4（7.5）と A100（8.0）は満たさない**）。**未試行である。**
 | 重みだけの量子化は計算量を減らさない／compile 無しでは元の精度より遅い | PyTorch 公式ブログ "Accelerating Generative AI with PyTorch II: GPT, Fast" `https://pytorch.org/blog/accelerating-generative-ai-2/`（2026-08-23 取得） |
 | int8 の重みだけは H100 で 0.912倍・0.652倍（遅化）／float8 の重み＋活性は 1.464倍・1.214倍／各設定の要件 | torchao 公式 `https://docs.pytorch.org/ao/main/workflows/inference.html`（同日取得） |
 | float8 学習の高速化は 10〜25%、上限の主張が 1.25倍／小さい行列では1倍を下回る | torchao 公式 `https://docs.pytorch.org/ao/main/workflows/training.html`（同日取得） |
+| compile だけで 0.650 秒/step・11.86 GB（float8 の寄与がゼロであること） | `work/train/pi05_c0_compile_200.log`（2026-08-23 の 200 歩・batch 16 の実測） |
 | 推論1回の秒数の分離（T=291ms・S=449ms） | `work/gpu_eval/0814_091240` / `0814_113657` / `0814_145933` の `eval.log` |
 | serve 時 compile で推論 7.16 倍 | `work/quant_sweep/PROGRESS.md` の 2026-08-22 09:06 の節（`work/train/_bench/`） |
 | CPU 描画が既定である理由と描画の秒数 | `solution/tools/eval/run_docker_eval.sh` の `kit_environment` のコメント |
