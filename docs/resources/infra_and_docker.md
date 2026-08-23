@@ -93,8 +93,12 @@ CPU 描画（osmesa）だけなので GPU が要らず、GPU マシン側の学�
 ## 2. Docker イメージとコンテナ
 
 **image は「配布キット」「SmolVLA 学習」「π0.5 学習」の 3 系統に加え、そこから都度ビルドされる
-派生 image がある。いま動いている 5 コンテナは、この 3 系統の image を直接使うものと派生 image を
-使うものが混在し、`quant_train` は世代の古い image のまま 2 日間動き続けている。**
+派生 image がある。いま動いているのは常駐の 2 コンテナだけで、どちらも 3 系統の image を
+そのまま使っている。**
+
+**作り替えたマシンで同じ状態に戻す手順は
+[../howto/10_rebuild_machine.md](../howto/10_rebuild_machine.md) にある**（この 2 コンテナの
+`docker run` の完全な形もそこに書いた）。
 
 ### 3 系統の image は依存が競合するため 1 image に混ぜていない
 
@@ -118,22 +122,21 @@ Dockerfile 群も HuggingFace LeRobot 本家の配布用であり、参考にし
 [3 節](#3-提出評価は-http--msgpack-の-2-プロセス構成)）。つまり「動いているコンテナが使う
 image」は、上の 3 系統そのものとは限らない。
 
-### いま動いている 5 コンテナ（実測）
+### いま動いている 2 コンテナ（2026-08-24 実測）
 
 | コンテナ名 | 使っている image | 3 系統との関係 | 実行コマンド | 起動 | 何をしているか |
 |---|---|---|---|---|---|
-| `distracted_galois` | `parc2026-train` | 3 系統そのもの | `npz_to_lerobot.py build`（`--npz-dir /data/tier0_all`） | 08-22 07:53 UTC | npz → lerobot データセット変換の一時実行 |
-| `gracious_lamarr` | `parc2026` | 3 系統そのもの | `docker_eval_inside.sh` | 08-22 07:27 UTC | 量子化 C2 候補のランクチェック評価（`work/gpu_eval/0822_162712_rankcheck_C2_quant_...`） |
-| `parc2026_verify` | `parc2026` | 3 系統そのもの（`gracious_lamarr` と同じ image） | `sleep infinity` | 08-21 13:48 UTC | 対話確認・`docker exec` 用に寝かせてある検証シェル |
-| `parc-policy` | `parc2026-train-pi05-server-b2e89d2a2735` | `parc2026-train-pi05` からの派生 image（image ID 付きタグ） | `policy_server.py --port 8000` | 08-22 07:27 UTC | 上の評価が呼ぶ方策サーバー。重みは `work/train/pi05_quant_c2/checkpoints/016000/pretrained_model_dequant` |
-| `quant_train` | `d1befbd37eb2`（**タグ無し**） | `parc2026-train-pi05` の旧世代（下記参照） | `sleep infinity` | 08-20 05:34 UTC | π0.5 量子化学習の常駐コンテナ。`docker exec` で `train_pi05.py` を都度実行する運用 |
+| `quant_train` | `parc2026-train-pi05`（`06cedf98971f`） | 3 系統そのもの | `sleep infinity` | 08-23 22:57 JST | π0.5 学習・量子化の常駐コンテナ。`docker exec` で `train_pi05.py` を都度実行する運用。`--gpus all`・`--user 1000:1000`、`work/train` を `/out` に、`~/.cache/huggingface` を `/hf_home` に bind mount |
+| `parc2026_verify` | `parc2026`（`15297a9921af`） | 3 系統そのもの | `sleep infinity` | 08-21 22:48 JST | 対話確認・`docker exec` 用に寝かせてある検証シェル。`--network none`・GPU なし |
 
-**`quant_train` の注意点**: 使用 image `d1befbd37eb2` は `docker images` のタグ一覧から既に外れている
-（`docker images -a --filter dangling=true` で確認）。2026-08-22 に `Dockerfile.pi05` へ
-bitsandbytes/torchao を追加して `parc2026-train-pi05` を再ビルドしたため、`quant_train` が
-起動時に取り込んだ古い版はタグを失って残った。**このコンテナの中で bitsandbytes/torchao の
-新しい版が使えるかは未確認**（[確認したい仮定](#確認したい仮定)参照）。新しい依存が必要な
-学習をここで流すなら、コンテナを作り直す必要がある。
+**`quant_train` が古い image を掴んでいた問題は解消している。** 2026-08-22 の時点では
+タグを失った旧世代の image（`d1befbd37eb2`）のまま動いていたが、08-23 22:57 に
+現在の `parc2026-train-pi05`（`06cedf98971f`）から作り直された。`docker inspect` の
+`.Image` が `docker inspect parc2026-train-pi05 --format '{{.Id}}'` と一致する。
+
+**タグに残っている派生 image 3 つ（`parc2026-train-pi05-server-b2e89d2a2735`・
+`parc2026-train-pi05-server-d1befbd37eb2`・`parc2026-train-server`）は、いま何も
+使っていない。** 評価のたびに作られるもので、必要になればまた作られる。
 
 ## 3. 提出評価は HTTP + msgpack の 2 プロセス構成
 
@@ -166,9 +169,11 @@ flowchart LR
 
 - 運営配布 GPU マシン（NVIDIA RTX Pro 6000 Blackwell 1 台、2026-08-24 開始予定）の VRAM 容量・
   アクセス方法は未確認です。分かった時点でこの節と「使える計算資源」の表・詳細を更新してください。
-- `quant_train` コンテナの中に bitsandbytes/torchao の新しい版が入っているかは確認していません。
-  入っていない場合、量子化学習をこのコンテナで流しても新しい依存を使えないため、コンテナの
-  作り直しが必要になります。
+- ~~`quant_train` コンテナの中に bitsandbytes/torchao の新しい版が入っているかは確認していません。~~
+  **2026-08-24 に確認して解消しました。** `docker exec quant_train` で測った実測値は
+  bitsandbytes 0.49.2・torchao 0.17.0+cu128・torch 2.11.0+cu128・lerobot 0.6.0・
+  torchvision 0.26.0+cu128・torchcodec 0.11.1+cu128 で、`Dockerfile.pi05` のピン留めと
+  一致します。コンテナの作り直しは要りません。
 - RunPod で現在進行中の Pod があるかどうかは未確認です（管理画面を見ないと分からない）。
   進行中の Pod がある場合、課金が発生し続けている点を踏まえて優先度を検討する必要があります。
 - ローカル Mac の Docker（colima）が今動いているかは未確認です。撮影タスクを今すぐ動かせるかは
