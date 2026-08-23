@@ -45,7 +45,7 @@
 ### 道具の仕様（未実装）
 
 ```
-solution/tools/measure_appearance.py --csv compe/val/VAL_TASKS.csv \
+solution/tools/analysis/measure_appearance.py --csv compe/val/VAL_TASKS.csv \
     --libero-plus <キット>/LIBERO-plus --output work/appearance.csv
 ```
 

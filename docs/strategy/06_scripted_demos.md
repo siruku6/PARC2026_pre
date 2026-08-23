@@ -414,7 +414,7 @@ docker run --rm --gpus all \
 **採点 8 本がその 4 タスク × 2 なら、300 ステップに張り付く原因は長さではない。**
 
 **これは手元で確かめられる。** 同じ重みで公開 4 タスク × 2 エピソードを回し、
-ステップ数の並びが採点ログと揃うかを見る（[compare_with_production.py](../../solution/tools/compare_with_production.py)）。
+ステップ数の並びが採点ログと揃うかを見る（[compare_with_production.py](../../solution/tools/analysis/compare_with_production.py)）。
 揃えば採点 8 本の正体が決まる。**軌道づくりより先に済ませる価値がある。**
 
 ## 次にやること

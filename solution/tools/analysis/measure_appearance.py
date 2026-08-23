@@ -32,7 +32,7 @@
 画像を作る（`docs/reference/08_appearance_spread.md` の末尾）。
 
     # 一覧を標準出力に
-    PYTHONPATH=<cv2 の置き場> python3 solution/tools/measure_appearance.py \\
+    PYTHONPATH=<cv2 の置き場> python3 solution/tools/analysis/measure_appearance.py \\
         outputs/0811_101824_base_n5_ep1_max300/videos
 
     # ドキュメントへ貼る表を出す

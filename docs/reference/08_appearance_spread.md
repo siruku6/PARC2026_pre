@@ -118,7 +118,7 @@ LIBERO-plus のカテゴリ 7 つのうち、名前で見分けが付くもの�
 | **A. 全部録画して撮り直す** | `PARC_RECORD_WHICH=all` で 84 件を再評価し、成功も残す | 実際にモデルへ渡った画面そのもの。ステップ数の重みも本番どおり | **評価 1 本（2.3 時間）を使う。** GPU 枠が要る |
 | **B. 変種の初期状態から画像を作る** | 方策を動かさず、変種の初期画面だけを描く | GPU 評価が要らない。母集団を広く取れる | 描画（osmesa）の配線が別に要る。1 コマ目だけで動きは見ない |
 
-どちらでも、このスクリプト（`solution/tools/measure_appearance.py`）の測り方は
+どちらでも、このスクリプト（`solution/tools/analysis/measure_appearance.py`）の測り方は
 そのまま使える。**入力の mp4／画像を偏りの無いものに差し替えるだけ**である。
 
 > 案 A は名前の 70 字切れ（偏り④）が残る。長いタスク名の変種を数えるなら、
@@ -131,14 +131,14 @@ LIBERO-plus のカテゴリ 7 つのうち、名前で見分けが付くもの�
 
 ```bash
 # 変種の接尾辞ごとの明るさ・コントラストと、1 本ごとの明細
-python3 solution/tools/measure_appearance.py \
+python3 solution/tools/analysis/measure_appearance.py \
     outputs/0811_101824_base_n5_ep1_max300/videos
 
 # ドキュメントへ貼る表だけ
-python3 solution/tools/measure_appearance.py <dir> --markdown
+python3 solution/tools/analysis/measure_appearance.py <dir> --markdown
 
 # 焼かれた文字を切り落とさずに測る（既定は切り落とす）
-python3 solution/tools/measure_appearance.py <dir> --include-text-band
+python3 solution/tools/analysis/measure_appearance.py <dir> --include-text-band
 ```
 
 **焼かれた文字を外している。** 録画にはステップ数やカメラ名が白い文字で焼かれている
@@ -161,7 +161,7 @@ python3 solution/tools/measure_appearance.py <dir> --include-text-band
 ```bash
 # キットの Docker で回すなら（環境を揃える場合）
 docker run --rm -v "$PWD:/w" -w /w parc2026:latest \
-    python solution/tools/measure_appearance.py \
+    python solution/tools/analysis/measure_appearance.py \
     outputs/0811_101824_base_n5_ep1_max300/videos
 ```
 
@@ -176,5 +176,5 @@ docker run --rm -v "$PWD:/w" -w /w parc2026:latest \
 | 84 件の内訳（成功 40・衝突 23・未完了 21） | `outputs/0811_101824_base_n5_ep1_max300/summary.txt` |
 | この置き場の録画 35 本（衝突 18・未完了 17） | `ls outputs/0811_101824_base_n5_ep1_max300/videos` |
 | 接尾辞とカテゴリの対応、名前で不可分な 3 カテゴリ | [make_validation_suite.py](../../solution/tools/make_validation_suite.py)（`_place_variant`）、`work/LIBERO-plus/.../task_classification.json` |
-| 明るさ・コントラストの各値 | `solution/tools/measure_appearance.py` を上の環境で実行 |
+| 明るさ・コントラストの各値 | `solution/tools/analysis/measure_appearance.py` を上の環境で実行 |
 | 外部の 15 コマ集計（比較の相手） | 2026-08-11 に共有された LIBERO-plus の EDA 報告 |

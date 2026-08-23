@@ -820,7 +820,7 @@ ls -l --time-style=+%H:%M:%S work/train2/base_recipe_all/checkpoints/
 「失敗の原因は摂動ではなくタスクだった」にある。
 
 ```bash
-python3 solution/tools/decompose_failures.py outputs/0811_101824_base_n5_ep1_max300
+python3 solution/tools/analysis/decompose_failures.py outputs/0811_101824_base_n5_ep1_max300
 ```
 
 **タスクの平均を引いたあとのカテゴリのずれ。マイナスがその摂動の効き目である。**

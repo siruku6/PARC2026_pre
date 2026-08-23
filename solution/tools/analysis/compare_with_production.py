@@ -9,11 +9,11 @@
 一致すれば、その検証集合を提出前の判断に使える。一致しなければ使えない。
 
     # 1 組だけ見る（エピソードごとのステップ数を並べる）
-    python3 solution/tools/compare_with_production.py \\
+    python3 solution/tools/analysis/compare_with_production.py \\
         --pair outputs/0812_base_t1=outputs/prod_eval_results/260810_評価結果_ema=0.3あり.md
 
     # 2 組以上で順序が一致するかを見る（**こちらが本題**）
-    python3 solution/tools/compare_with_production.py \\
+    python3 solution/tools/analysis/compare_with_production.py \\
         --pair outputs/0812_base_t1=outputs/prod_eval_results/260810_評価結果_ema=0.3あり.md \\
         --pair outputs/0812_lora_t1=outputs/prod_eval_results/260811_評価結果_ema=0.3あり_初回学習後.md
 
@@ -44,7 +44,10 @@ from pathlib import Path
 
 # `[結果]` 行の解析を共通にする。**同じ正規表現を 2 か所に置くと必ず片方が
 # 古くなる。** summarize_gpu_eval は import しても main() を実行しない。
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+#
+# **`summarize_gpu_eval` は `solution/tools/` 直下に残っている**（評価パイプライン
+# 13 本は分割を保留した）。このファイルが `analysis/` へ移った分、1 つ上を見る。
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from summarize_gpu_eval import _pad, _parse_log  # noqa: E402
 
 # 採点ログから読む値。

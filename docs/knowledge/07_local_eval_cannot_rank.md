@@ -51,7 +51,7 @@
 | ジャーク・SPARC | 連続値なので少ない本数でも読めるが、**本番スコアとの対応は確認できていない** |
 
 ```bash
-python3 solution/tools/compare_steps.py --base <基準の回> --other <比べる回>
+python3 solution/tools/analysis/compare_steps.py --base <基準の回> --other <比べる回>
 ```
 
 ## 一度作ってしまった規則

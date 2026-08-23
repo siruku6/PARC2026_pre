@@ -99,7 +99,7 @@
 
 | 順 | やること | 出た結果で何が決まるか |
 |---|---|---|
-| **41-1** | **公開 4 タスク × 2 エピソードを回し、ステップ数の並びを採点ログと突き合わせる**（[compare_with_production.py](../../solution/tools/compare_with_production.py)） | **採点 8 本の正体。揃えば狙いを変えられる。軌道づくりより先に済ませる価値がある** |
+| **41-1** | **公開 4 タスク × 2 エピソードを回し、ステップ数の並びを採点ログと突き合わせる**（[compare_with_production.py](../../solution/tools/analysis/compare_with_production.py)） | **採点 8 本の正体。揃えば狙いを変えられる。軌道づくりより先に済ませる価値がある** |
 | ~~41-2~~ | ~~`build` を通す~~ | **済み（8/13）。**record→check→build→inspect が通り、列は元データと一致（[howto/05](../howto/05_scripted_demos.md)） |
 | **41-3** | **本数を増やす**（50 本を 2 並列・約 72 分。**Docker が見ているコアは 2 つなので、3 個以上並べると swap で壊れる**） | 学習に載る量になる |
 | **41-4** | **作った手本だけで学習する**（2,000 ステップ・約 9 分）。**10 ステップの試運転は済み（8/13）** ——`--dataset.revision` の上書きは要らなかった | **台本を真似られるか。提出物ではない**（他 39 タスクを忘れる。**正規化の基準も 47 本から取り直される**） |
@@ -171,7 +171,7 @@
 | # | 何を頼むか | 触るファイル | 重なり |
 |---|---|---|---|
 | **29** | **`CATEGORIES` を評価の起動から生成器まで通す**（旗は既にある） | `run_docker_eval.sh` ＋ `docker_eval_inside.sh` | **無し。私は触らない** |
-| ~~31~~ | ~~84 件の初期フレームから見た目の振れ幅を測る~~ | **済み**（8/12）。[reference/08](../reference/08_appearance_spread.md) ＋ [measure_appearance.py](../../solution/tools/measure_appearance.py) | — |
+| ~~31~~ | ~~84 件の初期フレームから見た目の振れ幅を測る~~ | **済み**（8/12）。[reference/08](../reference/08_appearance_spread.md) ＋ [measure_appearance.py](../../solution/tools/analysis/measure_appearance.py) | — |
 | ~~32~~ | ~~モデルの仕組みの説明を書く~~（レポート用） | **済み**（8/12）。[reference/09](../reference/09_model_explained.md) | — |
 | **27** | **λ で混ぜるスクリプトを書く**（測るのは私） | **新しいスクリプト 1 つ** | **無し** |
 | **10 → 11** | **効きそうな手を調べて並べる** | **新しい doc 1 枚** | **無し**（web を読むだけ） |
@@ -205,7 +205,7 @@
 |---|---|
 | **29** | **評価を「摂動カテゴリを絞って」流せるようにしてほしい。** `solution/tools/make_validation_suite.py` には `--categories` が**既にある**（既定は 7 カテゴリ）。**足りないのは、評価の起動からそこへ値を渡す道である。** `PER_CELL` と同じ流儀で `CATEGORIES` を通す —— `run_docker_eval.sh`（既定値 ＋ `docker run -e`）と `docker_eval_inside.sh`（既定値 ＋ `--categories` へ渡す）の **3 か所**。**空なら今と同じ 84 件**になること。`"Light Conditions" "Background Textures"` のように**空白を含む名前が 2 つ以上**渡るので、そこを取り違えないこと。確認は `bash -n` と、**生成器を直接叩いて 24 行になること**まで |
 | ~~32~~ | **済み**（8/12）。**結果** [reference/09](../reference/09_model_explained.md)。**次に頼むことがあるなら「説明を書く」ではなく「回が決まったあとのステップ数・バッチを埋める」ほうである**（末尾の貼り付け用 4 段落に `<>` の空欄が 2 つある。32 の節） |
-| ~~31~~ | **済み**（8/12）。**結果** [reference/08](../reference/08_appearance_spread.md)／**道具** [measure_appearance.py](../../solution/tools/measure_appearance.py)。**撮り直すときに頼むのは「測る」ではなく「偏りの無い画像を用意する」ほうである**（A か B。31 の節） |
+| ~~31~~ | **済み**（8/12）。**結果** [reference/08](../reference/08_appearance_spread.md)／**道具** [measure_appearance.py](../../solution/tools/analysis/measure_appearance.py)。**撮り直すときに頼むのは「測る」ではなく「偏りの無い画像を用意する」ほうである**（A か B。31 の節） |
 | **27** | **`solution/tools/weights/blend_weights.py` を新規に作ってほしい。** 素の重みと追加学習後の重み、係数 λ を受け取り、`θ = (1−λ)·θ素 + λ·θ学習後` を計算して `merged_model` と同じ体裁で書き出す。**テンソルの構成が両者で一致することを先に確かめて、違えば止める。** `solution/tools/weights/install_weights.py` の `_read_safetensors_keys` が参考になる（同じ流儀で書く）。**測るのはこちらでやるので、評価は不要** |
 | **10 → 11** | **「LIBERO-plus の見た目の摂動に強くする手」を調べて `docs/talk/03_survey.md` に並べてほしい。** 情報源は LIBERO / LIBERO-plus の論文とリーダーボード、SmolVLA の issue と議論、似た設定の Kaggle の解法。**残り 3 日・GPU 1 台（学習 1 本 4 時間）で試せるかを、手ごとに書くこと。** 試せないものも消さずに「試せない」と書く |
 
@@ -657,7 +657,7 @@ rm -rf work/artifacts/model_weights_lora20k.bak  # GPU マシンで。900 MB
 ### 31. 評価側の見た目の振れ幅を測る — **測った（8/12）。残るのは撮り方の判断 1 つ**
 
 **結果 → [reference/08_appearance_spread.md](../reference/08_appearance_spread.md)。
-道具 → [measure_appearance.py](../../solution/tools/measure_appearance.py)**
+道具 → [measure_appearance.py](../../solution/tools/analysis/measure_appearance.py)**
 （mp4 の 1 コマ目から、接尾辞ごとの明るさ・コントラストを出す）。
 
 **分かったのは「この録画では母集団を測れない」ことである。** 偏りが 4 段重なる ——

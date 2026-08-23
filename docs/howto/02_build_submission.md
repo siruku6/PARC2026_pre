@@ -555,7 +555,7 @@ work/venv310/bin/python solution/tools/build/digest_submission.py --per-entry
 >   +3 件だった）。**ステップ数で見れば見抜ける。**
 > - **秒数だけ払う施策は事実上ただ** —— `num_inference_steps` と `samples` は
 >   推論の秒数しか増やさず、環境のステップ数を 1 ステップも増やさない。
-> ステップ数で 1 件ずつ突き合わせる道具: `solution/tools/compare_steps.py`。
+> ステップ数で 1 件ずつ突き合わせる道具: `solution/tools/analysis/compare_steps.py`。
 
 > **版と本番ログの表示がずれている点に注意。** 1.0.0 の採点ログには
 > `policy_server 0.3.0` と出ている（版を上げる前に重みだけ差し替えて出したため）。

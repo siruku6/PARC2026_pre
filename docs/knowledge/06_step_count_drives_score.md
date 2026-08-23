@@ -157,7 +157,7 @@
 grep -c "POST /act" outputs/<採点ログ>.md
 
 # 手元の 2 つの回をステップ数で 1 件ずつ突き合わせる
-python3 solution/tools/compare_steps.py \
+python3 solution/tools/analysis/compare_steps.py \
     --base  work/gpu_eval/<基準の回> \
     --other work/gpu_eval/<比べる回>
 ```

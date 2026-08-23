@@ -59,7 +59,7 @@ _PRODUCTION_CATEGORIES = ("Background Textures", "Light Conditions")
 
 # 元タスク名の先頭に付く場面の名前（`KITCHEN_SCENE3_` など）。
 # **落とすとデータセットの `task` 列と同じ文になる。**
-# `solution/tools/decompose_failures.py` の `_instruction_of` が同じ処理をしており、
+# `solution/tools/analysis/decompose_failures.py` の `_instruction_of` が同じ処理をしており、
 # そこに「CSV の instruction 列は学習データと綴りが違う」理由が書いてある。
 _SCENE_PREFIX_RE = re.compile(r"^[A-Z][A-Z_]*SCENE\d+_")
 

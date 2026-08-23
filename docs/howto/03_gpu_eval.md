@@ -119,7 +119,7 @@ MUJOCO_GL=osmesa LABEL=lora20k \
 **素と LoRA 20,000 ステップの 2 つで足りる。** この 2 つは採点環境のスコアが大きく違っており、λ=0.25 は素との差が 1 本ぶん（0.046）しかないので判定に使わない。
 
 ```bash
-python3 solution/tools/compare_with_production.py \
+python3 solution/tools/analysis/compare_with_production.py \
     --pair "work/gpu_eval/<base の回>=outputs/prod_eval_results/260810_評価結果_ema=0.3あり.md" \
     --pair "work/gpu_eval/<lora20k の回>=outputs/prod_eval_results/260811_評価結果_ema=0.3あり_初回学習後.md"
 ```

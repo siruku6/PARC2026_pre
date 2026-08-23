@@ -156,7 +156,7 @@ MUJOCO_GL=osmesa WEIGHTS=work/train/smolvla_lora_all_suites/merged_model \
 ## 手順 3：採点環境と突き合わせる
 
 ```bash
-python3 solution/tools/compare_with_production.py \
+python3 solution/tools/analysis/compare_with_production.py \
     --pair "outputs/0812_base_t1=outputs/prod_eval_results/260810_評価結果_ema=0.3あり.md" \
     --pair "outputs/0812_lora20k_t1=outputs/prod_eval_results/260811_評価結果_ema=0.3あり_初回学習後.md"
 ```

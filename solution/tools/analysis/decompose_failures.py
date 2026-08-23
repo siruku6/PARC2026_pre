@@ -16,12 +16,12 @@
 元タスクの識別には CSV の `init_states_file` を使う（変種名を切り出す必要がない。
 1 タスク 1 ファイルで対応している）。手本の長さは `--demo-lengths` の JSON から引く。
 
-    python3 solution/tools/decompose_failures.py outputs/0811_101824_base_n5_ep1_max300
+    python3 solution/tools/analysis/decompose_failures.py outputs/0811_101824_base_n5_ep1_max300
 
 Reads:
   - <output-dir>/eval.log
   - <output-dir>/VAL_TASKS.csv
-  - solution/tools/demo_lengths.json（`--demo-lengths` で差し替え可）
+  - solution/tools/analysis/demo_lengths.json（`--demo-lengths` で差し替え可）
 Generates:
   - 標準出力のみ
 """

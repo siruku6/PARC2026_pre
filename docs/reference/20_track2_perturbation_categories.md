@@ -404,7 +404,7 @@ Base（2/8）・15°（0/8）・30°（1/8）と明確に分かれる。**つま
 | タスク名の整数がそのまま設定に使われ、確認されるのは元の `.bddl` だけであること（2.3 節） | `env_wrapper.py:207-221`（文字列の分解）・`235-237`（`assert os.path.exists`） |
 | `_add_N` が bddl の番号で、物体数と相関 0.939 であること（2.2 節） | `bddl_files/libero_mix/KITCHEN_SCENE3_..._add_*.bddl` 60 件の `(:objects)` を数えた |
 | 方位角スイープの実測（4.1 節） | `work/gpu_eval/0823_141340_camera_azimuth_n16_ep1_max300_ema03_blend0_s1/summary.txt`・`eval.log`、入力は `work/logs/robot_init_sanity/CAMERA_AZIMUTH_PROBE.csv` |
-| ステップ比が 300 の打ち切りに引きずられること（4.1 節） | 上記 `eval.log` の 48 行を、打ち切られた組を含む場合と外した場合で計算し直した。同じ理由と対処は `solution/tools/compare_steps.py:95-118` に既にある |
+| ステップ比が 300 の打ち切りに引きずられること（4.1 節） | 上記 `eval.log` の 48 行を、打ち切られた組を含む場合と外した場合で計算し直した。同じ理由と対処は `solution/tools/analysis/compare_steps.py:95-118` に既にある |
 | 推論に乱数が入り seed を固定していないこと（4.1 節） | `solution/policy_server.py:1050-1054`（`_get_action_chunk` に `noise=None` を渡す）。`work/gpu_eval/` の全 49 回が `n_total_episodes == n_tasks`（1 タスク 1 エピソード） |
 | 学習データに摂動カテゴリ別の内訳が特定できないこと | [06_training_data_composition.md](06_training_data_composition.md) |
 | π0.5 系提出物が手首カメラを使っていること | `solution/policy_server.py`（`robot0_eye_in_hand_image` を観測に使用）、[07 §4](../plan/07_track2_preparation.md#4-わからないこと確認が必要なこと) |
