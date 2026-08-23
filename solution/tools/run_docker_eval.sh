@@ -47,6 +47,8 @@
 #   - work/artifacts/model_weights/**
 # Generates:
 #   - work/gpu_eval/<日時>_<設定>/eval.log・server.log・*.json・videos/
+#     run_config.json … このスクリプトが渡した設定値（渡した値のみ。実際に
+#     採用された値は server.log の [parc] 行を見ること）
 set -euo pipefail
 
 REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -285,6 +287,38 @@ kit_environment=(
     # ときは `PARC_RECORD_WHICH=all` を呼び出し側で渡すと両方録れる。
     -e "PARC_RECORD_WHICH=${PARC_RECORD_WHICH:-failures}"
 )
+
+# **このスクリプトが渡した設定値を、実行直後に記録として残す。**
+# ここに出るのは「渡した値」であり、空欄は policy_server.py 側の既定が効く
+# （既定込みの MUJOCO_GL=osmesa なども未設定なら空のまま出る）。
+# 「実際に採用された値」は $OUTPUT_DIR/server.log の [parc] 行（起動後に別途出る）で見る。
+CONFIG_JSON="$OUTPUT_DIR/run_config.json"
+env \
+    POLICY_IMAGE="$POLICY_IMAGE" KIT_IMAGE="$KIT_IMAGE" \
+    MAX_STEPS="$MAX_STEPS" N_EPISODES="$N_EPISODES" PER_CELL="$PER_CELL" \
+    EVAL_CSV="$EVAL_CSV" RECORD="$RECORD" WEIGHTS="$WEIGHTS" \
+    LABEL="${LABEL:-}" NETWORK="$NETWORK" \
+    python3 - "$CONFIG_JSON" <<'PY'
+import json
+import os
+import sys
+
+keys = [
+    "POLICY_IMAGE", "KIT_IMAGE", "MAX_STEPS", "N_EPISODES", "PER_CELL",
+    "EVAL_CSV", "RECORD", "WEIGHTS", "LABEL", "NETWORK",
+    "MUJOCO_GL",
+    "PARC_N_ACTION_STEPS", "PARC_NUM_INFERENCE_STEPS", "PARC_BLEND_STEPS", "PARC_EMA_ALPHA",
+    "PARC_SAMPLES", "PARC_RTC", "PARC_RTC_HORIZON", "PARC_RTC_GUIDANCE",
+    "PARC_NORMALIZE_INSTRUCTION", "PARC_NORM_EMBED",
+    "QUANT_SERVE_MODE", "QUANT_SERVE_SCOPE",
+    "PARC_RECORD_WHICH",
+]
+config = {key: os.environ.get(key) for key in keys}
+with open(sys.argv[1], "w") as f:
+    json.dump(config, f, indent=2, ensure_ascii=False, sort_keys=True)
+    f.write("\n")
+PY
+echo "  渡した設定値を書き出した: $CONFIG_JSON"
 
 # **`--ulimit core=0` と `PYTHONFAULTHANDLER=1` は、落ちたときに気づくためにある。**
 # 2026-08-14、評価側が 50 ステップ目で segfault した。既定のままだとカーネルが

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """C2（bnb 4bit vision encoder、work/quant_sweep/CANDIDATES.md）のチェックポイントを、
-ふつうの bf16 の `nn.Linear` 形式へ書き戻す。
+ふつうの `nn.Linear` 形式へ書き戻す。
 
 ## なぜこれが要るか
 
@@ -18,18 +18,40 @@
 （RAM 節約のため。同ファイルの docstring 参照）なので、`(2048, 1152)` を期待している場所に
 `(1179648, 1)` が来て「重みの形が合わない」で落ちる（2026-08-21 の回収評価で実際に発生）。
 
+## dtype は vision_tower・multi_modal_projector 全体を bf16 に揃える
+
+**「量子化されていない部分は元の dtype（大半 fp32）のまま残す」を最初に試したが、
+実機で3回落ちた。** `patch_embedding`・`q_proj`/`k_proj`/`v_proj` は fp32 のまま
+残しても通ったが、`self_attn.out_proj` だけは実行するたびに要求される dtype が
+入れ替わるように見えた（fp32 の重みでは「入力が bf16」、bf16 の重みでは
+「入力が fp32」という食い違いが両方向で観測された——SigLIP の attention 実装
+（SDPA のバックエンド選択、または内部の暗黙キャスト）が絡んでいると見ているが、
+正確な原因は特定できていない）。**個々の層ごとに「本来の dtype」を当てにいくのは
+もう一つも当たらないやり方だと判断し、この対症療法はやめた。**
+
+代わりに、**vision_tower + multi_modal_projector 全体（量子化されていた層も、
+patch_embedding・layer_norm のように量子化されていなかった層も含めて全部）を
+bf16 に統一する。** 内部で dtype が揃っていれば、個々の層がどちらの dtype を
+「本来」要求するかを当てる必要がなくなる——学習時の `compute_dtype=torch.bfloat16`
+（`quant_vision_4bit.py`）と揃えているので、量子化された層にとっては元々の
+計算精度と同じである。fp32 のまま残っていた層（patch_embedding・layer_norm 等）
+だけ、追加で bf16 への丸めが増える——C2 という候補自体が「凍結側の精度劣化を
+受け入れて学習を軽くする」ものなので、この追加の丸めも同じ性質の近似として
+許容できると判断した。
+
 ## この道具がやること・やらないこと
 
 - **C2 は「学習を軽くする」ための候補**（凍結側の重みメモリだけを 4bit 化。演算量は
   変えていない）で、量子化した重みを**そのまま本番で提供する**ことは元から想定していない
-  （量子化 4bit の対象は凍結側だけであり、`bnb.functional.dequantize_4bit` で戻せば学習中に
-  実際に使われていた値をほぼそのまま復元できる——4bit の丸め誤差ぶんの差はあるが、
-  それは C2 の学習自体が最初から抱えている誤差そのものである）。
+  （`bnb.functional.dequantize_4bit` で戻せば学習中に実際に使われていた値をほぼそのまま
+  復元できる——4bit の丸め誤差ぶんの差はあるが、それは C2 の学習自体が最初から
+  抱えている誤差そのものである）。
 - **したがって「評価用に一度だけ bf16 に戻す」のが最も安全な対応であり、
   `policy_server.py`/`_build_pi05` 側は一切変更しない**（他の全候補が通っている
   実績のあるロード経路を、C2 のためだけに複雑にしないため）。
-- 4bit 化されていないキー（gemma_2b・gemma_expert・埋め込み・norm など）はそのまま
-  コピーする。`config.json` 等の付随ファイル、`vlm/` もまとめてコピーする。
+- vision_tower・multi_modal_projector 以外のキー（gemma_2b・gemma_expert・
+  埋め込み・norm など）はそのままコピーする。`config.json` 等の付随ファイル、
+  `vlm/` もまとめてコピーする。
 
 ## 使い方（GPU が要る。`bnb.functional.dequantize_4bit` が CUDA カーネルのため）
 
@@ -84,7 +106,33 @@ def _find_quantized_bases(keys: list[str]) -> list[str]:
 
 
 def _dequantize_one(state: dict[str, torch.Tensor], base: str, device: str) -> torch.Tensor:
-    """`base`（4bit にパックされた weight キー）を、平の bf16 テンソルへ戻す。"""
+    """`base`（4bit にパックされた weight キー）を、平のテンソルへ戻す。
+
+    **戻す先の dtype は、同じ Linear の bias の dtype に合わせる（無ければ fp32）。**
+    bias は量子化の対象外なので、常に量子化"前"の値のままチェックポイントに
+    残っている——つまり「この Linear が実際にどの dtype で動いていたか」を
+    weight より確実に教えてくれる。
+
+    2026-08-22、実機の順位一致チェック（`run_quant_rank_check.sh`）で2段階の
+    実機確認があってこの結論に至った。
+
+    1回目（fp32 が正しいと考えた根拠）: `quant_vision_4bit.py` の
+       `compute_dtype=torch.bfloat16` は量子化後の計算精度の指定であって、
+       量子化前の本来の dtype とは無関係。C0（量子化していない baseline）の
+       vision_tower の `nn.Linear` はほぼ全部 fp32 で保存されている
+       （`patch_embedding`・`layer_norm` も同様）。→ 全部 fp32 に戻したところ、
+       `RuntimeError: ... got BFloat16 and Float` が **out_proj** で発生。
+
+    2回目（fp32 だけでは足りないと分かった根拠）: C2 のチェックポイントを
+       実際に調べると、**`self_attn.out_proj.bias` だけが全27層で一貫して
+       bf16、他（q_proj/k_proj/v_proj/mlp.fc1/fc2/multi_modal_projector.linear
+       の bias）は全部 fp32**（C0/C1 ではこの層も fp32 なので、C2 の学習
+       固有の現象——SigLIP の attention 実装が out_proj の入力だけ内部で
+       bf16 にキャストしている等が疑われるが、正確な原因は未確定）。
+       bias は量子化されないのでこの差は量子化処理自体が作ったものではなく、
+       実際にその dtype で計算されていたことの記録だと判断した。
+       → weight を bias の dtype に揃える方式に変更。
+    """
     satellites = {}
     for suffix in _QUANT_SUFFIXES:
         key = base + suffix
@@ -105,7 +153,7 @@ def _dequantize_one(state: dict[str, torch.Tensor], base: str, device: str) -> t
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input_dir", type=Path, help="C2 の checkpoints/<step>/pretrained_model")
-    parser.add_argument("output_dir", type=Path, help="bf16 に戻した内容を書き出す先")
+    parser.add_argument("output_dir", type=Path, help="fp32 に戻した内容を書き出す先")
     parser.add_argument("--device", default="cuda", help="既定 cuda（dequantize_4bit は CUDA 専用）")
     args = parser.parse_args()
 
@@ -134,6 +182,19 @@ def main() -> None:
         restored = _dequantize_one(state, base, args.device)
         state[base] = restored
         print(f"[dequant]  {base}: -> {tuple(restored.shape)} {restored.dtype}")
+
+    # vision_tower・multi_modal_projector 全体を bf16 に揃える（量子化されて
+    # いなかった patch_embedding・layer_norm 等も含む）。理由はモジュール
+    # docstring の「dtype は vision_tower・multi_modal_projector 全体を bf16 に
+    # 揃える」を参照——個々の層ごとに dtype を当てにいく方式は実機で3回落ちた。
+    cast_count = 0
+    for key in list(state.keys()):
+        if "vision_tower" in key or "multi_modal_projector" in key:
+            if torch.is_floating_point(state[key]) and state[key].dtype != torch.bfloat16:
+                state[key] = state[key].to(torch.bfloat16)
+                cast_count += 1
+    print(f"[dequant] vision_tower/multi_modal_projector のうち、"
+          f"元々 bf16 でなかった {cast_count} 個のテンソルも bf16 に統一した。")
 
     save_file(state, str(args.output_dir / "model.safetensors"))
     print(f"[dequant] 完了: {args.output_dir / 'model.safetensors'}")

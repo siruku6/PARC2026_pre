@@ -1028,8 +1028,17 @@ class MyPolicy(BasePolicy):
             original_predict = policy.predict_action_chunk
 
             def sampled_predict(batch, **kwargs):
+                # **`.clone()` が要る（2026-08-22、compile_model=true の実機検証で発見）。**
+                # `sample_actions` を `torch.compile` した状態だと、CUDA graphs に
+                # 裏打ちされた静的バッファを返すことがある。clone せずに複数回呼んだ
+                # 結果を後から `torch.stack` すると、2回目以降の呼び出しが1回目の
+                # 出力バッファを上書きし、`RuntimeError: accessing tensor output of
+                # CUDAGraphs that has been overwritten by a subsequent run` で落ちる。
+                # `compile_model=false`（これまでの既定）では静的バッファを使わないため
+                # 顕在化していなかった——このバグは compile_model 系の変更としてここに
+                # 記録する（work/quant_sweep/PROGRESS.md 参照）。
                 chunks = torch.stack(
-                    [original_predict(batch, **kwargs) for _ in range(count)]
+                    [original_predict(batch, **kwargs).clone() for _ in range(count)]
                 )
                 return pick_medoid(chunks)
 
