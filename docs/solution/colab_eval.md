@@ -1,43 +1,82 @@
 # Colab GPU で評価を回す
 
-**リポジトリから8ファイルを Colab へコピーし、セル3つを貼って呼び出すだけの手順である。**
+**リポジトリから8ファイルを Colab へコピーし、セルを5つ貼って呼び出すだけの手順である。**
 中身はすべて [solution/tools/colab/colab_eval.py](../../solution/tools/colab/colab_eval.py) にある。
 
 | 節 | 内容 |
 |---|---|
-| [Track1 用である](#この手順は-track1-用でtrack2-では未検証である) | π0.5 では動かない。何を直せば動くか |
+| [π0.5 にも対応した](#π05track2にも対応したただし-gpu-の選び方だけ未確認である) | `POLICY_KIND` で切り替える。T4 と CPU の可否 |
 | [上げる8ファイル](#colab-へ上げるのは-8-ファイルで集めるのはスクリプトが行う) | `collect_colab_files.py` が集める |
-| [貼るセル3つ](#colab-に貼るのはセル-3-つだけ) | そのままコピーできる形 |
-| [値を変える](#値を変えるのは-colab_eval_configpy-だけ) | 設定7項目の表 |
+| [貼るセル5つ](#colab-に貼るのはセル-5-つだけ) | そのままコピーできる形 |
+| [値を変える](#値を変えるのは-colab_eval_configpy-だけ) | 設定10項目の表 |
 | [出力の置き場](#結果は-1-本ごとに-drive-へ出る) | 落ちても直前まで残る |
 | [遅いとき](#1-本目が-200-秒を超えたら-egl-を疑う) | EGL がソフトウェア実装に落ちる罠 |
 | [2 プロセスと av](#依存を2プロセスに分けるのとav-が要る理由) | 依存が正面衝突する。`av` が要る理由 |
 | [使い分け](#colab-は速くないgpu-マシンが空いていればそちらで回す) | 実測 110 秒／本 |
 | [本番との違い](#本番との違い) | Python・CUDA の版、通信の可否 |
 
-## この手順は Track1 用で、Track2 では未検証である
+## π0.5（Track2）にも対応した。ただし GPU の選び方だけ未確認である
 
-**`colab_eval.py` と `colab_eval_config.py` は SmolVLA・912 MB の重みを前提にしている。**
-Track2 で使っている π0.5 は読み込むだけで約 18 GB 必要なので、この流れには乗らない。
+**`POLICY_KIND` で切り替える**（`colab_eval_config.py`）。`"pi05"` と `"smolvla"` の
+違いは `colab_eval.py` の `POLICY_SPECS` 1 か所に集めてある。
 
-| 前提にしている値 | どこ | Track2 で何が変わるか |
+| 違うところ | SmolVLA（Track1） | π0.5（Track2） |
 |---|---|---|
-| ベース重み `lerobot/smolvla_libero_plus` | `colab_eval.py:97` | π0.5 の重みに差し替える必要がある |
-| `EXPECT_DIGEST = "952171f9"`（λ=0.25 の重み。予選4回目の提出物） | `colab_eval_config.py` | 測る重みのハッシュ先頭8桁に書き換える |
-| 検証用スイート 84 件（4 スイート × 7 カテゴリ × 3） | `colab_eval_config.py` の `PER_CELL` | Track2 の摂動スイートとは中身が違う |
-| 重みを Drive 経由で運ぶ（912 MB） | `prepare_weights()` | 18 GB の転送時間を測っていない |
+| 重みの出どころ | Drive へ手で上げる（912 MB） | **HF の非公開リポジトリから落とす。**`siruku6/pi05_stage1_24000`（`vlm/` 同梱） |
+| トークナイザ | `HuggingFaceTB/SmolVLM2-500M-Video-Instruct` を別に落とす | **落とさない**（重みに同梱） |
+| 正規化の safetensors | `..._step_5_...` | **`..._step_2_...`** |
+| lerobot の extra | `[smolvla]` | **`[pi]`**（手元の学習イメージと同じ v0.6.0 ＋ `[pi]`） |
+| 測るタスク | 84 件を生成（`PER_CELL`） | **`compe/val/EVAL_TASKS.csv`（36 件）を上げる**。手元の評価と同じ集合 |
+| `n_action_steps` の既定 | 5 | 16 |
 
-**Track1 の重みを測り直すならそのまま使える。** π0.5 で使うなら上の4点を直すこと。
+**Drive は要らなくなった。** 重みは 8.8 GB あるが、`snapshot_download` で Colab へ
+直接落ちてくる（Drive のブラウザ画面から 8.8 GB を上げる必要はない）。
+**非公開リポジトリなので、Colab で先に HF へログインすること。**
+
+### 未確認: T4 で π0.5 が動くかどうか
+
+**π0.5 の dtype は bfloat16 である**（`config.json`）。bf16 は compute capability 8.0
+以上の GPU でしか本来の形で動かない。**T4 は 7.5 である。**
+
+SmolVLA には fp16 へ書き換える処置が入っているが（`colab_eval.py` の
+`patch_bf16`）、**π0.5 には同じ手が無い。** dtype を決めているのは
+`policy_server.py` の `_build_pi05` で、`bfloat16` でなければ float32 になる
+分岐しか無く、**float32 の π0.5 は T4 の 15 GB に載らない**（`_build_pi05` の
+docstring が記録している fp32 での組み立ては 16.6 GB）。
+
+そのため `setup_policy()` は、bf16 非対応の GPU では**止めずに警告だけ出して進む。**
+動くかどうかは疎通確認（`ce.run(chunk=1, max_tasks=5)`）で分かる。落ちるなら
+cc 8.0 以上（L4・A100 など）が要る。
+
+### CPU では回せない
+
+**1 推論に CPU 1 コアで 195 秒かかる**（2026-08-13 実測。
+[../howto/07_train_pi05_local.md](../howto/07_train_pi05_local.md) の表。
+重みの読み込みだけでも 302 秒）。1 エピソードは 300 ステップ ÷
+`n_action_steps` 16 ＝ 約 19 回の推論なので、
+
+    19 回 × 195 秒 ＝ 約 1.03 時間／エピソード（1 コア）
+    36 件 → 約 37 時間（1 コア）／約 19 時間（2 コアで半分になったとして）
+
+Colab の接続が保たない。**しかもこの 195 秒は下限である** —— 測ったのは
+`samples=1`・ノイズ除去 10 回の構成で、手元の 36 件評価と同じ構成
+（`samples=3`・20 回）は 1 推論の計算量がその約 6 倍になる。
+**CPU は「行動が出るか」を見る用途にしか使えない。**
 
 ## Colab へ上げるのは 8 ファイルで、集めるのはスクリプトが行う
 
 **手で選ぶと取り違えるので、`collect_colab_files.py` にコピーを作らせる。**
 
 ```bash
+# π0.5（Track2）—— 手元の 36 件評価と同じ集合を渡す
 cd /home/ubuntu/lab/PARC2026_pre
 python3 solution/tools/colab/collect_colab_files.py \
-    --val-tasks outputs/0811_101824_base_n5_ep1_max300/VAL_TASKS.csv
+    --val-tasks compe/val/EVAL_TASKS.csv
 open work/colab_upload
+
+# SmolVLA（Track1）—— 前の回と1件ずつ対にして比べるとき
+python3 solution/tools/colab/collect_colab_files.py \
+    --val-tasks outputs/0811_101824_base_n5_ep1_max300/VAL_TASKS.csv
 ```
 
 集まるのは `colab_eval.py`・`colab_eval_config.py`・`policy_server.py`・
@@ -53,12 +92,17 @@ open work/colab_upload
 `--val-tasks` に前の回の CSV を渡すと一緒に集まる。**前の回と1件ずつ対にして比べたい
 ときは必ず渡す** ——1件でも違うタスクが混ざると符号検定が成り立たない。
 
-重み（912 MB）は別で、Drive のブラウザ画面へフォルダごとドラッグする。置き場は
+**π0.5 では重みを運ぶ作業が無い。** `WEIGHTS_SOURCE = "hf"` にしておけば
+`prepare_weights()` が `snapshot_download` で 8.8 GB を直接落とす。**非公開
+リポジトリなので、先に Colab で HF へログインしておくこと**（下のセル 2）。
+
+SmolVLA を Drive から測るときだけ（`WEIGHTS_SOURCE = "drive"`）、重み（912 MB）を
+Drive のブラウザ画面へフォルダごとドラッグする。置き場は
 `MyDrive/parc2026/FOR_COLAB_EVAL/<重みのフォルダ名>` にして、その名前を
 `colab_eval_config.py` の `DRIVE_WEIGHTS_DIR` に書く。
 **Drive への上げ下ろしは Colab の実行時間を消費しない。**
 
-## Colab に貼るのはセル 3 つだけ
+## Colab に貼るのはセル 5 つだけ
 
 **ランタイムのタイプを GPU に変更**してから、セルを3つ作る。
 
@@ -71,16 +115,28 @@ importlib.reload(ce)
 ```
 
 ```python
-# セル 2 —— 準備（上から順に。合わせて 15 分ほど）
+# セル 2 —— HF へログイン（π0.5 の重みが非公開リポジトリにあるため。
+#           SmolVLA を Drive から測るなら要らない）
+from huggingface_hub import login
+login()               # トークンを貼る。read 権限で足りる
+```
+
+```python
+# セル 3 —— 準備（上から順に。合わせて 15 分ほど）
 ce.prepare()          # Drive をつなぐ・7 ファイルが上がっているか・GPU と EGL
 ce.setup_kit()        # clone・setup.sh・パッチ（5〜10 分）
 ce.prepare_weights()  # 重みを用意し、ハッシュで名指しする
 ce.setup_policy()     # 方策サーバーの依存と配置
-ce.build_suite()      # 検証用スイートへ差し替え、84 件を 3 つに割る
+ce.build_suite()      # 上げた CSV へ差し替え、塊に割る
 ```
 
 ```python
-# セル 3 —— 評価（1 つ 28 件・約 51 分。数字を変えて 3 回実行する）
+# セル 4 —— まず疎通確認（5 タスク。**36 件を回す前に必ずこれを通す**）
+ce.run(chunk=1, max_tasks=5)
+```
+
+```python
+# セル 5 —— 評価（π0.5 なら 1 つ 12 件。数字を変えて 3 回実行する）
 ce.run(chunk=1)
 ```
 
@@ -102,13 +158,15 @@ Drive への退避まで通る。前の関数が作ったものが無ければ�
 
 | 設定 | 既定 | 変えるとき |
 |---|---|---|
-| `USE_FINETUNED` / `DRIVE_WEIGHTS_DIR` | `True` / `…/model_weights_lam025` | 評価する重みを替える |
-| `EXPECT_DIGEST` | `952171f9` | **意図した重みかを読み込む前に照合する。違えば止まる** |
-| `N_EPISODES` | `1` | 1 タスクあたりの本数。84 件では 1 のまま |
+| `POLICY_KIND` | `pi05` | **どちらの模型を積むか。**`pi05` か `smolvla` |
+| `WEIGHTS_SOURCE` | `hf` | `hf`（π0.5・非公開リポジトリ）か `drive`（手で上げたもの） |
+| `DRIVE_WEIGHTS_DIR` | `…/model_weights_lam025` | `WEIGHTS_SOURCE = "drive"` のときだけ効く |
+| `EXPECT_DIGEST` | `d46bffcf` | **意図した重みかを読み込む前に照合する。違えば止まる** |
+| `N_EPISODES` | `1` | 1 タスクあたりの本数。手元の評価と揃えるため 1 のまま |
 | `MAX_STEPS` | `300` | 本番の打ち切りと同じ値 |
-| `CHUNKS` | `3` | 51 分でも落ちるなら 6（1 塊 14 件・26 分） |
-| `PER_CELL` | `3` | 検証用スイートの大きさ。4 スイート × 7 カテゴリ × この数 |
-| `POLICY_ENV` | 空 | 推論の設定値。**重みを比べるときは空** |
+| `CHUNKS` | `3` | 36 件なら 1 塊 12 件。落ちるなら増やす |
+| `PER_CELL` | `3` | 84 件を生成するときだけ効く。**CSV を上げているときは使われない** |
+| `POLICY_ENV` | `PARC_SAMPLES=3` | 推論の設定値。**π0.5 は手元評価に揃えて samples 3 を明示する** |
 | `RECORD_DIR` / `RECORD_WHICH` | `/content/videos` / `failures` | 録画。`None` で撮らない |
 
 **`ce.run()` は使う値を全部画面に出す。** 意図と違えばそこで止められる。
@@ -128,17 +186,23 @@ Drive への退避まで通る。前の関数が作ったものが無ければ�
 **時刻は Colab の既定の UTC なので、日本時間より 9 時間前に見える。**
 
 やり直すのは落ちた塊だけでよい。`build_suite()` は `/content/VAL_TASKS.csv` が
-上がっていれば同じ 84 件を作り直さないので、前の回と1件ずつ対にして比べられる。
+上がっていればそれをそのまま使い、作り直さないので、前の回と1件ずつ対にして
+比べられる（π0.5 では手元と同じ 36 件がそのまま入る）。
 
 ## 1 本目が 200 秒を超えたら EGL を疑う
 
 **Colab では EGL がソフトウェア実装に落ちて、例外も警告も出さずに 11 倍遅くなる。**
 `/usr/share/glvnd/egl_vendor.d/` に NVIDIA の登録が無いと、libglvnd は Mesa の
 ソフトウェア実装を掴み、`env.step` が 38.6 ms から 431.8 ms になる。
-`ce.prepare()` が `10_nvidia.json` を自分で書いて直す（`colab_eval.py` の 325〜340 行）。
+`ce.prepare()` が `10_nvidia.json` を自分で書いて直す（`colab_eval.py` の `prepare()`）。
 
 **`run()` の最初の `[結果]` 行の時刻を見る。** 100〜130 秒なら想定どおり。
 200 秒を超えていたら止めて、`ce.prepare()` の EGL の出力を読み直す。
+
+**この 100〜130 秒は Track1（SmolVLA・`n_action_steps=5`）の数字である。**
+π0.5 では 1 本の秒数を測っていない（推論 1 回が重い代わりに回数が 3 分の 1 になる）。
+π0.5 の 1 本目で判断するときは、EGL が効いているかを
+`ce.prepare()` の出力（`10_nvidia.json`）だけで確かめること。
 
 ## 依存を2プロセスに分けるのと、av が要る理由
 
@@ -153,7 +217,7 @@ Drive への退避まで通る。前の関数が作ったものが無ければ�
 `require_package("av")` を呼ぶ。**提出物の環境には `datasets` が無いので分岐が飛ばされ、
 `av` は要らない。** 版を固定するのは、素で入れると 17 系になり
 `lerobot/datasets/pyav_utils.py` が使う `av.option` が消えていて `AttributeError` に
-なるため（`colab_eval.py` の 535〜542 行）。
+なるため（`colab_eval.py` の `setup_policy()`）。
 
 それでも `av` 関連で落ちるときは、`pip uninstall -y datasets` で分岐そのものを
 通らなくする方が確実である。この評価では `datasets` を使わない。
@@ -170,7 +234,13 @@ Colab を使う理由は「GPU マシンが学習で埋まっているあいだ�
 | 使い分け | |
 |---|---|
 | GPU マシンが空いている | **そちらで回す。** 切断が無く、`--detach` で放っておける |
-| GPU マシンが学習中 | Colab で回す。ただし 28 件ずつ 3 回に割る |
+| GPU マシンが学習中 | Colab で回す。塊に割る（π0.5 の 36 件なら 12 件ずつ 3 回） |
+
+**π0.5 では、この比較がどうなるかを測っていない。** 手元の GPU マシンでは
+36 件 51 分（85 秒／本）で、その 7〜8 割が CPU 描画である
+（[../knowledge/14_quantization_and_eval_bottleneck.md](../knowledge/14_quantization_and_eval_bottleneck.md)）。
+Colab では描画が約 11 倍速い代わりに、割り当てられる GPU は H100 より遅い。
+**打ち消し合う量が読めないので、1 塊目の秒数で判断する。**
 
 **学習セッションとは別のアカウントで開くこと。** 同一アカウントで2つ GPU を使うと
 片方が止められる。

@@ -75,7 +75,7 @@ from types import ModuleType
 
 # **版。** 画面に出るこの数字と、リポジトリのこのファイルの数字が合っていなければ
 # 古いものを上げている。貼り替えの取り違えは、これでしか止められない。
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 CONTENT = Path("/content")
 KIT_DIR = CONTENT / "PARC2026_pre"
@@ -94,9 +94,73 @@ DRIVE_ROOT = Path("/content/drive/MyDrive")
 EVAL_ROOT = DRIVE_ROOT / "parc2026/eval"
 
 LEROBOT_TAG = "v0.6.0"
-BASE_WEIGHTS_REPO = "lerobot/smolvla_libero_plus"
-BASE_WEIGHTS_REVISION = "7bb70aa5bc92b82c9239142775d3a173103567ff"
-VLM_REPO = "HuggingFaceTB/SmolVLM2-500M-Video-Instruct"
+
+
+@dataclass(frozen=True)
+class PolicySpec:
+    """模型の種類ごとに違うところだけを集めた表。
+
+    **どちらを積むかは重みを落とす前に決まっていないといけない。** lerobot の
+    extra（`[smolvla]` か `[pi]`）も、必須ファイルの名前も、重みを見る前に要る。
+    だから `config.json` から後で読む形にはできず、`colab_eval_config.py` の
+    `POLICY_KIND` で明示してもらう。
+    """
+
+    kind: str
+    weights_repo: str
+    weights_revision: str | None
+    vlm_repo: str | None
+    lerobot_extra: str
+    normalizer_file: str
+    default_n_action_steps: str
+    patch_bf16: bool
+    known_digests: dict[str, str]
+
+
+POLICY_SPECS: dict[str, PolicySpec] = {
+    # Track1。8/11 に 84 件で実証済みの経路。
+    "smolvla": PolicySpec(
+        kind="smolvla",
+        weights_repo="lerobot/smolvla_libero_plus",
+        weights_revision="7bb70aa5bc92b82c9239142775d3a173103567ff",
+        # VLM 本体の重みはチェックポイントに含まれる。設定とトークナイザだけ別に落とす。
+        vlm_repo="HuggingFaceTB/SmolVLM2-500M-Video-Instruct",
+        lerobot_extra="smolvla",
+        normalizer_file="policy_preprocessor_step_5_normalizer_processor.safetensors",
+        default_n_action_steps="5",
+        # bf16 非対応の GPU（T4 など）では fp16 へ書き換える。**SmolVLA 専用の処置**
+        # で、π0.5 には効かない（書き換える対象のファイルが smolvla/ の下にある）。
+        patch_bf16=True,
+        known_digests={
+            "a67a056a": "素の重み（8/11 に評価済み。成功率 0.476）",
+            "2cd9faab": "lora20k（4 回目の提出。本番 0.016。評価済み）",
+            "952171f9": "λ=0.25（素の重み ＋ 学習で動いた分 × 0.25）",
+        },
+    ),
+    # Track2。**重みは HF の非公開リポジトリに `vlm/` 込みで置いてある**ので、
+    # Drive を経由せず `snapshot_download` で引ける（docs/reference/19_weights_catalog.md）。
+    # 非公開なので `hf auth login` か HF_TOKEN が要る。
+    "pi05": PolicySpec(
+        kind="pi05",
+        weights_repo="siruku6/pi05_stage1_24000",
+        weights_revision=None,
+        vlm_repo=None,
+        # π0.5 は `[pi]`（π0/π0.5 が要る依存一式）。手元の学習イメージと同じ
+        # 組み合わせにしてある（solution/train/Dockerfile.pi05 の v0.6.0 + [training,pi]）。
+        lerobot_extra="pi",
+        # **SmolVLA は step_5 だが π0.5 は step_2 である。**
+        # 実物: work/artifacts/model_weights_pi05_024000/
+        normalizer_file="policy_preprocessor_step_2_normalizer_processor.safetensors",
+        # policy_server.py は π0.5 のときだけ 16 を既定にする（版 3.9.0）。
+        default_n_action_steps="16",
+        patch_bf16=False,
+        known_digests={
+            "d46bffcf": "pi05/full_local_024000（1 回目の学習 24,000 歩。本番 0.264・手元36件 0.667〜0.722）",
+            "0c5d542e": "pi05/full_runpod_003000（予選の最終提出。本番 0.485・手元36件 0.750）",
+            "89fc796d": "C0 baseline 16,000 歩（量子化スイープの対照群）",
+        },
+    ),
+}
 
 # 手元の collect_colab_files.py が集めて、手で /content/ へ置くもの。
 UPLOADED_FILES: tuple[str, ...] = (
@@ -111,20 +175,14 @@ UPLOADED_FILES: tuple[str, ...] = (
 
 # 推論に必須のファイル。train_config.json は学習スクリプトが書くもので、
 # マージ済みモデル（save_pretrained の出力）には無いため必須にしない。
-REQUIRED_WEIGHT_FILES: frozenset[str] = frozenset({
+# **正規化の safetensors だけは模型によって名前が違う**ので `PolicySpec` から足す。
+_COMMON_WEIGHT_FILES: frozenset[str] = frozenset({
     "config.json",
     "model.safetensors",
     "policy_preprocessor.json",
     "policy_postprocessor.json",
-    "policy_preprocessor_step_5_normalizer_processor.safetensors",
     "policy_postprocessor_step_0_unnormalizer_processor.safetensors",
 })
-
-KNOWN_DIGESTS: dict[str, str] = {
-    "a67a056a": "素の重み（8/11 に 84 件で評価済み。成功率 0.476）",
-    "2cd9faab": "lora20k（4 回目の提出。本番 0.016。評価済み）",
-    "952171f9": "λ=0.25（素の重み ＋ 学習で動いた分 × 0.25）",
-}
 
 _HEARTBEAT_SEC = 60
 
@@ -161,6 +219,25 @@ def _setting(config: ModuleType, name: str) -> object:
             "古い設定ファイルを上げている可能性がある"
         )
     return getattr(config, name)
+
+
+def _spec(config: ModuleType) -> PolicySpec:
+    """どの模型を積むかを設定から決め、その差分表を返す。
+
+    Raises
+    ------
+    RuntimeError
+        知らない種類が書かれているとき。**黙って Track1 の既定で走らせない**
+        —— 別の模型の必須ファイル一覧で照合すると、通ってしまった後に
+        「重みが足りない」ではなく推論時の別のエラーになって原因が遠くなる。
+    """
+    kind = str(_setting(config, "POLICY_KIND")).strip()
+    if kind not in POLICY_SPECS:
+        raise RuntimeError(
+            f"POLICY_KIND={kind!r} は知らない。使えるのは "
+            f"{sorted(POLICY_SPECS)} である"
+        )
+    return POLICY_SPECS[kind]
 
 
 def _print_header(step: str) -> None:
@@ -257,6 +334,23 @@ def _mount_drive() -> bool:
         print(f"**Drive をつなげない: {error}**")
         return False
     return DRIVE_ROOT.is_dir()
+
+
+def _digest(path: Path) -> str:
+    """ファイルの sha256 を**少しずつ読んで**求める。
+
+    `read_bytes()` で一気に読むと、π0.5 の `model.safetensors`（9.4 GB）を
+    載せた時点で Colab の RAM（T4 のランタイムは 12.7 GB）が尽きて、
+    プロセスが SIGKILL される。SmolVLA の 912 MB では起きなかった事故である。
+
+    Reads:
+      - path（1 MiB ずつ）
+    """
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def _require(path: Path, message: str) -> Path:
@@ -452,12 +546,13 @@ def prepare_weights() -> None:
     """
     _print_header("3. 評価する重み")
     config = _load_config()
-    use_finetuned = bool(_setting(config, "USE_FINETUNED"))
+    spec = _spec(config)
+    source_kind = str(_setting(config, "WEIGHTS_SOURCE")).strip().lower()
     expect = str(_setting(config, "EXPECT_DIGEST")).strip().lower()
 
     from huggingface_hub import snapshot_download
 
-    if use_finetuned:
+    if source_kind == "drive":
         source = Path(str(_setting(config, "DRIVE_WEIGHTS_DIR")))
         if not _mount_drive():
             raise RuntimeError("Drive がつながらないので重みを持ってこられない")
@@ -467,26 +562,33 @@ def prepare_weights() -> None:
                 "colab_eval_config.py の DRIVE_WEIGHTS_DIR が合っているか確かめること"
             )
         _shell(f"rm -rf {WEIGHTS_DIR} && cp -r '{source}' {WEIGHTS_DIR}")
-    else:
-        # このリポジトリには eval/（評価動画 402 ファイル・25.6 MB）が入っている。
-        # 推論には不要なので除外する。
+    elif source_kind == "hf":
+        # SmolVLA のリポジトリには eval/（評価動画 402 ファイル・25.6 MB）が入って
+        # いる。推論には不要なので除外する。π0.5 側は `vlm/` が同梱なので、
+        # ここで落としたものだけで揃う。
         snapshot_download(
-            BASE_WEIGHTS_REPO,
-            revision=BASE_WEIGHTS_REVISION,
+            spec.weights_repo,
+            revision=spec.weights_revision,
             local_dir=str(WEIGHTS_DIR),
             ignore_patterns=["eval/*", "eval/**"],
         )
+    else:
+        raise RuntimeError(
+            f"WEIGHTS_SOURCE={source_kind!r} は知らない。'hf' か 'drive' である"
+        )
 
-    # policy_server.py は model_weights/vlm/ からトークナイザを読む。VLM 本体の
-    # 重みはポリシー側のチェックポイントに含まれるので、設定とトークナイザで足りる。
-    snapshot_download(
-        VLM_REPO,
-        local_dir=str(WEIGHTS_DIR / "vlm"),
-        allow_patterns=["*.json", "*.txt", "*.model", "tokenizer*"],
-    )
+    # policy_server.py は model_weights/vlm/ からトークナイザを読む（π0.5 も同じ。
+    # solution/policy_server.py の tokenizer_processor の上書き）。**π0.5 の
+    # リポジトリは vlm/ を同梱しているので別に落とさない**（spec.vlm_repo=None）。
+    if spec.vlm_repo:
+        snapshot_download(
+            spec.vlm_repo,
+            local_dir=str(WEIGHTS_DIR / "vlm"),
+            allow_patterns=["*.json", "*.txt", "*.model", "tokenizer*"],
+        )
 
     present = {path.name for path in WEIGHTS_DIR.iterdir() if path.is_file()}
-    missing = REQUIRED_WEIGHT_FILES - present
+    missing = (_COMMON_WEIGHT_FILES | {spec.normalizer_file}) - present
     if missing:
         raise RuntimeError(f"重みが足りない: {sorted(missing)}")
     _require(WEIGHTS_DIR / "vlm/tokenizer_config.json", "vlm のトークナイザが無い")
@@ -494,19 +596,24 @@ def prepare_weights() -> None:
     config_json = json.loads((WEIGHTS_DIR / "config.json").read_text())
     if config_json.get("use_peft"):
         raise RuntimeError("use_peft が真。LoRA がマージされていない重みである")
+    if str(config_json.get("type")) != spec.kind:
+        raise RuntimeError(
+            f"POLICY_KIND={spec.kind} だが、落ちてきた重みは "
+            f"{config_json.get('type')} である。設定か置き場を直すこと"
+        )
 
     total = sum(path.stat().st_size for path in WEIGHTS_DIR.rglob("*") if path.is_file())
-    print(f"重みの準備完了: {total / 1e6:.0f} MB"
-          f"  （追加学習: {'あり' if use_finetuned else 'なし'}）")
+    print(f"重みの準備完了: {total / 1e6:.0f} MB  （{spec.kind}・{source_kind}）")
 
-    digest = hashlib.sha256((WEIGHTS_DIR / "model.safetensors").read_bytes()).hexdigest()
+    digest = _digest(WEIGHTS_DIR / "model.safetensors")
     head = digest[:8]
-    print(f"model.safetensors: {digest[:16]}  … {KNOWN_DIGESTS.get(head, '**記録に無い重み**')}")
+    print(f"model.safetensors: {digest[:16]}  … "
+          f"{spec.known_digests.get(head, '**記録に無い重み**')}")
     if expect and head != expect:
         raise RuntimeError(
             f"意図した重みでない。EXPECT_DIGEST={expect} だが実物は {head} "
-            f"（{KNOWN_DIGESTS.get(head, '記録に無い重み')}）。"
-            "設定か Drive の置き場を直すこと"
+            f"（{spec.known_digests.get(head, '記録に無い重み')}）。"
+            "設定か置き場を直すこと"
         )
 
 
@@ -529,6 +636,7 @@ def setup_policy() -> None:
     """
     _print_header("4. 方策サーバーの準備")
     _require(WEIGHTS_DIR, "prepare_weights() を先に通すこと")
+    spec = _spec(_load_config())
 
     import torch
 
@@ -549,15 +657,28 @@ def setup_policy() -> None:
         # bf16 非対応の GPU（T4 など）では fp16 に書き換える。
         # 学習用ノートブックが同じ置換をしており、揃えないと挙動が変わる。
         if not torch.cuda.is_bf16_supported():
-            smolvlm = LEROBOT_SRC / "lerobot/policies/smolvla/smolvlm_with_expert.py"
-            source = smolvlm.read_text(encoding="utf-8")
-            smolvlm.write_text(
-                source.replace('torch_dtype="bfloat16",', 'torch_dtype="float16",', 1),
-                encoding="utf-8",
-            )
-            print("bf16 非対応の GPU のため fp16 へ書き換えた")
+            if spec.patch_bf16:
+                smolvlm = LEROBOT_SRC / "lerobot/policies/smolvla/smolvlm_with_expert.py"
+                source = smolvlm.read_text(encoding="utf-8")
+                smolvlm.write_text(
+                    source.replace('torch_dtype="bfloat16",', 'torch_dtype="float16",', 1),
+                    encoding="utf-8",
+                )
+                print("bf16 非対応の GPU のため fp16 へ書き換えた")
+            else:
+                # **π0.5 には効く書き換えを用意していない。** dtype は
+                # チェックポイントの config.json（`"dtype": "bfloat16"`）と
+                # policy_server.py の `_build_pi05` が決めており、fp16 を選ぶ道が
+                # そもそも無い（bfloat16 でなければ float32 になる分岐で、
+                # float32 の π0.5 は T4 の 15 GB に載らない）。
+                # **止めずに進む。** 動くかどうかは疎通確認（run(max_tasks=5)）で
+                # 分かる。ここで落とすと、その確認自体ができない。
+                print("**この GPU は bf16 非対応だが、π0.5 は bf16 のまま進む。**\n"
+                      "  疎通確認（ce.run(chunk=1, max_tasks=5)）で動くかを見ること。\n"
+                      "  落ちる場合は cc 8.0 以上の GPU（L4・A100 など）が要る。")
 
-        _shell(f"{sys.executable} -m pip install -q --upgrade -e '{LEROBOT_DIR}[smolvla]'")
+        _shell(f"{sys.executable} -m pip install -q --upgrade "
+               f"-e '{LEROBOT_DIR}[{spec.lerobot_extra}]'")
         _shell(f"{sys.executable} -m pip uninstall -y -q torchao", check=False)
 
     # clone 先 /content/lerobot には __init__.py が無いため、`import lerobot` が
@@ -662,10 +783,12 @@ def build_suite() -> None:
 
 
 def _split_into_chunks(chunks: int) -> None:
-    """タスクを塊へ割る。**どの塊にも 7 カテゴリが入る**ことを確かめる。
+    """タスクを塊へ割る。**どの塊にも全部のカテゴリが入る**ことを確かめる。
 
-    元の CSV はカテゴリ巡回順（先頭 7 件が 7 カテゴリ）なので、続きを
-    そのまま切り出せば偏らない。
+    元の CSV はカテゴリ巡回順（84 件版なら先頭 7 件が 7 カテゴリ）なので、続きを
+    そのまま切り出せば偏らない。**カテゴリの数は CSV 自身から数える** ——
+    Track2 の 36 件（`compe/val/EVAL_TASKS.csv`）は Background Textures と
+    Light Conditions の 2 つしか無く、7 で決め打ちすると毎回誤警告が出る。
 
     Generates:
       - /content/chunks/VAL_1.csv 〜 VAL_<chunks>.csv
@@ -680,6 +803,7 @@ def _split_into_chunks(chunks: int) -> None:
     CHUNK_DIR.mkdir(parents=True)
 
     size = -(-len(body) // chunks)        # 切り上げ
+    expected_kinds = len({row[category] for row in body})
     print()
     for index in range(chunks):
         part = body[index * size:(index + 1) * size]
@@ -689,7 +813,8 @@ def _split_into_chunks(chunks: int) -> None:
             writer.writerow(header)
             writer.writerows(part)
         kinds = len({row[category] for row in part})
-        note = "" if kinds == 7 else "  ← **7 カテゴリ揃っていない**"
+        note = ("" if kinds == expected_kinds
+                else f"  ← **{expected_kinds} カテゴリのうち {kinds} しか入っていない**")
         print(f"{path.name}: {len(part)} 件 / {kinds} カテゴリ{note}")
     print(f"\nrun(chunk=1) から run(chunk={chunks}) まで、順に回す")
 
@@ -758,7 +883,9 @@ def _resolve_plan(
         results_dir = CONTENT / "results" / f"chunk{chunk}"
     shutil.copy(tasks_csv, KIT_TASKS)
 
-    parts = [f"n{policy_env.get('PARC_N_ACTION_STEPS', '5')}",
+    # 既定値は模型によって違う（policy_server.py は π0.5 のとき 16、SmolVLA は 5）。
+    # ここを取り違えると、n16 で回した結果に n5 という名前が付く。
+    parts = [f"n{policy_env.get('PARC_N_ACTION_STEPS', _spec(config).default_n_action_steps)}",
              f"ep{n_episodes if n_episodes else _setting(config, 'N_EPISODES')}",
              f"chunk{chunk}" if chunk else "all"]
     if max_tasks:
