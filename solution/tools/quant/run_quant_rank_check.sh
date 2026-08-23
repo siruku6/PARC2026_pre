@@ -25,7 +25,7 @@
 # ユーザー自身が実行すること）:
 #
 #   docker build -t parc2026-train-pi05 -f solution/train/Dockerfile.pi05 solution/train
-#   nohup bash solution/tools/run_quant_rank_check.sh \
+#   nohup bash solution/tools/quant/run_quant_rank_check.sh \
 #       > work/quant_sweep/rank_check.log 2>&1 &
 #
 # **C0・C1 の「量子化なし」は回収済み（2026-08-21 の run_quant_eval_recovery.sh

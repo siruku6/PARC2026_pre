@@ -17,7 +17,7 @@
 #
 # 使い方（ユーザーが1回だけ、コンテナを常駐させた後に）:
 #   tmux new -d -s quant_sweep \
-#       'bash solution/tools/run_quant_sweep.sh 2>&1 | tee -a work/quant_sweep/sweep.log'
+#       'bash solution/tools/quant/run_quant_sweep.sh 2>&1 | tee -a work/quant_sweep/sweep.log'
 #   tmux attach -t quant_sweep   # 後で様子を見るとき
 #
 # 環境変数（省略時の既定）:

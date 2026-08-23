@@ -9,7 +9,7 @@
 # work/quant_sweep/sweep.log の末尾に「===== 量子化スイープ終了 =====」がある。
 #
 # 使い方（学習側スイープが終わったことを確認してから）:
-#   nohup bash solution/tools/run_quant_eval_recovery.sh \
+#   nohup bash solution/tools/quant/run_quant_eval_recovery.sh \
 #       > work/quant_sweep/eval_recovery.log 2>&1 &
 #
 # C0〜C3 は各自のチェックポイントを、C4/C5 は C0 のチェックポイントを

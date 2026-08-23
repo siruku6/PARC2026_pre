@@ -33,7 +33,7 @@
 # 使い方（GPUが空いていることを確認してから。docker run を伴うためユーザー自身が
 # 実行すること）:
 #
-#   nohup bash solution/tools/run_quant_rank_check2.sh \
+#   nohup bash solution/tools/quant/run_quant_rank_check2.sh \
 #       > work/quant_sweep/rank_check2.log 2>&1 &
 #
 # 3本（+おまけ1本）×約65〜70分 ＝ 約3.5〜5時間の見込み。
