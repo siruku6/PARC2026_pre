@@ -1,6 +1,21 @@
 #!/usr/bin/env python3
 """重みを退避先の HuggingFace リポジトリへ上げ、索引に 1 行足す。
 
+**既定の上げ先はもう存在しない。`--repo-id` を必ず渡すこと。**
+`siruku6/parc2026-archive` は 8/18 に消した（commit `c3b8f1e`）。付けずに
+実行すると `RepositoryNotFoundError` で落ちる —— ここが捕まえているのは
+`EntryNotFoundError` だけである。**既定値を直していないのは、8/18 に
+「重み 1 つごとに 1 リポジトリ」へ変えたので、既定にすべき 1 つが
+原理的に無いためである。**
+
+**索引の役目も、もうここには無い。** `index.json` に替わって
+`docs/reference/19_weights_catalog.md` が索引そのものになっている。
+8/18 以降に作った重みは `PROVENANCE.md` ではなく `INFERENCE.md`
+（推論の設定）を持つので、**このツールを既存のリポジトリへ向けると
+2 つの形が混ざる。**
+
+**それでも残してあるのは、下の歯止めのためである。**
+
 **このツールを通す限り、「どれがどれだか分からない重み」は退避先に増えない。**
 `train_config.json` を持たない重みは受け付けないためである（`--no-train-config`
 と `--note` を両方付けたときだけ、理由付きで例外にできる）。
@@ -12,13 +27,13 @@
 索引の一次資料は `index.json` である。`README.md` はそこから毎回作り直すので、
 手で直しても次回の実行で消える。**直すなら `index.json` を直す。**
 
-    python solution/tools/archive_push.py work/artifacts/model_weights_weak3x \\
+    python solution/tools/weights/archive_push.py work/artifacts/model_weights_weak3x \\
         --as smolvla/weak3x_20000 \\
         --train-config work/train2/weak3x_max300/checkpoints/020000/pretrained_model/train_config.json \\
         --source work/train2/weak3x_max300/checkpoints/020000 \\
         --score 0.722 --score-n 36 \\
         --score-run 0814_101939_weak3x_n8_ep1_max300
-    python solution/tools/archive_push.py ... --dry-run   # 何を上げるかだけ見る
+    python solution/tools/weights/archive_push.py ... --dry-run   # 何を上げるかだけ見る
 
 Reads:
   - <source-dir>/**（上げる重み一式）
@@ -41,9 +56,11 @@ from pathlib import Path
 from huggingface_hub import CommitOperationAdd, HfApi
 from huggingface_hub.errors import EntryNotFoundError
 
-# solution/tools/archive_push.py の 2 階層上がリポジトリルート。
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+# solution/tools/weights/archive_push.py の 3 階層上がリポジトリルート。
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
+# **このリポジトリは 8/18 に消してある。** 残してあるのは「何を既定にすべきか
+# 決まっていない」ことを見えるようにするためで、実行時は `--repo-id` で指す。
 _DEFAULT_REPO_ID = "siruku6/parc2026-archive"
 
 # 索引の一次資料と、そこから作る読みもの。
@@ -81,7 +98,9 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--repo-id",
         default=_DEFAULT_REPO_ID,
-        help=f"退避先のリポジトリ（既定: {_DEFAULT_REPO_ID}）",
+        help="退避先のリポジトリ。**必ず渡すこと。** "
+             f"既定の {_DEFAULT_REPO_ID} は 8/18 に消してあるので、"
+             "省くと RepositoryNotFoundError で落ちる",
     )
     parser.add_argument(
         "--train-config",
@@ -339,7 +358,7 @@ def _render_provenance(entry: dict) -> str:
         lines += ["", entry["note"]]
     lines += [
         "",
-        "この文章は `solution/tools/archive_push.py` が生成した。手で直さない。",
+        "この文章は `solution/tools/weights/archive_push.py` が生成した。手で直さない。",
     ]
     return "\n".join(lines) + "\n"
 
@@ -369,7 +388,7 @@ def _render_readme(index: list[dict], repo_id: str,
     header = [
         f"# {repo_id}",
         "",
-        "学習した重みの退避先。**`solution/tools/archive_push.py` だけが"
+        "学習した重みの退避先。**`solution/tools/weights/archive_push.py` だけが"
         "ここへ書く。**",
         "",
         "一次資料は [index.json](index.json) である。この README はそこから"
@@ -414,7 +433,7 @@ def _render_readme(index: list[dict], repo_id: str,
         "## 上げ方",
         "",
         "```bash",
-        "python solution/tools/archive_push.py <重みのディレクトリ> \\",
+        "python solution/tools/weights/archive_push.py <重みのディレクトリ> \\",
         "    --as <実行名>/<ステップ数> \\",
         "    --train-config <たどった学習実行>/train_config.json \\",
         "    --score <成功率> --score-n <件数> --score-run <gpu_eval の実行名>",
