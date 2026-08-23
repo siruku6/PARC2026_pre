@@ -33,10 +33,9 @@ DRIVE_WEIGHTS_DIR = "/content/drive/MyDrive/parc2026/FOR_COLAB_EVAL/model_weight
 # **意図した重みかを、読み込む前にハッシュで照合する。**
 # 大きさでは見分けられず、取り違えると 1 時間以上を捨てる。
 # 先頭 8 桁を書く。空文字にすると照合しない（記録に無い重みを測るとき）。
-# 一覧は colab_eval.py の POLICY_SPECS の known_digests にある。
-#   π0.5    d46bffcf … 1 回目の学習 24,000 歩（本番 0.264・手元36件 0.667〜0.722）
-#           0c5d542e … 予選の最終提出（本番 0.485・手元36件 0.750）
-#   SmolVLA a67a056a … 素の重み／2cd9faab … lora20k／952171f9 … λ=0.25
+# **どの重みのハッシュかは colab_eval.py の POLICY_SPECS の known_digests が持つ**
+# （ここに書き写すと、重みを足したとき片方だけ古くなる）。照合に失敗したときは
+# prepare_weights() が実物のハッシュと説明文の両方を印字する。
 EXPECT_DIGEST = "d46bffcf"
 
 # ============================================================
@@ -71,20 +70,26 @@ PER_CELL = 3
 # **重みを比べるときは、ここを手元の評価と同じ構成に揃える。** 値を書き換えると
 # 「重み」と「設定値」を同時に変えることになり、1 件ずつ対にした比較が成り立たない。
 #
-# **π0.5（Track2）では `PARC_SAMPLES` を明示する。** 手元の 36 件評価 6 本は
-# すべて `num_inference_steps=20 / n_action_steps=16 / ema_alpha=0.3 /
-# blend_steps=0 / samples=3` で回っている（work/quant_sweep/RANK_CHECK_REPORT.md）。
-# このうち samples だけが policy_server.py の既定（1）と違うので、書かないと
-# 手元の数字と比べられない。他の 4 つは π0.5 の既定と一致する。
+# 下の 5 つは、手元の 36 件評価 6 本すべての構成
+# （work/quant_sweep/RANK_CHECK_REPORT.md）であり、**同時に policy_server.py の
+# π0.5 の既定でもある**（`_setup` の各 os.environ.get の第 2 引数）。つまり
+# 空にしても今は同じ挙動になる。**それでも書くのは 2 つの理由からである。**
 #
-# SmolVLA（Track1）では**空にする**のが正しい既定である（n_action_steps=5 /
-# ema_alpha=0.3 が 3 回目の提出 0.1409 と 8/11 の 84 件評価の構成）。
+#   1. 保存先の名前に出る。空だと n が「渡していない」としか書けない
+#   2. **既定は版で動く。** SmolVLA の n_action_steps は版 3.7.0 で 5 → 8 に
+#      上がった。明示しておけば、既定が動いてもこの回の構成は変わらない
+#
+# 名前がその分長くなる（`…_n16_ep1_chunk1_blend_steps0_ema_alpha03_…`）。
+# **どの設定で回した結果かがディレクトリ名だけで分かる方を取っている。**
+#
+# SmolVLA（Track1）に戻すときは**空にする**のが正しい既定である
+# （3 回目の提出 0.1409 と 8/11 の 84 件評価が、その時点の既定で回っている）。
 POLICY_ENV: dict[str, str] = {
-    "PARC_SAMPLES": "3",             # **π0.5 の手元評価と揃える。** 既定は 1
-    # "PARC_N_ACTION_STEPS": "16",   # π0.5 の既定 16／SmolVLA の既定 5
-    # "PARC_NUM_INFERENCE_STEPS": "20",  # π0.5 の既定 20。ノイズ除去の回数
-    # "PARC_EMA_ALPHA": "0.15",      # **既定 0.3。** 直前の行動を混ぜる割合
-    # "PARC_BLEND_STEPS": "3",       # 既定 0（無効）。継ぎ目を均すステップ数
+    "PARC_N_ACTION_STEPS": "16",       # 1 回の推論で実行するステップ数
+    "PARC_NUM_INFERENCE_STEPS": "20",  # ノイズ除去の回数
+    "PARC_EMA_ALPHA": "0.3",           # 直前の行動を混ぜる割合
+    "PARC_BLEND_STEPS": "0",           # 継ぎ目を均すステップ数（0 で無効）
+    "PARC_SAMPLES": "3",               # chunk を引く本数
 }
 
 # ============================================================

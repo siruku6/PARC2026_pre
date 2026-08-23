@@ -100,10 +100,16 @@ LEROBOT_TAG = "v0.6.0"
 class PolicySpec:
     """模型の種類ごとに違うところだけを集めた表。
 
-    **どちらを積むかは重みを落とす前に決まっていないといけない。** lerobot の
-    extra（`[smolvla]` か `[pi]`）も、必須ファイルの名前も、重みを見る前に要る。
-    だから `config.json` から後で読む形にはできず、`colab_eval_config.py` の
-    `POLICY_KIND` で明示してもらう。
+    **`colab_eval_config.py` の `POLICY_KIND` で明示してもらう。** チェックポイント
+    自身の `config.json` にも `type` があるが、`WEIGHTS_SOURCE = "hf"` のときは
+    **どのリポジトリから落とすかがこの表で決まる**ので、落とす前に種類が要る。
+    落とした後は `prepare_weights()` が `config.json` の `type` と突き合わせ、
+    食い違っていればそこで止める —— 手で書く値はそこで必ず検算される。
+
+    **`policy_server.py` 側の既定値は写さない。** 写した瞬間に古くなるためで、
+    実際に一度そうなった（SmolVLA の `n_action_steps` は版 3.7.0 で 5 → 8 に
+    上がっており、5 のまま写していた）。推論の設定値は
+    `colab_eval_config.py` の `POLICY_ENV` に明示して、そこだけを正とする。
     """
 
     kind: str
@@ -112,25 +118,27 @@ class PolicySpec:
     vlm_repo: str | None
     lerobot_extra: str
     normalizer_file: str
-    default_n_action_steps: str
-    patch_bf16: bool
+    # bf16 非対応の GPU（T4 など）に当たったときの逃げ道。
+    # `(書き換えるファイル（lerobot/src からの相対）, 置換前, 置換後)`。
+    # **None は「逃げ道が無い」** —— 警告だけ出して進む（setup_policy）。
+    bf16_patch: tuple[str, str, str] | None
     known_digests: dict[str, str]
 
 
-POLICY_SPECS: dict[str, PolicySpec] = {
+POLICY_SPECS: dict[str, PolicySpec] = {spec.kind: spec for spec in (
     # Track1。8/11 に 84 件で実証済みの経路。
-    "smolvla": PolicySpec(
+    PolicySpec(
         kind="smolvla",
         weights_repo="lerobot/smolvla_libero_plus",
         weights_revision="7bb70aa5bc92b82c9239142775d3a173103567ff",
         # VLM 本体の重みはチェックポイントに含まれる。設定とトークナイザだけ別に落とす。
         vlm_repo="HuggingFaceTB/SmolVLM2-500M-Video-Instruct",
         lerobot_extra="smolvla",
+        # 必須ファイルの残り 5 件は _COMMON_WEIGHT_FILES にある。
         normalizer_file="policy_preprocessor_step_5_normalizer_processor.safetensors",
-        default_n_action_steps="5",
-        # bf16 非対応の GPU（T4 など）では fp16 へ書き換える。**SmolVLA 専用の処置**
-        # で、π0.5 には効かない（書き換える対象のファイルが smolvla/ の下にある）。
-        patch_bf16=True,
+        # 学習用ノートブックが同じ置換をしており、揃えないと挙動が変わる。
+        bf16_patch=("lerobot/policies/smolvla/smolvlm_with_expert.py",
+                    'torch_dtype="bfloat16",', 'torch_dtype="float16",'),
         known_digests={
             "a67a056a": "素の重み（8/11 に評価済み。成功率 0.476）",
             "2cd9faab": "lora20k（4 回目の提出。本番 0.016。評価済み）",
@@ -140,7 +148,7 @@ POLICY_SPECS: dict[str, PolicySpec] = {
     # Track2。**重みは HF の非公開リポジトリに `vlm/` 込みで置いてある**ので、
     # Drive を経由せず `snapshot_download` で引ける（docs/reference/19_weights_catalog.md）。
     # 非公開なので `hf auth login` か HF_TOKEN が要る。
-    "pi05": PolicySpec(
+    PolicySpec(
         kind="pi05",
         weights_repo="siruku6/pi05_stage1_24000",
         weights_revision=None,
@@ -151,16 +159,17 @@ POLICY_SPECS: dict[str, PolicySpec] = {
         # **SmolVLA は step_5 だが π0.5 は step_2 である。**
         # 実物: work/artifacts/model_weights_pi05_024000/
         normalizer_file="policy_preprocessor_step_2_normalizer_processor.safetensors",
-        # policy_server.py は π0.5 のときだけ 16 を既定にする（版 3.9.0）。
-        default_n_action_steps="16",
-        patch_bf16=False,
+        # **fp16 へ落ちる道が無い。** dtype を決めるのは policy_server.py の
+        # `_build_pi05` で、bfloat16 でなければ float32 になる分岐しか無く、
+        # float32 の π0.5（組み立てに 16.6 GB）は T4 の 15 GB に載らない。
+        bf16_patch=None,
         known_digests={
             "d46bffcf": "pi05/full_local_024000（1 回目の学習 24,000 歩。本番 0.264・手元36件 0.667〜0.722）",
             "0c5d542e": "pi05/full_runpod_003000（予選の最終提出。本番 0.485・手元36件 0.750）",
             "89fc796d": "C0 baseline 16,000 歩（量子化スイープの対照群）",
         },
     ),
-}
+)}
 
 # 手元の collect_colab_files.py が集めて、手で /content/ へ置くもの。
 UPLOADED_FILES: tuple[str, ...] = (
@@ -176,6 +185,12 @@ UPLOADED_FILES: tuple[str, ...] = (
 # 推論に必須のファイル。train_config.json は学習スクリプトが書くもので、
 # マージ済みモデル（save_pretrained の出力）には無いため必須にしない。
 # **正規化の safetensors だけは模型によって名前が違う**ので `PolicySpec` から足す。
+#
+# **同じ役目の一覧が手元の取り込みツールにもある**
+# （`solution/tools/weights/install_pi05_weights.py` の `_REQUIRED_FILES`。
+# あちらは 4 件で、後処理の safetensors を要求しない）。Colab へ上げるのは
+# `UPLOADED_FILES` の 7 つだけでリポジトリを clone しないため、import して
+# 共有する道が無い。**片方を直すときはもう片方も見ること。**
 _COMMON_WEIGHT_FILES: frozenset[str] = frozenset({
     "config.json",
     "model.safetensors",
@@ -221,23 +236,61 @@ def _setting(config: ModuleType, name: str) -> object:
     return getattr(config, name)
 
 
-def _spec(config: ModuleType) -> PolicySpec:
-    """どの模型を積むかを設定から決め、その差分表を返す。
+def _choice(config: ModuleType, name: str, allowed: tuple[str, ...]) -> str:
+    """候補のどれかであることを確かめて設定を返す。**綴り違いを黙って通さない。**
 
     Raises
     ------
     RuntimeError
-        知らない種類が書かれているとき。**黙って Track1 の既定で走らせない**
-        —— 別の模型の必須ファイル一覧で照合すると、通ってしまった後に
-        「重みが足りない」ではなく推論時の別のエラーになって原因が遠くなる。
+        候補外のとき。候補を名指しで出す。
     """
-    kind = str(_setting(config, "POLICY_KIND")).strip()
-    if kind not in POLICY_SPECS:
+    value = str(_setting(config, name)).strip()
+    if value not in allowed:
+        raise RuntimeError(f"{name}={value!r} は知らない。使えるのは {list(allowed)} である")
+    return value
+
+
+def _spec(config: ModuleType) -> PolicySpec:
+    """どの模型を積むかを設定から決め、その差分表を返す。
+
+    **黙って Track1 の既定で走らせない** —— 別の模型の必須ファイル一覧で照合すると、
+    通ってしまった後に「重みが足りない」ではなく推論時の別のエラーになって
+    原因が遠くなる。
+    """
+    return POLICY_SPECS[_choice(config, "POLICY_KIND", tuple(sorted(POLICY_SPECS)))]
+
+
+def _check_kind(weights: Path, spec: PolicySpec, hint: str) -> dict:
+    """置いてある重みが `POLICY_KIND` と同じ模型かを、`config.json` の `type` で見る。
+
+    **手で書く `POLICY_KIND` の検算である。** `policy_server.py` はこの `type` を
+    読んで自分で分岐するので（`_setup`）、食い違ったまま進むと「重みが足りない」
+    ではなく推論時の遠いエラーになる。
+
+    Parameters
+    ----------
+    hint : str
+        食い違ったときに名指しする設定の名前。
+
+    Returns
+    -------
+    config_json : dict
+        読んだ `config.json`（呼び出し側が続けて使えるように返す）。
+
+    Reads:
+      - <weights>/config.json
+    """
+    path = weights / "config.json"
+    if not path.is_file():
+        raise RuntimeError(f"{path} が無い。{hint} が指す先を確かめること")
+    config_json = json.loads(path.read_text())
+    kind = str(config_json.get("type"))
+    if kind != spec.kind:
         raise RuntimeError(
-            f"POLICY_KIND={kind!r} は知らない。使えるのは "
-            f"{sorted(POLICY_SPECS)} である"
+            f"POLICY_KIND={spec.kind} だが、{hint} が指す重みは {kind} である。"
+            "どちらかを直すこと"
         )
-    return POLICY_SPECS[kind]
+    return config_json
 
 
 def _print_header(step: str) -> None:
@@ -391,6 +444,14 @@ def prepare() -> None:
             "上のファイルを /content/ へドラッグしてから進むこと"
             "（手元で collect_colab_files.py を実行して集める）"
         )
+
+    # **設定の綴り違いはここで落とす。** 次の setup_kit() は clone・apt・setup.sh で
+    # 5〜10 分かかるので、その後の prepare_weights() で初めて気づくと丸ごと待ち損になる。
+    config = _load_config()
+    spec = _spec(config)
+    source_kind = _choice(config, "WEIGHTS_SOURCE", ("hf", "drive"))
+    print(f"模型: {spec.kind}  /  重みの出どころ: {source_kind}"
+          + (f"（{spec.weights_repo}）" if source_kind == "hf" else ""))
 
     print(
         "VAL_TASKS.csv: "
@@ -547,7 +608,7 @@ def prepare_weights() -> None:
     _print_header("3. 評価する重み")
     config = _load_config()
     spec = _spec(config)
-    source_kind = str(_setting(config, "WEIGHTS_SOURCE")).strip().lower()
+    source_kind = _choice(config, "WEIGHTS_SOURCE", ("hf", "drive"))
     expect = str(_setting(config, "EXPECT_DIGEST")).strip().lower()
 
     from huggingface_hub import snapshot_download
@@ -561,8 +622,12 @@ def prepare_weights() -> None:
                 f"{source} が無い。Drive の置き場と "
                 "colab_eval_config.py の DRIVE_WEIGHTS_DIR が合っているか確かめること"
             )
+        # **複製する前に 2 KB だけ読んで確かめる。** Drive の FUSE は 10〜40 MB/s
+        # なので、π0.5 の 8.8 GB なら複製に 4〜15 分かかる。取り違え
+        # （POLICY_KIND と置き場が別の模型を指している）をその後で知るのは高い。
+        _check_kind(source, spec, "DRIVE_WEIGHTS_DIR")
         _shell(f"rm -rf {WEIGHTS_DIR} && cp -r '{source}' {WEIGHTS_DIR}")
-    elif source_kind == "hf":
+    else:
         # SmolVLA のリポジトリには eval/（評価動画 402 ファイル・25.6 MB）が入って
         # いる。推論には不要なので除外する。π0.5 側は `vlm/` が同梱なので、
         # ここで落としたものだけで揃う。
@@ -571,10 +636,6 @@ def prepare_weights() -> None:
             revision=spec.weights_revision,
             local_dir=str(WEIGHTS_DIR),
             ignore_patterns=["eval/*", "eval/**"],
-        )
-    else:
-        raise RuntimeError(
-            f"WEIGHTS_SOURCE={source_kind!r} は知らない。'hf' か 'drive' である"
         )
 
     # policy_server.py は model_weights/vlm/ からトークナイザを読む（π0.5 も同じ。
@@ -593,14 +654,9 @@ def prepare_weights() -> None:
         raise RuntimeError(f"重みが足りない: {sorted(missing)}")
     _require(WEIGHTS_DIR / "vlm/tokenizer_config.json", "vlm のトークナイザが無い")
 
-    config_json = json.loads((WEIGHTS_DIR / "config.json").read_text())
+    config_json = _check_kind(WEIGHTS_DIR, spec, "POLICY_KIND と重みの置き場")
     if config_json.get("use_peft"):
         raise RuntimeError("use_peft が真。LoRA がマージされていない重みである")
-    if str(config_json.get("type")) != spec.kind:
-        raise RuntimeError(
-            f"POLICY_KIND={spec.kind} だが、落ちてきた重みは "
-            f"{config_json.get('type')} である。設定か置き場を直すこと"
-        )
 
     total = sum(path.stat().st_size for path in WEIGHTS_DIR.rglob("*") if path.is_file())
     print(f"重みの準備完了: {total / 1e6:.0f} MB  （{spec.kind}・{source_kind}）")
@@ -654,28 +710,25 @@ def setup_policy() -> None:
         _shell(f"git clone --quiet --depth 1 --branch {LEROBOT_TAG} "
                f"https://github.com/huggingface/lerobot.git {LEROBOT_DIR}")
 
-        # bf16 非対応の GPU（T4 など）では fp16 に書き換える。
-        # 学習用ノートブックが同じ置換をしており、揃えないと挙動が変わる。
+        # bf16 非対応の GPU（T4 など）では fp16 に書き換える。書き換える場所と
+        # 文字列は模型ごとに違うので POLICY_SPECS の bf16_patch が持っている。
         if not torch.cuda.is_bf16_supported():
-            if spec.patch_bf16:
-                smolvlm = LEROBOT_SRC / "lerobot/policies/smolvla/smolvlm_with_expert.py"
-                source = smolvlm.read_text(encoding="utf-8")
-                smolvlm.write_text(
-                    source.replace('torch_dtype="bfloat16",', 'torch_dtype="float16",', 1),
+            if spec.bf16_patch is None:
+                # **逃げ道を用意していない模型である**（理由は POLICY_SPECS の
+                # bf16_patch のコメント）。**それでも止めずに進む。** ここで落とすと、
+                # 動くかどうかを見る疎通確認（run(max_tasks=5)）そのものができない。
+                print(f"**この GPU は bf16 非対応だが、{spec.kind} は bf16 のまま進む。**\n"
+                      "  疎通確認（ce.run(chunk=1, max_tasks=5)）で動くかを見ること。\n"
+                      "  落ちる場合は compute capability 8.0 以上の GPU が要る。")
+            else:
+                # 学習用ノートブックが同じ置換をしており、揃えないと挙動が変わる。
+                relative, before, after = spec.bf16_patch
+                target = LEROBOT_SRC / relative
+                target.write_text(
+                    target.read_text(encoding="utf-8").replace(before, after, 1),
                     encoding="utf-8",
                 )
-                print("bf16 非対応の GPU のため fp16 へ書き換えた")
-            else:
-                # **π0.5 には効く書き換えを用意していない。** dtype は
-                # チェックポイントの config.json（`"dtype": "bfloat16"`）と
-                # policy_server.py の `_build_pi05` が決めており、fp16 を選ぶ道が
-                # そもそも無い（bfloat16 でなければ float32 になる分岐で、
-                # float32 の π0.5 は T4 の 15 GB に載らない）。
-                # **止めずに進む。** 動くかどうかは疎通確認（run(max_tasks=5)）で
-                # 分かる。ここで落とすと、その確認自体ができない。
-                print("**この GPU は bf16 非対応だが、π0.5 は bf16 のまま進む。**\n"
-                      "  疎通確認（ce.run(chunk=1, max_tasks=5)）で動くかを見ること。\n"
-                      "  落ちる場合は cc 8.0 以上の GPU（L4・A100 など）が要る。")
+                print(f"bf16 非対応の GPU のため {relative} を fp16 へ書き換えた")
 
         _shell(f"{sys.executable} -m pip install -q --upgrade "
                f"-e '{LEROBOT_DIR}[{spec.lerobot_extra}]'")
@@ -883,9 +936,11 @@ def _resolve_plan(
         results_dir = CONTENT / "results" / f"chunk{chunk}"
     shutil.copy(tasks_csv, KIT_TASKS)
 
-    # 既定値は模型によって違う（policy_server.py は π0.5 のとき 16、SmolVLA は 5）。
-    # ここを取り違えると、n16 で回した結果に n5 という名前が付く。
-    parts = [f"n{policy_env.get('PARC_N_ACTION_STEPS', _spec(config).default_n_action_steps)}",
+    # **既定値を写して名前に使わない。** policy_server.py 側の既定は版によって
+    # 変わっており（SmolVLA の n_action_steps は 3.7.0 で 5 → 8）、写すと
+    # 「n8 で回した結果に n5 という名前が付く」が無言で起きる。渡していない
+    # ときは渡していないと書き、実効値はサーバの起動ログ（[parc] 行）を正とする。
+    parts = [f"n{policy_env.get('PARC_N_ACTION_STEPS', 'default')}",
              f"ep{n_episodes if n_episodes else _setting(config, 'N_EPISODES')}",
              f"chunk{chunk}" if chunk else "all"]
     if max_tasks:

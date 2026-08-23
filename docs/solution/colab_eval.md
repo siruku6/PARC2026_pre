@@ -27,7 +27,7 @@
 | 正規化の safetensors | `..._step_5_...` | **`..._step_2_...`** |
 | lerobot の extra | `[smolvla]` | **`[pi]`**（手元の学習イメージと同じ v0.6.0 ＋ `[pi]`） |
 | 測るタスク | 84 件を生成（`PER_CELL`） | **`compe/val/EVAL_TASKS.csv`（36 件）を上げる**。手元の評価と同じ集合 |
-| `n_action_steps` の既定 | 5 | 16 |
+| `n_action_steps` の既定（`policy_server.py`） | 8 | 16 |
 
 **Drive は要らなくなった。** 重みは 8.8 GB あるが、`snapshot_download` で Colab へ
 直接落ちてくる（Drive のブラウザ画面から 8.8 GB を上げる必要はない）。
@@ -39,7 +39,7 @@
 以上の GPU でしか本来の形で動かない。**T4 は 7.5 である。**
 
 SmolVLA には fp16 へ書き換える処置が入っているが（`colab_eval.py` の
-`patch_bf16`）、**π0.5 には同じ手が無い。** dtype を決めているのは
+`POLICY_SPECS` の `bf16_patch`）、**π0.5 には同じ手が無い。** dtype を決めているのは
 `policy_server.py` の `_build_pi05` で、`bfloat16` でなければ float32 になる
 分岐しか無く、**float32 の π0.5 は T4 の 15 GB に載らない**（`_build_pi05` の
 docstring が記録している fp32 での組み立ては 16.6 GB）。
@@ -166,7 +166,7 @@ Drive への退避まで通る。前の関数が作ったものが無ければ�
 | `MAX_STEPS` | `300` | 本番の打ち切りと同じ値 |
 | `CHUNKS` | `3` | 36 件なら 1 塊 12 件。落ちるなら増やす |
 | `PER_CELL` | `3` | 84 件を生成するときだけ効く。**CSV を上げているときは使われない** |
-| `POLICY_ENV` | `PARC_SAMPLES=3` | 推論の設定値。**π0.5 は手元評価に揃えて samples 3 を明示する** |
+| `POLICY_ENV` | 推論の設定値 5 つ | **π0.5 は手元の 36 件評価と同じ 5 つを明示する。**値は `policy_server.py` の既定と同じなので挙動は変わらないが、保存先の名前と記録に残る |
 | `RECORD_DIR` / `RECORD_WHICH` | `/content/videos` / `failures` | 録画。`None` で撮らない |
 
 **`ce.run()` は使う値を全部画面に出す。** 意図と違えばそこで止められる。
