@@ -24,7 +24,6 @@
 | `tools/make_validation_suite.py` | example 以外のタスクで評価するための一覧を作る（Colab へ上げる） |
 | `tools/check_validation_suite.py` | 上の一覧が本当に開けるかを、**評価を回す前に**確かめる |
 | `tools/collect_colab_files.py` | Colab へ上げるファイルを `work/colab_upload/` に集める |
-| `tools/export_claude_setup.sh` | Claude の方針と skill を別のマシンへ持ち出す（GPU マシン用） |
 | `tools/weights/verify_merge.py` | マージ済みモデルを初期重みと比べ、**学習が反映されたか**を確かめる |
 | `tools/run_docker_eval.sh` | **GPU マシンで検証用スイートを流す（Docker 2 つ）。** 放っておける |
 | `tools/docker_eval_inside.sh` | 上が評価側コンテナの中で走らせる本体 |

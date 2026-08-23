@@ -30,34 +30,6 @@
 一度も見ていない。** 300 ステップでの測定では、背景テクスチャが変わったときの成功率が
 0.60（照明は 0.82）と落ち込んでもいる。
 
-## 0. GPU マシンで始めるとき：Claude の設定を持ち込む
-
-**このリポジトリを clone しただけでは足りない。** Claude 側の方針と skill は
-`~/.claude/` にあり、git の管理外である。無いと「日本語は日常語で」
-「コミットするパスは英語で」「一次情報を出典にする」を知らない状態から始まる。
-
-手元のマシンで固めて、GPU マシンへ渡す。
-
-```bash
-bash solution/tools/export_claude_setup.sh          # work/claude-setup.tgz ができる
-scp work/claude-setup.tgz <GPU マシン>:~/
-```
-
-GPU マシン側で展開する。
-
-```bash
-mkdir -p ~/.claude && tar xzf ~/claude-setup.tgz -C ~/.claude
-ls ~/.claude/skills/                        # 7 個並ぶ
-grep -c "How to apply" ~/.claude/CLAUDE.md  # 3 と出る
-```
-
-**認証情報は入っていない。** GPU マシンでは `claude` を改めて認証すること。
-
-> `Ignoring unknown extended header keyword 'LIBARCHIVE.xattr...'` が並ぶ版が
-> あった。**展開は成功していた**が（Linux の tar が macOS の拡張属性を
-> 読み飛ばしていただけ）、失敗と見分けが付かないので送る側で載せないようにした。
-> 上の 2 行で中身を確かめれば、警告の有無に関わらず判断できる。
-
 ## 全体像
 
 ```mermaid

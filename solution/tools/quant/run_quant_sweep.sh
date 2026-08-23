@@ -11,7 +11,7 @@
 #
 # 学習は常駐コンテナへの `docker exec` で回す（毎回 docker build/run し直さない —
 # work/quant_sweep/CANDIDATES.md 参照）。評価は既存の run_docker_eval.sh を
-# そのまま使う（run_knob_series.sh と同じ、実証済みの docker run/rm サイクル。
+# そのまま使う（run_knob_series.sh（削除済み）と同じ、実証済みの docker run/rm サイクル。
 # 出力先・重みのマウント先が回ごとに変わる設計なので、無理に常駐コンテナへ
 # 作り替えない）。
 #
