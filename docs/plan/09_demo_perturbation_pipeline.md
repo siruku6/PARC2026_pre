@@ -2,7 +2,7 @@
 
 **この文書の作り方**: 別セッションで下の報告メッセージを受け取った後、そのセッションの
 jsonl が壊れて読み返せなくなった。**メッセージの文面だけを書き写すのではなく**、現在の
-リポジトリの一次資料（`solution/tools/scripted_demo.py`、`work/scripted/sweep_action_noise.sh`、
+リポジトリの一次資料（`solution/tools/scripted_demo/scripted_demo.py`、`work/scripted/sweep_action_noise.sh`、
 [07_track2_preparation.md](07_track2_preparation.md)、
 [08_training_data_creation_cautions.md](08_training_data_creation_cautions.md)、
 `work/gpu_eval/tonight_0821.sh`、`compe/val/TRACK2_PROBE.csv`）を実際に開いて、
@@ -41,7 +41,7 @@ Robot Initial States・Objects Layout・Sensor Noise）が対応すると推測�
 | **Tier 2** | 台本があるタスクのみ（対象を増やすには台本を書く作業が別途必要） | ロボットの初期関節角・物体配置を変えて、閉ループ台本を新しい初期状態から再実行 | 初期関節角は基準姿勢にランダムな単位ベクトル方向へ大きさ 0.1〜0.5 を加える（LIBERO-plus 実装の値） | **Tier1より優先度は低いが、着手しないと決めるのは誤り。** ステップ数ではRobot Initial States+17.5%・Objects Layout+15.6%の劣化があり、Baseと「同率」ではなかった（3.1 節） |
 
 **シナリオが「台本の有無」で層を分けている理由**が要る。台本
-（`solution/tools/scripted_demo.py`）は、実測の手先位置・物体位置から目標への差分を
+（`solution/tools/scripted_demo/scripted_demo.py`）は、実測の手先位置・物体位置から目標への差分を
 毎ステップ計算し直す**閉ループ制御**である（`follow()` の `delta = targets[index] - self.eef_position`）。
 閉ループなので、**カメラ設定や画質だけが変わる Tier 1 は既存の行動列を再利用できる**が、
 **ロボット初期姿勢や物体配置という物理そのものが変わる Tier 2 は、台本を新しい初期状態から
@@ -476,7 +476,7 @@ python3 solution/tools/summarize_probe_by_category.py \
 
 | 事実 | 出典 |
 |---|---|
-| Tier 0 の実装内容・3 つの決定・軸飽和の性質 | `solution/tools/scripted_demo.py`（`_noisy()`・`_take_step()` の docstring と実装を直接読んで確認） |
+| Tier 0 の実装内容・3 つの決定・軸飽和の性質 | `solution/tools/scripted_demo/scripted_demo.py`（`_noisy()`・`_take_step()` の docstring と実装を直接読んで確認） |
 | σ スイープの対象タスク・σ の候補・実行方法 | `work/scripted/sweep_action_noise.sh`（実際に読んで確認） |
 | 台本のあるタスクが 2 つであること | `work/scripted/sweep_action_noise.sh` のコメント（`scripted_demo.TASK_PLANS` を指す）。メッセージの「1 つ」は誤りで、訂正後の記述に一致 |
 | Track2 の背景・4 カテゴリ・mix-SFT の実測・Tier 0/1/2 の設計・優先順位 | [07_track2_preparation.md](07_track2_preparation.md) |
