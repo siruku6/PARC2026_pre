@@ -119,6 +119,7 @@ Generates:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shlex
 import subprocess
@@ -156,6 +157,28 @@ _DATASET_REVISION = "f3f49f426d75030177b18778374005bc12ccd588"
 # 無ければ最初のバッチで落ちる。公式ドキュメントが「lerobot/libero でも
 # 同じ理由で mean_std に落とした」と明記しているレシピに揃える。
 _NORMALIZATION_MAPPING = '{"ACTION": "MEAN_STD", "STATE": "MEAN_STD", "VISUAL": "IDENTITY"}'
+
+# Tier 1（Camera Viewpoints 対策）の安価な近似。LeRobot の ImageTransformsConfig.tfs は
+# draccus 0.8.0 だと `--dataset.image_transforms.tfs.affine...` のような鍵ごとの上書きを
+# 受け付けず（`docker exec quant_train` での実測で確認済み。dict 型フィールドは丸ごと
+# JSON で渡すしかない）、既定 6 種（brightness/contrast/saturation/hue/sharpness/affine）を
+# 引いた上で足す・広げる形にする。3 次元の視点回転（方位角・仰角）は 2D 変換では
+# 再現できない——crop+zoom と affine の scale/translate/rotate だけが近似できる範囲
+# （docs/plan/11_tier1_camera_augmentation.md 2 節）。
+_CAMERA_VIEWPOINT_AUGMENT_TFS = {
+    "brightness": {"weight": 1.0, "type": "ColorJitter", "kwargs": {"brightness": [0.8, 1.2]}},
+    "contrast": {"weight": 1.0, "type": "ColorJitter", "kwargs": {"contrast": [0.8, 1.2]}},
+    "saturation": {"weight": 1.0, "type": "ColorJitter", "kwargs": {"saturation": [0.5, 1.5]}},
+    "hue": {"weight": 1.0, "type": "ColorJitter", "kwargs": {"hue": [-0.05, 0.05]}},
+    "sharpness": {"weight": 1.0, "type": "SharpnessJitter", "kwargs": {"sharpness": [0.5, 1.5]}},
+    # 既定の affine（degrees ±5・translate 5%）を広げる。scale を新たに足して
+    # LIBERO-plus の scale_factor（公式変種は 1.00〜2.00 の範囲。7 節）の低め側を近似する。
+    "affine": {"weight": 1.0, "type": "RandomAffine",
+               "kwargs": {"degrees": [-15.0, 15.0], "translate": [0.12, 0.12], "scale": [0.82, 1.22]}},
+    # ランダムクロップ＋ズーム。256x256 のまま返す（lerobot/libero_plus の画像 shape に合わせる）。
+    "camera_crop": {"weight": 1.0, "type": "RandomResizedCrop",
+                     "kwargs": {"size": [256, 256], "scale": [0.75, 1.0], "ratio": [0.9, 1.111]}},
+}
 
 
 def _parse_args() -> argparse.Namespace:
@@ -203,6 +226,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--dtype", type=str, default="bfloat16",
                         choices=("bfloat16", "float32"))
     quantization.add_arguments(parser)
+    parser.add_argument("--camera-viewpoint-augment", action="store_true",
+                        help="Tier 1（Camera Viewpoints 対策）の安価な近似。LeRobot の "
+                             "image_transforms を有効化し、既定 6 種に加えて crop+zoom "
+                             "（RandomResizedCrop）を追加、affine の rotate/translate/scale "
+                             "を広げる。3 次元の視点回転（方位角・仰角）は再現できない "
+                             "（docs/plan/11_tier1_camera_augmentation.md 参照）")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--log-file", type=Path, default=None, metavar="FILE",
@@ -318,6 +347,15 @@ def _build_command(
     if episode_indices is not None:
         command.append(f"--dataset.episodes=[{','.join(map(str, episode_indices))}]")
     command += quantization.extra_arguments(args)
+    if args.camera_viewpoint_augment:
+        command += [
+            "--dataset.image_transforms.enable=true",
+            # 8 種のうち毎フレーム最大 4 種を掛け合わせる（既定 3 のままだと、既定 6 種に
+            # 2 種足したぶん 1 種あたりの出現率が下がる。02_appearance_and_data.md で
+            # 指摘済みの注意点への対応）。
+            "--dataset.image_transforms.max_num_transforms=4",
+            f"--dataset.image_transforms.tfs={json.dumps(_CAMERA_VIEWPOINT_AUGMENT_TFS)}",
+        ]
     return command + list(args.extra)
 
 
