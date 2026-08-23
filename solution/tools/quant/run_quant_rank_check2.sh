@@ -24,11 +24,30 @@
 # ノイズ（n=36で標準偏差およそ0.07〜0.08）よりはっきり大きい。compile前後で
 # この差の順序・おおよその大きさが保たれるかを見る。
 #
-# おまけ（4本目、任意）: C0_compile。C0は既に compile_model=true 版チェックポイントが
-# 用意済み（work/train/pi05_compile_infer_eval/pretrained_model、2026-08-22作成）で、
-# 追加の準備コストがゼロ。PROGRESS.md 2026-08-22 09:06節で「36件評価での正しさ確認が
-# 未確認」と指摘されていたのはこれ——ついでに片付く。要らなければ末尾の1行をコメント
+# おまけ（4本目、任意）: C0_compile。PROGRESS.md 2026-08-22 09:06節で「36件評価での
+# 正しさ確認が未確認」と指摘されていたのはこれ。要らなければ末尾の1行をコメント
 # アウトすること。
+#
+# **2026-08-23の容量整理で work/train/pi05_compile_infer_eval（26GB）を消したので、
+# このまま流すと weak_compile・strong_compile・C0_compile の3本が重みを見つけられない。**
+# 流す前に3本を作り直す（重み本体は消す前と sha256 が一致することを確認済み）:
+#
+#   cd "$(git rev-parse --show-toplevel)"
+#   mkdir -p work/train/pi05_compile_infer_eval
+#   cp -r work/train/pi05_quant_c0/checkpoints/016000/pretrained_model \
+#         work/train/pi05_compile_infer_eval/pretrained_model          # sha256 89fc796d
+#   cp -r work/artifacts/pi05_rp3000 \
+#         work/train/pi05_compile_infer_eval/strong_pretrained_model   # sha256 0c5d542e
+#   cp -r work/artifacts/model_weights_pi05_024000 \
+#         work/train/pi05_compile_infer_eval/weak_pretrained_model     # sha256 d46bffcf
+#   # 消す前の config.json（3本とも "compile_model": true）をそのまま戻す
+#   for name in pretrained_model strong_pretrained_model weak_pretrained_model; do
+#       cp work/train/_deleted_configs/pi05_compile_infer_eval/$name/config.json \
+#          work/train/pi05_compile_infer_eval/$name/config.json
+#   done
+#
+# コピー元3本はどれも vlm/ を持っているので、評価が5秒で落ちる問題は起きない。
+# ただし26GBを書き戻すので、先に df で空きを見ること（docs/howto/09_free_disk_space.md）。
 #
 # 使い方（GPUが空いていることを確認してから。docker run を伴うためユーザー自身が
 # 実行すること）:
