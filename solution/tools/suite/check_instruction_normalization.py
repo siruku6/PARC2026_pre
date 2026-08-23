@@ -8,9 +8,9 @@
 （`make_holdout_split.py` が配布ノートブックと突き合わせて自己検査している）、
 **「渡ってくる文」と「本来の学習データの文」の対が 10,030 件そろう。**
 
-    python3 solution/tools/check_instruction_normalization.py            # 表を出す
-    python3 solution/tools/check_instruction_normalization.py --sweep    # しきい値を振る
-    python3 solution/tools/check_instruction_normalization.py --embed    # 意味で寄せる道も測る
+    python3 solution/tools/suite/check_instruction_normalization.py            # 表を出す
+    python3 solution/tools/suite/check_instruction_normalization.py --sweep    # しきい値を振る
+    python3 solution/tools/suite/check_instruction_normalization.py --embed    # 意味で寄せる道も測る
 
 **`--embed` には torch と重みが要る**（VLM の言語側を実際に動かすため）。
 手元（macOS）には torch が無いので、Docker で回す。
@@ -46,7 +46,7 @@ import sys
 import types
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from instruction_targets import build_pairs, training_instructions  # noqa: E402

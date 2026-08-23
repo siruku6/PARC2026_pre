@@ -178,7 +178,7 @@ def _parse_args() -> argparse.Namespace:
     # **検証専用にするタスクを学習から外す。** 摂動版は元のタスクの実演を
     # 共有するため、変種の id を抜いても同じ指示文の別の変種が学習に残る。
     # **指示文で丸ごと外さないと、手元の検証は「覚えた度合い」を測ってしまう。**
-    # 一覧は solution/tools/make_holdout_split.py が作り、
+    # 一覧は solution/tools/suite/make_holdout_split.py が作り、
     # **検証集合も同じ CSV を読む**（docs/howto/04_proxy_eval.md）。
     parser.add_argument("--holdout-tasks", type=Path, default=None,
                         metavar="CSV",
@@ -690,7 +690,7 @@ def _load_holdout(path: Path) -> list[str]:
     共有するため、変種の id を抜いても同じ指示文の別の変種が学習に残り、
     中身は見たままになる。
 
-    一覧は `solution/tools/make_holdout_split.py` が作る。
+    一覧は `solution/tools/suite/make_holdout_split.py` が作る。
     **検証集合も同じ CSV を読む**ので、片方だけ古くなることがない。
 
     **読み取りを `make_validation_suite.py` と共有していないのは、

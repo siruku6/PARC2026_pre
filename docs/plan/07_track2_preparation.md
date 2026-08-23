@@ -344,14 +344,14 @@ Tier 1 を「既存の学習データを別カメラ設定で撮り直す」に�
 **評価データ（ローカルの Track2 疑似検証スイート）**
 
 **運営配布の Track2 用検証キットはまだ無い**（`pipeline/`・`compe/` に track2 の
-仕組みは無いことを確認済み）。しかし **Track1 用に作った `solution/tools/make_task_suite.py`
+仕組みは無いことを確認済み）。しかし **Track1 用に作った `solution/tools/suite/make_task_suite.py`
 は、摂動カテゴリを引数で選べる汎用の道具である**ことをコードで確認した
 （`--categories` 引数。既定は Track1 の 2 カテゴリだが、上書きできる）。
 
 実際に動かして確認した。
 
 ```bash
-python3 solution/tools/make_task_suite.py \
+python3 solution/tools/suite/make_task_suite.py \
     --instruction "put both moka pots on the stove" \
     --categories "Camera Viewpoints" "Robot Initial States" "Sensor Noise" "Objects Layout" \
     --count 8 --output compe/val/TRACK2_PROBE_MOKA.csv
@@ -558,7 +558,7 @@ Track2 の実出題がどの 4 カテゴリであっても（あるいは推測�
 | 視点・ノイズ・位置ロバスト性の広い文献（VISTA・RoboSplat・3D Diffuser Actor・CRT・StableVLA・RobustVLA・ADR・MimicGen・arXiv:2603.22876 等） | researcher エージェントによる Web 調査（1.3.3 節に確認度を明記。要旨止まりのものと本文確認済みのものを区別している） |
 | 台本方策が閉ループであること | `solution/tools/scripted_demo/scripted_demo.py` の `follow()` 実装 |
 | 学習データが拡張を使っていないこと | `work/artifacts/model_weights.bak/train_config.json`（[02_appearance_and_data.md](02_appearance_and_data.md)で既確認） |
-| `make_task_suite.py` が任意のカテゴリで検証スイートを作れること | `solution/tools/make_task_suite.py` の `--categories` 引数を実行して確認 |
+| `make_task_suite.py` が任意のカテゴリで検証スイートを作れること | `solution/tools/suite/make_task_suite.py` の `--categories` 引数を実行して確認 |
 | 講義第6回・第7回の知見 | `docs/第6回 講義資料.pdf`／`docs/第7回 講義資料part1.pdf` |
 | Tier 0（ノイズ注入で復帰データを作る）の発想と注意点 | DART（Laskey+ 2017, arXiv:1703.09327）・SIRIUS（Liu+ 2022, arXiv:2211.08416）・Ross+ 2011（arXiv:1011.0686）。詳細と確認度は [08_training_data_creation_cautions.md](08_training_data_creation_cautions.md) 3 節 |
 | 検証データの分割・ログ規律・混合比・前処理一致などの実務要件 | 講義第6回 p39-p60・`docs/qiita_OpenVLA-OFT+.md`。詳細は [08_training_data_creation_cautions.md](08_training_data_creation_cautions.md) 1・2 節 |

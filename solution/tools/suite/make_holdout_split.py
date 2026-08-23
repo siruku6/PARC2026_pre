@@ -10,9 +10,9 @@
 抜いても、同じ指示文の別の摂動版が学習に残るので中身は見たままになる。
 **だから指示文（タスク）単位で丸ごと分ける。**
 
-    python3 solution/tools/make_holdout_split.py            # 既定で 8 タスク外す
-    python3 solution/tools/make_holdout_split.py --extra 0  # 配布 4 タスクだけ外す
-    python3 solution/tools/make_holdout_split.py --dry-run  # 書かずに内容を見る
+    python3 solution/tools/suite/make_holdout_split.py            # 既定で 8 タスク外す
+    python3 solution/tools/suite/make_holdout_split.py --extra 0  # 配布 4 タスクだけ外す
+    python3 solution/tools/suite/make_holdout_split.py --dry-run  # 書かずに内容を見る
 
 出力の CSV は 2 か所から読まれる。**同じ 1 枚を両方が読むことで、片方だけ
 古くなる事故を防ぐ。**
@@ -39,7 +39,7 @@ import json
 import re
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # 摂動の接尾辞。**後ろから繰り返し剥がすと素のタスク名になる。**
 # 3 種類ある。`_table_1` のように数字が離れている形、`_level1_sample2` のように

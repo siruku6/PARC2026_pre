@@ -384,7 +384,7 @@ the plate`。** 同じタスクなのに書き方が違う。
 40 種しかなく、そのうち 25 種が学習とずれている。**
 言い換え（1,527 種）が本番に含まれるかどうかとは**無関係に効く。**
 
-**実測**（`solution/tools/check_instruction_normalization.py`。
+**実測**（`solution/tools/suite/check_instruction_normalization.py`。
 変種 10,030 件・渡ってくる文 1,597 種すべて。答えは LIBERO-plus の変種名から取れる）。
 
 | 束 | 渡る文 | 寄せた（正しい） | **誤り** | 触らない |

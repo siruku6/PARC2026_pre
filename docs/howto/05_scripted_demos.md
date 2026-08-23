@@ -334,7 +334,7 @@ python solution/tools/weights/install_weights.py work/train/<run 名>/merged_mod
 **このタスクは 36 件に入っていない**（146 本すべてが 341 ステップ以上で、
 `--max-demo-steps 300` に全部落ちるため）。**このタスクの変種だけを集めた
 一覧が `compe/val/MOKA_TASKS.csv`（8 件）にある**ので、それを渡す
-（作り直すときは `solution/tools/make_task_suite.py`）。
+（作り直すときは `solution/tools/suite/make_task_suite.py`）。
 
 ```bash
 EVAL_CSV=compe/val/MOKA_TASKS.csv MUJOCO_GL=osmesa \
@@ -468,7 +468,7 @@ ls work/artifacts/model_weights_scripted_mix
 > 手元にある CSV が古いときは作り直す（数秒・GPU 不要）。
 >
 > ```bash
-> python3 solution/tools/make_task_suite.py \
+> python3 solution/tools/suite/make_task_suite.py \
 >     --instruction "put both moka pots on the stove" \
 >     --count 8 --output compe/val/MOKA_TASKS.csv
 > ```

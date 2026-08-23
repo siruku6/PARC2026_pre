@@ -24,7 +24,7 @@ Colab には 3 つの困りごとがあった。**GPU マシンなら 3 つと�
 | LoRA 20,000 ステップ | **0.500**（素より上に見えた） | **0.016** |
 
 理由と作り方は [04_proxy_eval.md](04_proxy_eval.md) にある。
-一覧を作り直すのは `solution/tools/make_eval_split.py` である。
+一覧を作り直すのは `solution/tools/suite/make_eval_split.py` である。
 
 | | 件数 | 所要 | いつ使うか |
 |---|---|---|---|
@@ -57,7 +57,7 @@ tail -f work/gpu_eval/launcher.log
 
 ```
   **測るタスクの一覧がない: .../compe/val/EVAL_TASKS.csv**
-  作る: python3 solution/tools/make_eval_split.py --record <episodes.json>
+  作る: python3 solution/tools/suite/make_eval_split.py --record <episodes.json>
   84 件を生成する道に戻す: EVAL_CSV= bash solution/tools/run_docker_eval.sh
 ```
 
@@ -225,7 +225,7 @@ python3 solution/tools/summarize_rollout_videos.py work/gpu_eval/<回>/videos
 
 ```bash
 docker run --rm --gpus all -v "$PWD:/w" -w /w parc2026-train-server \
-    python3 solution/tools/check_instruction_normalization.py --embed --sweep
+    python3 solution/tools/suite/check_instruction_normalization.py --embed --sweep
 ```
 
 **`parc2026` では動かない。** あのイメージに torch はあるが transformers が無い。
@@ -255,7 +255,7 @@ docker run --rm --gpus all -v "$PWD:/w" -w /w parc2026-train-server \
 
 ```bash
 # 指示文ごとに 2 件へ増やした一覧で測る
-python3 solution/tools/make_eval_split.py --record outputs/train2/episodes.json \
+python3 solution/tools/suite/make_eval_split.py --record outputs/train2/episodes.json \
     --per-task 2 --output compe/val/EVAL_TASKS_x2.csv
 EVAL_CSV=compe/val/EVAL_TASKS_x2.csv \
     bash solution/tools/run_docker_eval.sh --detach

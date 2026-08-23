@@ -258,11 +258,11 @@ work/venv310/bin/python validate_submission.py --static
 
 ```bash
 # 寄せ先 40 種を出す（policy_server.py に貼ってある値の出し方）
-python3 solution/tools/instruction_targets.py --emit python
+python3 solution/tools/suite/instruction_targets.py --emit python
 
 # 正しく寄せられるかを測る（変種 10,030 件・答え合わせ付き。torch 不要）
-python3 solution/tools/check_instruction_normalization.py
-python3 solution/tools/check_instruction_normalization.py --sweep   # 合格ラインを振って比べる
+python3 solution/tools/suite/check_instruction_normalization.py
+python3 solution/tools/suite/check_instruction_normalization.py --sweep   # 合格ラインを振って比べる
 ```
 
 **本番の 2 カテゴリで 1 件でも誤って寄せたら、道具が終了コードを立てて落ちる。**

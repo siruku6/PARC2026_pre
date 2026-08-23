@@ -81,7 +81,7 @@
 #          この 40 種を使い回す）。**そのうち 25 種は学習の書き方とずれている。**
 #          学習データの 40 種のうち最も近いものへ寄せると、**40 種すべてを
 #          正しく寄せ、誤りは 0 だった**（変種 7,280 件すべて。実測は
-#          solution/tools/check_instruction_normalization.py）。
+#          solution/tools/suite/check_instruction_normalization.py）。
 #          運営 Q&A No.29 が「小文字化、"Pick the"→"pick up the" のような言い換えの
 #          統一」を名指しで許容している。No.31 の埋め込み最近傍も許容だが、
 #          **既定では使わない**（下の _USE_EMBEDDING）。
@@ -235,7 +235,7 @@ class BasePolicy(ABC):
 _POSE_DIMS = slice(0, 6)
 
 # 寄せ先。**学習データ（lerobot/libero_plus）の指示文 40 種そのままである。**
-# 出し方は `python3 solution/tools/instruction_targets.py --emit python`。
+# 出し方は `python3 solution/tools/suite/instruction_targets.py --emit python`。
 # 2 つの独立な資料が一致することを確かめてある —— LIBERO-plus の
 # `task_classification.json` から取った素のタスク名と、学習データのエピソードの
 # メタデータ（`task` 列）。**40 種にならなければ道具がその場で止まる。**
@@ -287,7 +287,7 @@ _WORD_RE = re.compile(r"[a-z0-9]+")
 
 # **語の重なりで寄せると決める合格ライン。** LIBERO-plus の実物 1,597 種
 # （変種 10,030 件）に対して測って決めた
-# （`solution/tools/check_instruction_normalization.py --sweep`）。
+# （`solution/tools/suite/check_instruction_normalization.py --sweep`）。
 #
 # | 合格ライン | 本番の 2 カテゴリ（40 種） | 言い換え（1,527 種） |
 # |---|---|---|

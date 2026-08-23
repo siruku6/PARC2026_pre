@@ -53,7 +53,10 @@ from pathlib import Path
 # 素のタスク名の取り出しは `make_holdout_split` と共通にする。
 # **同じ正規表現を 2 か所に置くと必ず片方が古くなる。**
 # 兄弟の台本を読む書き方は `check_validation_suite.py` と同じである。
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# **`make_holdout_split` は `solution/tools/suite/` へ移った。** このファイル自身は
+# 評価パイプライン 13 本の 1 つとして `solution/tools/` 直下に残っているので、
+# 兄弟ではなく 1 つ下の `suite/` を見る。
+sys.path.insert(0, str(Path(__file__).resolve().parent / "suite"))
 from make_holdout_split import base_task, instruction  # noqa: E402
 
 # LIBERO-plus の摂動カテゴリ 7 つ。**既定では全部使う。**

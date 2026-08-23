@@ -231,7 +231,7 @@ LoRA 20k が 2 段目になる（0.095 − 0.016 = 0.079）。
 ### 0-1. 外すタスクの一覧を作る
 
 ```bash
-python3 solution/tools/make_holdout_split.py
+python3 solution/tools/suite/make_holdout_split.py
 ```
 
 **8 タスクを外す**（配布 4 タスク ＋ 同じ 2 カテゴリから 4 つ）。

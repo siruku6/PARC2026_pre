@@ -22,7 +22,7 @@
 #   N_EPISODES=1   **タスクあたり**の本数。件数が多いので 1 のままにする
 #   EVAL_CSV       **測るタスクの一覧。既定は compe/val/EVAL_TASKS.csv（36 件）。**
 #                  学習が引かなかった実演がある指示文だけで作った集合である
-#                  （solution/tools/make_eval_split.py）。
+#                  （solution/tools/suite/make_eval_split.py）。
 #                  `EVAL_CSV=` と空にすると、代わりに 84 件を生成して測る
 #   PER_CELL=3     84 件を生成するときの、スイート × カテゴリあたりの本数。
 #                  **EVAL_CSV を空にしたときだけ効く**
@@ -170,7 +170,7 @@ echo "  出力先 $OUTPUT_DIR"
 if [ -n "$EVAL_CSV" ]; then
     if [ ! -f "$EVAL_CSV" ]; then
         echo "  **測るタスクの一覧がない: $EVAL_CSV**" >&2
-        echo "  作る: python3 solution/tools/make_eval_split.py --record <episodes.json>" >&2
+        echo "  作る: python3 solution/tools/suite/make_eval_split.py --record <episodes.json>" >&2
         echo "  84 件を生成する道に戻す: EVAL_CSV= bash $0" >&2
         exit 1
     fi

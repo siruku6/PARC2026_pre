@@ -20,9 +20,9 @@ the plate` である。**同じタスクなのに綴りが違う。**
 | **寄せ先 40 種** | `solution/policy_server.py` に貼る（`--emit python`） |
 | **対応表** | 正規化の精度を測る（`--emit json` → `check_instruction_normalization.py`） |
 
-    python3 solution/tools/instruction_targets.py                  # 要点だけ
-    python3 solution/tools/instruction_targets.py --emit python    # 貼る形で出す
-    python3 solution/tools/instruction_targets.py --emit json \
+    python3 solution/tools/suite/instruction_targets.py                  # 要点だけ
+    python3 solution/tools/suite/instruction_targets.py --emit python    # 貼る形で出す
+    python3 solution/tools/suite/instruction_targets.py --emit json \
         --output outputs/instruction_norm/pairs.json               # 対応表
 
 **寄せ先は 2 つの独立な資料が一致することで確かめている。** 1 つは
@@ -49,7 +49,7 @@ import re
 import sys
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from make_holdout_split import (  # noqa: E402
@@ -249,7 +249,7 @@ def _print_summary(pairs: list[dict], targets: tuple[str, ...]) -> None:
 def _print_python(targets: tuple[str, ...]) -> None:
     """`policy_server.py` に貼る形で出す。"""
     print("# 寄せ先。**学習データ（lerobot/libero_plus）の指示文 40 種そのままである。**")
-    print("# 出し方は solution/tools/instruction_targets.py --emit python。")
+    print("# 出し方は solution/tools/suite/instruction_targets.py --emit python。")
     print("_TRAINING_INSTRUCTIONS = (")
     for target in targets:
         print(f'    "{target}",')

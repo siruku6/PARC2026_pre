@@ -10,7 +10,7 @@
 学習の前後で同じ一覧を回せば、**そのタスクだけの成否を直接比べられる。**
 
     # モカポットのタスクを 8 件（本番と同じ 2 カテゴリから）
-    python3 solution/tools/make_task_suite.py \
+    python3 solution/tools/suite/make_task_suite.py \
         --instruction "put both moka pots on the stove" \
         --count 8 --output compe/val/MOKA_TASKS.csv
 
@@ -39,7 +39,7 @@ import json
 import sys
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from instruction_targets import _bddl_index, _resolve_bddl, language_of  # noqa: E402

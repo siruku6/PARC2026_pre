@@ -10,7 +10,7 @@
 機械的に決まるので、選ぶ人の裁量が入らない。
 
     # 既定（指示文ごとに 1 件・本番と同じ 2 カテゴリ）
-    python3 solution/tools/make_eval_split.py --record outputs/train2/episodes.json
+    python3 solution/tools/suite/make_eval_split.py --record outputs/train2/episodes.json
 
     # 選び直す（**後から変えられる**）
     ... --per-task 2                      # 指示文ごとの件数を増やす
@@ -54,7 +54,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # 採点環境の摂動カテゴリ。運営 Q&A No.21 の回答は「7 カテゴリすべてが
 # 含まれているわけではありません」「同一タスク・同一ドメインにおける、

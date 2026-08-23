@@ -366,7 +366,7 @@ Q&A No.29 が「小文字化、`Pick the`→`pick up the` のような言い換�
 > **本番の 2 カテゴリで渡る文は 40 種しかなく、そのうち 25 種が学習とずれている。**
 > **言い換えが本番に来るかどうかとは無関係に効く。**
 
-**実測**（[check_instruction_normalization.py](../../solution/tools/check_instruction_normalization.py)。
+**実測**（[check_instruction_normalization.py](../../solution/tools/suite/check_instruction_normalization.py)。
 変種 10,030 件・渡ってくる文 1,597 種すべてに対して）。
 
 | 束 | 渡る文 | 寄せた（正しい） | **誤り** | 触らない |
@@ -414,7 +414,7 @@ Q&A No.29 が「小文字化、`Pick the`→`pick up the` のような言い換�
 **寄せ先は手元で作れる。外部からの取得は要らない。**
 
 ```bash
-python3 solution/tools/instruction_targets.py --emit python   # 貼る形で 40 種を出す
+python3 solution/tools/suite/instruction_targets.py --emit python   # 貼る形で 40 種を出す
 ```
 
 **壊す経路が無い仕掛けである。** 学習と同じ文が来たら**小文字化だけして自分に写る。**
