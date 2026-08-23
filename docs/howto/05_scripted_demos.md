@@ -325,7 +325,7 @@ cp -r work/artifacts/model_weights_base/vlm work/artifacts/model_weights_<label>
 見てくれる（書き換えは起きない）。
 
 ```bash
-python solution/tools/install_weights.py work/train/<run 名>/merged_model \
+python solution/tools/weights/install_weights.py work/train/<run 名>/merged_model \
     --destination work/artifacts/model_weights_base --dry-run
 ```
 

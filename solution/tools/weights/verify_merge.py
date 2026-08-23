@@ -16,10 +16,10 @@
 使い方::
 
     # GPU マシンで（初期重みは HF から取る。7 GB 程度の通信）
-    python3 solution/tools/verify_merge.py /out/smolvla_lora_all_suites/merged_model
+    python3 solution/tools/weights/verify_merge.py /out/smolvla_lora_all_suites/merged_model
 
     # 通信を避けたい場合、手元にある初期重みを指してもよい
-    python3 solution/tools/verify_merge.py <merged> --base-model <初期重みのディレクトリ>
+    python3 solution/tools/weights/verify_merge.py <merged> --base-model <初期重みのディレクトリ>
 
 Reads:
   - <merged>/model.safetensors, <merged>/config.json
@@ -320,7 +320,7 @@ def main() -> None:
     # 分岐そのものは手順書が持っているので、ここでは節番号で案内する。
     print("\n次に: vlm/ を足す。docs/howto/01_retrain.md の A-7")
     print("  測るだけ → 名前を付けて置き、WEIGHTS で指す（03_gpu_eval.md）")
-    print("  提出物   → solution/tools/install_weights.py "
+    print("  提出物   → solution/tools/weights/install_weights.py "
           f"{merged_dir} --dry-run")
 
 

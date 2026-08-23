@@ -203,7 +203,7 @@ XVLA のコードをそのままコピーして `"vlm" in name.lower()` で判�
 
 置換は**書き換え対象の文字列が 1 個だけ見つかった場合に限り実行し、0 個または 2 個以上なら例外を投げて止める**こと。
 LeRobot の版が変わったときに黙って壊れないようにする
-（`solution/tools/vendor_lerobot.py` が同じ方針を採っている）。
+（`solution/tools/build/vendor_lerobot.py` が同じ方針を採っている）。
 
 ## スケジューラは比率を壊さない（確認済み）
 

@@ -17,7 +17,7 @@ Omnicampus へ出す zip は `policy_server.py` が**ルート直下**に来る�
 `model_weights/` に固定される）。**π0.5 と SmolVLA を入れ替えて出すときに、
 本物のディレクトリを退避させずに済ませるため**である。
 
-    python3 solution/tools/build_submission.py \\
+    python3 solution/tools/build/build_submission.py \\
         --weights work/artifacts/model_weights_pi05_024000 \\
         --output work/submission_pi05.zip
 
@@ -39,8 +39,8 @@ import re
 import zipfile
 from pathlib import Path
 
-# solution/tools/build_submission.py の 2 階層上がリポジトリルート。
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+# solution/tools/build/build_submission.py の 3 階層上がリポジトリルート。
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_SOLUTION = _REPO_ROOT / "solution"
 _DEFAULT_ARTIFACTS = _REPO_ROOT / "work" / "artifacts"
 _DEFAULT_OUTPUT = _REPO_ROOT / "work" / "submission.zip"

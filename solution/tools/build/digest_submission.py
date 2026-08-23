@@ -19,8 +19,8 @@ import hashlib
 import zipfile
 from pathlib import Path
 
-# solution/tools/digest_submission.py の 2 階層上がリポジトリルート。
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+# solution/tools/build/digest_submission.py の 3 階層上がリポジトリルート。
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_TARGET = _REPO_ROOT / "work" / "submission.zip"
 
 _SKIP_PARTS = frozenset({"__pycache__", ".hf_home", ".ipynb_checkpoints", ".DS_Store"})

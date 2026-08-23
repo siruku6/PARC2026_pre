@@ -28,8 +28,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-# solution/tools/vendor_lerobot.py の 2 階層上がリポジトリルート。
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+# solution/tools/build/vendor_lerobot.py の 3 階層上がリポジトリルート。
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_SOURCE = _REPO_ROOT / "work" / "lerobot-src" / "src" / "lerobot"
 _DEFAULT_DESTINATION = _REPO_ROOT / "work" / "artifacts" / "vendor" / "lerobot"
 

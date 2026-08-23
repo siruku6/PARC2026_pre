@@ -146,7 +146,7 @@ python3 solution/tools/summarize_gpu_eval.py \
 GPU マシンへ 900 MB を運ぶ必要も無い。
 
 ```bash
-bash solution/tools/fetch_base_weights.sh          # 素の重みを取り寄せる（869 MB）
+bash solution/tools/build/fetch_base_weights.sh          # 素の重みを取り寄せる（869 MB）
 
 WEIGHTS=work/artifacts/model_weights_base LABEL=base \
     bash solution/tools/run_docker_eval.sh --detach     # 素の重みで評価する
@@ -253,7 +253,7 @@ python3 solution/tools/summarize_rollout_videos.py \
 ```bash
 rm -rf work/artifacts/model_weights && \
   mv work/artifacts/model_weights.bak work/artifacts/model_weights
-work/venv310/bin/python solution/tools/build_submission.py
+work/venv310/bin/python solution/tools/build/build_submission.py
 ```
 
 **`c1685507…` と同じハッシュになれば、0.1409 の構成が復元できている。**

@@ -16,19 +16,19 @@
 | `policy_server.py` | `MyPolicy` を実装したポリシーサーバー（変更不可領域は未改変） |
 | `requirements.txt` | 提出物の依存（確定版） |
 | `requirements-dev.txt` | ローカル検証用の依存。**提出物には使わない** |
-| `tools/vendor_lerobot.py` | LeRobot のソースを Python 3.10 で動く形へ書き換えて同梱する |
-| `tools/install_weights.py` | Colab で追加学習したマージ済みモデルを取り込む |
-| `tools/build_submission.py` | 提出用 zip を組み立て、検証し、sha256 を記録する |
-| `tools/digest_submission.py` | 提出物の内容ダイジェスト。環境間の同期確認に使う |
+| `tools/build/vendor_lerobot.py` | LeRobot のソースを Python 3.10 で動く形へ書き換えて同梱する |
+| `tools/weights/install_weights.py` | Colab で追加学習したマージ済みモデルを取り込む |
+| `tools/build/build_submission.py` | 提出用 zip を組み立て、検証し、sha256 を記録する |
+| `tools/build/digest_submission.py` | 提出物の内容ダイジェスト。環境間の同期確認に使う |
 | `tools/run_local_eval.sh` | 配布キットの評価パイプラインを提出物に対して回す（コンテナ内） |
 | `tools/make_validation_suite.py` | example 以外のタスクで評価するための一覧を作る（Colab へ上げる） |
 | `tools/check_validation_suite.py` | 上の一覧が本当に開けるかを、**評価を回す前に**確かめる |
 | `tools/collect_colab_files.py` | Colab へ上げるファイルを `work/colab_upload/` に集める |
 | `tools/export_claude_setup.sh` | Claude の方針と skill を別のマシンへ持ち出す（GPU マシン用） |
-| `tools/verify_merge.py` | マージ済みモデルを初期重みと比べ、**学習が反映されたか**を確かめる |
+| `tools/weights/verify_merge.py` | マージ済みモデルを初期重みと比べ、**学習が反映されたか**を確かめる |
 | `tools/run_docker_eval.sh` | **GPU マシンで検証用スイートを流す（Docker 2 つ）。** 放っておける |
 | `tools/docker_eval_inside.sh` | 上が評価側コンテナの中で走らせる本体 |
-| `tools/fetch_base_weights.sh` | **素の重み（0.1409 の構成）を revision 固定で取り寄せる** |
+| `tools/build/fetch_base_weights.sh` | **素の重み（0.1409 の構成）を revision 固定で取り寄せる** |
 | `tools/run_gpu_eval.sh` | 同じことをホスト直で。**LeRobot 入りの venv がある場合だけ** |
 | `tools/summarize_gpu_eval.py` | 上の結果を集計する。件数・結末・**ゴール到達と衝突の内訳**・動き・カテゴリ別・衝突の偏り |
 | `tools/patch_kit_for_variants.py` | 配布キットを、変種で測れて結末と映像が残る状態に書き換える |
@@ -52,10 +52,10 @@
 ```mermaid
 flowchart LR
     S["solution/<br/>policy_server.py<br/>requirements.txt"] --> Z["work/submission.zip"]
-    L["work/lerobot-src/"] -->|"tools/vendor_lerobot.py"| V["work/artifacts/vendor/"]
+    L["work/lerobot-src/"] -->|"tools/build/vendor_lerobot.py"| V["work/artifacts/vendor/"]
     V --> Z
     W["work/artifacts/model_weights/"] --> Z
-    Z -->|"tools/build_submission.py"| H["work/submission.sha256"]
+    Z -->|"tools/build/build_submission.py"| H["work/submission.sha256"]
 ```
 
 **コードは `solution/` が正**である。`work/` へコピーして同期させる運用にすると
@@ -71,7 +71,7 @@ venv の作成・LeRobot の同梱・重みの配置・zip の組み立てと検
 いちばん多いのは「`policy_server.py` を変えたので作り直す」場合で、これは 1 行である。
 
 ```bash
-work/venv310/bin/python solution/tools/build_submission.py
+work/venv310/bin/python solution/tools/build/build_submission.py
 ```
 
 ### 推論時の後処理（既定はすべて無効）

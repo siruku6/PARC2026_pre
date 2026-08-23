@@ -16,11 +16,11 @@
 中身は残る**（リンク数が 2 になるため）。
 
     # 学習の最終チェックポイントを取り込む
-    python3 solution/tools/install_pi05_weights.py \\
+    python3 solution/tools/weights/install_pi05_weights.py \\
         work/train/pi05_full_local/checkpoints/024000/pretrained_model
 
     # 名前を明示する（既定は model_weights_pi05_<ステップ数>）
-    python3 solution/tools/install_pi05_weights.py <ckpt> --name pi05_24k
+    python3 solution/tools/weights/install_pi05_weights.py <ckpt> --name pi05_24k
 
 出来たディレクトリはそのまま評価に渡せる。
 
@@ -43,8 +43,8 @@ import os
 import shutil
 from pathlib import Path
 
-# solution/tools/ の 2 階層上がリポジトリルート。
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+# solution/tools/weights/ の 3 階層上がリポジトリルート。
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # チェックポイントに必ずあるべきもの。1 つでも欠けたら取り込まない。
 _REQUIRED_FILES = (

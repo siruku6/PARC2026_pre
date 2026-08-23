@@ -44,7 +44,7 @@ flowchart TD
 # ケース 1. 作り直すだけ
 
 ```bash
-work/venv310/bin/python solution/tools/build_submission.py
+work/venv310/bin/python solution/tools/build/build_submission.py
 ```
 
 これだけである。出力はこうなる。
@@ -67,15 +67,15 @@ work/venv310/bin/python solution/tools/build_submission.py
 
 ```bash
 # 1. 検査だけする（何も書き換えない）
-work/venv310/bin/python solution/tools/install_weights.py \
+work/venv310/bin/python solution/tools/weights/install_weights.py \
     work/train/smolvla_lora_all_suites/merged_model --dry-run
 
 # 2. 問題なければ取り込む
-work/venv310/bin/python solution/tools/install_weights.py \
+work/venv310/bin/python solution/tools/weights/install_weights.py \
     work/train/smolvla_lora_all_suites/merged_model
 
 # 3. zip を作る
-work/venv310/bin/python solution/tools/build_submission.py
+work/venv310/bin/python solution/tools/build/build_submission.py
 ```
 
 ## なぜ手でコピーしてはいけないのか
@@ -136,7 +136,7 @@ with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as tf:
 (dest / root).rename(target)
 "
 
-work/venv310/bin/python solution/tools/vendor_lerobot.py \
+work/venv310/bin/python solution/tools/build/vendor_lerobot.py \
     --python310 work/venv310/bin/python
 ```
 
@@ -184,7 +184,7 @@ snapshot_download('HuggingFaceTB/SmolVLM2-500M-Video-Instruct',
 ### ① 混ぜる（2 分・GPU 不要）
 
 ```bash
-python3 solution/tools/blend_weights.py --lam 0.25 \
+python3 solution/tools/weights/blend_weights.py --lam 0.25 \
     --base       work/artifacts/model_weights.bak \
     --finetuned  work/artifacts/model_weights \
     --output     work/artifacts/model_weights_lam025
@@ -202,7 +202,7 @@ shasum -a 256 work/artifacts/model_weights*/model.safetensors | cut -c1-16
 
 ```bash
 # λ=1.0 は --finetuned と、λ=0.0 は --base と 1 バイトも違わないはず
-python3 solution/tools/blend_weights.py --lam 1.0 \
+python3 solution/tools/weights/blend_weights.py --lam 1.0 \
     --base work/artifacts/model_weights.bak \
     --finetuned work/artifacts/model_weights --output "$TMPDIR/lam100"
 shasum -a 256 "$TMPDIR/lam100/model.safetensors" \
@@ -237,10 +237,10 @@ python3 solution/tools/summarize_gpu_eval.py \
 # **素の重みを別名で確保してから。** install_weights.py は .bak を上書きする
 cp -r work/artifacts/model_weights.bak work/artifacts/model_weights_base
 
-work/venv310/bin/python solution/tools/install_weights.py \
+work/venv310/bin/python solution/tools/weights/install_weights.py \
     work/artifacts/model_weights_lam025 --destination work/artifacts/model_weights
-work/venv310/bin/python solution/tools/build_submission.py
-work/venv310/bin/python solution/tools/validate_submission.py --static
+work/venv310/bin/python solution/tools/build/build_submission.py
+work/venv310/bin/python validate_submission.py --static
 ```
 
 > **`.py` を 1 行も変えないなら、リハーサルの枠は要らない。**
@@ -344,7 +344,7 @@ cd /workspace && /opt/subvenv/bin/python validate_submission.py /sub/submission.
 環境をまたいだときは、内容が一致しているかを確認する。
 
 ```bash
-work/venv310/bin/python solution/tools/digest_submission.py --per-entry
+work/venv310/bin/python solution/tools/build/digest_submission.py --per-entry
 ```
 
 ## 既知のハッシュ

@@ -8,7 +8,7 @@
 #
 # 学習後の重みと比べるときに使う。
 #
-#   bash solution/tools/fetch_base_weights.sh
+#   bash solution/tools/build/fetch_base_weights.sh
 #   WEIGHTS=work/artifacts/model_weights_base LABEL=base \
 #       bash solution/tools/run_docker_eval.sh --detach
 #
@@ -20,7 +20,7 @@
 #   - work/artifacts/model_weights_base/**（約 869 MB）
 set -euo pipefail
 
-REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 OUTPUT="${OUTPUT:-$REPOSITORY_ROOT/work/artifacts/model_weights_base}"
 IMAGE="${IMAGE:-parc2026-train}"
 

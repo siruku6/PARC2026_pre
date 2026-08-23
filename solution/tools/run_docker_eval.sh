@@ -131,7 +131,7 @@ WEIGHTS="$(cd "$WEIGHTS" 2>/dev/null && pwd || echo "$WEIGHTS")"
 if [ ! -f "$WEIGHTS/model.safetensors" ]; then
     echo "エラー: 重みが無い: $WEIGHTS/model.safetensors" >&2
     echo "  素の重み（0.1409 の構成）を測るなら、先に取り寄せること:" >&2
-    echo "    bash solution/tools/fetch_base_weights.sh" >&2
+    echo "    bash solution/tools/build/fetch_base_weights.sh" >&2
     exit 1
 fi
 if [ ! -d "$WEIGHTS/vlm" ]; then

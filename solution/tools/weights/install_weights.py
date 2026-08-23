@@ -17,8 +17,8 @@
 
 実行はどのディレクトリからでもよい。
 
-    python solution/tools/install_weights.py ~/Downloads/merged_model
-    python solution/tools/install_weights.py ~/Downloads/merged_model --dry-run
+    python solution/tools/weights/install_weights.py ~/Downloads/merged_model
+    python solution/tools/weights/install_weights.py ~/Downloads/merged_model --dry-run
 
 Reads:
   - <source>/**（マージ済みモデル）
@@ -35,8 +35,8 @@ import json
 import shutil
 from pathlib import Path
 
-# solution/tools/install_weights.py の 2 階層上がリポジトリルート。
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+# solution/tools/weights/install_weights.py の 3 階層上がリポジトリルート。
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_DESTINATION = _REPO_ROOT / "work" / "artifacts" / "model_weights"
 
 # マージ済みモデルに必ずあるべきファイル。1 つでも欠ければ取り込まない。
@@ -244,7 +244,7 @@ def main() -> None:
     total_bytes = sum(p.stat().st_size for p in destination.rglob("*") if p.is_file())
     print(f"[install] 退避     {backup}")
     print(f"[install] 完了     {total_bytes / 1e6:.0f} MB")
-    print("[install] 次に: python solution/tools/build_submission.py")
+    print("[install] 次に: python solution/tools/build/build_submission.py")
 
 
 if __name__ == "__main__":

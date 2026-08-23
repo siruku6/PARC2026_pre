@@ -15,7 +15,7 @@
 グリッパの開閉が 20 回を超える回が 13% から 27% へ増えていた。**
 λ を下げるとこの荒れも同じ割合で薄まる。
 
-    python3 solution/tools/blend_weights.py --lam 0.25 \\
+    python3 solution/tools/weights/blend_weights.py --lam 0.25 \\
         --base      work/artifacts/model_weights.bak \\
         --finetuned work/artifacts/model_weights \\
         --output    work/artifacts/model_weights_lam025
@@ -23,7 +23,7 @@
 **λ=0.0 が素の重みと、λ=1.0 が学習後と 1 バイトも違わないことを必ず確かめる。**
 BF16 の丸めを間違えると、静かに壊れた重みが出てくる。
 
-    python3 solution/tools/blend_weights.py --lam 1.0 ... --output /tmp/lam100
+    python3 solution/tools/weights/blend_weights.py --lam 1.0 ... --output /tmp/lam100
     shasum -a 256 /tmp/lam100/model.safetensors <学習後>/model.safetensors
 
 Reads:
@@ -44,7 +44,7 @@ from pathlib import Path
 
 # numpy はこのリポジトリの venv に入っていないことがある。`work/pylibs` へ
 # 入れてある場合はそこから読む。**入っていなければ直し方を出して止める。**
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 _VENDORED_LIBS = _REPO_ROOT / "work" / "pylibs"
 if _VENDORED_LIBS.is_dir():
     sys.path.insert(0, str(_VENDORED_LIBS))
@@ -317,7 +317,7 @@ def main() -> None:
             "**1 つも変わっていない。** 2 つの重みが同じか、混ぜ方が壊れている"
         )
     print(f"[blend] 完了 {total_bytes / 1e6:.0f} MB")
-    print("[blend] 次に: solution/tools/install_weights.py で取り込む")
+    print("[blend] 次に: solution/tools/weights/install_weights.py で取り込む")
 
 
 if __name__ == "__main__":

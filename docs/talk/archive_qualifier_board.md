@@ -206,7 +206,7 @@
 | **29** | **評価を「摂動カテゴリを絞って」流せるようにしてほしい。** `solution/tools/make_validation_suite.py` には `--categories` が**既にある**（既定は 7 カテゴリ）。**足りないのは、評価の起動からそこへ値を渡す道である。** `PER_CELL` と同じ流儀で `CATEGORIES` を通す —— `run_docker_eval.sh`（既定値 ＋ `docker run -e`）と `docker_eval_inside.sh`（既定値 ＋ `--categories` へ渡す）の **3 か所**。**空なら今と同じ 84 件**になること。`"Light Conditions" "Background Textures"` のように**空白を含む名前が 2 つ以上**渡るので、そこを取り違えないこと。確認は `bash -n` と、**生成器を直接叩いて 24 行になること**まで |
 | ~~32~~ | **済み**（8/12）。**結果** [reference/09](../reference/09_model_explained.md)。**次に頼むことがあるなら「説明を書く」ではなく「回が決まったあとのステップ数・バッチを埋める」ほうである**（末尾の貼り付け用 4 段落に `<>` の空欄が 2 つある。32 の節） |
 | ~~31~~ | **済み**（8/12）。**結果** [reference/08](../reference/08_appearance_spread.md)／**道具** [measure_appearance.py](../../solution/tools/measure_appearance.py)。**撮り直すときに頼むのは「測る」ではなく「偏りの無い画像を用意する」ほうである**（A か B。31 の節） |
-| **27** | **`solution/tools/blend_weights.py` を新規に作ってほしい。** 素の重みと追加学習後の重み、係数 λ を受け取り、`θ = (1−λ)·θ素 + λ·θ学習後` を計算して `merged_model` と同じ体裁で書き出す。**テンソルの構成が両者で一致することを先に確かめて、違えば止める。** `solution/tools/install_weights.py` の `_read_safetensors_keys` が参考になる（同じ流儀で書く）。**測るのはこちらでやるので、評価は不要** |
+| **27** | **`solution/tools/weights/blend_weights.py` を新規に作ってほしい。** 素の重みと追加学習後の重み、係数 λ を受け取り、`θ = (1−λ)·θ素 + λ·θ学習後` を計算して `merged_model` と同じ体裁で書き出す。**テンソルの構成が両者で一致することを先に確かめて、違えば止める。** `solution/tools/weights/install_weights.py` の `_read_safetensors_keys` が参考になる（同じ流儀で書く）。**測るのはこちらでやるので、評価は不要** |
 | **10 → 11** | **「LIBERO-plus の見た目の摂動に強くする手」を調べて `docs/talk/03_survey.md` に並べてほしい。** 情報源は LIBERO / LIBERO-plus の論文とリーダーボード、SmolVLA の issue と議論、似た設定の Kaggle の解法。**残り 3 日・GPU 1 台（学習 1 本 4 時間）で試せるかを、手ごとに書くこと。** 試せないものも消さずに「試せない」と書く |
 
 ### 残り 3 日の日割り — GPU は 1 台。学習と評価が同じ枠を取り合う
@@ -724,7 +724,7 @@ rm -rf work/artifacts/model_weights_lora20k.bak  # GPU マシンで。900 MB
 | 項目 | 結論 |
 |---|---|
 | **GPU マシンで追加学習を回す** | **8/11 に完了した。** LoRA 20,000 ステップ。マージ・検証・zip 化まで通し、**4 回目として提出した**（版 1.0.0）。運営 Q&A No.36 の「独自の学習が必須」を満たした |
-| **マージが本当に効いたかを確かめる** | **[verify_merge.py](../../solution/tools/verify_merge.py) で確認した。** 素の重みと比べて 37 テンソルが変化（LoRA の対象 32）。**`merge.py` の検査は「LoRA が残っていないこと」しか見ないので、初期重みをそのまま出しても通る。** だから別に用意した |
+| **マージが本当に効いたかを確かめる** | **[verify_merge.py](../../solution/tools/weights/verify_merge.py) で確認した。** 素の重みと比べて 37 テンソルが変化（LoRA の対象 32）。**`merge.py` の検査は「LoRA が残っていないこと」しか見ないので、初期重みをそのまま出しても通る。** だから別に用意した |
 | **zip の中身が正しいか確かめる** | **8/11 に確認した。** 546 エントリ、重みのハッシュが `work/artifacts` と一致、`lora_` 0 個、`.py` 488 件の構文が通る、`validate_submission.py --static` が PASS。詳細は [05_実測結果.md](../strategy/05_実測結果.md) |
 | **最終提出の窓口を運営に確認する** | **聞いた。「準備中」との回答。** 現れるのを待つ。13 の組み立ては答えが出てから確定する |
 | **検証用スイートが 26 件で止まる** | **原因は 2 つとも潰した。** ① 1 タスクの例外がトラック全体を 0 点にしていた ② 物体が増える摂動の初期状態が別階層にあった。どちらも `patch_kit_for_variants.py` に入っている。→ notes 3 |

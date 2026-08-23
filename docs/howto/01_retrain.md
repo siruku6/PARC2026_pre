@@ -109,7 +109,7 @@ flowchart TD
 
 | ファイル | 役割 |
 |---|---|
-| [../../solution/tools/verify_merge.py](../../solution/tools/verify_merge.py) | **畳み込みが本当に効いたか**を初期重みと比べて確かめる（A-6） |
+| [../../solution/tools/weights/verify_merge.py](../../solution/tools/weights/verify_merge.py) | **畳み込みが本当に効いたか**を初期重みと比べて確かめる（A-6） |
 
 ## A-0. 前提を確かめる
 
@@ -683,7 +683,7 @@ docker run --rm -it \
 初期重みと 1 テンソルずつ比べる。
 
 ```bash
-python3 solution/tools/verify_merge.py work/train2/<run_name>/merged_model \
+python3 solution/tools/weights/verify_merge.py work/train2/<run_name>/merged_model \
     --base-model work/artifacts/model_weights_base
 ```
 
@@ -775,7 +775,7 @@ MUJOCO_GL=osmesa WEIGHTS=work/artifacts/model_weights_<label> LABEL=<label> \
 ### 提出物に載せるなら —— `install_weights.py` で取り込む
 
 ```bash
-work/venv310/bin/python solution/tools/install_weights.py \
+work/venv310/bin/python solution/tools/weights/install_weights.py \
     work/train2/<run_name>/merged_model --dry-run
 ```
 

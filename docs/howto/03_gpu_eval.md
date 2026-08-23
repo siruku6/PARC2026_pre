@@ -80,7 +80,7 @@ revision を固定して取り直せば同じものが手に入る。
 
 ```bash
 # 素の重み（0.1409 の構成）を取り寄せる。869 MB
-bash solution/tools/fetch_base_weights.sh
+bash solution/tools/build/fetch_base_weights.sh
 
 # 素の重みで評価する（36 件で約 1 時間）
 MUJOCO_GL=osmesa WEIGHTS=work/artifacts/model_weights_base LABEL=base \
