@@ -31,7 +31,7 @@
 #                  Dockerfile.pi05 の venv には入っているが、host 直の venv には
 #                  自分で入れないと無い）
 #   QUANT_SERVE_SCOPE  量子化する範囲。既定 vision_only。詳細は
-#                  solution/tools/quant_serve_common.py
+#                  solution/tools/quant/quant_serve_common.py
 #
 # Reads:
 #   - solution/policy_server.py, solution/tools/*.py
@@ -254,7 +254,7 @@ ln -sfn "$WEIGHTS" "$SERVE_DIR/model_weights"
 # 入っていない venv を指すと、実際に QUANT_SERVE_MODE を使ったときに import で
 # 落ちる——それは意図した「fail loudly」であり、ここでは黙って揃えたりしない。
 for _quant_tool in quant_serve_common.py quant_serve_bnb.py quant_serve_torchao.py; do
-    cp "$REPOSITORY_ROOT/solution/tools/$_quant_tool" "$SERVE_DIR/"
+    cp "$REPOSITORY_ROOT/solution/tools/quant/$_quant_tool" "$SERVE_DIR/"
 done
 
 SERVER_LOG="$OUTPUT_DIR/server.log"

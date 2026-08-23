@@ -35,7 +35,7 @@
 # 追記され、PROGRESS.md にも追記する。
 set -u
 
-REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPOSITORY_ROOT"
 
 SWEEP_DIR="work/quant_sweep"

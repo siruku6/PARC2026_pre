@@ -28,7 +28,7 @@
 #   MAX_SWEEP_HOURS   壁時計の強制終了までの時間（既定 24）
 set -u
 
-REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPOSITORY_ROOT"
 
 SWEEP_DIR="work/quant_sweep"

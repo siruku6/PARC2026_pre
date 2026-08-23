@@ -40,7 +40,7 @@
 #                  gemma_expert とパリゲンマ言語側も対象に含める
 #                  （modeling_pi05.py の compute_layer_complete の
 #                  dtype 分岐に当たる、壊れるかどうか込みで試す経路。
-#                  詳細は solution/tools/quant_serve_common.py）
+#                  詳細は solution/tools/quant/quant_serve_common.py）
 #
 # Reads:
 #   - solution/policy_server.py, solution/tools/*.py
@@ -191,7 +191,7 @@ cp "$REPOSITORY_ROOT/solution/policy_server.py" "$SERVE_DIR/"
 # する——未 import なので無害だが、ここを条件分岐にすると
 # 「今回だけ古い版を見ている」を後から見分けられなくなる。
 for _quant_tool in quant_serve_common.py quant_serve_bnb.py quant_serve_torchao.py; do
-    cp "$REPOSITORY_ROOT/solution/tools/$_quant_tool" "$SERVE_DIR/"
+    cp "$REPOSITORY_ROOT/solution/tools/quant/$_quant_tool" "$SERVE_DIR/"
 done
 
 # ---------------------------------------------------------------- 2. 後片付け

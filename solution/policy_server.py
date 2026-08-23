@@ -697,7 +697,7 @@ class MyPolicy(BasePolicy):
         # 1 バイトも変わらない。C1〜C3（学習時候補）と違い、こちらは
         # **すでにフル精度で読み終えた重みに後掛けする**（再学習が要らない）。
         #
-        # 実体は solution/tools/quant_serve_bnb.py / quant_serve_torchao.py。
+        # 実体は solution/tools/quant/quant_serve_bnb.py / quant_serve_torchao.py。
         # ロジックをここへ埋め込まず薄い分岐だけにしてあるのは、
         # solution/train/lerobot_train_with_quant.py（C1〜C3 側の分岐）と
         # 同じ流儀に揃えるため。

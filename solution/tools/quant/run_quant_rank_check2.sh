@@ -39,7 +39,7 @@
 # 3本（+おまけ1本）×約65〜70分 ＝ 約3.5〜5時間の見込み。
 set -u
 
-REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPOSITORY_ROOT"
 
 SWEEP_DIR="work/quant_sweep"

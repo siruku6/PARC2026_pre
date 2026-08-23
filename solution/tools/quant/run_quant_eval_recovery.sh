@@ -17,7 +17,7 @@
 # 重みファイルが無い候補（学習がまだ終わっていない等）は自動的に飛ばす。
 set -u
 
-REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPOSITORY_ROOT"
 
 SWEEP_DIR="work/quant_sweep"
