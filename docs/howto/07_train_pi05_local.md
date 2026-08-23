@@ -319,7 +319,7 @@ docker run --rm -it --memory=13g --cpus=1 \
     parc2026-train-pi05 \
     python /repo/solution/tools/viz/replay_pi05_on_dataset.py \
         /repo/work/train/pi05_full_local_old/checkpoints/000500/pretrained_model \
-        --task "pick up the black bowl" --output /repo/work/replay
+        --task "pick up the black bowl" --output /repo/work/logs/replay
 ```
 
 - **ピークは12.25GBだった**(500 ステップのチェックポイント・`--load-mode lowmem`)。
@@ -342,7 +342,7 @@ docker run --rm -it --memory=13g --cpus=1 \
 ### 500 ステップの時点で見えたこと(2026-08-13 23:48 実測)
 
 エピソード2(`pick up the black bowl in the top drawer...`)・`--mode chunk`。
-**本番が使う先頭10 ステップ**での値である(`work/replay/replay_ep2_chunk.csv`)。
+**本番が使う先頭10 ステップ**での値である(`work/logs/replay/replay_ep2_chunk.csv`)。
 
 | 見たもの | 値 | 読み |
 |---|---|---|

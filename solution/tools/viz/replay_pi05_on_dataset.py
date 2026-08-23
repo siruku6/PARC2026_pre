@@ -37,7 +37,7 @@ GPU が空いてから `stream` に進むのが安い。
         parc2026-train-pi05 \\
         python /repo/solution/tools/viz/replay_pi05_on_dataset.py \\
             /repo/work/train/pi05_full_local_old/checkpoints/000500/pretrained_model \\
-            --task "pick up the black bowl" --output /repo/work/replay
+            --task "pick up the black bowl" --output /repo/work/logs/replay
 
     # 素の LIBERO（lerobot/libero）で見る。**カメラの列名が違う**
     ... --dataset-root /hf_home/lerobot/lerobot/libero --dataset-cameras image,image2
