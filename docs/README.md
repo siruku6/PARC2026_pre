@@ -14,6 +14,7 @@
 | **次のコンペに持ち越すこと** | [talk/lessons_learned.md](talk/lessons_learned.md) |
 | **レポートに書く値** | [reference/03_report_values.md](reference/03_report_values.md) |
 | **どの重みがどの版で、中身は何か** | **[reference/19_weights_catalog.md](reference/19_weights_catalog.md)** |
+| **今使える計算資源・docker image は何か** | **[resources/README.md](resources/README.md)** |
 
 ## ディレクトリ
 
@@ -24,6 +25,7 @@
 | [solution/](solution/) | 提出物と Colab の説明。コード本体は `../solution/` |
 | [strategy/](strategy/) | 何を狙うか、なぜそうするか。判断の材料 |
 | [reference/](reference/) | 調べて分かった事実（モデル・評価データ・出題元のデータ・設定の意味） |
+| [resources/](resources/) | **今使える** インフラ・docker image の一覧。状態が変わるたびに上書きする（履歴は残さない） |
 | [plan/](plan/) | **1 つずつの手の設計。** 何を測り、出た数字で何を決めるか |
 | [prod_eval_results/](../outputs/prod_eval_results/) | 本番採点の生ログと読み解き |
 
