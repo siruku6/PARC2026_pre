@@ -5,7 +5,7 @@
 # （描画はどちらのマシンでも CPU＝osmesa。GPU マシンの vGPU は OpenGL 非対応）。
 #
 #     cd <リポジトリ>
-#     PARALLEL=6 bash solution/tools/record_tier2_robot_init.sh
+#     PARALLEL=6 bash solution/tools/scripted_demo/record_tier2_robot_init.sh
 #
 # **`PARALLEL` はコア数を超えないこと。** 1 本が 1.25 GB 使うので、メモリからも
 # 上限が決まる（2 コア 9.69 GB で 8 並列にして OOM で 1 本消えた前例がある）。
@@ -13,15 +13,15 @@
 #     docker info --format 'CPUs={{.NCPU}}'
 #
 # 撮り終わったら、**同じ Mac で LeRobot 形式へ変換してから運ぶ**。
-# npz のままだと 22 GB、変換後は約 360 MB で 62 分の 1 になる。
+# npz のままだと 26 GB、変換後は約 390 MB で 67 分の 1 になる。
 #     docker run --rm -v "$PWD/solution/tools:/host/tools:ro" \
 #         -v "$PWD/work/scripted:/data" \
-#         parc2026-train python /host/tools/npz_to_lerobot.py build \
+#         parc2026-train python /host/tools/scripted_demo/npz_to_lerobot.py build \
 #         --npz-dir /data/tier2_robot_init --output /data/tier2_lerobot \
 #         --repo-id local/tier2_robot_init
 set -u
 
-REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPOSITORY_ROOT"
 
 PARALLEL="${PARALLEL:-1}"
@@ -43,11 +43,20 @@ DISTURB_EPISODES="${DISTURB_EPISODES:-9,10,11,12,13,14,15,16,17,18,19,20,21,22,2
 
 # **学習用の変種。検証用とは排他にしてある**（08 の 2.8 節：分けないと
 # 「未知ドメインへの汎化」ではなく「見た条件を再現できたか」を測ることになる）。
-# 難易度がばらけるように選んだ。**検証用に SCENE3 は 38 変種・SCENE8 は 28 変種残る。**
+# **検証用に SCENE3 は 38 変種・SCENE8 は 28 変種残る。**
+#
+# **選び方を 2026-08-23 に差し替えた。** 最初は難易度ラベル
+# （`benchmark/task_classification.json` の `difficulty_level`）がばらけるように
+# 選んだが、**そのラベルは台本が通るかどうかを予測しない**と実測で分かった
+# （難易度 1 の initstate_113 が 9 回中 1 回しか成功せず、難易度 5 の
+# initstate_139 が 9 回中 6 回成功した）。
+# いまの 12 変種は、**用意されている 78 変種すべてを妨害なしで 3 回ずつ試し、
+# 3 回とも成功した 30 変種**（タスクごとに 15）から、難易度がばらけるように
+# 選んだものである（12_tier2_recording_spec.md の 4 節に実測値）。
 SCENE3="KITCHEN_SCENE3_turn_on_the_stove_and_put_the_moka_pot_on_it"
 SCENE8="KITCHEN_SCENE8_put_both_moka_pots_on_the_stove"
-SCENE3_VARIANTS="113 13 103 133 123 293"
-SCENE8_VARIANTS="109 169 149 159 229 139"
+SCENE3_VARIANTS="13 83 3 133 123 433"
+SCENE8_VARIANTS="109 169 159 289 419 139"
 
 jobs_file="$(mktemp)"
 for pair in "$SCENE3:$SCENE3_VARIANTS" "$SCENE8:$SCENE8_VARIANTS"; do
@@ -73,7 +82,7 @@ run_one() {
         -e MUJOCO_GL=osmesa -e LP_NUM_THREADS=1 -e OMP_NUM_THREADS=1 \
         -v "$PWD/solution/tools:/host/tools:ro" \
         -v "$PWD/work/scripted:/out" \
-        parc2026 python /host/tools/scripted_demo.py record \
+        parc2026 python /host/tools/scripted_demo/scripted_demo.py record \
         --task "$task" --variant "$variant" \
         --output "$OUTPUT_DIR" "${flags[@]}"
 }

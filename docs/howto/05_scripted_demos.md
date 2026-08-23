@@ -88,7 +88,7 @@ docker run --rm \
     -e MUJOCO_GL=osmesa \
     -v "$PWD/solution/tools:/host/tools:ro" \
     -v "$PWD/work/scripted:/out" \
-    parc2026 python /host/tools/scripted_demo.py record \
+    parc2026 python /host/tools/scripted_demo/scripted_demo.py record \
     --task KITCHEN_SCENE8_put_both_moka_pots_on_the_stove \
     --episodes 0 --output /out/base
 
@@ -141,7 +141,7 @@ for i in $(seq 0 $((N-1))); do
         -e MUJOCO_GL=osmesa -e LP_NUM_THREADS=1 -e OMP_NUM_THREADS=1 \
         -v "$PWD/solution/tools:/host/tools:ro" \
         -v "$PWD/work/scripted:/out" \
-        parc2026 python /host/tools/scripted_demo.py record \
+        parc2026 python /host/tools/scripted_demo/scripted_demo.py record \
         --task KITCHEN_SCENE8_put_both_moka_pots_on_the_stove \
         --episodes "$eps" --output /out/base
 done
@@ -173,7 +173,7 @@ docker logs -f rec0
 
 ```bash
 docker run --rm -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/data" \
-    parc2026 python /host/tools/npz_to_lerobot.py check --npz-dir /data/base
+    parc2026 python /host/tools/scripted_demo/npz_to_lerobot.py check --npz-dir /data/base
 ```
 
 混ぜる相手の宣言と突き合わせるなら `--against <libero_plus の meta/info.json>` を足す。
@@ -190,7 +190,7 @@ docker run --rm -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/
 ```bash
 docker run --rm \
     -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/data" \
-    parc2026-train python /host/tools/npz_to_lerobot.py build \
+    parc2026-train python /host/tools/scripted_demo/npz_to_lerobot.py build \
     --npz-dir /data/base --output /data/lerobot --repo-id local/scripted_moka
 ```
 
@@ -204,7 +204,7 @@ docker run --rm \
 ```bash
 docker run --rm \
     -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/data" \
-    parc2026-train python /host/tools/npz_to_lerobot.py inspect \
+    parc2026-train python /host/tools/scripted_demo/npz_to_lerobot.py inspect \
     --root /data/lerobot --repo-id local/scripted_moka
 ```
 
@@ -375,7 +375,7 @@ df -h .                                                   # 17 GB 以上空い�
 docker run --rm \
     -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/data" \
     -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
-    parc2026-train python /host/tools/npz_to_lerobot.py align \
+    parc2026-train python /host/tools/scripted_demo/npz_to_lerobot.py align \
     --base /root/.cache/huggingface/lerobot/lerobot/libero_plus \
     --add /data/lerobot
 ```
@@ -395,7 +395,7 @@ rm -rf work/merged
 docker run --rm \
     -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work:/work" \
     -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
-    parc2026-train python /host/tools/npz_to_lerobot.py merge \
+    parc2026-train python /host/tools/scripted_demo/npz_to_lerobot.py merge \
     --base /root/.cache/huggingface/lerobot/lerobot/libero_plus \
     --add /work/scripted/lerobot --add-repo-id local/scripted_moka \
     --output /work/merged
@@ -547,4 +547,4 @@ GPU マシンで撮る場合は `nproc` から測り直すこと。
 | `docker stats` の CPU% が上限に届かない／BLOCK I/O が数十 GB | **並べすぎで swap を叩いている。** `N` を下げる |
 | コンテナが消える（`Status` が 137） | OOM で殺された。**`N` × 1.25 GB が実装メモリに収まるか**を確かめる |
 | 出力を消せない | root で書かれている。上の `chown` を回す |
-| `ModuleNotFoundError: scripted_demo` | 標準入力から流し込むと `__file__` が使えない。`PYTHONPATH` に道具の置き場を入れる |
+| `ModuleNotFoundError: scripted_demo` | 標準入力から流し込むと `__file__` が使えない。`PYTHONPATH=<リポジトリ>/solution/tools/scripted_demo` を付けて実行する |

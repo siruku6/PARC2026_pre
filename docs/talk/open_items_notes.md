@@ -1021,7 +1021,7 @@ python3 solution/tools/summarize_rollout_videos.py work/smoke/videos
 | メモリの山 | 31 MB（300 ステップ・2 カメラ） |
 | 84 件を全部撮った場合 | 90 分に **+2.9 分** |
 
-**検査したこと。** 前任の [visualize_actions.py](../../solution/tools/visualize_actions.py) は
+**検査したこと。** 前任の [visualize_actions.py](../../solution/tools/viz/visualize_actions.py) は
 一度も走らせずに置かれていたので、同じことを繰り返さないようにした。
 
 | 確かめたこと | 結果 |

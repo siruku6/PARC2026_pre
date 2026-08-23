@@ -29,7 +29,7 @@ the stove` だけである。** 残りは「多くが超えている」だけで
 
 > **出典。** `outputs/tmp/libero_plus_episodes.parquet`（`lerobot/libero_plus` の
 > `meta/episodes` そのもの）の `length` 列と `tasks` 列。数え直す手順は
-> [scripted_demo.py](../../solution/tools/scripted_demo.py) の冒頭にある。
+> [scripted_demo.py](../../solution/tools/scripted_demo/scripted_demo.py) の冒頭にある。
 
 ## 自分で作った手本を学習に使ってよい
 
@@ -86,8 +86,8 @@ flowchart LR
 
 | 道具 | 何をするか |
 |---|---|
-| [scripted_demo.py](../../solution/tools/scripted_demo.py) | `measure` 寸法を測る / `verify` 通るか数える / `record` 学習データに書き出す |
-| [visualize_demo.py](../../solution/tools/visualize_demo.py) | 元の手本と作った軌道を左右に並べた mp4 と 1 枚絵を作る |
+| [scripted_demo.py](../../solution/tools/scripted_demo/scripted_demo.py) | `measure` 寸法を測る / `verify` 通るか数える / `record` 学習データに書き出す |
+| [visualize_demo.py](../../solution/tools/viz/visualize_demo.py) | 元の手本と作った軌道を左右に並べた mp4 と 1 枚絵を作る |
 
 ### 先に測る 3 つ
 

@@ -508,7 +508,7 @@ behavior cloning でも誤りが指数関数的に積み重なる事態を避け
 | 事実 | 出典 |
 |---|---|
 | Qiita 記事の全内容（データ構成・失敗切り分け・検証方法） | `docs/qiita_OpenVLA-OFT+.md`（2 次情報・他チームの体験談） |
-| 台本方策が成功軌道のみを作る設計であること・閉ループ制御であること | `solution/tools/scripted_demo.py`（[07_track2_preparation.md](07_track2_preparation.md) 2.1 節で既読） |
+| 台本方策が成功軌道のみを作る設計であること・閉ループ制御であること | `solution/tools/scripted_demo/scripted_demo.py`（[07_track2_preparation.md](07_track2_preparation.md) 2.1 節で既読） |
 | 松尾研講義第6回の補足内容（2節） | `docs/第6回 講義資料.pdf` p42-61・p77・p80（`pypdf` でテキスト抽出し実際に読んだ。ページ番号は本文中に明記） |
 | DAgger・covariate shift（3.1節） | Ross, Gordon, Bagnell 2011, arXiv:1011.0686（researcher エージェントが ar5iv で本文確認） |
 | DART・デモ収集時のノイズ注入（3.2節） | Laskey et al. 2017, arXiv:1703.09327, CoRL 2017（同上、本文確認） |

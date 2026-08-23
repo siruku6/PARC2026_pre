@@ -6,16 +6,16 @@
 作った軌道はそれが無い。**並べて初めて、削れたステップ数の中身が見える。**
 
 左が元の手本（`lerobot/libero_plus` の実フレーム）、右が台本で作った軌道
-（[scripted_demo.py](scripted_demo.py) の `record` が書いた npz）である。
+（[scripted_demo.py](../scripted_demo/scripted_demo.py) の `record` が書いた npz）である。
 **どちらも 180 度回した向き**で、学習時にモデルへ入るのと同じ絵になる。
 
     # 1. 台本の軌道を書き出す（先にこちらを済ませる）
-    MUJOCO_GL=egl python3 solution/tools/scripted_demo.py record \\
+    MUJOCO_GL=egl python3 solution/tools/scripted_demo/scripted_demo.py record \\
         --task KITCHEN_SCENE8_put_both_moka_pots_on_the_stove \\
         --episodes 0 --output /out/scripted
 
     # 2. 並べて動画にする
-    python3 solution/tools/visualize_demo.py \\
+    python3 solution/tools/viz/visualize_demo.py \\
         --generated /out/scripted/KITCHEN_SCENE8_..._ep000.npz \\
         --task "put both moka pots on the stove" \\
         --episodes-parquet outputs/tmp/libero_plus_episodes.parquet \\
@@ -56,14 +56,15 @@ import numpy as np
 # （`docker exec -i ... python - <引数> < この file` の形）。その場合は
 # 道具の置き場を PYTHONPATH に入れて渡す。
 if Path(__file__).suffix == ".py":
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripted_demo"))
 try:
     from scripted_demo import SavedEpisode  # noqa: E402
 except ModuleNotFoundError as error:  # pragma: no cover - 起動の仕方の問題
     raise SystemExit(
         f"{error}\n  scripted_demo.py が import できない。"
-        "**道具の置き場を PYTHONPATH に入れて実行すること**\n"
-        "  例: PYTHONPATH=/path/to/solution/tools python - check ... < npz_to_lerobot.py"
+        "**書き手の置き場を PYTHONPATH に入れて実行すること**\n"
+        "  例: PYTHONPATH=/path/to/solution/tools/scripted_demo"
+        " python - check ... < npz_to_lerobot.py"
     ) from error
 
 # **学習に使った版に固定する。** `main` から取ると、上流が再アップロードした

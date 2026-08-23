@@ -196,7 +196,7 @@ docker run -d --gpus all --rm -it \
 
 ### 推論側は着手済み(2026-08-13 22:50時点)
 
-**`solution/tools/infer_pi05_once.py`(548行)がある**——学習途中の
+**`solution/tools/viz/infer_pi05_once.py`(548行)がある**——学習途中の
 チェックポイントで1手ぶんの行動が出るかを確かめる道具で、
 (1)チェックポイントをそのまま読めるか (2)カメラ名が`front`/`wrist`へ
 差し替わるか (3)ダミー観測から`(7,)`の有限な行動が出るか
@@ -214,7 +214,7 @@ docker run -d --gpus all --rm -it \
 
 | ファイル | 状態 |
 |---|---|
-| `solution/tools/infer_pi05_once.py` | **未追跡。** 上記の推論確認の道具 |
+| `solution/tools/viz/infer_pi05_once.py` | **未追跡。** 上記の推論確認の道具 |
 | `solution/train/prune_checkpoints.sh` | **未コミット**(117行追加)。`--once`・`--log`・`--dry-run`・`flock`を足した版。**[docs/howto/07](../howto/07_train_pi05_local.md)がこの版を前提に書かれており、cronもこの版を呼んでいる**ので、入れ忘れると説明と実物がずれる |
 | `compe/val/KNOB_TASKS.csv` | 未追跡。従来どおり意図的に外している |
 

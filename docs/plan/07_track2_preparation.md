@@ -262,7 +262,7 @@ Tier 0 が**既存の台本を書き換えずに（action にノイズを足す�
 ### 2.1 データを作成する手法と、実現可能性
 
 自チームの手元には Track1 対応で作った **台本方策（scripted policy）による撮影パイプライン**
-が既にある（[05_scripted_demos.md](../howto/05_scripted_demos.md)）。`solution/tools/scripted_demo.py`
+が既にある（[05_scripted_demos.md](../howto/05_scripted_demos.md)）。`solution/tools/scripted_demo/scripted_demo.py`
 を読むと、この台本は各ステップで `obs["<object>_pos"]` などの**実測の物体位置・EE位置から
 目標への差分**を計算して行動を出している（`follow()` の
 `delta = targets[index] - self.eef_position`）。**つまり新しい観測を見ながらそのつど
@@ -556,7 +556,7 @@ Track2 の実出題がどの 4 カテゴリであっても（あるいは推測�
 | Track1 が 7 カテゴリ全部ではないこと | 運営 Q&A No.21（[05_perturbation_categories.md](../reference/05_perturbation_categories.md)） |
 | LIBERO-plus 論文の実験結果・mix-SFT の効果・後続研究 3 件 | arXiv:2510.13626／2511.18960／2511.18810／2511.15605（researcher エージェントが HTML 版を複数回取得。数値の食い違いは本文に明記） |
 | 視点・ノイズ・位置ロバスト性の広い文献（VISTA・RoboSplat・3D Diffuser Actor・CRT・StableVLA・RobustVLA・ADR・MimicGen・arXiv:2603.22876 等） | researcher エージェントによる Web 調査（1.3.3 節に確認度を明記。要旨止まりのものと本文確認済みのものを区別している） |
-| 台本方策が閉ループであること | `solution/tools/scripted_demo.py` の `follow()` 実装 |
+| 台本方策が閉ループであること | `solution/tools/scripted_demo/scripted_demo.py` の `follow()` 実装 |
 | 学習データが拡張を使っていないこと | `work/artifacts/model_weights.bak/train_config.json`（[02_appearance_and_data.md](02_appearance_and_data.md)で既確認） |
 | `make_task_suite.py` が任意のカテゴリで検証スイートを作れること | `solution/tools/make_task_suite.py` の `--categories` 引数を実行して確認 |
 | 講義第6回・第7回の知見 | `docs/第6回 講義資料.pdf`／`docs/第7回 講義資料part1.pdf` |

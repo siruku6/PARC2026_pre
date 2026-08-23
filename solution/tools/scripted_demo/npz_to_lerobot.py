@@ -11,12 +11,12 @@ lerobot が入っている側（Colab か学習用の venv）でこちらが行�
 `meta/` の中身がずれることがない。
 
     # 1. 作った分だけで 1 つのデータセットにする
-    python3 solution/tools/npz_to_lerobot.py build \\
+    python3 solution/tools/scripted_demo/npz_to_lerobot.py build \\
         --npz-dir outputs/scripted --output outputs/scripted_lerobot \\
         --repo-id local/scripted_moka
 
     # 2. 学習が読めるかを確かめる（**流す前にここで捕まえる**）
-    python3 solution/tools/npz_to_lerobot.py inspect \
+    python3 solution/tools/scripted_demo/npz_to_lerobot.py inspect \
         --root outputs/scripted_lerobot --repo-id local/scripted_moka
 
     # 3. 学習を回す（作った分だけ。**提出物にはならない**）
@@ -24,12 +24,12 @@ lerobot が入っている側（Colab か学習用の venv）でこちらが行�
         --dataset.root=outputs/scripted_lerobot ...
 
     # 4a. 混ぜる相手と列の書き方を揃える（**lerobot の版が違うと食い違う**）
-    python3 solution/tools/npz_to_lerobot.py align \\
+    python3 solution/tools/scripted_demo/npz_to_lerobot.py align \\
         --base ~/.cache/huggingface/lerobot/lerobot/libero_plus \\
         --add outputs/scripted_lerobot
 
     # 4b. 既存の学習データに混ぜる（提出候補を作るときはこちら）
-    python3 solution/tools/npz_to_lerobot.py merge \\
+    python3 solution/tools/scripted_demo/npz_to_lerobot.py merge \\
         --base ~/.cache/huggingface/lerobot/lerobot/libero_plus \\
         --add outputs/scripted_lerobot \\
         --output outputs/libero_plus_with_scripted
@@ -69,7 +69,8 @@ except ModuleNotFoundError as error:  # pragma: no cover - 起動の仕方の問
     raise SystemExit(
         f"{error}\n  scripted_demo.py が import できない。"
         "**道具の置き場を PYTHONPATH に入れて実行すること**\n"
-        "  例: PYTHONPATH=/path/to/solution/tools python - check ... < npz_to_lerobot.py"
+        "  例: PYTHONPATH=/path/to/solution/tools/scripted_demo"
+        " python - check ... < npz_to_lerobot.py"
     ) from error
 
 # `lerobot/libero_plus` の `meta/info.json` と同じ宣言にする。

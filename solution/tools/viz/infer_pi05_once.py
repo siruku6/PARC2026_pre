@@ -57,7 +57,7 @@
     docker run --rm -it --memory=12g --user "$(id -u):$(id -g)" \
         -v "$PWD:/repo" -v "$HOME/.cache/huggingface:/hf_home" \
         parc2026-train-pi05 \
-        python /repo/solution/tools/infer_pi05_once.py \
+        python /repo/solution/tools/viz/infer_pi05_once.py \
             /repo/work/train/pi05_full_local_old/checkpoints/000500/pretrained_model \
             --device cpu --steps 2
 
@@ -65,7 +65,7 @@
     docker run --rm -it --gpus all --user "$(id -u):$(id -g)" \
         -v "$PWD:/repo" -v "$HOME/.cache/huggingface:/hf_home" \
         parc2026-train-pi05 \
-        python /repo/solution/tools/infer_pi05_once.py \
+        python /repo/solution/tools/viz/infer_pi05_once.py \
             /repo/work/train/pi05_full_local_old/checkpoints/000500/pretrained_model
 
 `--steps` の既定は 12 で、**チェックポイントの `n_action_steps`（10）を必ず 1 度

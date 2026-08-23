@@ -102,7 +102,7 @@ python3 solution/tools/make_tier1_camera_variants.py \
 `--episodes` で調整する（`scripted_demo.py` の既存引数）。
 
 ```bash
-MUJOCO_GL=osmesa python3 solution/tools/scripted_demo.py record \
+MUJOCO_GL=osmesa python3 solution/tools/scripted_demo/scripted_demo.py record \
     --task KITCHEN_SCENE3_turn_on_the_stove_and_put_the_moka_pot_on_it \
     --variant KITCHEN_SCENE3_turn_on_the_stove_and_put_the_moka_pot_on_it_view_38_15_100_0_0_initstate_0 \
     --output outputs/scripted/tier1_camera

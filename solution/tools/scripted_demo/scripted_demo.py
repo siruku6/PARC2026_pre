@@ -17,15 +17,15 @@
 物体の位置から決め、腕をそこへ寄せる行動を1 ステップごとに計算する。
 
     # 1. 場面の寸法を測る（新しいタスクの台本を書く前に必ずやる）
-    python3 solution/tools/scripted_demo.py measure \\
+    python3 solution/tools/scripted_demo/scripted_demo.py measure \\
         --task KITCHEN_SCENE8_put_both_moka_pots_on_the_stove
 
     # 2. 初期配置すべてで通るか数える（描画しないので 1 本 2.4 秒）
-    python3 solution/tools/scripted_demo.py verify \\
+    python3 solution/tools/scripted_demo/scripted_demo.py verify \\
         --task KITCHEN_SCENE8_put_both_moka_pots_on_the_stove
 
     # 3. 学習データとして書き出す（描画するので 1 本 100 秒。**並列で回す**）
-    MUJOCO_GL=osmesa python3 solution/tools/scripted_demo.py record \\
+    MUJOCO_GL=osmesa python3 solution/tools/scripted_demo/scripted_demo.py record \\
         --task KITCHEN_SCENE8_put_both_moka_pots_on_the_stove \\
         --variant KITCHEN_SCENE8_put_both_moka_pots_on_the_stove_light_2 \\
         --episodes 0,1,2 --output /out/scripted/
@@ -35,7 +35,7 @@
     #    **σ は大きすぎると成功率が落ちて逆効果になる**ので、
     #    描画しない verify で振ってから決める（1 本 2.4 秒）。
     for sigma in 0 0.02 0.05 0.10; do
-      python3 solution/tools/scripted_demo.py verify \\
+      python3 solution/tools/scripted_demo/scripted_demo.py verify \\
         --task KITCHEN_SCENE8_put_both_moka_pots_on_the_stove \\
         --action-noise $sigma
     done

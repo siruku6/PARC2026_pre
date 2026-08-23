@@ -152,7 +152,7 @@ def main() -> None:
 
     print("\n[tier1-camera] 撮る例（1 行につき、既存の record と同じ手順）:")
     for row in rows:
-        print(f"[tier1-camera]   MUJOCO_GL=osmesa python3 solution/tools/scripted_demo.py "
+        print(f"[tier1-camera]   MUJOCO_GL=osmesa python3 solution/tools/scripted_demo/scripted_demo.py "
               f"record --task {row['task']} --variant {row['variant']} "
               f"--output outputs/scripted/tier1_camera")
 

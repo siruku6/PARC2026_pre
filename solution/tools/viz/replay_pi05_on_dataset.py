@@ -35,7 +35,7 @@ GPU が空いてから `stream` に進むのが安い。
         --user "$(id -u):$(id -g)" \\
         -v "$PWD:/repo" -v "$HOME/.cache/huggingface:/hf_home" \\
         parc2026-train-pi05 \\
-        python /repo/solution/tools/replay_pi05_on_dataset.py \\
+        python /repo/solution/tools/viz/replay_pi05_on_dataset.py \\
             /repo/work/train/pi05_full_local_old/checkpoints/000500/pretrained_model \\
             --task "pick up the black bowl" --output /repo/work/replay
 
