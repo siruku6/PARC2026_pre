@@ -1,7 +1,7 @@
 # Colab GPU で評価を回す
 
 **リポジトリから8ファイルを Colab へコピーし、セル3つを貼って呼び出すだけの手順である。**
-中身はすべて [solution/tools/colab_eval.py](../../solution/tools/colab_eval.py) にある。
+中身はすべて [solution/tools/colab/colab_eval.py](../../solution/tools/colab/colab_eval.py) にある。
 
 | 節 | 内容 |
 |---|---|
@@ -35,7 +35,7 @@ Track2 で使っている π0.5 は読み込むだけで約 18 GB 必要なの�
 
 ```bash
 cd /home/ubuntu/lab/PARC2026_pre
-python3 solution/tools/collect_colab_files.py \
+python3 solution/tools/colab/collect_colab_files.py \
     --val-tasks outputs/0811_101824_base_n5_ep1_max300/VAL_TASKS.csv
 open work/colab_upload
 ```
@@ -135,7 +135,7 @@ Drive への退避まで通る。前の関数が作ったものが無ければ�
 **Colab では EGL がソフトウェア実装に落ちて、例外も警告も出さずに 11 倍遅くなる。**
 `/usr/share/glvnd/egl_vendor.d/` に NVIDIA の登録が無いと、libglvnd は Mesa の
 ソフトウェア実装を掴み、`env.step` が 38.6 ms から 431.8 ms になる。
-`ce.prepare()` が `10_nvidia.json` を自分で書いて直す（`colab_eval.py` の 284〜330 行）。
+`ce.prepare()` が `10_nvidia.json` を自分で書いて直す（`colab_eval.py` の 325〜340 行）。
 
 **`run()` の最初の `[結果]` 行の時刻を見る。** 100〜130 秒なら想定どおり。
 200 秒を超えていたら止めて、`ce.prepare()` の EGL の出力を読み直す。
@@ -153,7 +153,7 @@ Drive への退避まで通る。前の関数が作ったものが無ければ�
 `require_package("av")` を呼ぶ。**提出物の環境には `datasets` が無いので分岐が飛ばされ、
 `av` は要らない。** 版を固定するのは、素で入れると 17 系になり
 `lerobot/datasets/pyav_utils.py` が使う `av.option` が消えていて `AttributeError` に
-なるため（`colab_eval.py` の 539〜542 行）。
+なるため（`colab_eval.py` の 535〜542 行）。
 
 それでも `av` 関連で落ちるときは、`pip uninstall -y datasets` で分岐そのものを
 通らなくする方が確実である。この評価では `datasets` を使わない。
@@ -187,8 +187,8 @@ Colab を使う理由は「GPU マシンが学習で埋まっているあいだ�
 
 | 知りたいこと | ファイル |
 |---|---|
-| 各関数が実際に何をしているか | [solution/tools/colab_eval.py](../../solution/tools/colab_eval.py) |
-| 変えられる設定の全部 | [solution/tools/colab_eval_config.py](../../solution/tools/colab_eval_config.py) |
+| 各関数が実際に何をしているか | [solution/tools/colab/colab_eval.py](../../solution/tools/colab/colab_eval.py) |
+| 変えられる設定の全部 | [solution/tools/colab/colab_eval_config.py](../../solution/tools/colab/colab_eval_config.py) |
 | 配布キットへのパッチの中身（`register.py` と `parse_obj_of_interest`） | [solution/tools/patch_kit_for_variants.py](../../solution/tools/patch_kit_for_variants.py) |
 | GPU マシンで評価を回す（放っておける） | [../howto/03_gpu_eval.md](../howto/03_gpu_eval.md) |
 | 実測値の一覧 | [../strategy/05_実測結果.md](../strategy/05_実測結果.md) |

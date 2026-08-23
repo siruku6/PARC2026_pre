@@ -1255,8 +1255,8 @@ LIBERO / LIBERO-plus のリーダーボードと論文、SmolVLA の issue と�
 
 | ファイル | 中身 |
 |---|---|
-| **`solution/tools/colab_eval.py`** | 手順 1〜9 の処理を関数にしたもの。**Colab に依存する部分だけ**を持つ |
-| **`solution/tools/colab_eval_config.py`** | **編集するのはここだけ。** 重みの場所・塊の数・設定値・録画 |
+| **`solution/tools/colab/colab_eval.py`** | 手順 1〜9 の処理を関数にしたもの。**Colab に依存する部分だけ**を持つ |
+| **`solution/tools/colab/colab_eval_config.py`** | **編集するのはここだけ。** 重みの場所・塊の数・設定値・録画 |
 
 **ノートブックはこうなる。**
 

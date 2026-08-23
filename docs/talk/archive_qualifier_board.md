@@ -441,8 +441,8 @@ python3 solution/tools/suite/instruction_targets.py --emit python   # 貼る形�
 ### ~~36. Colab のセルを py ファイルへ畳む~~ — **済み（8/12）**
 
 **貼るのは 4 行 ＋ 呼び出し 8 行になった。** 手順は
-[colab_eval.py](../../solution/tools/colab_eval.py) の関数で、編集するのは
-[colab_eval_config.py](../../solution/tools/colab_eval_config.py) だけである。
+[colab_eval.py](../../solution/tools/colab/colab_eval.py) の関数で、編集するのは
+[colab_eval_config.py](../../solution/tools/colab/colab_eval_config.py) だけである。
 **呼び出し方は [colab_eval/README.md](../solution/colab_eval/README.md) の「最短の道順」。**
 
 **畳んだことで、手順の順番に由来する事故が構造的に消えた**（notes の 36）。

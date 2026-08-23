@@ -11,7 +11,7 @@ Colab の評価ノートブックは、リポジトリの中の何ファイル�
 
 使い方::
 
-    python3 solution/tools/collect_colab_files.py
+    python3 solution/tools/colab/collect_colab_files.py
     open work/colab_upload          # Finder で開いて、中身を Colab へドラッグ
 
 Reads:
@@ -30,17 +30,17 @@ import shutil
 import sys
 from pathlib import Path
 
-_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 # (リポジトリ内の場所, Colab で何に使うか)
 _UPLOAD_FILES: tuple[tuple[str, str], ...] = (
     (
-        "solution/tools/colab_eval.py",
+        "solution/tools/colab/colab_eval.py",
         "**ノートブックが呼ぶ本体。**手順 1〜9 が関数になっている。"
         "セルに貼るのは import と 6 行の呼び出しだけ。",
     ),
     (
-        "solution/tools/colab_eval_config.py",
+        "solution/tools/colab/colab_eval_config.py",
         "**編集するのはこのファイルだけ。**重みの場所・塊の数・設定値・録画。"
         "書き換えたらこれだけ上げ直せば効く（colab_eval.py が毎回読み直す）。",
     ),
@@ -76,25 +76,27 @@ _READ_ME = """\
 このフォルダの中身をまとめて Colab の /content/ へドラッグする。
 
 作り直すには:
-    python3 solution/tools/collect_colab_files.py
+    python3 solution/tools/colab/collect_colab_files.py
 
 {descriptions}
 
-置いたあと、ノートブックに貼るのはこれだけ:
+置いたあと、ランタイムのタイプを GPU にしてから、貼るのはセル 3 つだけ:
 
+    # セル 1 —— 読み込む（ファイルを上げ直したときも、これを流し直すだけでよい）
     import importlib, sys
     sys.path.insert(0, "/content")
     import colab_eval as ce
-    importlib.reload(ce)          # 上げ直したときのため
+    importlib.reload(ce)
 
-    ce.prepare()                  # Drive・上がっているかの確認・EGL
+    # セル 2 —— 準備（上から順に。合わせて 15 分ほど）
+    ce.prepare()                  # Drive・7 ファイルが上がっているかの確認・GPU と EGL
     ce.setup_kit()                # clone・setup.sh・パッチ（5〜10 分）
     ce.prepare_weights()          # 重みを用意し、ハッシュで名指しする
     ce.setup_policy()             # 方策サーバーの依存と配置
     ce.build_suite()              # 検証用スイートへ差し替え、塊に割る
-    ce.run(chunk=1)               # 評価 → 集計 → Drive へ退避（51 分）
-    ce.run(chunk=2)
-    ce.run(chunk=3)
+
+    # セル 3 —— 評価（1 つ 28 件・約 51 分。数字を変えて 3 回実行する）
+    ce.run(chunk=1)
 
   - 疎通確認は ce.run(chunk=1, max_tasks=5)（5 分）。**戻し忘れが起きない。**
   - 途中で切れたら ce.status() で、どの塊が終わっているか分かる。

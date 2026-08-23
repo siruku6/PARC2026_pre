@@ -17,13 +17,13 @@
 | `requirements.txt` | 提出物の依存（確定版） |
 | `requirements-dev.txt` | ローカル検証用の依存。**提出物には使わない** |
 | `tools/build/vendor_lerobot.py` | LeRobot のソースを Python 3.10 で動く形へ書き換えて同梱する |
-| `tools/weights/install_weights.py` | Colab で追加学習したマージ済みモデルを取り込む |
+| `tools/weights/install_weights.py` | マージ済みモデルのディレクトリを渡して取り込む。`vlm/` は今の重みから引き継ぐ |
 | `tools/build/build_submission.py` | 提出用 zip を組み立て、検証し、sha256 を記録する |
 | `tools/build/digest_submission.py` | 提出物の内容ダイジェスト。環境間の同期確認に使う |
 | `tools/run_local_eval.sh` | 配布キットの評価パイプラインを提出物に対して回す（コンテナ内） |
 | `tools/make_validation_suite.py` | example 以外のタスクで評価するための一覧を作る（Colab へ上げる） |
 | `tools/check_validation_suite.py` | 上の一覧が本当に開けるかを、**評価を回す前に**確かめる |
-| `tools/collect_colab_files.py` | Colab へ上げるファイルを `work/colab_upload/` に集める |
+| `tools/colab/collect_colab_files.py` | Colab へ上げるファイルを `work/colab_upload/` に集める |
 | `tools/weights/verify_merge.py` | マージ済みモデルを初期重みと比べ、**学習が反映されたか**を確かめる |
 | `tools/run_docker_eval.sh` | **GPU マシンで検証用スイートを流す（Docker 2 つ）。** 放っておける |
 | `tools/docker_eval_inside.sh` | 上が評価側コンテナの中で走らせる本体 |
