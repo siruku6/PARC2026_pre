@@ -156,7 +156,7 @@ work/venv310/bin/python validate_submission.py --static
 | `PARC_NORMALIZE_INSTRUCTION` | 763 |
 
 **手元の評価だけなら書き換えは要らない。**7 つとも環境変数で上書きできるので、
-`PARC_NUM_INFERENCE_STEPS=20 bash solution/tools/run_docker_eval.sh …` で足りる。
+`PARC_NUM_INFERENCE_STEPS=20 bash solution/tools/eval/run_docker_eval.sh …` で足りる。
 **採点環境はこちらの環境変数を渡してくれないので、提出するときだけ既定値を直す。**
 
 **組み直した zip の sha256 は元と一致しない**（時刻が入る）。提出済みの版の

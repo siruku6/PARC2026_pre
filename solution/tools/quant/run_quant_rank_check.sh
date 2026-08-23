@@ -71,7 +71,7 @@ run_eval() {
         LABEL="rankcheck_${name}" MAX_STEPS=300 N_EPISODES=1 \
         POLICY_IMAGE="$POLICY_IMAGE" \
         QUANT_SERVE_MODE="$serve_mode" \
-        bash solution/tools/run_docker_eval.sh
+        bash solution/tools/eval/run_docker_eval.sh
     local status=$?
 
     if [ "$status" -ne 0 ]; then

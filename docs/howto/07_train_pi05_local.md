@@ -329,7 +329,7 @@ docker run --rm -it --memory=13g --cpus=1 \
 - **シミュレータは回さない。** 入力は常に学習データの実フレームなので、
   「その時点の判断が合っているか」だけが出る。誤差が積み上がって別の場所へ
   行く分は含まれない(ロールアウトの動画を撮るのは
-  [rollout_recorder.py](../../solution/tools/rollout_recorder.py)の役目で、
+  [rollout_recorder.py](../../solution/tools/eval/rollout_recorder.py)の役目で、
   そちらは評価コンテナとGPUが要る)
 - `--dry-run`を付けると方策を読まずに動画の配管だけ試せる(数秒)
 - **`--mode chunk`では、本番が実際に使う先頭10 ステップと、11 ステップ目以降(作り置きの外挿)を

@@ -20,7 +20,7 @@
 | 読む側 | 何に使うか |
 |---|---|
 | `solution/train/train.py --holdout-tasks` | 学習から外す |
-| `solution/tools/make_validation_suite.py --holdout` | 検証集合をここに限る |
+| `solution/tools/eval/make_validation_suite.py --holdout` | 検証集合をここに限る |
 
 Reads:
   - <libero-plus>/libero/libero/benchmark/task_classification.json

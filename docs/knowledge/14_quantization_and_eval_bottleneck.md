@@ -80,7 +80,7 @@ T4（7.5）と A100（8.0）は満たさない**）。**未試行である。**
 | 合計（2026-08-23の36件評価の実測） | 513 ms | 100% |
 
 **7〜8割は CPU での描画である。** このマシンの vGPU は `NVIDIA Virtual Compute Server`
-（計算専用で OpenGL 非対応）なので、`solution/tools/run_docker_eval.sh` は
+（計算専用で OpenGL 非対応）なので、`solution/tools/eval/run_docker_eval.sh` は
 `MUJOCO_GL` の既定を `osmesa`（CPU 描画）にせざるを得ない。`nproc` は 2 で、
 評価中の負荷は 1.95 ——2コアが埋まっている。
 
@@ -123,5 +123,5 @@ T4（7.5）と A100（8.0）は満たさない**）。**未試行である。**
 | float8 学習の高速化は 10〜25%、上限の主張が 1.25倍／小さい行列では1倍を下回る | torchao 公式 `https://docs.pytorch.org/ao/main/workflows/training.html`（同日取得） |
 | 推論1回の秒数の分離（T=291ms・S=449ms） | `work/gpu_eval/0814_091240` / `0814_113657` / `0814_145933` の `eval.log` |
 | serve 時 compile で推論 7.16 倍 | `work/quant_sweep/PROGRESS.md` の 2026-08-22 09:06 の節（`work/train/_bench/`） |
-| CPU 描画が既定である理由と描画の秒数 | `solution/tools/run_docker_eval.sh` の `kit_environment` のコメント |
+| CPU 描画が既定である理由と描画の秒数 | `solution/tools/eval/run_docker_eval.sh` の `kit_environment` のコメント |
 | Colab で EGL が効くと `env.step` が 431.8→38.6 ms | `docs/solution/colab_eval.md` |

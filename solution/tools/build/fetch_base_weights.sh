@@ -10,7 +10,7 @@
 #
 #   bash solution/tools/build/fetch_base_weights.sh
 #   WEIGHTS=work/artifacts/model_weights_base LABEL=base \
-#       bash solution/tools/run_docker_eval.sh --detach
+#       bash solution/tools/eval/run_docker_eval.sh --detach
 #
 # 環境変数
 #   OUTPUT  置き場所（既定 work/artifacts/model_weights_base）
@@ -102,4 +102,4 @@ echo "        sha256 $(sha256sum "$OUTPUT/model.safetensors" | cut -c1-32)"
 echo
 echo "これで測る:"
 echo "  WEIGHTS=$OUTPUT LABEL=base \\"
-echo "      bash solution/tools/run_docker_eval.sh --detach"
+echo "      bash solution/tools/eval/run_docker_eval.sh --detach"

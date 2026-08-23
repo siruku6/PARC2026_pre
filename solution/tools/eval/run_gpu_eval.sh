@@ -11,9 +11,9 @@
 # 配布 Dockerfile は CPU 描画（osmesa）で固定されており、**1 ステップ 300 ms** で
 # 84 件が 16 時間になる。EGL で GPU 描画にすれば 39 ms で済む。
 #
-#   bash solution/tools/run_gpu_eval.sh --check     # 5 分。配線だけ確かめる
-#   bash solution/tools/run_gpu_eval.sh            # 90 分。84 件を流す
-#   bash solution/tools/run_gpu_eval.sh --detach   # 同じものを裏で流して抜ける
+#   bash solution/tools/eval/run_gpu_eval.sh --check     # 5 分。配線だけ確かめる
+#   bash solution/tools/eval/run_gpu_eval.sh            # 90 分。84 件を流す
+#   bash solution/tools/eval/run_gpu_eval.sh --detach   # 同じものを裏で流して抜ける
 #
 # 環境変数（省略時の既定）
 #   POLICY_PYTHON  学習に使った venv の python。**GPU torch と LeRobot が要る**
@@ -38,9 +38,11 @@
 #   - work/artifacts/model_weights/**（提出物と同じ重み）
 # Generates:
 #   - work/gpu_eval/<日時>_<設定>/eval.log・server.log・*.json・videos/
+#     run_config.json … このスクリプトが渡した設定値（渡した値のみ。実際に
+#     採用された値は server.log の [parc] 行を見ること）
 set -euo pipefail
 
-REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPOSITORY_ROOT"
 
 KIT_DIR="${KIT_DIR:-$REPOSITORY_ROOT/work/eval-kit}"
@@ -182,7 +184,7 @@ PY
 
 echo
 echo "===== 3/6 検証用スイートを作る ====="
-RUN_TOOLS="$REPOSITORY_ROOT/solution/tools"
+RUN_TOOLS="$REPOSITORY_ROOT/solution/tools/eval"
 CSV="$KIT_DIR/compe/val/VAL_TASKS.csv"
 mkdir -p "$(dirname "$CSV")"
 
@@ -238,6 +240,30 @@ for name in PARC_N_ACTION_STEPS PARC_SAMPLES PARC_BLEND_STEPS PARC_EMA_ALPHA; do
         echo "  設定値: $name=$(eval "printf '%s' \"\$$name\"")"
     fi
 done
+
+# **このスクリプトが渡した設定値を、実行直後に記録として残す。**
+# ここに出るのは「渡した値」であり、空欄は policy_server.py 側の既定が効く。
+# 「実際に採用された値」は $SERVER_LOG の [parc] 行（起動後に別途出る）で見る。
+CONFIG_JSON="$OUTPUT_DIR/run_config.json"
+python3 - "$CONFIG_JSON" <<'PY'
+import json
+import os
+import sys
+
+keys = [
+    "KIT_DIR", "POLICY_PYTHON", "MAX_STEPS", "N_EPISODES", "PER_CELL", "RECORD", "PORT",
+    "PARC_N_ACTION_STEPS", "PARC_NUM_INFERENCE_STEPS", "PARC_BLEND_STEPS", "PARC_EMA_ALPHA",
+    "PARC_SAMPLES", "PARC_RTC", "PARC_RTC_HORIZON", "PARC_RTC_GUIDANCE",
+    "PARC_NORMALIZE_INSTRUCTION", "PARC_NORM_EMBED",
+    "QUANT_SERVE_MODE", "QUANT_SERVE_SCOPE",
+    "PARC_RECORD_DIR", "PARC_RECORD_WHICH", "PARC_RECORD_MAX", "PARC_RECORD_SCALE", "PARC_RECORD_FPS",
+]
+config = {key: os.environ.get(key) for key in keys}
+with open(sys.argv[1], "w") as f:
+    json.dump(config, f, indent=2, ensure_ascii=False, sort_keys=True)
+    f.write("\n")
+PY
+echo "  渡した設定値を書き出した: $CONFIG_JSON"
 
 # **`policy_server.py` は重みを自分の隣から読む**（`Path(__file__).parent /
 # "model_weights"`）。環境変数では動かせないので、提出物と同じ並びを作る。

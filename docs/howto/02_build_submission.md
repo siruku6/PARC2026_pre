@@ -218,7 +218,7 @@ shasum -a 256 "$TMPDIR/lam100/model.safetensors" \
 **素の重みの回と 1 件ずつ対にして比べる。**
 
 ```bash
-python3 solution/tools/summarize_gpu_eval.py \
+python3 solution/tools/eval/summarize_gpu_eval.py \
     --output-dir <混ぜた重みの出力先> --csv <その VAL_TASKS.csv> \
     --compare    <素の重みの出力先>
 ```

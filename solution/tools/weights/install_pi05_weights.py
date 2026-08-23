@@ -26,7 +26,7 @@
 
     WEIGHTS=$PWD/work/artifacts/model_weights_pi05_024000 LABEL=pi05_24k \\
     POLICY_IMAGE=parc2026-train-pi05 \\
-        bash solution/tools/run_docker_eval.sh --check
+        bash solution/tools/eval/run_docker_eval.sh --check
 
 Reads:
   - <checkpoint>/config.json, model.safetensors, policy_pre/postprocessor*
@@ -216,7 +216,7 @@ def main() -> None:
     print("  次はこれで評価に回す（**GPU が空いてから**）:")
     print(f"    WEIGHTS={destination} LABEL={destination.name.replace('model_weights_', '')} \\")
     print("    POLICY_IMAGE=parc2026-train-pi05 \\")
-    print("        bash solution/tools/run_docker_eval.sh --check")
+    print("        bash solution/tools/eval/run_docker_eval.sh --check")
 
 
 if __name__ == "__main__":

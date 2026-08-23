@@ -141,10 +141,10 @@ python -m pipeline --server-url http://localhost:8000 \
 ```bash
 # 素の重みで 8 本
 MUJOCO_GL=osmesa WEIGHTS=work/artifacts/model_weights_base LABEL=base_t1 \
-    bash solution/tools/run_docker_eval.sh --detach
+    bash solution/tools/eval/run_docker_eval.sh --detach
 # 終わってから、追加学習した重みで 8 本（**同時に流さない**）
 MUJOCO_GL=osmesa WEIGHTS=work/train/smolvla_lora_all_suites/merged_model \
-    LABEL=lora20k_t1 bash solution/tools/run_docker_eval.sh --detach
+    LABEL=lora20k_t1 bash solution/tools/eval/run_docker_eval.sh --detach
 ```
 
 > **`run_docker_eval.sh` は 84 件のスイートを作る作りになっている。**
@@ -276,7 +276,7 @@ python train.py --holdout-tasks compe/val/HOLDOUT_TASKS.csv
 ### 0-3. 検証集合を外したタスクだけにする
 
 ```bash
-python3 solution/tools/make_validation_suite.py \
+python3 solution/tools/eval/make_validation_suite.py \
     --libero-plus work/LIBERO-plus \
     --holdout compe/val/HOLDOUT_TASKS.csv \
     --categories 'Light Conditions' 'Background Textures'
@@ -318,7 +318,7 @@ python3 solution/tools/make_validation_suite.py \
 
 ```bash
 CATEGORIES='Light Conditions,Background Textures' \
-    bash solution/tools/run_docker_eval.sh --detach
+    bash solution/tools/eval/run_docker_eval.sh --detach
 ```
 
 24 件で **39 分**である（実測）。**8 本で差が小さすぎて判別できないときの

@@ -183,7 +183,7 @@ eval_candidate() {
         LABEL="quant_${name}" MAX_STEPS=300 N_EPISODES=1 \
         POLICY_IMAGE="$POLICY_IMAGE" \
         QUANT_SERVE_MODE="$serve_mode" QUANT_SERVE_SCOPE="$serve_scope" \
-        bash solution/tools/run_docker_eval.sh
+        bash solution/tools/eval/run_docker_eval.sh
     local status=$?
 
     if [ "$status" -ne 0 ]; then

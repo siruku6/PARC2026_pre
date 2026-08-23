@@ -15,7 +15,7 @@
         --count 8 --output compe/val/MOKA_TASKS.csv
 
     # 回す（1 件 2 分ほど）
-    EVAL_CSV=compe/val/MOKA_TASKS.csv bash solution/tools/run_docker_eval.sh --detach
+    EVAL_CSV=compe/val/MOKA_TASKS.csv bash solution/tools/eval/run_docker_eval.sh --detach
 
 **`make_validation_suite.py` は使えない。** あれは `libero` パッケージを
 import して初期状態のパスを組み立てるので、**手元（macOS）では動かない。**

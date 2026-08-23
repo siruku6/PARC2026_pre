@@ -8,7 +8,7 @@
 `pipeline.py` の `_errored_track_score` が `{"error": 1.0}` を書いて
 **正常終了する**ためである（2026-08-10 に 3 タスクで止まったのに気づけなかった）。
 
-    solution/tools/summarize_smoke_test.py --output-dir work/smoke --expected-tasks 5
+    solution/tools/eval/summarize_smoke_test.py --output-dir work/smoke --expected-tasks 5
 
 Reads:
   - <output-dir>/eval.log

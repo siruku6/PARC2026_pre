@@ -86,7 +86,7 @@ ls -d work/gpu_eval/*/ && ls work/gpu_eval/*lora*/summary.txt
 
 ```bash
 # GPU マシンで。stdlib だけで動く（numpy も torch も要らない）
-python3 solution/tools/summarize_gpu_eval.py \
+python3 solution/tools/eval/summarize_gpu_eval.py \
     --output-dir work/gpu_eval/<lora20k の分> \
     --compare    work/gpu_eval/0811_101824_base_n5_ep1_max300 \
     | tee work/gpu_eval/compare_base_vs_lora20k.txt
@@ -149,9 +149,9 @@ GPU マシンへ 900 MB を運ぶ必要も無い。
 bash solution/tools/build/fetch_base_weights.sh          # 素の重みを取り寄せる（869 MB）
 
 WEIGHTS=work/artifacts/model_weights_base LABEL=base \
-    bash solution/tools/run_docker_eval.sh --detach     # 素の重みで評価する
+    bash solution/tools/eval/run_docker_eval.sh --detach     # 素の重みで評価する
 
-LABEL=lora15k bash solution/tools/run_docker_eval.sh --detach   # 学習後の重みで評価する
+LABEL=lora15k bash solution/tools/eval/run_docker_eval.sh --detach   # 学習後の重みで評価する
 ```
 
 **手元にも 1 つある** — Mac の `work/artifacts/model_weights.bak/`。
@@ -226,7 +226,7 @@ LABEL=lora15k bash solution/tools/run_docker_eval.sh --detach   # 学習後の�
 **中身**を見る。録画は失敗した回だけ残っている。
 
 ```bash
-python3 solution/tools/summarize_rollout_videos.py \
+python3 solution/tools/eval/summarize_rollout_videos.py \
     outputs/0811_101824_base_n5_ep1_max300/videos
 ```
 
@@ -600,7 +600,7 @@ ls -l --time-style=+%H:%M:%S work/train/<run>/checkpoints/
 >
 #### 実装は半分できていた — **旗はあるが、評価から渡す道が無い（8/11 に確認）**
 
-**[make_validation_suite.py](../../solution/tools/make_validation_suite.py) には
+**[make_validation_suite.py](../../solution/tools/eval/make_validation_suite.py) には
 `--categories` が既にある**（既定は 7 カテゴリ全部。`_DEFAULT_CATEGORIES`）。
 **「旗を足すだけ」と書いていたが、旗はもうある。**
 
@@ -617,7 +617,7 @@ ls -l --time-style=+%H:%M:%S work/train/<run>/checkpoints/
 
 ```bash
 # 生成器だけを直接叩けば、いま確かめられる（24 行になる）
-python3 solution/tools/make_validation_suite.py --libero-plus work/LIBERO-plus \
+python3 solution/tools/eval/make_validation_suite.py --libero-plus work/LIBERO-plus \
     --categories "Light Conditions" "Background Textures" \
     --output /tmp/VAL_24.csv
 ```
@@ -706,7 +706,7 @@ ls work/train/smolvla_lora_all_suites/checkpoints/
 **到達率では 2 倍しか説明できない。残る 4.4 倍は動きの質の指標である。**
 
 > **「集計が jerk を出していない」と書いたのは誤りだった。**
-> [summarize_gpu_eval.py](../../solution/tools/summarize_gpu_eval.py) の
+> [summarize_gpu_eval.py](../../solution/tools/eval/summarize_gpu_eval.py) の
 > `_report_json` は最初から `mean_avg_cartesian_jerk` /
 > `mean_rms_cartesian_jerk` / `mean_sparc` を出している。
 > **読まずに「無い」と書いた。**
@@ -719,7 +719,7 @@ ls work/train/smolvla_lora_all_suites/checkpoints/
 | **出せなかった行を名指しする** | **行が無いのを「差が無い」と読み違えるのを防ぐ。** 滑らかさの行が消えるのがいちばん危ない |
 
 ```bash
-solution/tools/summarize_gpu_eval.py \
+solution/tools/eval/summarize_gpu_eval.py \
     --output-dir work/gpu_eval/0811_..._lora \
     --compare    work/gpu_eval/0811_..._base
 ```
@@ -898,8 +898,8 @@ python train.py --steps 1 --image-transforms -- \
 [03_gpu_eval.md](../howto/03_gpu_eval.md)。
 
 ```bash
-bash solution/tools/run_gpu_eval.sh --check    # 5 分。配線を確かめる
-bash solution/tools/run_gpu_eval.sh --detach   # 90 分。端末を閉じてよい
+bash solution/tools/eval/run_gpu_eval.sh --check    # 5 分。配線を確かめる
+bash solution/tools/eval/run_gpu_eval.sh --detach   # 90 分。端末を閉じてよい
 tail -f work/gpu_eval/launcher.log
 ```
 
@@ -980,8 +980,8 @@ tail -f work/gpu_eval/launcher.log
 ゴールに届いていない。**止まっているのか、往復しているのか、掴めずに
 空振りしているのか——成功率と衝突率では区別できない。**
 
-**採点ハーネス側に入れた。** [rollout_recorder.py](../../solution/tools/rollout_recorder.py) が本体で、
-[patch_kit_for_variants.py](../../solution/tools/patch_kit_for_variants.py) が
+**採点ハーネス側に入れた。** [rollout_recorder.py](../../solution/tools/eval/rollout_recorder.py) が本体で、
+[patch_kit_for_variants.py](../../solution/tools/eval/patch_kit_for_variants.py) が
 キットの `pipeline/rollout.py` へ差し込む。**提出物には一切手を入れていない。**
 
 > **提出物側に入れても意味が無い。** 採点環境が返すのは標準出力のログだけで、
@@ -995,7 +995,7 @@ tail -f work/gpu_eval/launcher.log
 環境変数を 1 つ渡す。
 
 ```bash
-PARC_RECORD_DIR=/out/videos bash solution/tools/run_local_eval.sh
+PARC_RECORD_DIR=/out/videos bash solution/tools/eval/run_local_eval.sh
 ```
 
 | 変数 | 既定 | 意味 |
@@ -1008,7 +1008,7 @@ PARC_RECORD_DIR=/out/videos bash solution/tools/run_local_eval.sh
 書き出さない。撮れたものは分類して並べる。
 
 ```bash
-python3 solution/tools/summarize_rollout_videos.py work/smoke/videos
+python3 solution/tools/eval/summarize_rollout_videos.py work/smoke/videos
 ```
 
 **打ち切りに張り付いた回が先頭に来て**、1 本ずつ 8 コマの静止画になる。
@@ -1063,7 +1063,7 @@ python3 solution/tools/summarize_rollout_videos.py work/smoke/videos
 録画の配線だけを数分で確かめるなら、重みを使わずに済む。
 
 ```bash
-RECORD=1 bash solution/tools/smoke_test_suite.sh   # 5 タスク・20 ステップ
+RECORD=1 bash solution/tools/eval/smoke_test_suite.sh   # 5 タスク・20 ステップ
 ```
 
 ---
@@ -1202,7 +1202,7 @@ RECORD=1 bash solution/tools/smoke_test_suite.sh   # 5 タスク・20 ステッ�
 
 > **判定は「直近の動き」で行う。** 総変位で見ると、
 > **前半で 0.31 m 動いてから 200 ステップ固まった回を見逃す**（8/11 に実際に見逃した）。
-> [rollout_recorder.py](../../solution/tools/rollout_recorder.py) に
+> [rollout_recorder.py](../../solution/tools/eval/rollout_recorder.py) に
 > **終盤 50 ステップの移動量**を入れて `固まった` を出せるようにした。
 > **いま走っている 84 件には入っていない**（pull 前だった）。次回から出る。
 

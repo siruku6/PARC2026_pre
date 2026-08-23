@@ -15,7 +15,7 @@ set -euo pipefail
 
 KIT="${KIT:-/workspace}"
 PY="${PY:-$KIT/venv/bin/python}"
-TOOLS_DIR="${TOOLS_DIR:-/host/tools}"
+TOOLS_DIR="${TOOLS_DIR:-/host/tools/eval}"
 OUT_DIR="${OUT_DIR:-/out}"
 SERVER_URL="${SERVER_URL:?SERVER_URL が要る}"
 TASKS="${TASKS:-0}"

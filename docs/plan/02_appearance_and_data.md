@@ -62,8 +62,8 @@ solution/tools/analysis/measure_appearance.py --csv compe/val/VAL_TASKS.csv \
 
 | 穴 | 対処 |
 |---|---|
-| 評価環境の生画像は**上下逆**（モデルへ渡す前に回す） | 統計は回した後で取る。[rollout_recorder.py](../../solution/tools/rollout_recorder.py) と同じ向きに揃える |
-| CPU 描画（osmesa）だと 1 枚 300ms | `MUJOCO_GL=egl` を要求する。[run_gpu_eval.sh](../../solution/tools/run_gpu_eval.sh) と同じ確認を通す |
+| 評価環境の生画像は**上下逆**（モデルへ渡す前に回す） | 統計は回した後で取る。[rollout_recorder.py](../../solution/tools/eval/rollout_recorder.py) と同じ向きに揃える |
+| CPU 描画（osmesa）だと 1 枚 300ms | `MUJOCO_GL=egl` を要求する。[run_gpu_eval.sh](../../solution/tools/eval/run_gpu_eval.sh) と同じ確認を通す |
 | 平均輝度は 1 次元の代理値。**同じ明るさで別の模様**がありうる | 標準偏差とパーセンタイルも出す。**模様の違いは数字では埋まらない**ので画像も残す |
 | 84 件は母集団 2,218 件の 3.8% | 接尾辞ごとの傾向を見るだけに使う。**確定には使わない** |
 

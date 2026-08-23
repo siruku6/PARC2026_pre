@@ -258,16 +258,16 @@ weight = (BLEND_STEPS - 境界からの経過) / (BLEND_STEPS + 1)
 
 ```bash
 # 既定（何もしない）
-bash solution/tools/run_local_eval.sh
+bash solution/tools/eval/run_local_eval.sh
 
 # 閉ループ寄りにする
-PARC_N_ACTION_STEPS=25 bash solution/tools/run_local_eval.sh
+PARC_N_ACTION_STEPS=25 bash solution/tools/eval/run_local_eval.sh
 
 # chunk を 3 回引いて典型的な 1 本を選ぶ
-PARC_SAMPLES=3 bash solution/tools/run_local_eval.sh
+PARC_SAMPLES=3 bash solution/tools/eval/run_local_eval.sh
 
 # 境界の段差を消す
-PARC_BLEND_STEPS=3 bash solution/tools/run_local_eval.sh
+PARC_BLEND_STEPS=3 bash solution/tools/eval/run_local_eval.sh
 ```
 
 見るべき指標は 2 段階である。
@@ -302,8 +302,8 @@ flowchart LR
 パッチは当てたままにしておいてよい。
 
 ```bash
-PARC_RECORD_DIR=/out/videos bash solution/tools/run_local_eval.sh
-python3 solution/tools/summarize_rollout_videos.py /out/videos
+PARC_RECORD_DIR=/out/videos bash solution/tools/eval/run_local_eval.sh
+python3 solution/tools/eval/summarize_rollout_videos.py /out/videos
 ```
 
 | 変数 | 既定 | 意味 |
@@ -345,7 +345,7 @@ python3 solution/tools/summarize_rollout_videos.py /out/videos
 配線だけを数分で確かめるなら、重みを使わずに済む。
 
 ```bash
-RECORD=1 bash solution/tools/smoke_test_suite.sh   # 5 タスク・20 ステップ
+RECORD=1 bash solution/tools/eval/smoke_test_suite.sh   # 5 タスク・20 ステップ
 ```
 
 ## 追加学習した重みへの差し替え・検証

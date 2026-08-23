@@ -166,7 +166,7 @@
 
 **判定は「触るファイルが重なるか」だけで行った。**
 私がいま触るのは [strategy/05_実測結果.md](../strategy/05_実測結果.md)・このファイル・
-`solution/tools/rollout_recorder.py` である。**下の 5 つはどれも重ならない。**
+`solution/tools/eval/rollout_recorder.py` である。**下の 5 つはどれも重ならない。**
 
 | # | 何を頼むか | 触るファイル | 重なり |
 |---|---|---|---|
@@ -203,7 +203,7 @@
 
 | # | 依頼文 |
 |---|---|
-| **29** | **評価を「摂動カテゴリを絞って」流せるようにしてほしい。** `solution/tools/make_validation_suite.py` には `--categories` が**既にある**（既定は 7 カテゴリ）。**足りないのは、評価の起動からそこへ値を渡す道である。** `PER_CELL` と同じ流儀で `CATEGORIES` を通す —— `run_docker_eval.sh`（既定値 ＋ `docker run -e`）と `docker_eval_inside.sh`（既定値 ＋ `--categories` へ渡す）の **3 か所**。**空なら今と同じ 84 件**になること。`"Light Conditions" "Background Textures"` のように**空白を含む名前が 2 つ以上**渡るので、そこを取り違えないこと。確認は `bash -n` と、**生成器を直接叩いて 24 行になること**まで |
+| **29** | **評価を「摂動カテゴリを絞って」流せるようにしてほしい。** `solution/tools/eval/make_validation_suite.py` には `--categories` が**既にある**（既定は 7 カテゴリ）。**足りないのは、評価の起動からそこへ値を渡す道である。** `PER_CELL` と同じ流儀で `CATEGORIES` を通す —— `run_docker_eval.sh`（既定値 ＋ `docker run -e`）と `docker_eval_inside.sh`（既定値 ＋ `--categories` へ渡す）の **3 か所**。**空なら今と同じ 84 件**になること。`"Light Conditions" "Background Textures"` のように**空白を含む名前が 2 つ以上**渡るので、そこを取り違えないこと。確認は `bash -n` と、**生成器を直接叩いて 24 行になること**まで |
 | ~~32~~ | **済み**（8/12）。**結果** [reference/09](../reference/09_model_explained.md)。**次に頼むことがあるなら「説明を書く」ではなく「回が決まったあとのステップ数・バッチを埋める」ほうである**（末尾の貼り付け用 4 段落に `<>` の空欄が 2 つある。32 の節） |
 | ~~31~~ | **済み**（8/12）。**結果** [reference/08](../reference/08_appearance_spread.md)／**道具** [measure_appearance.py](../../solution/tools/analysis/measure_appearance.py)。**撮り直すときに頼むのは「測る」ではなく「偏りの無い画像を用意する」ほうである**（A か B。31 の節） |
 | **27** | **`solution/tools/weights/blend_weights.py` を新規に作ってほしい。** 素の重みと追加学習後の重み、係数 λ を受け取り、`θ = (1−λ)·θ素 + λ·θ学習後` を計算して `merged_model` と同じ体裁で書き出す。**テンソルの構成が両者で一致することを先に確かめて、違えば止める。** `solution/tools/weights/install_weights.py` の `_read_safetensors_keys` が参考になる（同じ流儀で書く）。**測るのはこちらでやるので、評価は不要** |
@@ -494,7 +494,7 @@ python3 solution/tools/suite/instruction_targets.py --emit python   # 貼る形�
 `make_validation_suite.py` に `--categories` は既にある。足りないのは評価の起動から渡す道（`run_docker_eval.sh` と `docker_eval_inside.sh` の `CATEGORIES`。`PER_CELL` を真似る）。
 
 ```bash
-python3 solution/tools/make_validation_suite.py --libero-plus work/LIBERO-plus \
+python3 solution/tools/eval/make_validation_suite.py --libero-plus work/LIBERO-plus \
     --categories "Light Conditions" "Background Textures" --output /tmp/VAL_24.csv
 ```
 
@@ -728,8 +728,8 @@ rm -rf work/artifacts/model_weights_lora20k.bak  # GPU マシンで。900 MB
 | **zip の中身が正しいか確かめる** | **8/11 に確認した。** 546 エントリ、重みのハッシュが `work/artifacts` と一致、`lora_` 0 個、`.py` 488 件の構文が通る、`validate_submission.py --static` が PASS。詳細は [05_実測結果.md](../strategy/05_実測結果.md) |
 | **最終提出の窓口を運営に確認する** | **聞いた。「準備中」との回答。** 現れるのを待つ。13 の組み立ては答えが出てから確定する |
 | **検証用スイートが 26 件で止まる** | **原因は 2 つとも潰した。** ① 1 タスクの例外がトラック全体を 0 点にしていた ② 物体が増える摂動の初期状態が別階層にあった。どちらも `patch_kit_for_variants.py` に入っている。→ notes 3 |
-| **評価を回す前に CSV が開けるか確かめる** | **[check_validation_suite.py](../../solution/tools/check_validation_suite.py) を作った。** 配布キットと LIBERO-plus の実コードと同じ手順でパスを組み立てる。パッチ前は 48 行・4 カテゴリで落ちることを、パッチ後は 84 行すべて開けることを実物で確認済み |
-| **手元の Docker で 5 件だけ通す** | **8/10 に完走を確認した。** 5 / 5 タスク・92.2 秒。`_view_` を含む変種も通った。手順は `bash solution/tools/smoke_test_suite.sh`。[05_実測結果.md](../strategy/05_実測結果.md) に記録 |
+| **評価を回す前に CSV が開けるか確かめる** | **[check_validation_suite.py](../../solution/tools/eval/check_validation_suite.py) を作った。** 配布キットと LIBERO-plus の実コードと同じ手順でパスを組み立てる。パッチ前は 48 行・4 カテゴリで落ちることを、パッチ後は 84 行すべて開けることを実物で確認済み |
+| **手元の Docker で 5 件だけ通す** | **8/10 に完走を確認した。** 5 / 5 タスク・92.2 秒。`_view_` を含む変種も通った。手順は `bash solution/tools/eval/smoke_test_suite.sh`。[05_実測結果.md](../strategy/05_実測結果.md) に記録 |
 | **ロールアウトの動画を撮れるようにする** | **できた。** 採点ハーネス側に入れ、提出物には触っていない。**本物の LIBERO-plus に対してだけ未実行**。→ notes 4 |
 
 ### C. 環境・ビルドの制約 — 既知の地雷（セットアップで踏む）

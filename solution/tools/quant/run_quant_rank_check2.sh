@@ -91,7 +91,7 @@ run_eval() {
     WEIGHTS="$weights" EVAL_CSV="$REPOSITORY_ROOT/compe/val/EVAL_TASKS.csv" \
         LABEL="rankcheck2_${name}" MAX_STEPS=300 N_EPISODES=1 \
         POLICY_IMAGE="$POLICY_IMAGE" \
-        bash solution/tools/run_docker_eval.sh
+        bash solution/tools/eval/run_docker_eval.sh
     local status=$?
 
     if [ "$status" -ne 0 ]; then

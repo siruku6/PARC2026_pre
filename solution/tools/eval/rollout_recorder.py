@@ -34,7 +34,7 @@
 使い方（コンテナ内・評価を回すシェルで）::
 
     export PARC_RECORD_DIR=/out/videos
-    bash solution/tools/run_local_eval.sh
+    bash solution/tools/eval/run_local_eval.sh
 
 **撮れる映像はモデルに渡るのと同じ向き**（180 度回転後）である。評価環境の
 生画像は上下逆で、回転して初めて学習データと揃う。詳細は

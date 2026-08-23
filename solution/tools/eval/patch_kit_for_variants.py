@@ -42,13 +42,13 @@ bddl は存在しない（`libero/libero/envs/env_wrapper.py` が `_view_` で�
 **中身を変えた版を、古い版が当たったままのキットへ当てても壊れない。**
 古い版は `_OBSOLETE` として剥がしてから当て直す（下）。
 
-    python3 solution/tools/patch_kit_for_variants.py --kit-dir /workspace
+    python3 solution/tools/eval/patch_kit_for_variants.py --kit-dir /workspace
 
 Reads:
   - <kit-dir>/compe/t1/register.py
   - <kit-dir>/pipeline/environment.py
   - <kit-dir>/pipeline/rollout.py
-  - solution/tools/rollout_recorder.py
+  - solution/tools/eval/rollout_recorder.py
 Generates:
   - 上の 3 ファイル（上書き）
   - <kit-dir>/pipeline/rollout_recorder.py（複製）
@@ -401,13 +401,18 @@ def _refuse_own_repository(kit_dir: Path) -> None:
 
     **この台本は `/content/` へ 1 枚だけコピーして使われる**（Colab）。
     そのとき `parents` は `/content` と `/` の 2 つしかないので、
-    `parents[2]` は `IndexError` になる。**リポジトリの外に置かれている
+    `parents[3]` は `IndexError` になる。**リポジトリの外に置かれている
     ということは、守るべきリポジトリも無い**ので、その場合は何もしない。
+
+    **数え方**: このファイルは `<repo>/solution/tools/eval/` にあるので、
+    `parents[0]`=`eval`、`[1]`=`tools`、`[2]`=`solution`、`[3]`=リポジトリ直下。
+    **`eval/` へ移した 2026-08-23 に `[2]`→`[3]`、`< 3`→`< 4` を同時に直した。**
+    片方だけ直すと、この事故防止が警告なしに無効化される。
     """
     parents = Path(__file__).resolve().parents
-    if len(parents) < 3:
+    if len(parents) < 4:
         return                                   # リポジトリの外に置かれている
-    repository_root = parents[2]
+    repository_root = parents[3]
     if kit_dir.resolve() == repository_root:
         raise SystemExit(
             f"このリポジトリ自身（{repository_root}）は書き換えません。\n"

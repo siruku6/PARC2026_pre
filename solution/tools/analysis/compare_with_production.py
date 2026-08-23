@@ -45,9 +45,10 @@ from pathlib import Path
 # `[結果]` 行の解析を共通にする。**同じ正規表現を 2 か所に置くと必ず片方が
 # 古くなる。** summarize_gpu_eval は import しても main() を実行しない。
 #
-# **`summarize_gpu_eval` は `solution/tools/` 直下に残っている**（評価パイプライン
-# 13 本は分割を保留した）。このファイルが `analysis/` へ移った分、1 つ上を見る。
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# **`summarize_gpu_eval` は `solution/tools/eval/` へ移った**（2026-08-23）。
+# このファイルは `solution/tools/analysis/` にあるので、1 つ上（`tools/`）へ戻って
+# `eval/` へ降りる。**`parents[1]` だけでは `tools/` を指すので import できない。**
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "eval"))
 from summarize_gpu_eval import _pad, _parse_log  # noqa: E402
 
 # 採点ログから読む値。

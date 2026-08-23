@@ -24,7 +24,7 @@
 | **単一摂動の評価データ（a）** | ある。`compe/val/TRACK2_PROBE.csv`（8タスク×[Base+4摂動]=40行）。生成スクリプト`solution/tools/probe/make_track2_probe.py`は各カテゴリで難易度1〜5の中央値を1件だけ選ぶ。スクリプト自身のdocstringが「1セル1件しか測らない順位付けツールで、本評価ではない」と明記している |
 | **複数摂動を組み合わせた評価データ（b）** | 無い。`work/LIBERO-plus`の公式タスク一覧（`task_classification.json`、7カテゴリ計10,030件）を数えたところ、**カテゴリを跨いで摂動を組み合わせたタスクは1件も無い**。LIBERO-plus論文自体は「組み合わせ摂動には単独の積を下回る相互作用効果がある（Negative Compositional Generalization）」と報告しているが、そのための生成コード・`.bddl`・分類表はこのリポジトリに同梱されていない |
 | **技術的な可能性（検証済み・4節参照）** | `env_wrapper.py`の`ControlEnv.__init__`は、`<base>_view_..._initstate_..._noise_...`という1つのtask_id名から、カメラ視点・ロボット初期姿勢・センサノイズの3要素を独立にパースできる構造になっている。**この3軸の組み合わせ、およびそこにObjects Layoutを加えた4軸の組み合わせは、実際に動作することを確認した**（4節）。Objects Layoutを混ぜた場合に評価ハーネス側の初期状態ファイル解決が見つけていなかった箇所は、原因を特定して修正済み（4.2節） |
-| **評価データの分離原則** | [08_training_data_creation_cautions.md](08_training_data_creation_cautions.md)の「学習で見せたカメラ角度・初期姿勢・物体配置の集合と、検証で使う集合を分離しないと汎化を測れない」（2.8節）は評価データにも直接効く。09で決まるTier 0/1/2の学習側variant IDと、評価側で使うvariant IDが重ならないようにする仕組み（`solution/tools/make_validation_suite.py --exclude`）は既にある |
+| **評価データの分離原則** | [08_training_data_creation_cautions.md](08_training_data_creation_cautions.md)の「学習で見せたカメラ角度・初期姿勢・物体配置の集合と、検証で使う集合を分離しないと汎化を測れない」（2.8節）は評価データにも直接効く。09で決まるTier 0/1/2の学習側variant IDと、評価側で使うvariant IDが重ならないようにする仕組み（`solution/tools/eval/make_validation_suite.py --exclude`）は既にある |
 
 ---
 
@@ -84,10 +84,10 @@ Q&A後に「作るべき」と判断が変わったときに前提の確認か�
 | 場所 | 何をするか | このtask_idでの結果 |
 |---|---|---|
 | `work/LIBERO-plus/libero/libero/benchmark/__init__.py`の`get_task_init_states`（LIBERO-plus本体） | 公式10,030タスク一覧を単体で読むときに使う | `_view_`より前を切り出した`..._add_14.pruned_init`を**標準の`init_files/libero_10/`配下**で探すため見つからない（バグ）。**しかしこの関数は本戦の評価パイプラインからは呼ばれていない**（`benchmark_scripts/`の単体スクリプト専用。`grep`で使用箇所を確認済み） |
-| `compe/t1/register.py`の`get_task_init_states`（このリポジトリの評価パイプラインが実際に使うもの） | `solution/tools/patch_kit_for_variants.py`が配布キットに当てるパッチにより、CSVの`init_states_file`列の値をそのまま使う設計に**すでに直っている**（`/`を含む値なら`libero_newobj`配下も読み、reshapeする） | **こちらは元から正しく動く。** 問題はCSVの`init_states_file`列の値を計算する側にあった |
+| `compe/t1/register.py`の`get_task_init_states`（このリポジトリの評価パイプラインが実際に使うもの） | `solution/tools/eval/patch_kit_for_variants.py`が配布キットに当てるパッチにより、CSVの`init_states_file`列の値をそのまま使う設計に**すでに直っている**（`/`を含む値なら`libero_newobj`配下も読み、reshapeする） | **こちらは元から正しく動く。** 問題はCSVの`init_states_file`列の値を計算する側にあった |
 
 **実際のバグは評価パイプライン自体ではなく、検証スイートCSVを作る
-`solution/tools/make_validation_suite.py`の`_resolve_newobj_init`にあった。**
+`solution/tools/eval/make_validation_suite.py`の`_resolve_newobj_init`にあった。**
 この関数は`_add_14`のような単独のObjects Layout変種名なら`task_id`とファイル名が
 完全一致するので正しく動くが、`..._add_14_view_..._noise_1`のような複合名では
 「`task_id`と完全一致するファイル」を探すため、`_add_14`用のファイルを見つけられない
@@ -96,7 +96,7 @@ Q&A後に「作るべき」と判断が変わったときに前提の確認か�
 
 **修正**: `_resolve_newobj_init`が`task_id`自身に加えて`_view_`より前の名前でも探すように
 した（`_resolve_bddl`と同じ考え方）。既存の単独Objects Layout名は`_view_`を含まないため
-挙動は変わらない（後方互換）。`solution/tools/make_validation_suite.py`を編集し、
+挙動は変わらない（後方互換）。`solution/tools/eval/make_validation_suite.py`を編集し、
 `py_compile`で構文を確認した。
 
 **修正後、`parc2026_verify`コンテナで実際のパイプラインと同じ手順を最初から最後まで
@@ -137,7 +137,7 @@ end-to-endで確認した。**
 - `work/robot_init_sanity/ROBOT_INIT_SANITY.csv`: `TRACK2_PROBE.csv`の実在する2行
   （`KITCHEN_SCENE3_turn_on_the_stove_and_put_the_moka_pot_on_it`のBase行と、
   `..._view_0_0_100_0_0_initstate_3`行）をそのまま抜いた2行だけのCSV。
-- `solution/tools/run_docker_eval.sh`に`PARC_RECORD_WHICH`の転送を追加。**既定では
+- `solution/tools/eval/run_docker_eval.sh`に`PARC_RECORD_WHICH`の転送を追加。**既定では
   失敗した回しか録画しない**ため、2件とも成功すると動画が1本も残らない問題を防ぐ
   （`PARC_RECORD_WHICH=all`を渡せば両方録画される）。既存の呼び出しは既定値
   `failures`が保たれるため後方互換。
@@ -148,7 +148,7 @@ WEIGHTS="$PWD/work/artifacts/pi05_rp3000" \
   LABEL=robot_init_sanity N_EPISODES=1 MAX_STEPS=300 \
   RECORD=1 PARC_RECORD_WHICH=all \
   POLICY_IMAGE=parc2026-train-pi05 \
-  bash solution/tools/run_docker_eval.sh
+  bash solution/tools/eval/run_docker_eval.sh
 ```
 
 出力先: `work/gpu_eval/0822_070934_robot_init_sanity_n5_ep1_max300/`。
@@ -399,16 +399,16 @@ knowledge/06 が挙げる勝ち筋（全パラメータ学習 −13%・chunk 長
 | ファイル名パーサが複数軸を同時に受理できる構造であること、および3軸（Camera・Robot・Noise）が実際に動くこと | `env_wrapper.py`の`ControlEnv.__init__`・`step`/`reset`。`parc2026_verify`コンテナで`ControlEnv`を直接構築し、Base条件とqpos・`agentview_image`を比較して確認 |
 | Objects Layout（`_add_14`）を混ぜた場合、env構築自体は通ること | 同上コンテナで`..._add_14_view_0_0_121_0_0_initstate_3_noise_1`を構築し確認 |
 | LIBERO-plus本体の`get_task_init_states`（`benchmark/__init__.py`）が複合task_idに対して実在しないパスを組み立てること、かつこの関数が本戦の評価パイプラインからは呼ばれていないこと | 同関数のコードを読み、標準の`init_files/libero_10/..._add_14.pruned_init`が存在せず`init_files/libero_newobj/libero_10/..._add_14.pruned_init`にのみ実在することを`os.path.exists`で確認。呼び出し元は`grep -rn`で`benchmark_scripts/check_task_suites.py`・`render_single_task.py`のみと確認 |
-| 本戦の評価パイプラインが実際に使う`compe/t1/register.py`の`get_task_init_states`は、`solution/tools/patch_kit_for_variants.py`のパッチによりCSVの`init_states_file`列をそのまま使う設計に直っていること | `compe/t1/register.py`・`solution/tools/patch_kit_for_variants.py`を読んで確認 |
-| 実際のバグが`solution/tools/make_validation_suite.py`の`_resolve_newobj_init`（完全一致でしか探さない）にあったこと、および修正後に単独名・複合4軸名の両方を正しく解決すること | 同ファイルを読み、修正前後の挙動を`_resolve_newobj_init`・`_place_variant`を直接呼んで比較。修正後は`py_compile`で構文確認済み |
+| 本戦の評価パイプラインが実際に使う`compe/t1/register.py`の`get_task_init_states`は、`solution/tools/eval/patch_kit_for_variants.py`のパッチによりCSVの`init_states_file`列をそのまま使う設計に直っていること | `compe/t1/register.py`・`solution/tools/eval/patch_kit_for_variants.py`を読んで確認 |
+| 実際のバグが`solution/tools/eval/make_validation_suite.py`の`_resolve_newobj_init`（完全一致でしか探さない）にあったこと、および修正後に単独名・複合4軸名の両方を正しく解決すること | 同ファイルを読み、修正前後の挙動を`_resolve_newobj_init`・`_place_variant`を直接呼んで比較。修正後は`py_compile`で構文確認済み |
 | 修正後、bddlパス構築→`ControlEnv`構築→初期状態の`torch.load`/`reshape`/`set_state_from_flattened`→`env.step()`まで実際のパイプラインと同じ手順で通ること | `parc2026_verify`コンテナで一連の手順を再現し、状態ベクトル長86（`1+nq+nv`）が一致・エラー無しで確認 |
 | LIBERO-plus論文の Negative Compositional Generalization の主張 | [07_track2_preparation.md](07_track2_preparation.md) §1.3.1（arXiv HTML再取得による2次情報） |
-| 検証データの分離原則・`make_validation_suite.py --exclude` | [08_training_data_creation_cautions.md](08_training_data_creation_cautions.md) 2.8節・4.3節、`solution/tools/make_validation_suite.py` |
+| 検証データの分離原則・`make_validation_suite.py --exclude` | [08_training_data_creation_cautions.md](08_training_data_creation_cautions.md) 2.8節・4.3節、`solution/tools/eval/make_validation_suite.py` |
 | `quant_train`にrobosuite/liberoが入っておらず、`parc2026`イメージには入っていること | 各コンテナへ`docker exec`で直接importを試して確認 |
 | 検証当時、`parc2026`イメージのコンテナ（`suspicious_hopper`）は別のGPU評価ジョブを実行中で、その後量子化スイープの評価回収（朝までかかる見込み）に引き継がれたこと | `docker exec suspicious_hopper ps aux`・`work/gpu_eval/`のログ・`work/quant_sweep/PROGRESS.md`（2026-08-21 21:47の記載） |
 | Track2の4カテゴリ対応が推測であり8/24のQ&Aで確認する計画であること | [07_track2_preparation.md](07_track2_preparation.md) §1.1 |
 | Robot Initial States単軸の実機ロールアウト結果・画素差分の数値 | `work/gpu_eval/0822_070934_robot_init_sanity_n5_ep1_max300/eval.log`、動画2本を`parc2026_verify`コンテナでcv2により1フレーム目を区画ごとに`np.abs`差分（実際に計算） |
-| `PARC_RECORD_WHICH`が既定で`run_docker_eval.sh`からkitコンテナへ転送されていなかったこと・修正内容 | `solution/tools/run_docker_eval.sh`のkit_environment配列を読んで確認し、実際に1行追加、`bash -n`で構文確認 |
+| `PARC_RECORD_WHICH`が既定で`run_docker_eval.sh`からkitコンテナへ転送されていなかったこと・修正内容 | `solution/tools/eval/run_docker_eval.sh`のkit_environment配列を読んで確認し、実際に1行追加、`bash -n`で構文確認 |
 | 実行中にOOMが2回発生した経緯（量子化スイープ回収との重複、`pi05_c3_compile_smoke`との重複） | 各時点で`nvidia-smi`・`docker ps -a`・`ps aux`・該当ログを実際に確認 |
 | `compe/val/TRACK2_PROBE.csv`（40行）のGPU評価がまだ実行されていないこと | `work/gpu_eval/*/VAL_TASKS.csv`を全件確認（41行のものが無い）・`grep -rl TRACK2_PROBE work/gpu_eval/*/*.log`が0件 |
 | 09の3節が想定していた並行実行が、実際には量子化スイープ関連の複数ジョブ（回収・compileスモークテスト・`work/train/_bench/bench_driver.py`による推論速度ベンチマーク）に占有され続けたこと | `work/quant_sweep/PROGRESS.md`・`docker exec quant_train ps aux`・`work/train/_bench/bench_driver.py`のdocstringを実際に確認 |

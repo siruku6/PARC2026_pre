@@ -83,7 +83,7 @@ pick_up_the_black_bowl_from_table_center_and_place_it_on_the_plate_tb_1
                           ^^^^^ ここに引っかかる          ^^^^ 本当の接尾辞
 ```
 
-[summarize_gpu_eval.py](../../solution/tools/summarize_gpu_eval.py) の
+[summarize_gpu_eval.py](../../solution/tools/eval/summarize_gpu_eval.py) の
 カテゴリ判定はこの形（含むかどうか・`_table_` を `_tb_` より先に見る）だったので、
 **末尾一致に直した**。試験で固定してある
 （[tests/test_rollout_report_line.py](../../tests/test_rollout_report_line.py)）。
@@ -150,14 +150,14 @@ Track 1 候補 2,218 件の bddl を全部読んで数えた。
 最大は一致した。平均の差は数え方の違いと見る）。
 
 **衝突率をそのまま方策の比較に使えない。** 0 個のタスクを分母に入れると
-薄まるので、[summarize_gpu_eval.py](../../solution/tools/summarize_gpu_eval.py) は
+薄まるので、[summarize_gpu_eval.py](../../solution/tools/eval/summarize_gpu_eval.py) は
 **相手がいる回だけの衝突率**も出すようにした。数は
-[make_validation_suite.py](../../solution/tools/make_validation_suite.py) が
+[make_validation_suite.py](../../solution/tools/eval/make_validation_suite.py) が
 CSV の `n_nontarget_objects` 列に書く。
 
 ```bash
 # 84 件のスイートについて数える（CSV を作り直すだけで出る）
-python3 solution/tools/make_validation_suite.py \
+python3 solution/tools/eval/make_validation_suite.py \
     --libero-plus work/LIBERO-plus \
     --bddl-root work/LIBERO-plus/libero/libero/bddl_files \
     --init-states-root work/LIBERO-plus/libero/libero/init_files \

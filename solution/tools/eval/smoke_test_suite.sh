@@ -13,9 +13,9 @@
 #
 # ホストから実行する。イメージは `docker build -t parc2026 .` で作ったもの。
 #
-#   bash solution/tools/smoke_test_suite.sh              # 5 タスク・20 ステップ
-#   TASKS=7 MAX_STEPS=40 bash solution/tools/smoke_test_suite.sh
-#   RECORD=1 bash solution/tools/smoke_test_suite.sh     # 録画の配線も確かめる
+#   bash solution/tools/eval/smoke_test_suite.sh              # 5 タスク・20 ステップ
+#   TASKS=7 MAX_STEPS=40 bash solution/tools/eval/smoke_test_suite.sh
+#   RECORD=1 bash solution/tools/eval/smoke_test_suite.sh     # 録画の配線も確かめる
 #
 # Reads:
 #   - solution/tools/ の 4 スクリプト（コンテナへ読み取り専用で渡す）
@@ -25,7 +25,7 @@
 #   - work/smoke/videos/*.mp4（RECORD=1 のとき）
 set -euo pipefail
 
-REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 IMAGE="${IMAGE:-parc2026}"
 TASKS="${TASKS:-5}"
 MAX_STEPS="${MAX_STEPS:-20}"
@@ -44,9 +44,9 @@ docker run --rm \
     -e RECORD="$RECORD" \
     -v "$REPOSITORY_ROOT/solution/tools:/host/tools:ro" \
     -v "$OUTPUT_DIR:/out" \
-    "$IMAGE" bash /host/tools/smoke_test_inside.sh
+    "$IMAGE" bash /host/tools/eval/smoke_test_inside.sh
 
 echo
 echo "===== 判定 ====="
-python3 "$REPOSITORY_ROOT/solution/tools/summarize_smoke_test.py" \
+python3 "$REPOSITORY_ROOT/solution/tools/eval/summarize_smoke_test.py" \
     --output-dir "$OUTPUT_DIR" --expected-tasks "$TASKS"

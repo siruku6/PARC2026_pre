@@ -6,14 +6,14 @@
 #
 #   docker exec -e TASKS=5 -e MAX_STEPS=20 \
 #       -v ... （実行中のコンテナには mount を足せないので、
-#              tools を /host/tools に見せた状態で起動しておくこと）
-#       <container> bash /host/tools/smoke_test_inside.sh
+#              tools を /host/tools に見せた状態（このスクリプトは /host/tools/eval/ にある）で起動しておくこと）
+#       <container> bash /host/tools/eval/smoke_test_inside.sh
 #
 # 環境変数（省略時の既定）
 #   TASKS=5        回すタスク数。CSV の先頭からこの件数
 #   MAX_STEPS=20   1 エピソードの上限ステップ数。**成功させる必要はない**
 #   PER_CELL=3     スイート × カテゴリあたりの本数（CSV 全体は 84 件になる）
-#   TOOLS_DIR=/host/tools   スクリプトの置き場
+#   TOOLS_DIR=/host/tools/eval   スクリプトの置き場
 #   OUT_DIR=/out            出力先
 #   RECORD=1       ロールアウトを mp4 に撮る（$OUT_DIR/videos へ）。
 #                  **ランダム方策なので中身に意味は無い。** 録画の配線が
@@ -22,7 +22,7 @@ set -euo pipefail
 
 KIT="${KIT:-/workspace}"
 PY="${PY:-$KIT/venv/bin/python}"
-TOOLS_DIR="${TOOLS_DIR:-/host/tools}"
+TOOLS_DIR="${TOOLS_DIR:-/host/tools/eval}"
 OUT_DIR="${OUT_DIR:-/out}"
 TASKS="${TASKS:-5}"
 MAX_STEPS="${MAX_STEPS:-20}"

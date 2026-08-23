@@ -8,7 +8,7 @@
 配布キットと LIBERO-plus の**実際のコード**と同じ手順でパスを組み立てる。
 真似ではなく、条件分岐まで写している（写した箇所は各関数に出典を書いた）。
 
-    python3 solution/tools/check_validation_suite.py \\
+    python3 solution/tools/eval/check_validation_suite.py \\
         --csv work/VAL_TASKS.csv --libero-plus work/LIBERO-plus \\
         --kit-dir /workspace
 

@@ -189,6 +189,6 @@ Colab を使う理由は「GPU マシンが学習で埋まっているあいだ�
 |---|---|
 | 各関数が実際に何をしているか | [solution/tools/colab/colab_eval.py](../../solution/tools/colab/colab_eval.py) |
 | 変えられる設定の全部 | [solution/tools/colab/colab_eval_config.py](../../solution/tools/colab/colab_eval_config.py) |
-| 配布キットへのパッチの中身（`register.py` と `parse_obj_of_interest`） | [solution/tools/patch_kit_for_variants.py](../../solution/tools/patch_kit_for_variants.py) |
+| 配布キットへのパッチの中身（`register.py` と `parse_obj_of_interest`） | [solution/tools/eval/patch_kit_for_variants.py](../../solution/tools/eval/patch_kit_for_variants.py) |
 | GPU マシンで評価を回す（放っておける） | [../howto/03_gpu_eval.md](../howto/03_gpu_eval.md) |
 | 実測値の一覧 | [../strategy/05_実測結果.md](../strategy/05_実測結果.md) |

@@ -15,10 +15,10 @@ Drive へ退避する必要がないので、退避漏れで結果を失う経�
 - ぶつけた物体の偏りと、**初めて 1mm を超えた歩**
 - **2 回の評価を並べた差** — `--compare` を渡したとき
 
-    solution/tools/summarize_gpu_eval.py --output-dir work/gpu_eval/0811_...
+    solution/tools/eval/summarize_gpu_eval.py --output-dir work/gpu_eval/0811_...
 
     # 素の重みと学習後を並べる
-    solution/tools/summarize_gpu_eval.py \
+    solution/tools/eval/summarize_gpu_eval.py \
         --output-dir work/gpu_eval/0811_..._lora --compare work/gpu_eval/0811_..._base
 
 **古いログでも動く。** ゴール到達・動き・初衝突は 2026-08-11 のパッチから
@@ -1225,7 +1225,7 @@ def _report_videos(lines: list[str], output_dir: Path) -> None:
         return
     lines.append(f"  {len(videos)} 本")
     lines.append("  見るには:")
-    lines.append(f"    python3 solution/tools/summarize_rollout_videos.py {output_dir / 'videos'}")
+    lines.append(f"    python3 solution/tools/eval/summarize_rollout_videos.py {output_dir / 'videos'}")
 
 
 def main() -> None:

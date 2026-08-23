@@ -9,9 +9,9 @@
 #
 # **本番と同じ 2 プロセス構成**である。依存が正面衝突するので 1 つに混ぜられない。
 #
-#   bash solution/tools/run_docker_eval.sh --check    # 5 件。5 分で配線を見る
-#   bash solution/tools/run_docker_eval.sh            # 84 件。90 分
-#   bash solution/tools/run_docker_eval.sh --detach   # 同じものを裏で流して抜ける
+#   bash solution/tools/eval/run_docker_eval.sh --check    # 5 件。5 分で配線を見る
+#   bash solution/tools/eval/run_docker_eval.sh            # 84 件。90 分
+#   bash solution/tools/eval/run_docker_eval.sh --detach   # 同じものを裏で流して抜ける
 #
 # 事前に 2 つのイメージが要る。
 #   docker build -t parc2026-train solution/train      # 学習で作ってあるはず
@@ -51,7 +51,7 @@
 #     採用された値は server.log の [parc] 行を見ること）
 set -euo pipefail
 
-REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPOSITORY_ROOT"
 
 POLICY_IMAGE="${POLICY_IMAGE:-parc2026-train}"
@@ -334,7 +334,7 @@ docker run --rm --gpus all --network "$NETWORK" \
     "${kit_environment[@]}" \
     -v "$REPOSITORY_ROOT/solution/tools:/host/tools:ro" \
     -v "$OUTPUT_DIR:/out" \
-    "$KIT_IMAGE" bash /host/tools/docker_eval_inside.sh
+    "$KIT_IMAGE" bash /host/tools/eval/docker_eval_inside.sh
 
 # **評価側のコンテナだけは root のまま走らせている。**
 # 中にある配布キット（`/workspace` に置かれた `pipeline/` や `compe/`）へ
@@ -357,5 +357,5 @@ echo
 echo "===== 判定 ====="
 docker run --rm -v "$OUTPUT_DIR:/out" \
     -v "$REPOSITORY_ROOT/solution/tools:/host/tools:ro" \
-    "$KIT_IMAGE" python /host/tools/summarize_gpu_eval.py \
+    "$KIT_IMAGE" python /host/tools/eval/summarize_gpu_eval.py \
         --output-dir /out --csv /out/VAL_TASKS.csv

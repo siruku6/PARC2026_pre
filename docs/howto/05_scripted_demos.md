@@ -104,7 +104,7 @@ docker run --rm -v "$PWD/work/scripted:/out" --entrypoint chown parc2026 \
 `EOFError: EOF when reading a line` で落ちる。この設定はキットの
 `setup.sh` がビルド時に `/root/.libero/` へ書いており、`/root` は他の
 利用者から読めない。**root で走らせて、あとで `chown` するのが素直である**
-（評価側の [run_docker_eval.sh](../../solution/tools/run_docker_eval.sh) も同じ形）。
+（評価側の [run_docker_eval.sh](../../solution/tools/eval/run_docker_eval.sh) も同じ形）。
 
 ### 並列にできるが、コア数が上限である
 
@@ -339,7 +339,7 @@ python solution/tools/weights/install_weights.py work/train/<run 名>/merged_mod
 ```bash
 EVAL_CSV=compe/val/MOKA_TASKS.csv MUJOCO_GL=osmesa \
     WEIGHTS="$PWD/work/artifacts/model_weights_<label>" LABEL=<label> \
-    bash solution/tools/run_docker_eval.sh --detach
+    bash solution/tools/eval/run_docker_eval.sh --detach
 ```
 
 手順の詳細は [03_gpu_eval.md](03_gpu_eval.md) にある。
@@ -481,18 +481,18 @@ ls work/artifacts/model_weights_scripted_mix
 # 5. モカポット 8 件で測る（20 分）。**比べる相手を先に測る**
 EVAL_CSV=compe/val/MOKA_TASKS.csv MUJOCO_GL=osmesa \
     WEIGHTS="$PWD/work/artifacts/model_weights_weak3x" LABEL=weak3x_moka \
-    bash solution/tools/run_docker_eval.sh --detach     # 0/8 のはず
+    bash solution/tools/eval/run_docker_eval.sh --detach     # 0/8 のはず
 
 EVAL_CSV=compe/val/MOKA_TASKS.csv MUJOCO_GL=osmesa \
     WEIGHTS="$PWD/work/artifacts/model_weights_scripted_mix" LABEL=scripted_mix_moka \
-    bash solution/tools/run_docker_eval.sh --detach
+    bash solution/tools/eval/run_docker_eval.sh --detach
 ```
 
 ```bash
 # 6. ゲート C：他のタスクを壊していないか（36 件・72 分）
 EVAL_CSV=compe/val/EVAL_TASKS.csv MUJOCO_GL=osmesa \
     WEIGHTS="$PWD/work/artifacts/model_weights_scripted_mix" LABEL=scripted_mix_36 \
-    bash solution/tools/run_docker_eval.sh --detach
+    bash solution/tools/eval/run_docker_eval.sh --detach
 ```
 
 **評価は 2 つ同時に走らせられない。** 起動時に前回の残骸（`parc-policy` と

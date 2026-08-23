@@ -14,14 +14,20 @@
 | `quant/` | 量子化候補（学習側・推論側）の実装とスイープ | 学習・推論を速くする検討のとき |
 | `scripted_demo/` | シミュレータの中で台本から手本を作り、学習形式へ変換する | 学習データを増やすとき |
 | `colab/` | Colab GPU で評価を回す一式（**Track1 用。Track2 では未検証**） | GPU マシンが学習で埋まっているとき |
+| `eval/` | **評価を回す一式**（13 ファイル）。Docker の起動、キットへのパッチ当て、ロールアウトの記録、集計 | 手元で測るとき。**入口は `eval/run_docker_eval.sh`** |
 
-`tools/` 直下に平積みになっている 13 ファイル（`run_local_eval.sh`・
-`run_docker_eval.sh`・`run_gpu_eval.sh`・`*_inside.sh`・`smoke_test_*`・
-`make_validation_suite.py`・`patch_kit_for_variants.py`・
-`check_validation_suite.py`・`rollout_recorder.py`・`summarize_*.py`）は
-**評価パイプライン一式で、分類を保留している。** シェルスクリプトが互いを
-同じディレクトリ越しに呼び合っているため、分けるとマウントと相対パスを
-まとめて直す必要がある。
+**`tools/` 直下にファイルは残っていない**（この README だけ）。評価パイプラインの
+13 ファイル（`run_local_eval.sh`・`run_docker_eval.sh`・`run_gpu_eval.sh`・
+`*_inside.sh`・`smoke_test_*`・`make_validation_suite.py`・
+`patch_kit_for_variants.py`・`check_validation_suite.py`・`rollout_recorder.py`・
+`summarize_*.py`）は 2026-08-23 に `eval/` へ移した。
+
+**`eval/` を動かすときの要注意点が 1 つある。** `run_docker_eval.sh` と
+`smoke_test_suite.sh` は **`solution/tools` 全体**をコンテナの `/host/tools` に
+見せ、その中の `/host/tools/eval/...` を叩く形にしてある。**マウント元を
+`solution/tools/eval` に変えてはいけない**——`eval/make_validation_suite.py` が
+兄弟の `suite/make_holdout_split.py` を `parents[1] / "suite"` で読むので、
+`eval/` だけを見せると `ModuleNotFoundError` になる（実測済み）。
 
 ## 移動するときに壊れる 2 箇所
 
@@ -29,10 +35,17 @@
   数えているファイルが多い。1 階層深くすると `parents[2]` → `parents[3]` に
   直す必要がある。**直し忘れても import は通り、実行して初めて分かる。**
 - **`sys.path.insert` でディレクトリをまたいで import しているもの**（4 箇所）：
-  `make_validation_suite.py` → `suite/`、
-  `probe/make_track2_probe.py` → 直下の `make_validation_suite.py`、
-  `analysis/compare_with_production.py` → 直下の `summarize_gpu_eval.py`、
-  `viz/visualize_demo.py` → `scripted_demo/scripted_demo.py`。
+  `eval/make_validation_suite.py` → `parents[1] / "suite"`、
+  `probe/make_track2_probe.py` → `parents[1] / "eval"`、
+  `analysis/compare_with_production.py` → `parents[1] / "eval"`、
+  `viz/visualize_demo.py` → `parents[1] / "scripted_demo"`。
+  **`--help` を叩けば分かる**——import はモジュールの先頭で走るので、
+  引数を解釈する前に落ちる。
+- **`patch_kit_for_variants.py` の `_refuse_own_repository` は 2 行を同時に直す。**
+  `parents[3]` と `len(parents) < 4` の片方だけ直すと、「配布キットを自分自身の
+  リポジトリと誤認して書き換えてしまう」事故防止が**警告なしに無効化される。**
+  確かめ方: `python3 solution/tools/eval/patch_kit_for_variants.py --kit-dir .`
+  が「このリポジトリ自身は書き換えません」と出して終了コード 1 になること。
 
 文書側に書かれた `PYTHONPATH=...:solution/tools` のような実行例も、
 モジュールを直接 import していれば同じ理由で壊れる。

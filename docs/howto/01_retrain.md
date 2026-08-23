@@ -734,7 +734,7 @@ cp -r work/train2/<run_name>/merged_model work/artifacts/model_weights_<label>
 cp -r work/artifacts/model_weights_base/vlm work/artifacts/model_weights_<label>/vlm
 
 MUJOCO_GL=osmesa WEIGHTS=work/artifacts/model_weights_<label> LABEL=<label> \
-    bash solution/tools/run_docker_eval.sh --detach
+    bash solution/tools/eval/run_docker_eval.sh --detach
 ```
 
 **回ごとに別の名前にする。** そうすれば前の回を消さずに並べて測れる

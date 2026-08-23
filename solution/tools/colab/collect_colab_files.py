@@ -16,7 +16,7 @@ Colab の評価ノートブックは、リポジトリの中の何ファイル�
 
 Reads:
   - solution/policy_server.py
-  - solution/tools/make_validation_suite.py
+  - solution/tools/eval/make_validation_suite.py
 Generates:
   - work/colab_upload/policy_server.py
   - work/colab_upload/make_validation_suite.py
@@ -49,25 +49,25 @@ _UPLOAD_FILES: tuple[tuple[str, str], ...] = (
         "評価に使う推論サーバ。colab_eval.setup_policy() が /content/ から拾う。",
     ),
     (
-        "solution/tools/make_validation_suite.py",
+        "solution/tools/eval/make_validation_suite.py",
         "検証用スイートを作る。build_suite() だけで使う。",
     ),
     (
-        "solution/tools/check_validation_suite.py",
+        "solution/tools/eval/check_validation_suite.py",
         "作った CSV が本当に開けるかを、評価を回す前に確かめる。build_suite() が呼ぶ。",
     ),
     (
-        "solution/tools/patch_kit_for_variants.py",
+        "solution/tools/eval/patch_kit_for_variants.py",
         "配布キットへのパッチ。setup_kit() と build_suite() が呼ぶ。"
         "**これが無いと setup_kit() で落ちる。**",
     ),
     (
-        "solution/tools/rollout_recorder.py",
+        "solution/tools/eval/rollout_recorder.py",
         "ロールアウトの録画。**patch_kit_for_variants.py が同じ /content/ から"
         "探してキットへ複製する**ので、2 つは必ず揃えて置く。",
     ),
     (
-        "solution/tools/summarize_rollout_videos.py",
+        "solution/tools/eval/summarize_rollout_videos.py",
         "撮れた mp4 を見るべき順に並べ、コマ並べ画像にする。run() が呼ぶ。",
     ),
 )

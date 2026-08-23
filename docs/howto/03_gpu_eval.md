@@ -46,10 +46,10 @@ Colab には 3 つの困りごとがあった。**GPU マシンなら 3 つと�
 
 ```bash
 # 1. まず 5 件だけ。5 分ほどで配線が通っているかが分かる
-bash solution/tools/run_docker_eval.sh --check
+bash solution/tools/eval/run_docker_eval.sh --check
 
 # 2. 通ったら 36 件。放っておける形で流す
-bash solution/tools/run_docker_eval.sh --detach
+bash solution/tools/eval/run_docker_eval.sh --detach
 tail -f work/gpu_eval/launcher.log
 ```
 
@@ -58,7 +58,7 @@ tail -f work/gpu_eval/launcher.log
 ```
   **測るタスクの一覧がない: .../compe/val/EVAL_TASKS.csv**
   作る: python3 solution/tools/suite/make_eval_split.py --record <episodes.json>
-  84 件を生成する道に戻す: EVAL_CSV= bash solution/tools/run_docker_eval.sh
+  84 件を生成する道に戻す: EVAL_CSV= bash solution/tools/eval/run_docker_eval.sh
 ```
 
 事前に 2 つのイメージが要る。**学習に使ったものがそのまま使える。**
@@ -84,11 +84,11 @@ bash solution/tools/build/fetch_base_weights.sh
 
 # 素の重みで評価する（36 件で約 1 時間）
 MUJOCO_GL=osmesa WEIGHTS=work/artifacts/model_weights_base LABEL=base \
-    bash solution/tools/run_docker_eval.sh --detach
+    bash solution/tools/eval/run_docker_eval.sh --detach
 
 # 学習後の重みで測る（終わってから。さらに約 1 時間）
 MUJOCO_GL=osmesa LABEL=lora20k \
-    bash solution/tools/run_docker_eval.sh --detach
+    bash solution/tools/eval/run_docker_eval.sh --detach
 ```
 
 > **同時に流さないこと**（下の警告と同じ理由）。
@@ -193,7 +193,7 @@ work/gpu_eval/0811_161500_lora15k_n5_ep1_max300/
 | **失敗した回の映像** | `videos/`。`stalled` か `wandering` かで打つ手が変わる |
 
 ```bash
-python3 solution/tools/summarize_rollout_videos.py work/gpu_eval/<回>/videos
+python3 solution/tools/eval/summarize_rollout_videos.py work/gpu_eval/<回>/videos
 ```
 
 > **Mac では直接動かない。`parc2026` の Docker で回す。**
@@ -205,7 +205,7 @@ python3 solution/tools/summarize_rollout_videos.py work/gpu_eval/<回>/videos
 >
 > ```bash
 > docker run --rm -v "$PWD:/w" -w /w parc2026 \
->     python3 solution/tools/summarize_rollout_videos.py outputs/local_eval/<回>/videos
+>     python3 solution/tools/eval/summarize_rollout_videos.py outputs/local_eval/<回>/videos
 > ```
 >
 > **`videos/sheets/<動画名>.png` が 1 本 8 コマで出る。** 動画を再生しなくても、
@@ -258,7 +258,7 @@ docker run --rm --gpus all -v "$PWD:/w" -w /w parc2026-train-server \
 python3 solution/tools/suite/make_eval_split.py --record outputs/train2/episodes.json \
     --per-task 2 --output compe/val/EVAL_TASKS_x2.csv
 EVAL_CSV=compe/val/EVAL_TASKS_x2.csv \
-    bash solution/tools/run_docker_eval.sh --detach
+    bash solution/tools/eval/run_docker_eval.sh --detach
 ```
 
 ### カテゴリを絞って短く回す（84 件を生成する道でだけ効く）
@@ -274,7 +274,7 @@ EVAL_CSV=compe/val/EVAL_TASKS_x2.csv \
 
 ```bash
 EVAL_CSV= CATEGORIES='Light Conditions,Background Textures' \
-    bash solution/tools/run_docker_eval.sh   # 84 件 2 時間 21 分 → 24 件 39 分
+    bash solution/tools/eval/run_docker_eval.sh   # 84 件 2 時間 21 分 → 24 件 39 分
 ```
 
 時間はどちらも実測である。**カテゴリごとの内訳**は下の
@@ -350,7 +350,7 @@ $ nvidia-smi -q | grep -iA3 -e virtualization -e vgpu
 **こちら側では直せない。** `osmesa` を使う。
 
 ```bash
-MUJOCO_GL=osmesa bash solution/tools/run_docker_eval.sh --check
+MUJOCO_GL=osmesa bash solution/tools/eval/run_docker_eval.sh --check
 ```
 
 > **速さの測定を「動く証拠」にしてはいけない。**
@@ -448,7 +448,7 @@ grep '\[結果\]' "$run/eval.log" | sed -n '1p;$p' | cut -c1-19
 **84 件の報告を 2 つ見比べると見落とす。** 差だけを出す。
 
 ```bash
-python3 solution/tools/summarize_gpu_eval.py \
+python3 solution/tools/eval/summarize_gpu_eval.py \
     --output-dir work/gpu_eval/0811_..._lora \
     --compare    work/gpu_eval/0811_..._base
 ```

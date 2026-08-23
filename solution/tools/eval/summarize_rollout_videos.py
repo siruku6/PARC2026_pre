@@ -11,10 +11,10 @@
 [rollout_recorder.py](rollout_recorder.py) が付けたファイル名から取り、
 静止か往復かは動画に焼かれた文字から目で読む。
 
-    python3 solution/tools/summarize_rollout_videos.py work/videos
+    python3 solution/tools/eval/summarize_rollout_videos.py work/videos
 
     # コマ並べ画像を作らない（一覧だけ見る）
-    python3 solution/tools/summarize_rollout_videos.py work/videos --no-sheets
+    python3 solution/tools/eval/summarize_rollout_videos.py work/videos --no-sheets
 
 Reads:
   - <dir>/*.mp4（rollout_recorder.py が書いたもの）

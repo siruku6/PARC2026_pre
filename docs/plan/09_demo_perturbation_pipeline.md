@@ -310,7 +310,7 @@ WEIGHTS="$PWD/work/artifacts/pi05_rp3000" \
 EVAL_CSV="$PWD/work/robot_init_sanity/SENSOR_NOISE_HIGH_PROBE.csv" \
 LABEL=sensor_noise_high MAX_STEPS=300 N_EPISODES=1 \
 POLICY_IMAGE=parc2026-train-pi05 \
-  bash solution/tools/run_docker_eval.sh
+  bash solution/tools/eval/run_docker_eval.sh
 ```
 
 severity別に成功率・ステップ数が単調に崩れるなら、Sensor Noise対策（Tier1の中でも
@@ -379,7 +379,7 @@ WEIGHTS="$PWD/work/artifacts/pi05_rp3000" \
 EVAL_CSV="$PWD/work/logs/robot_init_sanity/ROBOT_INIT_HIGH_PROBE.csv" \
 LABEL=robot_init_high MAX_STEPS=300 N_EPISODES=1 \
 POLICY_IMAGE=parc2026-train-pi05 \
-  bash solution/tools/run_docker_eval.sh
+  bash solution/tools/eval/run_docker_eval.sh
 ```
 
 実行後は次で読む（Base＋摂動1カテゴリの2行区切りなので`--block-size 2`）:
