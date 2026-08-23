@@ -201,7 +201,7 @@ print(f'使った {len(used):,} / 見た目が同じ {same:,} / 未知 {novel:,}
 PY
 
 # 変種と実演が対応しないこと
-PYTHONPATH=work/pylibs:solution/tools python3 - <<'PY'
+PYTHONPATH=work/pylibs:solution/tools/suite python3 - <<'PY'
 import json, statistics as st
 from collections import Counter, defaultdict
 import pyarrow.parquet as pq

@@ -78,7 +78,7 @@ $ docker exec parc-tools ... scripted_demo.py measure --task KITCHEN_SCENE3_...
 ## 速さの実測（`parc-tools` の中・Mac）
 
 ```
-$ docker exec parc-tools env MUJOCO_GL=osmesa python3 solution/tools/scripted_demo.py \
+$ docker exec parc-tools env MUJOCO_GL=osmesa python3 solution/tools/scripted_demo/scripted_demo.py \
       verify --task KITCHEN_SCENE8_put_both_moka_pots_on_the_stove --episodes 0,1,2
 成功 3/3  ステップ数 中央値 227 最小 225 最大 233  （上限 300）
   滑らかさ（採点と同じ式・中央値）平均ジャーク 11.58  RMS 22.97  SPARC -4.16
