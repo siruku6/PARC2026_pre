@@ -212,7 +212,9 @@ echo "===== 1/5 方策サーバーを起動する（$SERVER_IMAGE）====="
 
 policy_environment=()
 for name in PARC_N_ACTION_STEPS PARC_SAMPLES PARC_BLEND_STEPS PARC_EMA_ALPHA \
-            PARC_NUM_INFERENCE_STEPS QUANT_SERVE_MODE QUANT_SERVE_SCOPE; do
+            PARC_NUM_INFERENCE_STEPS PARC_SEED QUANT_SERVE_MODE QUANT_SERVE_SCOPE; do
+    # PARC_SEED はエピソードごとの乱数を固定する（既定は固定しない）。**渡さないと
+    # 同じ設定で回し直しても結果が変わる**——揺れ幅を測るとき以外は空でよい。
     # QUANT_SERVE_MODE/QUANT_SERVE_SCOPE は量子化スイープ（work/quant_sweep/）の
     # 推論時候補 C4/C5 用。policy_server.py 側で解釈する（未設定なら何も変わらない）。
     value="$(eval "printf '%s' \"\${$name:-}\"")"
@@ -308,7 +310,7 @@ keys = [
     "EVAL_CSV", "RECORD", "WEIGHTS", "LABEL", "NETWORK",
     "MUJOCO_GL",
     "PARC_N_ACTION_STEPS", "PARC_NUM_INFERENCE_STEPS", "PARC_BLEND_STEPS", "PARC_EMA_ALPHA",
-    "PARC_SAMPLES", "PARC_RTC", "PARC_RTC_HORIZON", "PARC_RTC_GUIDANCE",
+    "PARC_SAMPLES", "PARC_SEED", "PARC_RTC", "PARC_RTC_HORIZON", "PARC_RTC_GUIDANCE",
     "PARC_NORMALIZE_INSTRUCTION", "PARC_NORM_EMBED",
     "QUANT_SERVE_MODE", "QUANT_SERVE_SCOPE",
     "PARC_RECORD_WHICH",

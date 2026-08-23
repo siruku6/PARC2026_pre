@@ -4,7 +4,7 @@
 **何をどう撮るのか・撮れたものは何なのか**を 1 枚で確かめられるようにする。
 数値はすべて、この文書を書きながら実測した（測り方は各節に書いた）。
 
-正本は [09_demo_perturbation_pipeline.md](09_demo_perturbation_pipeline.md)。
+基準にする文書は [09_demo_perturbation_pipeline.md](09_demo_perturbation_pipeline.md)。
 こちらは「撮影 1 回ぶんの仕様」だけを切り出したものである。
 
 ---

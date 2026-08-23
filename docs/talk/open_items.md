@@ -6,7 +6,7 @@
 
 > **この板を小さく保つ。** 測定値・理由・閉じた項目の詳細は
 > [open_items_notes.md](open_items_notes.md)（予選のときの根拠置き場）と
-> [../plan/07_track2_preparation.md](../plan/07_track2_preparation.md)（Track2 の正本）に置く。
+> [../plan/07_track2_preparation.md](../plan/07_track2_preparation.md)（Track2 の基準にする文書）に置く。
 > **複数行の手順は [../howto/](../howto/) に節を作り、板からは節の番号で指す。**
 > 板に書いてよいのは 1 行で終わるコマンドだけである。
 
@@ -32,7 +32,7 @@
 ## 一覧 — 開いているものだけ
 
 **Track2 の 7 項目の進み具合は
-[../plan/07_track2_preparation.md](../plan/07_track2_preparation.md) の 3.0 節が正本である。**
+[../plan/07_track2_preparation.md](../plan/07_track2_preparation.md) の 3.0 節が基準にする文書である。**
 ここには板として動かすものだけ置く。
 
 | # | やること | 状態 |

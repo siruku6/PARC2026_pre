@@ -768,6 +768,25 @@ class MyPolicy(BasePolicy):
         self._ema_alpha = float(os.environ.get("PARC_EMA_ALPHA", "0.3"))
         self._n_action_steps = int(self._policy.config.n_action_steps)
 
+        # **`PARC_SEED` を渡すと、エピソードごとに乱数を固定する（既定は固定しない）。**
+        # 行動は flow matching で作るので、毎回ノイズを引き直している
+        # （`_get_action_chunk` に `noise=None` を渡す＝モデル側が引く）。**同じ設定で
+        # 回し直すと結果が変わる。** 手元の 49 回はすべて 1 タスク 1 エピソードで、
+        # この揺れ幅を測ったことがない。
+        #
+        # **これは「2 つの設定を比べられるようにする」ものではない。** 種を揃えても、
+        # `blend_steps` のように行動そのものを書き換える設定は 16 歩目以降で軌道を
+        # 変えてしまい、300 歩の境界にいたタスクはどちらへも転ぶ。**設定の効果と
+        # 境界での転びを分けるには、種を変えた複数回が要る。** 種を揃える意味は、
+        # 複数回で比べるときに対応が取れてばらつきが小さくなる点にある。
+        #
+        # 種はエピソードごとに `PARC_SEED + 通し番号` にする。**同じ値にすると全
+        # エピソードが同じ軌道になり、揺れ幅が 0 に見えてしまう。**
+        # **採点環境は環境変数を渡さないので、既定（固定しない）が提出時の挙動である。**
+        seed_text = os.environ.get("PARC_SEED", "")
+        self._seed = int(seed_text) if seed_text else None
+        self._episode_index = 0
+
         # chunk を何回引くか。1 なら素の挙動。
         # 版 3.4.0 で 3 にして本番で測ったが、0.166 → 0.168（0.04 本ぶん）で
         # **差が無く、時間だけ 2.7 倍になった。版 3.5.0 で 1 に戻した。**
@@ -824,6 +843,7 @@ class MyPolicy(BasePolicy):
             f"num_inference_steps={getattr(self._policy.config, 'num_inference_steps', '-')}  "
             f"n_action_steps={self._n_action_steps}  ema_alpha={self._ema_alpha}  "
             f"blend_steps={self._blend_steps}  samples={self._samples}  "
+            f"seed={self._seed if self._seed is not None else 'off'}  "
             f"rtc={f'on(horizon={self._rtc_horizon})' if self._rtc_enabled else 'off'}  "
             f"normalize={self._normalize_mode()}  "
             f"quant_serve={quant_mode or 'off'}"
@@ -1237,6 +1257,19 @@ class MyPolicy(BasePolicy):
             self._instruction = instruction
         else:
             self._instruction = self._normalizer.normalize(instruction)[0]
+
+        # **種を渡されているときだけ、このエピソードの乱数を固定する。**
+        # 既定（`PARC_SEED` 無し）では何もしない＝提出時の挙動は変わらない。
+        # 何のためかは `__init__` の `PARC_SEED` の注記にある。
+        if self._seed is not None:
+            import torch
+
+            seed = self._seed + self._episode_index
+            torch.manual_seed(seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(seed)
+            np.random.seed(seed % (2**32))
+        self._episode_index += 1
 
         # chunk のキャッシュを捨てる。忘れると前エピソードの action を出し続ける。
         self._policy.reset()
