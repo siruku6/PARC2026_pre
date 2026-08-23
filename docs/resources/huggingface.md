@@ -5,19 +5,25 @@
 このファイルを直す。
 
 読む目的: 学習・評価・提出のどれを次に回せるかを検討するとき、「どの重みが手元に無くても
-取り直せるか」「ローカルのディスクを空けても復旧できるか」を確認する。
+取り直せるか」を確認する。
+
+**書くのは「どのモデルがどこにあるか」という今の状態だけである。** 消し方・空け方・運び方の
+ような手順や Tips はここに書かない（[README.md](README.md) の線引き）。ディスクを空ける手順は
+[../howto/09_free_disk_space.md](../howto/09_free_disk_space.md)、運ぶときに詰まったら
+[../howto/08_hf_transfer_troubleshooting.md](../howto/08_hf_transfer_troubleshooting.md)。
 
 **[reference/19_weights_catalog.md](../reference/19_weights_catalog.md) との違い**: あちらは
 「どの重みでどの版を提出して何点だったか」という履歴の索引で、消した重みも載っている。
 こちらは**今この瞬間 HF に存在するものだけ**を、置き場所として並べる。
 
-最終更新: 2026-08-23 03:13 UTC 時点の HF の状態（`HfApi.list_models` / `model_info` で確認）
+最終更新: 2026-08-23 03:13 UTC 時点の HF の状態（`HfApi.list_models` / `model_info` で確認）。
+3 節のローカル側は同日に `du` と `stat` で確認。
 
 | # | 節 | 結論 |
 |---|---|---|
 | 1 | [自分が上げたリポジトリ](#1-自分が上げたリポジトリは-4-つ公開は-1-つだけ) | 4 リポジトリ・計 48.7 GB。公開は weak3x だけ |
 | 2 | [上流から取る素の重み](#2-素の重みは-2-つとも上流から取り直せるが-π05-は-gemma-ライセンス) | π0.5 は gemma ライセンスで扱いが違う |
-| 3 | [ローカルとの二重持ち](#3-π05-の重み-2-本はローカルと-hf-の二重持ちディスクを空けられる) | ディスク残 40 GB。二重持ちの 17.6 GB は消せる |
+| 3 | [ローカルにある重みの控えの有無](#3-ローカルにある重みのうち控えがあるのは-π05-の-2-本だけ) | π0.5 の 2 本は HF にある。量子化スイープの 4 本はどこにも無い |
 
 ## 1. 自分が上げたリポジトリは 4 つ、公開は 1 つだけ
 
@@ -63,27 +69,25 @@
 固定しているコミットは、いずれも問い合わせた時点の上流の先頭と一致していた（上流が動いていない）。
 
 π0.5 の gemma ライセンスは apache-2.0 と条件が違うため、提出物に同梱する際の表記は
-[knowledge/04_licenses.md](../knowledge/04_licenses.md) を正本とする。
+[knowledge/04_licenses.md](../knowledge/04_licenses.md) に書いてあるものに合わせる。
 
-## 3. π0.5 の重み 2 本はローカルと HF の二重持ちで、ディスクを空けられる
+## 3. ローカルにある重みのうち、控えがあるのは π0.5 の 2 本だけ
 
-**ディスクの残りは 40 GB（298 GB のうち 258 GB 使用・87%）。HF に上げてある重みのローカル
-コピーは消しても取り直せるので、詰まったらここから空ける。**
+**π0.5 の重み 2 本は HF に同じ中身があり、手元から消えても取り直せる。量子化スイープの
+4 本と `weak_undertrained` はどこにも控えが無い。**
 
-| ローカルのパス | 容量 | HF に同じものがあるか |
+| ローカルのパス | 容量 | 同じ中身がある場所 |
 |---|---|---|
-| `work/artifacts/pi05_rp3000` | 8.8 GB | ○ `siruku6/pi05_full_runpod` |
-| `work/artifacts/model_weights_pi05_024000` | 8.8 GB | ○ `siruku6/pi05_stage1_24000` |
-| `work/train/pi05_compile_infer_eval` | 27 GB | ✗ **HF に無い** |
-| `work/train/pi05_quant_c2` | 18 GB | ✗ **HF に無い**（評価中の C2 候補。[infra_and_docker.md](infra_and_docker.md) の `parc-policy` が今これを読んでいる） |
-| `work/train/pi05_quant_c0`・`c1`・`c3`・`c3_compile`・`c3_compile_smoke` | 各 9.6〜11 GB | ✗ **HF に無い** |
-| `work/train/pi05_full_local`・`pi05_full_runpod` | 11 GB・8.8 GB | ○（上の artifacts と同じ重みの学習元） |
+| `work/artifacts/pi05_rp3000` | 8.8 GB | HF `siruku6/pi05_full_runpod`（sha256 `0c5d542e…`）。ローカルでは `work/train/pi05_full_runpod/003000` と同じ実体 |
+| `work/artifacts/model_weights_pi05_024000` | 8.8 GB | HF `siruku6/pi05_stage1_24000`（sha256 `d46bffcf…`）。ローカルでは `work/train/pi05_full_local/checkpoints/024000/pretrained_model` と同じ実体 |
+| `work/train/pi05_quant_c0`・`c3`・`c3_compile` の 016000 | 各 11 GB | **どこにも無い。**作り直すには 16,000 ステップの再学習（C3＋compile で 3 時間 02 分。`work/train/pi05_quant_c3_compile.log` の最終行） |
+| `work/train/pi05_quant_weak_undertrained` の 000500 | 11 GB | **どこにも無い**（500 ステップなので作り直しは短い） |
+| `~/.cache/huggingface/hub/models--lerobot--pi05_libero_base` | 14 GB | 上流 `lerobot/pi05_libero_base` rev `a217bfd3`。学習・評価のたびに要る |
+| `~/.cache/huggingface/lerobot` | 15 GB | 上流 `lerobot/libero_plus`（学習データ本体）。取り直しは遅い |
 
-上流の素の重みもローカルキャッシュに 14.5 GB ある（`lerobot/pi05_libero_base`）。これも
-消せば取り直せるが、学習・評価のたびに要るので消す意味は薄い。
-
-**量子化スイープの成果物（`pi05_quant_*`、計 60 GB 超）は HF に無く、消すと作り直しに学習時間が
-かかる。** 空けるなら二重持ちの 17.6 GB（`work/artifacts/` の 2 本）から手をつける。
+**上の 2 本は `work/artifacts/` と `work/train/` が同じ実体を指しているので、片方だけ消しても
+1 バイトも空かない。** 消してよいかの判定と、消しても空かないときの見方は
+[../howto/09_free_disk_space.md](../howto/09_free_disk_space.md) にある。
 
 ## 確認したい仮定
 
