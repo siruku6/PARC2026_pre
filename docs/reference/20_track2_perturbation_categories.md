@@ -158,7 +158,7 @@ Camera・Robot・Layout は Base と同率 88% で崩れていない」と判断
 だけのステップ数」**（[knowledge/06_step_count_drives_score.md](../knowledge/06_step_count_drives_score.md)、
 r=−0.868）であり、成功率は「壊れていないことの確認」にしか使えない。
 
-**訂正後の数字**（`solution/tools/summarize_probe_by_category.py`で算出）:
+**訂正後の数字**（`solution/tools/probe/summarize_probe_by_category.py`で算出）:
 
 | カテゴリ | 成功率 | 打ち切り | ステップ中央値 | ステップ最大 | **基準完走件のステップ比** |
 |---|---|---|---|---|---|
@@ -194,7 +194,7 @@ Objects Layout と近い水準（+17.5% 対 +15.6%）**である。
 候補として、**このスイートの Sensor Noise 8 行が `_noise_3`〜`_noise_14`——LIBERO-plus の
 5 種の画質劣化のうち最も軽い motion_blur・gaussian_blur の低〜中強度しか使っておらず、
 より崩れの大きい zoom_blur・fog・glass_blur を 1 件も試していないこと**が判明している
-（[09 §3.2](../plan/09_demo_perturbation_pipeline.md#32-高強度sensor-noiseの追加実験準備済み実行待ち)）。
+（[09 §3.2](../plan/09_demo_perturbation_pipeline.md#32-高強度sensor-noiseの追加実験実行済み2026-08-22)）。
 **この確認のための追加実験（`SENSOR_NOISE_HIGH_PROBE.csv`、32 行）は実行済みである
 （2026-08-22、[09 §3.2](../plan/09_demo_perturbation_pipeline.md#32-高強度sensor-noiseの追加実験実行済み2026-08-22)）。**
 結果は総合成功率 90.6%（29/32）——severity を上げても崩れなかった。つまり文献値との
@@ -202,17 +202,29 @@ Objects Layout と近い水準（+17.5% 対 +15.6%）**である。
 対して CRT 論文が報告するほどの崩れを起こしていない**、という結論になった
 （Sensor Noise 対策の投資優先度を下げる判断に反映済み）。
 
-**Robot Initial States には、同じ構造の未解決の食い違いが残っている。** 文献では
-mix-SFT 後も伸びが最小（+8.6pt 止まり）の弱点カテゴリだが、自チームの実測は +17.5%で
-Objects Layout（+15.6%）とほぼ同水準——さらに `make_track2_probe.py` の
-`_pick_variant` は各カテゴリで「難易度が中央値の 1 件」しか選んでいないため、
-Robot Initial States は難易度 1〜5・`robots/new_init.py` の摂動の大きさ 0.1〜0.5 が
-どちらも「5 段階×各 100 個体」という同じ構成であり、両者が対応すると見ているが、
-**分類表（`task_classification.json`）の`difficulty_level`をどの処理が割り振っているかを
-示すコードは見つかっておらず、対応は未確認**（コードは静的な JSON を読むだけで、
-生成処理は同梱されていない）。この対応が正しい前提で、中央値（難易度 3、0.3 相当と
-見立てている段階）でしか見ていない可能性がある。Sensor Noise と同じ「severity を
-上げたら見え方が変わるか」を確認する高強度 probe が次の実験として準備中である。
+**Robot Initial States にも、同じ構造の食い違いがあったが、Sensor Noise と同じ結論で
+解決した。** 文献では mix-SFT 後も伸びが最小（+8.6pt 止まり）の弱点カテゴリだが、
+自チームの実測は +17.5%でObjects Layout（+15.6%）とほぼ同水準——これが
+`make_track2_probe.py`の`_pick_variant`が各カテゴリで「難易度が中央値の1件」しか
+選ばないこと（中央値＝難易度3）による見落としなのかを、難易度5（分類表上の最大）の
+追加probe（16行）で確認した（2026-08-23、
+[09 §3.3](../plan/09_demo_perturbation_pipeline.md#33-高強度robot-initial-statesの追加実験実行済み2026-08-23)）。
+
+**確認の途中で、`difficulty_level`は実際の関節角摂動量の段ではないことが判明した。**
+`env_wrapper.py`は`_initstate_N`の`N`を直接使って`robots/new_init.py`の摂動量
+（1〜100→0.1、…、401〜500→0.5）を選ぶが、この`N`と分類表の`difficulty_level`を
+1550件全体で突き合わせると、**difficulty_level=5の変種にも実際の摂動量が0.1〜0.5まで
+全段階混ざっている**（相関はあるが1対1ではない）。今回選んだ8件で実際の摂動量を
+逆算すると平均0.19→0.31（8件中6件で増加・2件は変化なし・減少は0件）——狙った
+0.3→0.5ほどきれいではないが、**実際に摂動量は増えている。**
+
+**結果は悪化ではなく縮小だった。** 実際の摂動量が平均1.6倍に増えたにもかかわらず、
+ステップ比は+17.5%→+2.0%と縮んだ。Sensor Noiseと同じく、摂動量を上げても崩れない。
+つまり Robot Initial States の弱さも文献ほど突出しておらず、+17.5%という値自体が
+元のprobe（n=8）の揺れだった可能性が高い。**Camera・Robot・Noise・Layoutの4カテゴリの
+うち、severity/摂動量を上げても悪化が確認されたのは今のところ無く、Tier1の優先度を
+支える根拠はCamera Viewpoints（+34.6%、severityを上げる実験はまだ行っていない）に
+絞られている。**
 
 ---
 
@@ -229,8 +241,8 @@ Robot Initial States は難易度 1〜5・`robots/new_init.py` の摂動の大�
 | 自チームの Track2 疑似検証スイート実測（生ログ） | `work/gpu_eval/0822_092556_track2_probe_n16_ep1_max300_ema03_blend0_s1/summary.txt`・`eval.log` |
 | 手元の成功率は本番の順位を付けられないこと | [knowledge/07_local_eval_cannot_rank.md](../knowledge/07_local_eval_cannot_rank.md) |
 | ステップ数（基準完走件）が本番と繋がる量であること（r=−0.868） | [knowledge/06_step_count_drives_score.md](../knowledge/06_step_count_drives_score.md) |
-| カテゴリ別のステップ数の読み直し（訂正後の数字） | `solution/tools/summarize_probe_by_category.py` を実行して算出 |
+| カテゴリ別のステップ数の読み直し（訂正後の数字） | `solution/tools/probe/summarize_probe_by_category.py` を実行して算出 |
 | Sensor Noise 8 行が低〜中強度の劣化しか含まないこと・高強度追加実験の準備 | [09 §3.2](../plan/09_demo_perturbation_pipeline.md#32-高強度sensor-noiseの追加実験準備済み実行待ち)、`work/robot_init_sanity/SENSOR_NOISE_HIGH_PROBE.csv` |
-| TRACK2_PROBE.csv が「順位付けツールで本評価ではない」こと | `solution/tools/make_track2_probe.py` の docstring |
+| TRACK2_PROBE.csv が「順位付けツールで本評価ではない」こと | `solution/tools/probe/make_track2_probe.py` の docstring |
 | 学習データに摂動カテゴリ別の内訳が特定できないこと | [06_training_data_composition.md](06_training_data_composition.md) |
 | π0.5 系提出物が手首カメラを使っていること | `solution/policy_server.py`（`robot0_eye_in_hand_image` を観測に使用）、[07 §4](../plan/07_track2_preparation.md#4-わからないこと確認が必要なこと) |

@@ -36,7 +36,7 @@ Track2 で加わる**カメラ位置・ロボット初期姿勢・物体配置�
 
 使い方:
 
-    python3 solution/tools/make_track2_probe.py --output compe/val/TRACK2_PROBE.csv
+    python3 solution/tools/probe/make_track2_probe.py --output compe/val/TRACK2_PROBE.csv
 
     # 回す（1 件 2 分ほど。40 行で 80 分ほど）
     EVAL_CSV=compe/val/TRACK2_PROBE.csv bash solution/tools/run_docker_eval.sh --detach
@@ -59,8 +59,10 @@ import statistics
 import sys
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+# **`make_validation_suite` は `solution/tools/` 直下に残っている**（評価パイプライン
+# 13 本は分割を保留した）。このファイルが `probe/` へ移った分、1 つ上を見る。
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # **本選 Track2 で加わると読んでいる 4 カテゴリ。**
 # 運営が category 名まで確定させたわけではない（`docs/reference/05_*.md`）。

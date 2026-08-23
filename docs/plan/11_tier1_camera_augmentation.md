@@ -75,14 +75,14 @@ Camera Viewpoints 変種の1つ（`_view_38_15_100_0_0_initstate_0`、方位角�
 
 **評価スイート（`compe/val/TRACK2_PROBE.csv`）と重ならない変種を選ぶ**必要がある
 （[08_training_data_creation_cautions.md](08_training_data_creation_cautions.md) 2.8 節の
-分離原則）。新規に書いた `solution/tools/make_tier1_camera_variants.py` が、
+分離原則）。新規に書いた `solution/tools/probe/make_tier1_camera_variants.py` が、
 LIBERO-plus の分類表（`task_classification.json`）から台本のある2タスクの
 Camera Viewpoints 変種を集め、`TRACK2_PROBE.csv` に載っている変種（`KITCHEN_SCENE3` の
 1件のみ。`KITCHEN_SCENE8` はこの疑似検証スイートに1件も入っていない）を除外し、
 難易度・`id` の昇順で等間隔に選ぶ。
 
 ```bash
-python3 solution/tools/make_tier1_camera_variants.py \
+python3 solution/tools/probe/make_tier1_camera_variants.py \
     --task KITCHEN_SCENE3_turn_on_the_stove_and_put_the_moka_pot_on_it \
     --task KITCHEN_SCENE8_put_both_moka_pots_on_the_stove \
     --exclude compe/val/TRACK2_PROBE.csv \
@@ -192,7 +192,7 @@ python3 solution/train/train_pi05.py --run-name pi05_tier1_camera_aug \
    それぞれ別の run として行い、**両方を同じ `compe/val/TRACK2_PROBE.csv` で評価する**
    （`run_docker_eval.sh`、`EVAL_CSV=compe/val/TRACK2_PROBE.csv`）。
 2. 各 run の出力ディレクトリに対して
-   `python3 solution/tools/summarize_probe_by_category.py <run_dir>` を実行し、
+   `python3 solution/tools/probe/summarize_probe_by_category.py <run_dir>` を実行し、
    Camera Viewpoints 行の「基準完走件のステップ比」を、追加学習前
    （[09 §3.1](09_demo_perturbation_pipeline.md#31-track2疑似検証スイートの結果2026-08-22-実行08-22-に読み方を訂正)の
    +34.6%）と比較する。

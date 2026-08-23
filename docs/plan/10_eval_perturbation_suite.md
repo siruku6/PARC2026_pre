@@ -21,7 +21,7 @@
 
 | 観点 | 現状 |
 |---|---|
-| **単一摂動の評価データ（a）** | ある。`compe/val/TRACK2_PROBE.csv`（8タスク×[Base+4摂動]=40行）。生成スクリプト`solution/tools/make_track2_probe.py`は各カテゴリで難易度1〜5の中央値を1件だけ選ぶ。スクリプト自身のdocstringが「1セル1件しか測らない順位付けツールで、本評価ではない」と明記している |
+| **単一摂動の評価データ（a）** | ある。`compe/val/TRACK2_PROBE.csv`（8タスク×[Base+4摂動]=40行）。生成スクリプト`solution/tools/probe/make_track2_probe.py`は各カテゴリで難易度1〜5の中央値を1件だけ選ぶ。スクリプト自身のdocstringが「1セル1件しか測らない順位付けツールで、本評価ではない」と明記している |
 | **複数摂動を組み合わせた評価データ（b）** | 無い。`work/LIBERO-plus`の公式タスク一覧（`task_classification.json`、7カテゴリ計10,030件）を数えたところ、**カテゴリを跨いで摂動を組み合わせたタスクは1件も無い**。LIBERO-plus論文自体は「組み合わせ摂動には単独の積を下回る相互作用効果がある（Negative Compositional Generalization）」と報告しているが、そのための生成コード・`.bddl`・分類表はこのリポジトリに同梱されていない |
 | **技術的な可能性（検証済み・4節参照）** | `env_wrapper.py`の`ControlEnv.__init__`は、`<base>_view_..._initstate_..._noise_...`という1つのtask_id名から、カメラ視点・ロボット初期姿勢・センサノイズの3要素を独立にパースできる構造になっている。**この3軸の組み合わせ、およびそこにObjects Layoutを加えた4軸の組み合わせは、実際に動作することを確認した**（4節）。Objects Layoutを混ぜた場合に評価ハーネス側の初期状態ファイル解決が見つけていなかった箇所は、原因を特定して修正済み（4.2節） |
 | **評価データの分離原則** | [08_training_data_creation_cautions.md](08_training_data_creation_cautions.md)の「学習で見せたカメラ角度・初期姿勢・物体配置の集合と、検証で使う集合を分離しないと汎化を測れない」（2.8節）は評価データにも直接効く。09で決まるTier 0/1/2の学習側variant IDと、評価側で使うvariant IDが重ならないようにする仕組み（`solution/tools/make_validation_suite.py --exclude`）は既にある |
@@ -230,7 +230,7 @@ Artifactの実行環境が推奨する動画の扱い方は`data:`埋め込み�
 | 事実 | 出典 |
 |---|---|
 | 評価が動画像ファイルを不要としレンダリングが実行時に行われること | `work/LIBERO-plus/libero/libero/envs/env_wrapper.py`（`ControlEnv.step`/`reset`）・`libero_tabletop_manipulation.py`（`_setup_camera`） |
-| TRACK2_PROBE.csv の行数・生成方法・「順位付けツール」という位置づけ | `compe/val/TRACK2_PROBE.csv`（実際に確認）・`solution/tools/make_track2_probe.py`のdocstring |
+| TRACK2_PROBE.csv の行数・生成方法・「順位付けツール」という位置づけ | `compe/val/TRACK2_PROBE.csv`（実際に確認）・`solution/tools/probe/make_track2_probe.py`のdocstring |
 | LIBERO-plus公式タスク一覧に複合摂動タスクが無いこと | `work/LIBERO-plus/libero/libero/benchmark/task_classification.json`（7カテゴリ計10,030件を実際に数えて確認） |
 | ファイル名パーサが複数軸を同時に受理できる構造であること、および3軸（Camera・Robot・Noise）が実際に動くこと | `env_wrapper.py`の`ControlEnv.__init__`・`step`/`reset`。`parc2026_verify`コンテナで`ControlEnv`を直接構築し、Base条件とqpos・`agentview_image`を比較して確認 |
 | Objects Layout（`_add_14`）を混ぜた場合、env構築自体は通ること | 同上コンテナで`..._add_14_view_0_0_121_0_0_initstate_3_noise_1`を構築し確認 |

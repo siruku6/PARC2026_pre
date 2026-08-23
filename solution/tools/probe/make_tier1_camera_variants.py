@@ -25,7 +25,7 @@ Camera Viewpoints の変種を学習データにも使うと、検証が「見�
 
 使い方:
 
-    python3 solution/tools/make_tier1_camera_variants.py \\
+    python3 solution/tools/probe/make_tier1_camera_variants.py \\
         --task KITCHEN_SCENE3_turn_on_the_stove_and_put_the_moka_pot_on_it \\
         --task KITCHEN_SCENE8_put_both_moka_pots_on_the_stove \\
         --exclude compe/val/TRACK2_PROBE.csv \\
@@ -46,7 +46,7 @@ import json
 import sys
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 _CATEGORY = "Camera Viewpoints"
 
 
