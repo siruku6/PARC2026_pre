@@ -699,7 +699,7 @@ class MyPolicy(BasePolicy):
         #
         # 実体は solution/tools/quant/quant_serve_bnb.py / quant_serve_torchao.py。
         # ロジックをここへ埋め込まず薄い分岐だけにしてあるのは、
-        # solution/train/lerobot_train_with_quant.py（C1〜C3 側の分岐）と
+        # solution/train/experiments/quantization/lerobot_train_with_quant.py（C1〜C3 側の分岐）と
         # 同じ流儀に揃えるため。
         #
         # `solution/tools/*.py` はこのファイル自身とは別ディレクトリにある

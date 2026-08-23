@@ -72,7 +72,7 @@ def target_modules(policy) -> dict[str, nn.Module]:
         期待する属性パスが無い場合（lerobot 側の構造がここに書いた版と
         変わっている等）。黙って何もしないより、ここで気づけたほうがよい
         ——このプロジェクトの量子化候補はどれも「fail loudly」を方針にしている
-        （solution/train/quant_optim.py 等と同じ姿勢）。
+        （solution/train/experiments/quantization/ の各候補と同じ姿勢）。
     """
     try:
         expert_model = policy.model.paligemma_with_expert

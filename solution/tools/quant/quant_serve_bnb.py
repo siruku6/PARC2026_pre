@@ -1,8 +1,9 @@
 """量子化スイープ・推論時候補 C4: bitsandbytes の 4bit 量子化を、読み込み済みの
 π0.5 に後掛けする（policy_server.py 専用。work/quant_sweep/CANDIDATES.md の C4）。
 
-**学習側の候補 C2（solution/train/quant_vision_4bit.py。学習前に量子化する）との
-違いは順番だけである。** こちらは policy_server.py の `_build_pi05` が
+**学習側の候補 C2（学習前に量子化する。
+solution/train/experiments/quantization/quant_vision_4bit.py）との違いは順番だけ
+である。** こちらは policy_server.py の `_build_pi05` が
 safetensors から全パラメータを写し終えた「フル精度の完成品」に対して、
 サービング直前に量子化する。逆伝播を考えなくてよい分、学習側より制約が緩い
 （optimizer の "same dtype" 要求や勾配の量子化誤差を気にしなくてよい）。

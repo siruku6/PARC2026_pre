@@ -171,9 +171,11 @@ WORKDIR /opt/pi05
 # なのでチェックポイントがそのまま提出用になる。
 # runpod_ssh_start.sh は RunPod の Container Start Command から呼ぶ（上記参照）。
 #
-# quant_optim.py / quant_vision_4bit.py / quant_float8_expert.py は量子化実験の
-# 各候補（work/quant_sweep/CANDIDATES.md 参照）、lerobot_train_with_quant.py は
-# それらを lerobot-train の実行前に import するための薄いラッパー。
+# experiments/quantization/ は量子化実験の候補 C1〜C3（work/quant_sweep/CANDIDATES.md
+# 参照）と、train_pi05.py 側の窓口（__init__.py）。**train_pi05.py が
+# `from experiments import quantization` で読むので、リポジトリと同じ並びのまま置く。**
+# 中の lerobot_train_with_quant.py は、候補を lerobot-train の実行前に import する
+# ための薄いラッパーで、`python /opt/pi05/experiments/quantization/…` として起動される。
 #
 # **`solution/tools/quant/dequantize_bnb4bit_checkpoint.py`（C2 のチェックポイントを評価用に
 # bf16 へ戻す道具）はここには COPY しない。** ビルドコンテキストが `solution/train`
@@ -181,9 +183,8 @@ WORKDIR /opt/pi05
 # `docker exec -i quant_train bash -c 'cat > /tmp/dequantize_bnb4bit_checkpoint.py'`
 # のように都度渡す（2026-08-22、実際にこの方法で C2 の再評価用チェックポイントを
 # 作った。work/quant_sweep/PROGRESS.md 参照）。
-COPY train.py train_pi05.py prune_checkpoints.sh runpod_ssh_start.sh \
-     quant_optim.py quant_vision_4bit.py quant_float8_expert.py \
-     lerobot_train_with_quant.py /opt/pi05/
+COPY train.py train_pi05.py prune_checkpoints.sh runpod_ssh_start.sh /opt/pi05/
+COPY experiments /opt/pi05/experiments/
 
 VOLUME ["/out"]
 ENV OUTPUT_ROOT=/out
