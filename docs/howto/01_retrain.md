@@ -513,12 +513,13 @@ lerobot-train
 | `--policy.*` | **渡さない** | `--policy.path` は `_resolve_pretrained_from_cli()` が優先するため、渡すと**再開が黙って無視される** |
 | `--dataset.*` | **渡さない** | エピソードの選択も画像拡張も config に入っている |
 | `--steps` | **渡さない** | 学習率は `scheduler_decay_steps` で決まる。変えるとスケジュールが途中で別物になる |
-| `--output_dir` | **必ず渡す** | config には**元の環境のパス**（Colab なら `/content/outputs/...`）が入っている |
+| `--output_dir` | **必ず渡す** | config には**元の環境のパス**が入っている。別のマシンで学習した回なら、その環境の置き場が残っている |
 | `--batch_size` / `--num_workers` / `--save_freq` | 渡してよい | 学習条件を壊さない |
 
-## A-4. Colab で作ったチェックポイントから続ける
+## A-4. 別のマシンで作ったチェックポイントから続ける
 
-**必要なのは 2 つのディレクトリで、両方揃っていないと再開できない。**
+**時間貸しの GPU マシンから持ち帰ったチェックポイントで続けるときの話である。**
+必要なのは 2 つのディレクトリで、両方揃っていないと再開できない。
 
 ```
 work/train/<run-name>/checkpoints/009000/
@@ -536,15 +537,14 @@ work/train/<run-name>/checkpoints/009000/
     └── training_step.json                               … **何ステップ目か**
 ```
 
-Drive から丸ごと持ってくればよい。
+`checkpoints/` を丸ごと持ってくればよい。
 
 ```bash
-mkdir -p work/train/smolvla_lora_all_suites
-cp -r "<Drive>/parc2026/260809_smolvla_lora_multiple_suites_001/train/checkpoints" \
-      work/train/smolvla_lora_all_suites/
+mkdir -p work/train/<run-name>
+cp -r "<持ち帰った場所>/checkpoints" work/train/<run-name>/
 
 # 中身の確認。両方あることを必ず見る
-ls work/train/smolvla_lora_all_suites/checkpoints/009000/
+ls work/train/<run-name>/checkpoints/009000/
 ```
 
 **ディレクトリ名はゼロ埋め 6 桁である**（桁数は `max(6, len(str(steps)))`）。
@@ -556,12 +556,12 @@ ls work/train/smolvla_lora_all_suites/checkpoints/009000/
 
 ### 初期重みの置き場所は train.py が直す
 
-LoRA のアダプタは「どの重みへの差分か」を**絶対パスで**覚えている。Colab で作った
-チェックポイントには Colab の置き場（`/content/hf_cache/...`）が入っており、
-コンテナ側（`/root/.cache/huggingface`）では存在しない場所になる。
+LoRA のアダプタは「どの重みへの差分か」を**絶対パスで**覚えている。**マシンをまたぐと
+その場所は存在しない**ため、ここを直さないと落ちる。
 
 LeRobot はこの値を初期重みの指定としてそのまま使い、**場所として存在しなければ
-HF のリポジトリ名として解釈する。** 直さないとこう落ちる。
+HF のリポジトリ名として解釈する。** 出るのはこのエラーである（下の例は
+`/content/hf_cache/...` という別環境の置き場が焼き付いていた回のもの）。
 
 ```
 HFValidationError: Repo id must be in the form 'repo_name' or 'namespace/repo_name':
@@ -593,7 +593,7 @@ HFValidationError: Repo id must be in the form 'repo_name' or 'namespace/repo_na
 
 ### バッチサイズは変えても構わない
 
-Colab では VRAM の都合で小さくしていたはずだが、GPU マシンでは上げてよい。
+VRAM が前のマシンより大きいなら上げてよい。
 食い違うと次の警告が出るが、**エポックとオフセットは正しく復元される。**
 
 ```
@@ -789,7 +789,7 @@ work/venv310/bin/python solution/tools/weights/install_weights.py \
 | `RuntimeError: operator torchvision::nms does not exist` | torch と torchvision の版が対になっていない | A-1 のイメージを作り直す（Dockerfile で torchvision を torch と同じ index から固定済み） |
 | `--resume` したのに step 0 から始まる | `--policy.path` を渡している | A-3 の表のとおり、最小限の引数だけにする |
 | `NotADirectoryError` | `training_state/` が無い | A-4 のとおり両方コピーする |
-| `HFValidationError: Repo id must be in the form ...` で `/content/hf_cache/...` が出る | Colab の置き場所がアダプタに焼き付いている | `train.py` が `--resume` で直す（A-4 の「初期重みの置き場所は train.py が直す」）。古い train.py なら入れ替える |
+| `HFValidationError: Repo id must be in the form ...` で存在しないパスが出る | 学習した側のマシンの置き場所がアダプタに焼き付いている | `train.py` が `--resume` で直す（A-4 の「初期重みの置き場所は train.py が直す」）。古い train.py なら入れ替える |
 | 毎回 6.4 GB を落とし直す | HF キャッシュをマウントしていない | `-v "$HOME/.cache/huggingface:/root/.cache/huggingface"` |
 | 学習は終わったのに推論で使えない | マージしていない | A-5 を実行する |
 | `can't open file '/workspace/merge.py'` | イメージが `train.py` しか持っていない古いもの | A-1 でイメージを作り直す（`COPY train.py merge.py` に修正済み。`COPY` は最後の行なのでキャッシュが効いて数秒で終わる） |
