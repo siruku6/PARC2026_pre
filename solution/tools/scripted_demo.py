@@ -295,6 +295,12 @@ class EpisodeRecord:
     executed_actions: list[np.ndarray] = field(default_factory=list)
     # 台本に混ぜたノイズの大きさ（標準偏差）。0.0 なら混ぜていない。
     action_noise: float = 0.0
+    # **一度だけ大きく妨害した記録**（`--disturb-scale`）。0.0 なら妨害していない。
+    # 何を・いつ・どちらへ・何歩やったかを残す（後から条件別に選び直せるように）。
+    disturb_scale: float = 0.0
+    disturb_start: int = -1
+    disturb_steps: int = 0
+    disturb_direction: np.ndarray = field(default_factory=lambda: np.zeros(3))
     ee_positions: list[np.ndarray] = field(default_factory=list)
     # 画像はステップ数ぶんに切った「眺め」で、複製ではない（`attach_images`）。
     front: np.ndarray | None = None
@@ -397,6 +403,13 @@ class SavedEpisode:
         # （`action` はノイズを混ぜる前の行動で、そこは昔から変わらない）。
         self.action_noise = (float(self._payload["action_noise"])
                              if "action_noise" in self._payload else 0.0)
+        # **`--disturb-scale` より前に書いた npz にはこの 3 つが無い。**
+        self.disturb_scale = (float(self._payload["disturb_scale"])
+                              if "disturb_scale" in self._payload else 0.0)
+        self.disturb_start = (int(self._payload["disturb_start"])
+                              if "disturb_start" in self._payload else -1)
+        self.disturb_steps = (int(self._payload["disturb_steps"])
+                              if "disturb_steps" in self._payload else 0)
 
     @property
     def action_executed(self) -> np.ndarray:
@@ -439,7 +452,9 @@ class _Rollout:
 
     def __init__(self, env: Any, init_state: np.ndarray, max_steps: int,
                  record_images: bool, action_noise: float = 0.0,
-                 rng: np.random.Generator | None = None) -> None:
+                 rng: np.random.Generator | None = None,
+                 disturb_scale: float = 0.0, disturb_steps: int = 10,
+                 disturb_at: tuple[int, int] | None = None) -> None:
         self.env = env
         self.max_steps = max_steps
         self.record_images = record_images
@@ -453,6 +468,25 @@ class _Rollout:
         self.phases: list[tuple[str, int, float]] = []
         self._last_command = np.zeros(3)
         self.record.action_noise = self.action_noise
+
+        # **妨害の中身は 1 歩も進める前に引く。** ここで引けば、
+        # 毎ステップのノイズを何回引いたかに関係なく同じ種から同じ妨害が出る。
+        self.disturb_scale = float(disturb_scale)
+        self.disturb_steps = int(disturb_steps)
+        if self.disturb_scale > 0.0 and disturb_at is not None:
+            low, high = disturb_at
+            self.disturb_start = int(self._rng.integers(low, high + 1))
+            drawn = self._rng.normal(size=3)
+            norm = float(np.linalg.norm(drawn))
+            self.disturb_direction = drawn / (norm if norm > 0.0 else 1.0)
+        else:
+            self.disturb_start = -1
+            self.disturb_direction = np.zeros(3)
+        self.record.disturb_scale = self.disturb_scale
+        self.record.disturb_start = self.disturb_start
+        self.record.disturb_steps = (self.disturb_steps
+                                     if self.disturb_start >= 0 else 0)
+        self.record.disturb_direction = self.disturb_direction
 
         self.obs = reset_to(env, init_state)
 
@@ -591,6 +625,43 @@ class _Rollout:
         )
         return noisy
 
+    def _disturbed(self, action: np.ndarray) -> np.ndarray:
+        """決めた区間だけ、送る行動を大きく横へ押しのける。**記録は押す前である。**
+
+        `_noisy` は毎ステップ独立に小さく揺らすので、**連続した微小なずれ**になる。
+        こちらは**1 本につき一度だけ、数歩まとめて大きく押す**ので、
+        「途中で一度失敗し、そこから戻る」形の手本になる。台本は閉ループなので、
+        押しのけられた先から目標へ戻す行動を自分で作る（`_noisy` と同じ仕組み）。
+
+        **決めたことが 4 つある。どれも変えると別物になる。**
+
+        1. **足すのではなく上書きする。** `_velocity_command` はいちばん大きい軸を
+           ±1 に揃えるので、**足すと外へ出るぶんが切られて狙った大きさが届かない**
+           （`_noisy` の docstring に書いた性質）。上書きなら確実にずれる。
+        2. **向きは 1 本につき 1 つ引き、妨害中は固定する。** 毎ステップ引き直すと
+           行きと戻りが打ち消し合って正味の変位が小さくなり、**「一度失敗」ではなく
+           「揺れ続ける」**になる。
+        3. **指の開閉（`action[6]`）と手首の向き（`action[3:6]`）には触らない。**
+           `_noisy` と同じ理由である ── 指に触ると物を落とすだけで復帰は学べず、
+           向きは台本が閉ループで直していないので誤った正解になる。
+        4. **開始する歩は本ごとに範囲から引く。** ご要望の「異なるタイミングで
+           一度失敗」を、1 つのコマンドで本数ぶん作るためである。段の途中で押すか
+           境目で押すかによって、崩れ方の種類が変わる。
+
+        **戻れなかった本は `record` が既定で捨てる。** 捨てた本の割合が上がったら
+        `--disturb-scale` か `--disturb-steps` が大きすぎる合図である。
+        """
+        if self.disturb_scale <= 0.0 or self.disturb_start < 0:
+            return action
+        step = self.record.steps
+        if not (self.disturb_start <= step
+                < self.disturb_start + self.disturb_steps):
+            return action
+        pushed = action.copy()
+        pushed[:3] = np.clip(self.disturb_scale * self.disturb_direction,
+                             -1.0, 1.0)   # 環境が受け取る範囲
+        return pushed
+
     def _take_step(self, action: np.ndarray) -> bool:
         """1 ステップ進める。ステップ数の上限に達したら False を返す。"""
         index = self.record.steps
@@ -598,7 +669,7 @@ class _Rollout:
         self.record.states.append(self._observation_state())
         self.record.actions.append(action.astype(np.float32))
         # **観測とノイズ無しの行動を記録してから、混ぜたほうを送る。**
-        action = self._noisy(action)
+        action = self._disturbed(self._noisy(action))
         self.record.executed_actions.append(action.astype(np.float32))
         if self._front_buffer is not None and index < self.max_steps:
             # **学習データは 180 度回した向き**である（LeRobot の同名の処理）。
@@ -818,7 +889,9 @@ _RUNNERS: dict[type, Any] = {PickPlace: _run_pick_place, TurnKnob: _run_turn_kno
 def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
                 max_steps: int = 300, record_images: bool = False,
                 verbose: bool = False, action_noise: float = 0.0,
-                noise_seed: int | None = None) -> EpisodeRecord:
+                noise_seed: int | None = None, disturb_scale: float = 0.0,
+                disturb_steps: int = 10,
+                disturb_at: tuple[int, int] | None = None) -> EpisodeRecord:
     """台本を 1 本ぶん実行し、採点と同じ基準で成否を付ける。
 
     Parameters
@@ -843,6 +916,15 @@ def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
     noise_seed : int | None
         ノイズの種。**本ごとに違う値を渡すこと。** 同じ値だと初期配置が
         違っても同じノイズ列を混ぜてしまい、ずれ方の種類が増えない。
+    disturb_scale : float
+        **1 本につき一度だけ**、送る行動の手先の位置を押しのける大きさ。
+        0.0 なら妨害しない。`action_noise` とは別物で、あちらは毎ステップ
+        独立に小さく揺らす（`_Rollout._disturbed` に決めたことを書いた）。
+    disturb_steps : int
+        妨害を続ける歩数。
+    disturb_at : tuple[int, int] | None
+        妨害を始める歩の範囲。**この範囲から本ごとに 1 つ引く**ので、
+        本数ぶん違うタイミングで失敗する手本になる。
 
     Returns
     -------
@@ -851,7 +933,10 @@ def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
     """
     rollout = _Rollout(env, init_state, max_steps, record_images,
                        action_noise=action_noise,
-                       rng=np.random.default_rng(noise_seed))
+                       rng=np.random.default_rng(noise_seed),
+                       disturb_scale=disturb_scale,
+                       disturb_steps=disturb_steps,
+                       disturb_at=disturb_at)
     for step in plan.steps:
         _RUNNERS[type(step)](rollout, step, plan)
     rollout.hold("整定", GRIPPER_OPEN, plan.final_settle_steps)
@@ -1083,6 +1168,54 @@ def command_measure(args: argparse.Namespace) -> None:
     print(f"\n初期配置 {len(init_states)} 通り")
 
 
+def _report_disturbance(env: Any, plan: TaskPlan, init_states: np.ndarray,
+                        args: argparse.Namespace) -> None:
+    """妨害が軌道をどれだけ外したかを、同じ本の対で測る。
+
+    **成功率では妨害の効き具合が読めない。** 10 本では 1〜3 本の違いが
+    偶然と区別できず、実際に 10 歩と 30 歩で成功率・失敗した本の番号まで
+    一致した（2026-08-23）。**そこで同じ初期配置・同じ種で「妨害あり」と
+    「妨害なし」を 2 回走らせ、同じ歩どうしの手先の距離を直接測る。**
+
+    ここで見るのは 2 つである。
+
+    | 見るもの | 意味 |
+    |---|---|
+    | 最大のずれ | 妨害でどこまで軌道から外れたか。**これが小さいなら妨害は効いていない** |
+    | 終わりのずれ | 戻れたか。小さければ復帰できている（0 に近いのが良い） |
+    """
+    print(f"  **妨害の効き具合を測る**（1 本を 2 回走らせるので時間は 2 倍）")
+    rows: list[tuple[int, int, float, float, bool, bool]] = []
+    for index, state in enumerate(init_states):
+        with_hit = run_episode(env, state, plan, args.max_steps,
+                               action_noise=args.action_noise,
+                               noise_seed=args.noise_seed + index,
+                               disturb_scale=args.disturb_scale,
+                               disturb_steps=args.disturb_steps,
+                               disturb_at=args.disturb_at)
+        without = run_episode(env, state, plan, args.max_steps,
+                              action_noise=args.action_noise,
+                              noise_seed=args.noise_seed + index,
+                              disturb_scale=0.0)
+        a = np.asarray(with_hit.ee_positions)
+        b = np.asarray(without.ee_positions)
+        shared = min(len(a), len(b))
+        gap = np.linalg.norm(a[:shared] - b[:shared], axis=1)
+        rows.append((index, with_hit.disturb_start, float(gap.max()),
+                     float(gap[-1]), with_hit.success, without.success))
+    print(f"  {'本':>3} {'妨害開始':>8} {'最大のずれ':>10} {'終わりのずれ':>12}"
+          f" {'妨害あり':>8} {'妨害なし':>8}")
+    for index, start, peak, last, ok, base_ok in rows:
+        print(f"  {index:3d} {start:8d} {peak * 100:9.1f}cm {last * 100:11.1f}cm"
+              f" {'成功' if ok else '**失敗**':>8} {'成功' if base_ok else '失敗':>8}")
+    peaks = np.array([r[2] for r in rows])
+    lasts = np.array([r[3] for r in rows])
+    print(f"  **最大のずれ 中央 {np.median(peaks) * 100:.1f}cm "
+          f"（最小 {peaks.min() * 100:.1f} 最大 {peaks.max() * 100:.1f}）**")
+    print(f"  終わりのずれ 中央 {np.median(lasts) * 100:.1f}cm "
+          f"（最小 {lasts.min() * 100:.1f} 最大 {lasts.max() * 100:.1f}）")
+
+
 def command_verify(args: argparse.Namespace) -> None:
     """初期配置すべてで台本が通るかを数える。**描画しないので速い。**"""
     plan, variant, env, init_states = _setup(args, with_images=False)
@@ -1092,6 +1225,12 @@ def command_verify(args: argparse.Namespace) -> None:
     print(f"=== {variant} — {len(init_states)} 通りの初期配置 ===")
     if args.action_noise > 0.0:
         print(f"  行動ノイズ σ={args.action_noise}（送る行動だけに混ぜる）")
+    if args.disturb_scale > 0.0 and args.disturb_at is not None:
+        print(f"  妨害 大きさ={args.disturb_scale} × {args.disturb_steps} 歩"
+              f"（開始 {args.disturb_at[0]}〜{args.disturb_at[1]} 歩）")
+    if args.disturb_report and args.disturb_scale > 0.0:
+        _report_disturbance(env, plan, init_states, args)
+        return
     started = time.time()
     lengths: list[int] = []
     failures: list[tuple[int, int, bool]] = []
@@ -1100,7 +1239,10 @@ def command_verify(args: argparse.Namespace) -> None:
         record = run_episode(env, state, plan, args.max_steps,
                              verbose=args.verbose and index == 0,
                              action_noise=args.action_noise,
-                             noise_seed=args.noise_seed + index)
+                             noise_seed=args.noise_seed + index,
+                             disturb_scale=args.disturb_scale,
+                             disturb_steps=args.disturb_steps,
+                             disturb_at=args.disturb_at)
         lengths.append(record.steps)
         if not record.success:
             failures.append((index, record.steps, record.collided))
@@ -1146,18 +1288,29 @@ def command_record(args: argparse.Namespace) -> None:
         print(f"  行動ノイズ σ={args.action_noise}"
               f"（種 {args.noise_seed}＋本の番号）。"
               "**書き出す行動は混ぜる前である**")
+    if args.disturb_scale > 0.0 and args.disturb_at is not None:
+        print(f"  妨害 大きさ={args.disturb_scale} × {args.disturb_steps} 歩、"
+              f"開始は {args.disturb_at[0]}〜{args.disturb_at[1]} 歩から本ごとに引く。"
+              "**書き出す行動は押す前である**")
     for index in indices:
         started = time.time()
         record = run_episode(env, init_states[index], plan, args.max_steps,
                              record_images=True,
                              action_noise=args.action_noise,
-                             noise_seed=args.noise_seed + index)
+                             noise_seed=args.noise_seed + index,
+                             disturb_scale=args.disturb_scale,
+                             disturb_steps=args.disturb_steps,
+                             disturb_at=args.disturb_at)
         if not record.success and not args.keep_failures:
             print(f"  ep{index:02d} 失敗（{record.steps} 歩）—— 書き出さない")
             continue
         # **ノイズの大きさを名前に入れる。** 入れないと、σ を変えて作った組が
         # 同じ名前になって上書きし合う（同じ変種・同じ番号で作るため）。
         tag = "" if args.action_noise <= 0.0 else f"_n{args.action_noise:g}"
+        # **妨害の大きさも名前に入れる。** 妨害あり／なしを同じ置き場に
+        # 混ぜて撮るので、入れないと同じ名前になって上書きし合う。
+        if args.disturb_scale > 0.0:
+            tag += f"_d{args.disturb_scale:g}"
         destination = args.output / f"{variant}{tag}_ep{index:03d}.npz"
         # **圧縮しない。** これは動画に再エンコードするだけの中継物で、
         # 画像 118 MB を deflate しても 1.7 倍しか縮まないのに 1 本 4.3 秒
@@ -1176,6 +1329,13 @@ def command_record(args: argparse.Namespace) -> None:
             # 鍵が増えても `SavedEpisode` 経由で読む側は影響を受けない。
             action_executed=np.stack(record.executed_actions),
             action_noise=record.action_noise,
+            # **何を・いつ・どちらへ妨害したかを残す。** 残さないと、
+            # 後から「妨害あり／なし」で選び直すことも、混合比を測ることも
+            # できない（08_training_data_creation_cautions.md 2.11 節）。
+            disturb_scale=record.disturb_scale,
+            disturb_start=record.disturb_start,
+            disturb_steps=record.disturb_steps,
+            disturb_direction=record.disturb_direction,
         )
         print(f"  ep{index:02d} {record.steps} 歩  成功 {record.success}  "
               f"{time.time() - started:.0f} 秒  → {destination.name}")
@@ -1213,6 +1373,24 @@ def _parse_args() -> argparse.Namespace:
                              "逆効果になる**ので、先に verify で振って決めること")
     parser.add_argument("--noise-seed", type=int, default=0,
                         help="ノイズの種の基準値。本ごとに番号を足して使う")
+    parser.add_argument("--disturb-scale", type=float, default=0.0,
+                        help="**1 本につき一度だけ**手先を押しのける大きさ"
+                             "（行動の範囲は ±1）。`--action-noise` と違い、"
+                             "毎ステップではなく**数歩まとめて大きく**押すので、"
+                             "「途中で一度失敗して戻る」手本になる。"
+                             "0.0 で妨害しない")
+    parser.add_argument("--disturb-steps", type=int, default=10,
+                        help="妨害を続ける歩数（既定 10）")
+    parser.add_argument("--disturb-report", action="store_true",
+                        help="**妨害が実際に軌道をどれだけ外したかを測る**"
+                             "（verify のみ）。同じ本を妨害あり／なしで 2 回走らせ、"
+                             "同じ歩どうしの手先の距離を比べる。**成功率では"
+                             "妨害の効き具合が読めない**ので、大きさと歩数を"
+                             "決めるときはこちらを見る。時間は 2 倍になる")
+    parser.add_argument("--disturb-at", default=None,
+                        help="妨害を始める歩。`N` で固定、`LO,HI` なら"
+                             "**その範囲から本ごとに引く**（タイミングを"
+                             "散らすにはこちら）。省略時は妨害しない")
     parser.add_argument("--blend-radius", type=float, default=None,
                         help="通過点を見切る距離 [m]。台本の値を上書きする")
     parser.add_argument("--verbose", action="store_true",
@@ -1220,6 +1398,14 @@ def _parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if args.episodes:
         args.episodes = [int(x) for x in args.episodes.split(",")]
+    if args.disturb_at:
+        bounds = [int(x) for x in str(args.disturb_at).split(",")]
+        # `N` は「その歩に固定」＝範囲の幅が 0 と同じである
+        args.disturb_at = (bounds[0], bounds[-1])
+        if args.disturb_at[0] > args.disturb_at[1]:
+            raise SystemExit("--disturb-at は LO,HI の順で渡すこと")
+    else:
+        args.disturb_at = None
     return args
 
 

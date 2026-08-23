@@ -204,7 +204,8 @@ Robot・Layout の崩れが特に大きいタスクが見つかったときに�
   下げて保留」に訂正された（3.1節）
 
 **Tier 1・Tier 2 のどちらも、対象タスク・投入量の最終判断は 3.2 節の高強度 Sensor Noise
-追加実験の結果が出るまで確定しない。** Tier 0 のデータ量産だけがこの前提から独立している。
+追加実験（完了）・3.3 節の高強度 Robot Initial States 追加実験（準備済み・実行待ち）の
+結果が出るまで確定しない。** Tier 0 のデータ量産だけがこの前提から独立している。
 
 ```mermaid
 flowchart TD
@@ -217,6 +218,7 @@ flowchart TD
     I -->|"Camera・Noiseより小さいが<br/>ゼロではない（+15〜18%）"| K["Tier 2 の優先度はTier1より低いままだが、<br/>「着手しない」は言い過ぎ——保留にする"]
     E --> L["Tier 1（画像の幾何拡張・画質劣化拡張を有効化）<br/>CameraとSensor Noiseのステップ数劣化が<br/>最も大きいため優先度が上がる"]
     H -.->|"Sensor Noiseの劣化がCRT論文の報告より<br/>ずっと小さい点は要検証"| M["高強度Sensor Noise probe（32行・完了）<br/>severity 25〜50でも成功率90.6%で崩れず<br/>→ Noise対策の投資優先度を下げる"]
+    H -.->|"Robot Initial Statesが文献より<br/>軽く見える点は要検証"| N["高強度Robot Initial States probe<br/>（16行・準備済み・実行待ち）<br/>難易度5（摂動量0.5）でステップ比が<br/>+17.5%から明確に崩れるか確認"]
 ```
 
 **σ スイープと、Track2 疑似検証スイート（40 行）の GPU 評価は別の作業だが、並行して走らせる
@@ -348,6 +350,52 @@ LIBERO-plus論文自体もCamera・Robotの劣化がSensor Noiseより大きい�
 Track2 疑似検証スイート（`compe/val/TRACK2_PROBE.csv`）に 5 行入っている**（実際に数えて
 確認済み）。**Tier 0 のデータを追加学習に混ぜた前後を、この 5 行で直接比べられる**という
 意味で、σ スイープの結果と GPU 評価の結果は後工程でつながる。
+
+### 3.3 高強度Robot Initial Statesの追加実験（準備済み・実行待ち）
+
+**3.1節にはSensor Noiseと同じ構造の未解決点がもう1つ残っている。** 文献
+（[20_track2_perturbation_categories.md §3](../reference/20_track2_perturbation_categories.md)）
+はRobot Initial Statesを、追加学習後も伸びが最小（+8.6pt止まり）の弱点カテゴリと報告する。
+一方、自チームの実測は+17.5%でObjects Layout（+15.6%）とほぼ同水準で、文献ほど突出して
+悪くない。**`make_track2_probe.py`の`_pick_variant`は各カテゴリで「難易度が中央値の1件」
+しか選ばない**ため、Robot Initial States（難易度1〜5は`robots/new_init.py`の関節角
+摂動量0.1〜0.5と「5段階×各100個体」で構成が一致し対応すると見ているが、分類表の
+`difficulty_level`をどの処理が割り振っているかを示すコードは見つからず、対応自体は
+未確認）は中央値（難易度3、0.3相当と見立てている段階）でしか見ていない。Sensor Noiseで
+「severityを上げたら見え方が変わる」と分かった以上、同じ見落としが起きていないかを
+確認する必要がある。
+
+**`work/logs/robot_init_sanity/ROBOT_INIT_HIGH_PROBE.csv`（3.1節と同じ8タスク×
+[Base＋Robot Initial States難易度5]＝16行）を新規に作った。** 難易度5（5段階中最大。
+`robots/new_init.py`の摂動量0.5と対応すると見ているが上記のとおり未確認）の変種は
+8タスク全てに存在することを分類表で確認済み。bddl・初期状態
+の実体解決も`make_validation_suite._build_rows`で事前確認済み（0件欠落）。実行コマンド
+（GPU要）:
+
+```bash
+PARC_N_ACTION_STEPS=16 PARC_NUM_INFERENCE_STEPS=10 PARC_BLEND_STEPS=0 \
+PARC_EMA_ALPHA=0.3 PARC_SAMPLES=1 \
+WEIGHTS="$PWD/work/artifacts/pi05_rp3000" \
+EVAL_CSV="$PWD/work/logs/robot_init_sanity/ROBOT_INIT_HIGH_PROBE.csv" \
+LABEL=robot_init_high MAX_STEPS=300 N_EPISODES=1 \
+POLICY_IMAGE=parc2026-train-pi05 \
+  bash solution/tools/run_docker_eval.sh
+```
+
+実行後は次で読む（Base＋摂動1カテゴリの2行区切りなので`--block-size 2`）:
+
+```bash
+python3 solution/tools/summarize_probe_by_category.py \
+  work/gpu_eval/<出力ディレクトリ> --block-size 2
+```
+
+**判断材料になる読み方**: 難易度5でのステップ比が3.1節の中央値（+17.5%）より明確に
+大きければ、Robot Initial Statesの弱さは摂動量に依存し、文献との食い違いは
+「見ていた強さの違い」で説明できる。変わらなければ、+17.5%は摂動量に関わらず妥当な
+水準で、文献の突出した弱さ（π0系での実測）は自チームのモデル・データには当たらない
+という判断材料になる。いずれの場合も**n=8（比較はn=7以下）のままなので、統計的に
+強い結論ではない**——GPUに空きがある時間を使って先に方向性だけ確認し、量子化評価が
+速くなった後に標本数を増やす、という2段構えにしている。
 
 ---
 
