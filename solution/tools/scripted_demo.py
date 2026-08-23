@@ -131,7 +131,8 @@ class PickPlace:
 
 @dataclass
 class TurnKnob:
-    """つまみを掴んで回す。**「点ける」は角度で判定される。**
+    """コンロの火力つまみを掴んで回す。
+    **「点ける」は角度で判定される。**
 
     SCENE3 のコンロなら `flat_stove_1_button` が **0.5 rad 以上**で点火
     （`libero/libero/envs/objects/articulated_objects.py` の
@@ -762,7 +763,7 @@ class _Rollout:
         return np.asarray(sim.data.xanchor[sim.model.joint_name2id(name)])
 
     def turn_arc(self, label: str, centre: np.ndarray, step: TurnKnob) -> None:
-        """掴んだつまみを、円弧に沿って動かしながら手首も回す。
+        """掴んだコンロの火力つまみを、円弧に沿って動かしながら手首も回す。
 
         **`follow` を使わない。** あちらは中継点に近づいたら次へ飛ぶので、
         回す速さが場面ごとに変わってしまう。ここは**1 ステップに中継点 1 つ**を
@@ -855,10 +856,10 @@ def _run_pick_place(rollout: _Rollout, step: PickPlace, plan: TaskPlan) -> None:
 
 
 def _run_turn_knob(rollout: _Rollout, step: TurnKnob, plan: TaskPlan) -> None:
-    """つまみを掴んで回し、離して逃げる。
+    """コンロの火力つまみを掴んで回し、離して逃げる。
 
     ```
-    出発 ─▶ 設定値の上   ← 構える
+    出発 ─▶ コンロの火力つまみの上   ← 構える
            ▶ 掴む高さ     ← ここだけ正確に止まる
              掴む
            ⤿ 円弧に沿って動かしながら手首を回す   ← ここで点く
@@ -869,14 +870,14 @@ def _run_turn_knob(rollout: _Rollout, step: TurnKnob, plan: TaskPlan) -> None:
     centre = rollout.joint_anchor(step.joint)
     grip_at = np.array([centre[0] + step.radius, centre[1], step.height])
 
-    rollout.move_to("つまみへ構える", grip_at + [0.0, 0.0, step.hover_dz],
+    rollout.move_to("コンロの火力つまみへ構える", grip_at + [0.0, 0.0, step.hover_dz],
                     GRIPPER_OPEN, tolerance=0.006, budget=plan.budget_move)
-    rollout.move_to("つまみを掴む位置へ", grip_at, GRIPPER_OPEN,
+    rollout.move_to("コンロの火力つまみを掴む位置へ", grip_at, GRIPPER_OPEN,
                     tolerance=0.004, budget=plan.budget_descend)
-    rollout.hold("つまみを掴む", GRIPPER_CLOSE, plan.close_steps)
-    rollout.turn_arc("設定値を回す", centre, step)
-    rollout.hold("設定値を離す", GRIPPER_OPEN, plan.open_steps)
-    rollout.move_to("設定値から逃げる",
+    rollout.hold("コンロの火力つまみを掴む", GRIPPER_CLOSE, plan.close_steps)
+    rollout.turn_arc("コンロの火力つまみを回す", centre, step)
+    rollout.hold("コンロの火力つまみを離す", GRIPPER_OPEN, plan.open_steps)
+    rollout.move_to("コンロの火力つまみから逃げる",
                     [rollout.eef_position[0], rollout.eef_position[1],
                      plan.retreat_z],
                     GRIPPER_OPEN, tolerance=0.01, budget=plan.budget_lift)
@@ -1096,14 +1097,14 @@ def _report_goal_sites(env: Any, sim: Any) -> None:
 
 
 def _report_articulation(env: Any, sim: Any) -> None:
-    """関節を持つ什器（コンロの設定値・引き出し）の状態と、点く境目を出す。
+    """関節を持つ什器（コンロの火力つまみ・引き出し）の状態と、点く境目を出す。
 
     **「点ける」は関節の角度で判定される。** `flat_stove` なら
     `qpos >= 0.5`（`libero/libero/envs/objects/articulated_objects.py` の
     `default_turnon_ranges` の下限）で、**どの関節でもよい**（`turn_on` は
     どれか 1 つが超えれば真を返す）。**見た目ではなくこの値を狙う。**
     """
-    print("\n--- 関節（設定値・扉）---")
+    print("\n--- 関節（コンロの火力つまみ・扉）---")
     found = False
     for name in env.env.obj_body_id:
         obj = env.env.get_object(name) if hasattr(env.env, "get_object") else None
@@ -1177,12 +1178,17 @@ def _report_disturbance(env: Any, plan: TaskPlan, init_states: np.ndarray,
     一致した（2026-08-23）。**そこで同じ初期配置・同じ種で「妨害あり」と
     「妨害なし」を 2 回走らせ、同じ歩どうしの手先の距離を直接測る。**
 
-    ここで見るのは 2 つである。
+    ここで見るのは 3 つである。
 
     | 見るもの | 意味 |
     |---|---|
     | 最大のずれ | 妨害でどこまで軌道から外れたか。**これが小さいなら妨害は効いていない** |
-    | 終わりのずれ | 戻れたか。小さければ復帰できている（0 に近いのが良い） |
+    | 最後のずれ | **互いの最終歩どうし**で比べた距離。戻れていれば 0 に近い |
+    | 遅れ | 復帰に使った歩数。**打ち切り 300 への余裕を食う分**である |
+
+    **「同じ歩どうし」で最後を比べてはいけない**（2026-08-23 に一度やって誤った）。
+    妨害された本は復帰に歩数を使うので遅れる。短いほうの最終歩で比べると、
+    **妨害ありのほうはまだ手前の段にいる**ので、戻れていても大きな差に見える。
     """
     print(f"  **妨害の効き具合を測る**（1 本を 2 回走らせるので時間は 2 倍）")
     rows: list[tuple[int, int, float, float, bool, bool]] = []
@@ -1201,19 +1207,31 @@ def _report_disturbance(env: Any, plan: TaskPlan, init_states: np.ndarray,
         b = np.asarray(without.ee_positions)
         shared = min(len(a), len(b))
         gap = np.linalg.norm(a[:shared] - b[:shared], axis=1)
+        # **最後は互いの最終歩どうしで比べる。** 同じ歩どうしだと、遅れている
+        # ぶんが「戻れていない」に見える（この docstring に書いた誤り）。
+        ending = float(np.linalg.norm(a[-1] - b[-1]))
         rows.append((index, with_hit.disturb_start, float(gap.max()),
-                     float(gap[-1]), with_hit.success, without.success))
-    print(f"  {'本':>3} {'妨害開始':>8} {'最大のずれ':>10} {'終わりのずれ':>12}"
-          f" {'妨害あり':>8} {'妨害なし':>8}")
-    for index, start, peak, last, ok, base_ok in rows:
-        print(f"  {index:3d} {start:8d} {peak * 100:9.1f}cm {last * 100:11.1f}cm"
-              f" {'成功' if ok else '**失敗**':>8} {'成功' if base_ok else '失敗':>8}")
+                     ending, with_hit.steps - without.steps,
+                     with_hit.success, without.success))
+    print(f"  {'本':>3} {'妨害開始':>8} {'最大のずれ':>10} {'最後のずれ':>10}"
+          f" {'遅れ':>6} {'妨害あり':>8} {'妨害なし':>8}")
+    for index, start, peak, ending, delay, ok, base_ok in rows:
+        print(f"  {index:3d} {start:8d} {peak * 100:9.1f}cm {ending * 100:9.1f}cm"
+              f" {delay:+5d}歩 {'成功' if ok else '**失敗**':>8}"
+              f" {'成功' if base_ok else '失敗':>8}")
     peaks = np.array([r[2] for r in rows])
-    lasts = np.array([r[3] for r in rows])
+    endings = np.array([r[3] for r in rows])
+    delays = np.array([r[4] for r in rows])
+    kept = sum(1 for r in rows if r[5])
     print(f"  **最大のずれ 中央 {np.median(peaks) * 100:.1f}cm "
           f"（最小 {peaks.min() * 100:.1f} 最大 {peaks.max() * 100:.1f}）**")
-    print(f"  終わりのずれ 中央 {np.median(lasts) * 100:.1f}cm "
-          f"（最小 {lasts.min() * 100:.1f} 最大 {lasts.max() * 100:.1f}）")
+    print(f"  **最後のずれ 中央 {np.median(endings) * 100:.1f}cm** "
+          f"（最小 {endings.min() * 100:.1f} 最大 {endings.max() * 100:.1f}）"
+          "  ← 0 に近ければ戻れている")
+    print(f"  遅れ 中央 {int(np.median(delays)):+d} 歩"
+          f"（最小 {delays.min():+d} 最大 {delays.max():+d}）")
+    print(f"  **残る本 {kept}/{len(rows)}**"
+          f"（撮影は 1 本 95 秒。捨てる割合がそのまま無駄になる）")
 
 
 def command_verify(args: argparse.Namespace) -> None:
