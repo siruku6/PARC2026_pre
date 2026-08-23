@@ -919,8 +919,9 @@ tail -f work/gpu_eval/launcher.log
 
 **件数は集計が数える。** 84 件そろわなければ最初の行で警告が出る。
 
-> **Colab で回す道も残してある**（[COLAB_EVAL.md](../solution/COLAB_EVAL.md)）。
-> GPU マシンが使えないときはそちら。**手順は捨てていない。**
+> **Colab で回す道も残してある**（[colab_eval.md](../solution/colab_eval.md)）。
+> GPU マシンが使えないときはそちら。**手順は捨てていない**（ただし Track1 用で、
+> π0.5 では未検証）。
 
 ### 20. 失敗の内訳を数える — **入れた。17 を流せば出る**
 
@@ -1320,8 +1321,9 @@ ce.run(chunk=1)       # 評価 → 集計 → Drive へ退避（1 呼び出し�
 条件と名前の対応（`n5_ep1_chunk3` / `smoke5` / `chunk=None` で 84 件へ復帰）、
 環境変数、95%CI、結果行の集計、**エラーだけの JSON を読んでも例外にしないこと**。
 
-**Colab で 1 度通すまでは、`docs/solution/colab_eval/01〜09` のセルを控えとして
-残す。** 差し替えが失敗したときに戻れる場所が無いと、その日の枠を失う。
+**控えとして残していた `docs/solution/colab_eval/01〜10`（セルの本文）は 8/23 に削除した。**
+Colab で 1 度通したので控えは不要になり、説明は
+[colab_eval.md](../solution/colab_eval.md) 1 枚に畳んだ。
 
 ## 提出の運用
 

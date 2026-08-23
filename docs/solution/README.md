@@ -250,7 +250,8 @@ weight = (BLEND_STEPS - 境界からの経過) / (BLEND_STEPS + 1)
 
 設定を変えながら同じ評価を回して比較する。**手元の CPU コンテナでは
 12 エピソードに 2.5 時間かかり、成功率 10% と 20% すら区別できない。**
-比較は [colab_eval/](colab_eval/README.md) の GPU 評価で行うこと。
+比較は [../howto/03_gpu_eval.md](../howto/03_gpu_eval.md)（GPU マシン）か
+[colab_eval.md](colab_eval.md)（Colab）の GPU 評価で行うこと。
 
 ```bash
 # 既定（何もしない）

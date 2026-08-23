@@ -100,7 +100,7 @@ _READ_ME = """\
   - 途中で切れたら ce.status() で、どの塊が終わっているか分かる。
   - colab_eval.py を上げ直したら importlib.reload(ce) を通す。**版が画面に出る。**
 
-手順の説明: docs/solution/colab_eval/README.md
+手順の説明: docs/solution/colab_eval.md
 """
 
 

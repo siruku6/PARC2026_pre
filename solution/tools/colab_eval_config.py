@@ -4,7 +4,7 @@
 ノートブックのセルをもう一度実行する。**`colab_eval.py` は毎回これを
 読み直す**ので、ランタイムを再起動する必要はない。
 
-手順の説明は docs/solution/colab_eval/README.md にある。
+手順の説明は docs/solution/colab_eval.md にある。
 """
 
 from __future__ import annotations

@@ -59,7 +59,7 @@
 ## 説明とコードの分け方
 
 ```
-docs/solution/     説明（README・COLAB・COLAB_EVAL・DOCKER_TRAIN）
+docs/solution/     説明（README・colab_eval・DOCKER_TRAIN）
 solution/          動かすファイル（policy_server.py・requirements.txt・tools/・train/）
 ```
 
