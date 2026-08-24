@@ -88,7 +88,7 @@ CPU 描画（osmesa）だけなので GPU が要らず、GPU マシン側の学�
 | 用途 | ノートブック／スクリプト | Track2 で足りないもの |
 |---|---|---|
 | 学習 | `examples/smolvla_libero_spatial_lora.ipynb`（SmolVLA の LoRA 用） | π0.5 向けのノートブックは無い |
-| 評価 | `solution/tools/colab/colab_eval.py`（[solution/colab_eval.md](../solution/colab_eval.md) が手順） | ベース重みの差し替え・摂動スイートへの入れ替え・18 GB の転送時間の実測。詳細は手順書の「Track1 用で、Track2 では未検証である」節 |
+| 評価 | `solution/tools/colab/colab_eval.py`（[howto/11_colab_eval.md](../howto/11_colab_eval.md) が手順） | **π0.5 対応済み（`POLICY_KIND`）。重みは HF から直接落ちるので Drive を経由しない。**残る未確認は T4（cc 7.5）で bf16 の π0.5 が動くかだけ。詳細は手順書の「未確認: T4 で π0.5 が動くかどうか」節 |
 
 ## 2. Docker イメージとコンテナ
 

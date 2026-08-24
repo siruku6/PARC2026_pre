@@ -214,7 +214,7 @@ shasum -a 256 "$TMPDIR/lam100/model.safetensors" \
 ### ② 検証用データで評価してから取り込む
 
 **混ぜた重みを 84 件の検証用データで評価する**（Colab なら 2.6 時間。28 件 × 3 に割る。
-[../solution/colab_eval.md](../solution/colab_eval.md)）。
+[11_colab_eval.md](11_colab_eval.md)）。
 **素の重みの回と 1 件ずつ対にして比べる。**
 
 ```bash
@@ -660,7 +660,7 @@ Omnicampus に `work/submission.zip` をアップロードする。
 
 **出す前に、ローカル評価で成功率を確かめておくこと。** 手順は
 [03_gpu_eval.md](03_gpu_eval.md)（GPU マシン）か
-[../solution/colab_eval.md](../solution/colab_eval.md)（Colab）にある。
+[11_colab_eval.md](11_colab_eval.md)（Colab）にある。
 
 > **【8/14 17:30 訂正】「ローカル評価は本番スコアを再現する」は成り立たない。**
 > **手元の 36 件で「差が無い」と出たものが、本番では 5 割増しになった。**

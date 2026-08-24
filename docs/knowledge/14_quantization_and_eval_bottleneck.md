@@ -101,7 +101,7 @@ T4（7.5）と A100（8.0）は満たさない**）。**未試行である。**
 
 ## Colab では描画が 11 倍速いので、方策の高速化が初めて意味を持つ
 
-`docs/solution/colab_eval.md` の実測によると、Colab で EGL（GPU 描画）が正しく効くと
+`docs/howto/11_colab_eval.md` の実測によると、Colab で EGL（GPU 描画）が正しく効くと
 `env.step` は **431.8 ms から 38.6 ms** になる。**描画が律速から外れるので、
 方策の推論が律速になる。**
 
@@ -132,4 +132,4 @@ T4（7.5）と A100（8.0）は満たさない**）。**未試行である。**
 | 推論1回の秒数の分離（T=291ms・S=449ms） | `work/gpu_eval/0814_091240` / `0814_113657` / `0814_145933` の `eval.log` |
 | serve 時 compile で推論 7.16 倍 | `work/quant_sweep/PROGRESS.md` の 2026-08-22 09:06 の節（`work/train/_bench/`） |
 | CPU 描画が既定である理由と描画の秒数 | `solution/tools/eval/run_docker_eval.sh` の `kit_environment` のコメント |
-| Colab で EGL が効くと `env.step` が 431.8→38.6 ms | `docs/solution/colab_eval.md` |
+| Colab で EGL が効くと `env.step` が 431.8→38.6 ms | `docs/howto/11_colab_eval.md` |

@@ -11,4 +11,4 @@
 | 学習を回したい | [01_retrain.md](../howto/01_retrain.md) |
 | 学習した重みを提出物にしたい | [02_build_submission.md](../howto/02_build_submission.md) |
 | 評価を回したい（GPU マシン） | [03_gpu_eval.md](../howto/03_gpu_eval.md) |
-| 評価を回したい（Colab） | [colab_eval.md](colab_eval.md) |
+| 評価を回したい（Colab） | [../howto/11_colab_eval.md](../howto/11_colab_eval.md) |
