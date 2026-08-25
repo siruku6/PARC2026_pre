@@ -22,5 +22,5 @@ Tips は、ここではなく `howto/` と `knowledge/` に書く。**
 
 | ファイル | 中身 |
 |---|---|
-| [infra_and_docker.md](infra_and_docker.md) | 使える計算資源（このマシン・運営配布 GPU・RunPod・Mac・Colab）と、Docker image・コンテナの現状 |
+| [infra_and_docker.md](infra_and_docker.md) | 使える計算資源（このマシン・運営配布 GPU・RunPod・Mac）と、Docker image・コンテナの現状 |
 | [huggingface.md](huggingface.md) | HF 上に置いてあるモデル・提出 zip と、ローカルにある重みの控えの有無 |
