@@ -125,3 +125,73 @@ python3 outputs/tmp/probe_ordering.py  outputs/tmp/libero_plus_episodes.parquet
 | 分類表の 7 カテゴリと件数 | [05_perturbation_categories.md](05_perturbation_categories.md) |
 | `light` 0.287 / `table`・`tb` 0.405 の目安 | 外部で共有された EDA（[04_track1_population.md](04_track1_population.md)） |
 | 出発点が拡張を使っていないこと | `work/artifacts/model_weights.bak/train_config.json` |
+
+---
+
+## 本選で配布された 6 つのデータセットを数えた（2026-08-25 追記）
+
+**本選では `~/dataset/` に複数のデータセットが tar で配られている。** どれを使うかを
+決めるために、公開されている同じものの `meta/info.json` を 1 つずつ読んで数えた。
+
+| データセット | fps | エピソード | コマ | タスク | 1 本の平均コマ |
+|---|---|---|---|---|---|
+| `libero_spatial_no_noops` | 20 | 432 | 52,970 | 10 | 122.6 |
+| `libero_object_no_noops` | 20 | 454 | 66,984 | 10 | 147.5 |
+| `libero_goal_no_noops` | 20 | 428 | 52,042 | 10 | 121.6 |
+| **`libero_10_no_noops`** | 20 | 379 | 101,469 | 10 | **267.7** |
+| `libero_90_no_noops` | 20 | 3,921 | 569,249 | **73** | 145.2 |
+| **`Sylvest/libero_plus`（いま使っているもの）** | 20 | **14,347** | **2,238,036** | **40** | 156.0 |
+
+**読み方が 4 つある。**
+
+**(1) 6 つとも fps は 20 である。** つまり **「20Hz で統合した」は変換の説明ではなく、
+素材がもともと全部 20 Hz だという言明**と読める。1 コマ 0.05 秒で、
+評価ハーネスの制御周期（`LIBERO_CONTROL_FREQ` の既定 20・`dt` は 0.05 固定）と一致する。
+**学習と評価で時間の刻みがそろっているので、1 歩で進む距離の意味が同じである。**
+
+**(2) `no_noops` は「動いていないコマを抜いた版」である。** 行動がほぼゼロのステップを
+落としてある。落とさないと、方策が「止まっていること」まで覚える。
+
+**(3) `libero_10` だけ 1 本が飛び抜けて長い（267.7 コマ）。** 他は 120〜150 コマである。
+**300 歩の打ち切りに対して、この長さは余裕が無い。** Track3 の課題（置いてあるものを
+取って机に置く、という 2 段構えのもの）も同じ長さの帯に入ると見込まれるので、
+**長い課題を学ぶなら `libero_10` と `libero_90` に入っている。**
+
+**(4) 標準スイート 4 つの 40 タスクは、`libero_plus` の 40 タスクと同じものである。**
+`libero_plus` は spatial・object・goal・10 の 40 タスクに摂動を掛けて作られている
+（変種は 10,030 個だが、指示文は 40 種しかない。この文書の上の節）。
+**したがって「統合」してもタスクの種類は増えない。増えるのは `libero_90` を入れたときだけである。**
+
+### `libero_combined_20hz` が何を含むかは、数を見れば判別できる
+
+配布物の `libero_combined_20hz` の中身は現物を見ていない。**ただし取りうる組み合わせは
+限られるので、`total_tasks` と `total_frames` を見れば判別できる。**
+
+| 中身の仮説 | タスク | エピソード | コマ |
+|---|---|---|---|
+| `libero_plus` だけ | 40 | 14,347 | 2,238,036 |
+| **`libero_plus` ＋ 標準スイート 4 つ** | **40**（増えない） | 16,040 | 2,511,465 |
+| **`libero_plus` ＋ 標準スイート 4 つ ＋ `libero_90`** | **113** | 19,961 | 3,080,714 |
+
+**確かめる手順（tar を全部展開しなくてよい）。**
+
+```bash
+# tar の中の info.json だけを取り出して読む
+tar xf ~/dataset/lerobot/libero_combined_20hz.tar -O '*/meta/info.json' \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); \
+    print({k: d[k] for k in ('fps','total_episodes','total_frames','total_tasks')})"
+
+# 指示文の一覧を見る（v2.1 は jsonl・v3.0 は parquet）
+tar tf ~/dataset/lerobot/libero_combined_20hz.tar | grep -E 'meta/tasks\.(jsonl|parquet)'
+```
+
+**tar の名前と中の階層は現物で違う可能性がある。** まず `tar tf … | head` で並びを見ること。
+
+### `libero_90` のタスク数が 73 になっている
+
+**課題の定義ファイルは 91 個ある**（手元の `work/LIBERO-plus/libero/libero/bddl_files/libero_90/`
+を数えた）のに、データセットの `total_tasks` は **73** である。
+**指示文が同じ課題が複数のシーンにあり、指示文で数えると重複が落ちるためだと考えられる**
+（lerobot 形式は指示文を単位にタスクを数える）。**未確認である。**
+Track3 対策で `libero_90` を混ぜるときは、**課題 91 個ぶんの多様さがあるが、
+指示文としては 73 種類**という理解で使う。
