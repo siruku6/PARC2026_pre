@@ -640,7 +640,7 @@ EOF
 ```
 
 **したがって`policy_server.py`は1行も触らずに済む。**
-取り込みは[install_pi05_weights.py](../../solution/tools/install_pi05_weights.py)が
+取り込みは[install_pi05_weights.py](../../solution/tools/weights/install_pi05_weights.py)が
 そのまま使える(トークナイザの`vlm/`を足すだけ)。
 
 ### 持ち帰りは`scp`ではなくHugging Face経由にした

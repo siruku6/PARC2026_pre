@@ -18,7 +18,7 @@ SmolVLAの提出は保険としてそのまま残し、**並行してπ0.5が間
 | batch sizeの決定 | **16**(下の表の実測から) |
 | チェックポイントの間引き | [prune_checkpoints.sh](../../solution/train/prune_checkpoints.sh)。放っておける形に作り直して実測済み。**cronに登録済み**(2026-08-13 22:06。`*/5 * * * *`・**5個残す**。下の例文の「1分ごと・2個」とは違う) |
 | 本番学習(段1) | **回っている**(22:06 開始、`--steps 24000 --batch-size 16`)。`smp/s` 12 で**8/14 07:00 ごろ完走見込み** |
-| チェックポイントがそのまま推論に使えること | **確認済み**(2026-08-13 23:00、500 ステップのチェックポイントで実測)。[infer_pi05_once.py](../../solution/tools/infer_pi05_once.py)が重み813個を1つ残さず読み、`(7,)`の有限な行動を出した。マージ手順は要らない |
+| チェックポイントがそのまま推論に使えること | **確認済み**(2026-08-13 23:00、500 ステップのチェックポイントで実測)。[infer_pi05_once.py](../../solution/tools/viz/infer_pi05_once.py)が重み813個を1つ残さず読み、`(7,)`の有限な行動を出した。マージ手順は要らない |
 | カメラ名が`front`/`wrist`へ差し替わること | **確認済み**。出典はチェックポイント自身の`config.json`の`input_features`(`observation.images.front`/`wrist`、各[3,256,256]と`empty_camera_0`[3,224,224])。同じ値は上の実測の出力にも出る |
 
 | 次にやること | 中身 |
@@ -308,8 +308,8 @@ L4 24GB・10秒/推論の制約に収まるかを実測する段階に進む。
 
 | 道具 | 何が分かるか | かかる時間(CPU 1コア実測) |
 |---|---|---|
-| [infer_pi05_once.py](../../solution/tools/infer_pi05_once.py) | 重みを読めるか・カメラ名・1推論の秒数。観測は真っ黒なダミー | 読み込み302〜352秒＋1推論195〜209秒(学習と同時に回した2回の実測) |
-| [replay_pi05_on_dataset.py](../../solution/tools/replay_pi05_on_dataset.py) | **実データのフレームを流したときに何をしようとしているか。**正解の行動と並べた動画とcsvが出る | 上に同じ(`--mode chunk`なら推論は1回) |
+| [infer_pi05_once.py](../../solution/tools/viz/infer_pi05_once.py) | 重みを読めるか・カメラ名・1推論の秒数。観測は真っ黒なダミー | 読み込み302〜352秒＋1推論195〜209秒(学習と同時に回した2回の実測) |
+| [replay_pi05_on_dataset.py](../../solution/tools/viz/replay_pi05_on_dataset.py) | **実データのフレームを流したときに何をしようとしているか。**正解の行動と並べた動画とcsvが出る | 上に同じ(`--mode chunk`なら推論は1回) |
 
 ```bash
 # 実データ1フレームから先50 ステップを予測し、正解と並べた動画にする(推論1回・約9分)
@@ -317,9 +317,9 @@ docker run --rm -it --memory=13g --cpus=1 \
     --user "$(id -u):$(id -g)" \
     -v "$PWD:/repo" -v "$HOME/.cache/huggingface:/hf_home" \
     parc2026-train-pi05 \
-    python /repo/solution/tools/replay_pi05_on_dataset.py \
+    python /repo/solution/tools/viz/replay_pi05_on_dataset.py \
         /repo/work/train/pi05_full_local_old/checkpoints/000500/pretrained_model \
-        --task "pick up the black bowl" --output /repo/work/replay
+        --task "pick up the black bowl" --output /repo/work/logs/replay
 ```
 
 - **ピークは12.25GBだった**(500 ステップのチェックポイント・`--load-mode lowmem`)。
@@ -329,7 +329,7 @@ docker run --rm -it --memory=13g --cpus=1 \
 - **シミュレータは回さない。** 入力は常に学習データの実フレームなので、
   「その時点の判断が合っているか」だけが出る。誤差が積み上がって別の場所へ
   行く分は含まれない(ロールアウトの動画を撮るのは
-  [rollout_recorder.py](../../solution/tools/rollout_recorder.py)の役目で、
+  [rollout_recorder.py](../../solution/tools/eval/rollout_recorder.py)の役目で、
   そちらは評価コンテナとGPUが要る)
 - `--dry-run`を付けると方策を読まずに動画の配管だけ試せる(数秒)
 - **`--mode chunk`では、本番が実際に使う先頭10 ステップと、11 ステップ目以降(作り置きの外挿)を
@@ -342,7 +342,7 @@ docker run --rm -it --memory=13g --cpus=1 \
 ### 500 ステップの時点で見えたこと(2026-08-13 23:48 実測)
 
 エピソード2(`pick up the black bowl in the top drawer...`)・`--mode chunk`。
-**本番が使う先頭10 ステップ**での値である(`work/replay/replay_ep2_chunk.csv`)。
+**本番が使う先頭10 ステップ**での値である(`work/logs/replay/replay_ep2_chunk.csv`)。
 
 | 見たもの | 値 | 読み |
 |---|---|---|
@@ -363,4 +363,4 @@ docker run --rm -it --memory=13g --cpus=1 \
 | batch=16のまま学習データに手作業の画像を混ぜたときにメモリ・速度が変わるか | 混ぜたデータセットで同じsmoke-testを再実行する |
 | 手作業の画像を`--dataset-root`で混ぜる形が、pi05でもコードを直さずに通るか | 少量(`--episodes-per-task 3`程度)で1度回してみる |
 | L4 24GBでの1推論の時間(10秒に収まるか) | `policy_server.py`のπ0.5版を書いてから実測。**このマシンのCPU 1コアでは195秒**、重みの読み込みに302秒かかった(2026-08-13実測)。GPUでの値はまだ無い |
-| 学習が進むと予測が正解に近づいていくか | [replay_pi05_on_dataset.py](../../solution/tools/replay_pi05_on_dataset.py)で、実データのフレームを流して正解と並べた動画を作る(下の節) |
+| 学習が進むと予測が正解に近づいていくか | [replay_pi05_on_dataset.py](../../solution/tools/viz/replay_pi05_on_dataset.py)で、実データのフレームを流して正解と並べた動画を作る(下の節) |

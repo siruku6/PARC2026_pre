@@ -2,7 +2,7 @@
 
 **この文書の作り方**: 別セッションで下の報告メッセージを受け取った後、そのセッションの
 jsonl が壊れて読み返せなくなった。**メッセージの文面だけを書き写すのではなく**、現在の
-リポジトリの一次資料（`solution/tools/scripted_demo.py`、`work/scripted/sweep_action_noise.sh`、
+リポジトリの一次資料（`solution/tools/scripted_demo/scripted_demo.py`、`work/scripted/sweep_action_noise.sh`、
 [07_track2_preparation.md](07_track2_preparation.md)、
 [08_training_data_creation_cautions.md](08_training_data_creation_cautions.md)、
 `work/gpu_eval/tonight_0821.sh`、`compe/val/TRACK2_PROBE.csv`）を実際に開いて、
@@ -36,12 +36,12 @@ Robot Initial States・Objects Layout・Sensor Noise）が対応すると推測�
 
 | 層 | 対象シナリオ（タスク） | 加える摂動 | 摂動の程度 | 状態 |
 |---|---|---|---|---|
-| **Tier 0** | 台本があるタスクのみ（現時点で 2 つ） | 台本が出す行動のうち、**手先の位置指令だけ**に、**シミュレータへ送る直前で**ガウスノイズを加える（学習ラベルとして記録するのはノイズを混ぜる前の行動——2.1 節で詳述） | σ = 0 / 0.02 / 0.05 / 0.08 / 0.12 / 0.20 を候補として振り、**実測した**（2.1 節）。SCENE3 は σ=0.05、SCENE8 は σ=0.12 が「落ち始める直前」 | **実装済み・σスイープ実行済み。データ量産はこれから（3 節）** |
-| **Tier 1** | 既存の成功ロールアウト（撮り直し不要） | 画像側の幾何変換（クロップ・ズーム・微小回転）と画質劣化（ぼかし・霧・ガラス歪み） | LeRobot 側の拡張は既定で全て無効。まず有効化するだけ（程度は LIBERO-plus 実装の既定値に合わせる予定） | **未着手。次にやる作業** |
-| **Tier 2** | 台本があるタスクのみ（対象を増やすには台本を書く作業が別途必要） | ロボットの初期関節角・物体配置を変えて、閉ループ台本を新しい初期状態から再実行 | 初期関節角は基準姿勢にランダムな単位ベクトル方向へ大きさ 0.1〜0.5 を加える（LIBERO-plus 実装の値） | **条件付きで後回し**（3 節） |
+| **Tier 0** | 台本があるタスクのみ（現時点で 2 つ） | 台本が出す行動のうち、**手先の位置指令だけ**に、**シミュレータへ送る直前で**ガウスノイズを加える（学習ラベルとして記録するのはノイズを混ぜる前の行動——2.1 節で詳述） | **タスクごとに異なる σ を採用**（SCENE3=0.05・SCENE8=0.12。2.1.1 節で実測・決定の経緯） | **実装済み・σ決定済み。データ量産に着手（3 節）** |
+| **Tier 1** | 既存の成功ロールアウト（撮り直し不要） | 画像側の幾何変換（クロップ・ズーム・微小回転）と画質劣化（ぼかし・霧・ガラス歪み） | LeRobot 側の拡張は既定で全て無効。まず有効化するだけ（程度は LIBERO-plus 実装の既定値に合わせる予定） | **未着手。優先度は上がったが、根拠は Camera Viewpoints（+34.6%）にほぼ絞られる。** Sensor Noise（3.2節）・Robot Initial States（3.3節）はどちらも高強度probeで崩れず、投資優先度を下げた |
+| **Tier 2** | 台本があるタスクのみ（対象を増やすには台本を書く作業が別途必要） | ロボットの初期関節角・物体配置を変えて、閉ループ台本を新しい初期状態から再実行 | 初期関節角は基準姿勢にランダムな単位ベクトル方向へ大きさ 0.1〜0.5 を加える（LIBERO-plus 実装の値） | **Tier1より優先度は低いが、着手しないと決めるのは誤り。** ステップ数ではRobot Initial States+17.5%・Objects Layout+15.6%の劣化があり、Baseと「同率」ではなかった（3.1 節）。ただしRobot Initial Statesは摂動量を最大にしても悪化せず（3.3 節、+2.0%）、Sensor Noiseと同じく severity依存ではないと分かっている |
 
 **シナリオが「台本の有無」で層を分けている理由**が要る。台本
-（`solution/tools/scripted_demo.py`）は、実測の手先位置・物体位置から目標への差分を
+（`solution/tools/scripted_demo/scripted_demo.py`）は、実測の手先位置・物体位置から目標への差分を
 毎ステップ計算し直す**閉ループ制御**である（`follow()` の `delta = targets[index] - self.eef_position`）。
 閉ループなので、**カメラ設定や画質だけが変わる Tier 1 は既存の行動列を再利用できる**が、
 **ロボット初期姿勢や物体配置という物理そのものが変わる Tier 2 は、台本を新しい初期状態から
@@ -139,10 +139,13 @@ Tier 0 のデータ生成には使わない、という点は両タスクで一�
 基準（σ=0）を上回る成功率が出ている点は、50 本という標本数での揺れの範囲として扱い、
 「σを上げるほど良い」とは読まない。
 
-**残っている選択**: タスクごとに違う σ（SCENE3=0.05・SCENE8=0.12）を採用して各タスクの
-限界まで復帰データを稼ぐか、両方に共通の安全側の値（0.05）で揃えて後工程の管理項目を
-減らすかは、まだ決めていない。`sweep_action_noise.sh` 自身のコメントが「σ はタスクごとに
-違って構わない」としているので、前者を妨げる制約は無い。
+**決定（2026-08-22、再検討後）**: タスクごとに異なる σ（**SCENE3=0.05・SCENE8=0.12**）を
+採用する。いったんは後工程の管理項目を減らす目的で両タスク共通の σ=0.05 に揃える案を
+選んだが、**Tier 1・Tier 2 でもどのみちタスクごとに条件が分かれていく**見込みであり
+（3.1 節・3.2 節で見るとおり、Camera・Sensor Noise の劣化幅もタスク横断で揃っていない）、
+共通化で減らせる管理項目は限定的だと判断し直した。各タスクの「落ち始める直前」の値を
+そのまま使うことで、**SCENE8では0.12まで復帰データの限界を広く使える**（σ=0.05のままだと
+SCENE8で得られる復帰の幅を無駄に狭めることになる）。
 
 **この測定が決めるのは、あくまで「台本自身がどこまで手本を作れるか」だけである。**
 方策が学習した後に効く最適な σ（DART でいう α）は別問題であり、4 節の原則のとおり、
@@ -193,35 +196,247 @@ Robot・Layout の崩れが特に大きいタスクが見つかったときに�
 
 **この段階には、まだ入っていないもの**を明確にしておく。
 
-- 決めた σ で実際にひとまとまりの Tier 0 データ（recovery episode 群）を量産すること
+- SCENE3=σ0.05・SCENE8=σ0.12 で実際にひとまとまりの Tier 0 データ（recovery episode 群）を
+  量産すること——**これは他の判断を待たずに着手できる**（下記コマンド）
 - そのデータを `lerobot/libero_plus` に混ぜて追加学習すること
-- Tier 1（画像拡張の有効化・撮り直し）
-- Tier 2（初期姿勢・配置を変えた再収集）
+- Tier 1（画像拡張の有効化・撮り直し）——3.1節のステップ数での読み直しにより優先度が上がった
+- Tier 2（初期姿勢・配置を変えた再収集）——「着手しない」ではなく「Tier 1より優先度を
+  下げて保留」に訂正された（3.1節）
 
-これらは**σ が決まった後**に着手する分である。
+**Tier 1・Tier 2 のどちらも、対象タスク・投入量の最終判断は 3.2 節の高強度 Sensor Noise
+追加実験・3.3 節の高強度 Robot Initial States 追加実験（両方完了）の結果を反映している。**
+Tier 0 のデータ量産だけがこの前提から独立している。
 
 ```mermaid
 flowchart TD
     A["Tier 0 実装（完了）"] --> B["σ スイープ実行<br/>work/scripted/sweep_action_noise.sh（完了）"]
     B --> C{"落ち始める直前の σ<br/>が選べたか"}
-    C -->|"選べた（SCENE3=0.05・SCENE8=0.12）"| D["その σ で Tier 0 データを量産し<br/>lerobot/libero_plus に混ぜる"]
+    C -->|"選べた（SCENE3=0.05・SCENE8=0.12。<br/>再検討の末、タスクごとの値を<br/>そのまま採用）"| D["SCENE3=0.05・SCENE8=0.12 で<br/>Tier 0 データを量産し<br/>lerobot/libero_plus に混ぜる"]
     D --> E["追加学習 → Track2 疑似検証スイートで<br/>追加学習前後を比較"]
-    G["Track2 疑似検証スイート 40 行<br/>run_docker_eval.sh（実行中）"] -.->|"σ 決定と並行して実行<br/>結果は別軸として使う"| H["4 カテゴリのどこで<br/>最も崩れるかが分かる"]
+    G["Track2 疑似検証スイート 40 行<br/>run_docker_eval.sh（完了・2026-08-22 09:26開始）"] -->|"結果は別軸として使う"| H["4カテゴリ別・基準完走件のステップ比<br/>（成功率だけの読みは誤りと判明・訂正済み）<br/>Camera +34.6%・Sensor Noise +24.4%・<br/>Robot Initial States +17.5%・Objects Layout +15.6%"]
     H --> I{"Robot / Layout の<br/>崩れが特に大きいタスクがあるか"}
-    I -->|"ある"| J["Tier 2（そのタスクに絞って着手）"]
-    I -->|"ない/未着手のまま"| K["Tier 2 は着手しない"]
-    E --> L["Tier 1（画像の幾何拡張・画質劣化拡張を有効化）"]
+    I -->|"Camera・Noiseより小さいが<br/>ゼロではない（+15〜18%）"| K["Tier 2 の優先度はTier1より低いままだが、<br/>「着手しない」は言い過ぎ——保留にする"]
+    E --> L["Tier 1（画像の幾何拡張・画質劣化拡張を有効化）<br/>CameraとSensor Noiseのステップ数劣化が<br/>最も大きいため優先度が上がる"]
+    H -.->|"Sensor Noiseの劣化がCRT論文の報告より<br/>ずっと小さい点は要検証"| M["高強度Sensor Noise probe（32行・完了）<br/>severity 25〜50でも成功率90.6%で崩れず<br/>→ Noise対策の投資優先度を下げる"]
+    H -.->|"Robot Initial Statesが文献より<br/>軽く見える点は要検証"| N["高強度Robot Initial States probe<br/>（16行・完了。実際の摂動量は平均<br/>0.19→0.31に増加）ステップ比は+2.0%と縮み<br/>→ 文献ほどの弱さは再現されない"]
 ```
 
-**σ スイープと、Track2 疑似検証スイート（40 行）の GPU 評価は別の作業だが、並行して走らせた。**
-σ スイープは `verify` が描画しないため CPU だけで済み、GPU 評価と同時に回せた。両者の
-結果は独立に使う——σ スイープは Tier 0 の内部設計を決め、GPU 評価は Tier 1/Tier 2 の
-どちらを優先するかを決める。
+**σ スイープと、Track2 疑似検証スイート（40 行）の GPU 評価は別の作業だが、並行して走らせる
+計画だった。** 実際には量子化スイープ関連の複数ジョブ（回収・compileスモークテスト・
+推論速度ベンチマーク）がGPUを占有し続け、σスイープ完了（8/22 08:38）から半日近く遅れて
+8/22 09:26に開始・10:06に完了した（40分・見積り80分より速い）。両者の結果は独立に使う
+——σ スイープは Tier 0 の内部設計を決め、GPU 評価は Tier 1/Tier 2 の どちらを優先するかを
+決める。
+
+### 3.1 Track2疑似検証スイートの結果（2026-08-22 実行、08-22 に読み方を訂正）
+
+`work/gpu_eval/0822_092556_track2_probe_n16_ep1_max300_ema03_blend0_s1/summary.txt`より。
+
+| カテゴリ | 成功率 | 本数 | 内訳 |
+|---|---|---|---|
+| Sensor Noise | 75% | 8本 | 成功6・未完了2 |
+| Base | 88% | 8本 | 成功7・未完了1 |
+| Camera Viewpoints | 88% | 8本 | 成功7・衝突1 |
+| Objects Layout | 88% | 8本 | 成功7・未完了1 |
+| Robot Initial States | 88% | 8本 | 成功7・衝突1 |
+
+総合成功率85.0%（34/40）、方策由来の衝突率5.0%（2/40）。
+
+**この成功率の表だけでの読み（下の訂正前の記述）は誤りだった。** 全体を統括する
+別セッションから、[07_track2_preparation.md §3.1](07_track2_preparation.md#31-完了条件に使う指標2026-08-22-追記)
+の指摘——**手元の成功率は本番の順位を付けられず（`knowledge/07_local_eval_cannot_rank.md`）、
+本番と繋がっている量は「基準（Base）で完走していた件だけのステップ数」
+（`knowledge/06_step_count_drives_score.md`、r=−0.868）である**——を踏まえた再検証の
+依頼を受け、実際に確認した。
+
+**訂正前の記述（誤り）**: 「Robot Initial StatesとObjects LayoutはBaseと全く同じ88%で
+明確な崩れが見えない。Sensor Noiseだけが唯一Baseを下回る」→ Tier2は着手しない、
+Tier1（Sensor Noise対策込み）の優先度を上げる、という結論にしていた。
+
+**ステップ数で読み直した結果（`solution/tools/probe/summarize_probe_by_category.py`を新規実装。
+`compare_steps.py`の「基準で完走していた件のステップ数」の考え方を、1回のスイート内で
+Base行と各摂動行を突き合わせる形に適用したもの）:**
+
+| カテゴリ | 成功率 | 打ち切り | ステップ中央値 | ステップ最大 | **基準完走件のステップ比** |
+|---|---|---|---|---|---|
+| **Camera Viewpoints** | 88%（7/8） | 0/8 | 177 | 290 | **+34.6%**（n=7/8） |
+| **Sensor Noise** | 75%（6/8） | 2/8 | 136 | 300 | **+24.4%**（n=7/8） |
+| Robot Initial States | 88%（7/8） | 1/8 | 132 | 300 | +17.5%（n=7/8） |
+| Objects Layout | 88%（7/8） | 1/8 | 136 | 300 | +15.6%（n=7/8） |
+
+**成功率の順位とステップ数の順位が逆転している。** 成功率だけ見るとCamera・Robot・Layoutは
+Baseと同率で「崩れていない」ように見えたが、**ステップ数で見ると崩れが最も大きいのは
+Camera Viewpoints（+34.6%）であり、Robot Initial States・Objects Layoutも+15〜18%と
+無視できない。** これは「成功はしたが遅い」「300ステップの打ち切りに近づいている」という、
+成功率には出ない副作用がカテゴリ間で異なる大きさで存在することを意味する（07 §3.1が
+警告していたとおり、予選のblend4がまさにこの見え方で本番を悪化させていた）。
+
+**この訂正を踏まえた結論**:
+
+- **Tier 2（Robot/Layoutを変えた再収集）は、成功率だけで「崩れていない」と判断して
+  見送るべきではない。** ステップ数では+15〜18%の劣化があり、Camera・Noiseより小さいが
+  ゼロではない。**それでもTier1より優先度は下げてよい**（劣化の大きさがCamera・Noiseより
+  小さいこと、Tier2は台本を書く追加の人手コストが要ることの両方が根拠）。
+- **Tier 1の優先度が上がるという結論自体は変わらない**が、根拠がSensor Noiseの
+  成功率ではなく、**Camera ViewpointsとSensor Noiseのステップ数劣化**（+34.6%・+24.4%）
+  に置き換わる。
+- **8本×4カテゴリ（n=7で比較）という少ない標本数での判断であり、1〜2件の外れ値に
+  結果が左右されている。** 例えばCamera Viewpointsの+34.6%は、8タスク中2タスク
+  （衝突1件・290/300ステップ1件）が主因である。統計的に強い結論ではない点は留保する。
+- **標本数を増やすタイミング**: 今は事前準備段階なのでn=8のまま進めてよいが、量子化
+  推論の高速化（`work/quant_sweep/`）でGPU評価1本あたりのコストが下がることが確認され
+  次第、`compe/val/TRACK2_PROBE.csv`をカテゴリあたりn=8から増やして本節の数字を確かな
+  ものにする（2026-08-22、ユーザーとの会話で決定）。量子化の状況は
+  `work/quant_sweep/PROGRESS.md`を見る。
+
+### 3.2 高強度Sensor Noiseの追加実験（実行済み・2026-08-22）
+
+07 §1.4が引く外部報告（CRT論文: π0.5・SmolVLAはセンサ劣化で90%→2%まで落ちる）に対し、
+3.1節のprobeは1/8多く未完了という小さな差しか出していない。**原因を確認したところ、
+このprobeのSensor Noise 8行は`_noise_3`〜`_noise_14`——env_wrapper.pyの5種の画質劣化
+（motion_blur 1-10・gaussian_blur 11-20・zoom_blur 21-30・fog 31-40・glass_blur 41-50）
+のうち、最も軽いmotion_blur・gaussian_blurの低〜中強度しか使っていなかった。**
+zoom_blur・fog・glass_blurという、より崩れの大きい種類は1件も試していない。
+
+**そのため、`work/robot_init_sanity/SENSOR_NOISE_HIGH_PROBE.csv`（8タスク×4強度
+[25・35・45・50] = 32行、zoom_blur・fog・glass_blur各1点＋glass_blurの最大値）を新規に
+作った。** 各severityでの`ControlEnv`構築・reset・レンダリングは`parc2026_verify`
+コンテナで事前確認済み（クラッシュしない）。実行コマンド（GPU要）:
+
+```bash
+PARC_N_ACTION_STEPS=16 PARC_NUM_INFERENCE_STEPS=10 PARC_BLEND_STEPS=0 \
+PARC_EMA_ALPHA=0.3 PARC_SAMPLES=1 \
+WEIGHTS="$PWD/work/artifacts/pi05_rp3000" \
+EVAL_CSV="$PWD/work/robot_init_sanity/SENSOR_NOISE_HIGH_PROBE.csv" \
+LABEL=sensor_noise_high MAX_STEPS=300 N_EPISODES=1 \
+POLICY_IMAGE=parc2026-train-pi05 \
+  bash solution/tools/eval/run_docker_eval.sh
+```
+
+severity別に成功率・ステップ数が単調に崩れるなら、Sensor Noise対策（Tier1の中でも
+画質劣化の有効化）への投資根拠が強まる。崩れないなら、LIBERO-plusの合成劣化はCRTが
+報告する実センサの劣化を再現しておらず、Noise対策への投資優先度を下げてよい、という
+判断材料になる。
+
+**結果: 崩れなかった。** `work/gpu_eval/0822_120617_sensor_noise_high_n16_ep1_max300_ema03_blend0_s1/`。
+
+| severity | 成功 | 打ち切り | ステップ中央値 | ステップ最大 | 失敗の内訳 |
+|---|---|---|---|---|---|
+| 25（zoom_blur上限） | 8/8 | 0/8 | 128 | 250 | なし |
+| 35（fog中位） | 7/8 | 1/8 | 179 | 300 | wooden_cabinetタスクが未完了 |
+| 45（glass_blur中位） | 7/8 | 1/8 | 144 | 300 | KITCHEN_SCENE3が衝突 |
+| 50（glass_blur最大） | 7/8 | 1/8 | 130 | 300 | KITCHEN_SCENE3が未完了 |
+
+総合成功率90.6%（29/32）——**3.1節の低強度probe（Sensor Noise 75%）より高い。**
+severityを上げても成功率・ステップ数中央値のどちらにも単調な悪化は無く、CRT論文が
+報告する90%→2%のような崩壊は**この32行では再現されなかった。**
+
+**唯一severity 45・50の両方で失敗したのはKITCHEN_SCENE3だけ**（35以下では成功）だが、
+**この1タスクだけを severity の効果と見るのは早計である。** 3.1節の元のprobeでも
+KITCHEN_SCENE3は`_add_14`（Objects Layout）と`_noise_4`（低強度Sensor Noise）で
+既に0%だった——**severityに関係なく元々崩れやすいタスクである可能性が高い。**
+n=1（severity×task）という最小の標本数でもあり、1本の失敗で強い結論を出せない。
+
+**結論**: **Sensor Noise対策への投資優先度は下げる。** LIBERO-plusの合成画質劣化
+（motion/gaussian/zoom blur・fog・glass blur）は、severityを最大にしてもCRT論文が
+報告するような崩壊を再現しない。3.1節で「Tier1の優先度を上げる根拠」としていた
+Sensor Noiseの劣化（+24.4%）は、**severityを上げても悪化しない**ことが分かった以上、
+**元のprobeがたまたま拾った小さな揺れ（n=8）だった可能性が高い。** Tier1の優先度を
+支える根拠は、**Camera Viewpoints（+34.6%、severityを上げる実験はまだしていないが
+LIBERO-plus論文自体もCamera・Robotの劣化がSensor Noiseより大きいと報告している）
+のほうに絞られる。**
 
 **なお `KITCHEN_SCENE3_turn_on_the_stove_and_put_the_moka_pot_on_it` は、今夜の
 Track2 疑似検証スイート（`compe/val/TRACK2_PROBE.csv`）に 5 行入っている**（実際に数えて
 確認済み）。**Tier 0 のデータを追加学習に混ぜた前後を、この 5 行で直接比べられる**という
 意味で、σ スイープの結果と GPU 評価の結果は後工程でつながる。
+
+### 3.3 高強度Robot Initial Statesの追加実験（実行済み・2026-08-23）
+
+**3.1節にはSensor Noiseと同じ構造の未解決点がもう1つ残っている。** 文献
+（[20_track2_perturbation_categories.md §3](../reference/20_track2_perturbation_categories.md)）
+はRobot Initial Statesを、追加学習後も伸びが最小（+8.6pt止まり）の弱点カテゴリと報告する。
+一方、自チームの実測は+17.5%でObjects Layout（+15.6%）とほぼ同水準で、文献ほど突出して
+悪くない。**`make_track2_probe.py`の`_pick_variant`は各カテゴリで「難易度が中央値の1件」
+しか選ばない**ため、Robot Initial States（難易度1〜5は`robots/new_init.py`の関節角
+摂動量0.1〜0.5と「5段階×各100個体」で構成が一致し対応すると見ているが、分類表の
+`difficulty_level`をどの処理が割り振っているかを示すコードは見つからず、対応自体は
+未確認）は中央値（難易度3、0.3相当と見立てている段階）でしか見ていない。Sensor Noiseで
+「severityを上げたら見え方が変わる」と分かった以上、同じ見落としが起きていないかを
+確認する必要がある。
+
+**`work/logs/robot_init_sanity/ROBOT_INIT_HIGH_PROBE.csv`（3.1節と同じ8タスク×
+[Base＋Robot Initial States難易度5]＝16行）を新規に作った。** 難易度5（5段階中最大。
+`robots/new_init.py`の摂動量0.5と対応すると見ているが上記のとおり未確認）の変種は
+8タスク全てに存在することを分類表で確認済み。bddl・初期状態
+の実体解決も`make_validation_suite._build_rows`で事前確認済み（0件欠落）。実行コマンド
+（GPU要）:
+
+```bash
+PARC_N_ACTION_STEPS=16 PARC_NUM_INFERENCE_STEPS=10 PARC_BLEND_STEPS=0 \
+PARC_EMA_ALPHA=0.3 PARC_SAMPLES=1 \
+WEIGHTS="$PWD/work/artifacts/pi05_rp3000" \
+EVAL_CSV="$PWD/work/logs/robot_init_sanity/ROBOT_INIT_HIGH_PROBE.csv" \
+LABEL=robot_init_high MAX_STEPS=300 N_EPISODES=1 \
+POLICY_IMAGE=parc2026-train-pi05 \
+  bash solution/tools/eval/run_docker_eval.sh
+```
+
+実行後は次で読む（Base＋摂動1カテゴリの2行区切りなので`--block-size 2`）:
+
+```bash
+python3 solution/tools/probe/summarize_probe_by_category.py \
+  work/gpu_eval/<出力ディレクトリ> --block-size 2
+```
+
+**判断材料になる読み方**: 難易度5でのステップ比が3.1節の中央値（+17.5%）より明確に
+大きければ、Robot Initial Statesの弱さは摂動量に依存し、文献との食い違いは
+「見ていた強さの違い」で説明できる。変わらなければ、+17.5%は摂動量に関わらず妥当な
+水準で、文献の突出した弱さ（π0系での実測）は自チームのモデル・データには当たらない
+という判断材料になる。いずれの場合も**n=8（比較はn=7以下）のままなので、統計的に
+強い結論ではない**——GPUに空きがある時間を使って先に方向性だけ確認し、量子化評価が
+速くなった後に標本数を増やす、という2段構えにしている。
+
+**実行後に判明した重要な訂正: `difficulty_level`は実際の摂動量の段ではなかった。**
+`env_wrapper.py`は`_initstate_N`の`N`を直接使って`robots/new_init.py`の500個体
+（1〜100→摂動量0.1、101〜200→0.2、…、401〜500→0.5）から選ぶ。この`N`と分類表の
+`difficulty_level`を1550件全体で突き合わせたところ、**`difficulty_level=5`の変種にも
+実際の摂動量0.1〜0.5が全段階混ざっており、1対1に対応していない**（相関はあるが
+決定的ではない）。つまり「難易度5だから摂動量0.5」という前提は誤りだった。
+
+**今回選ばれた8件の`_initstate_N`から実際の摂動量を逆算すると、平均0.19→0.31
+（8件中6件で増加・2件は変化なし・減少は0件）。** 狙った0.3→0.5ほどきれいな比較には
+ならなかったが、**実際の摂動量は確かに増えている**（tomato_sauce・black_bowl_wooden
+の2件だけは変化なし）。
+
+**結果: 実際に摂動量が増えたにもかかわらず、悪化しなかった。むしろ縮んだ。**
+`work/gpu_eval/0823_092324_robot_init_high_n16_ep1_max300_ema03_blend0_s1/`
+（`summarize_probe_by_category.py --block-size 2`で算出）。
+
+| 摂動 | 成功率 | 打ち切り | ステップ中央値 | ステップ最大 | 基準完走件のステップ比 |
+|---|---|---|---|---|---|
+| Robot Initial States（難易度3、中央値。3.1節） | 88%（7/8） | 1/8 | 132 | 300 | +17.5%（n=7/8） |
+| Robot Initial States（難易度5、最大） | 88%（7/8） | 1/8 | 168 | 300 | **+2.0%（n=7/8）** |
+
+難易度5（最大摂動量）でのステップ比は中央値（難易度3）の +17.5% より**小さい**。
+severityを上げても悪化しないという、3.2節のSensor Noiseと同じ形の結果になった。
+
+**唯一300ステップで打ち切られたのはKITCHEN_SCENE3だけ**（Base・高強度の両方で
+未完了）。この1タスクは3.1節の元のprobeでもObjects Layout・低強度Sensor Noiseで
+既に崩れており、3.2節でも同じ指摘をした——**摂動の種類に関わらず元々崩れやすい
+タスクである可能性が高く、Robot Initial States というカテゴリの特性とは考えにくい。**
+なお`pick_up_the_tomato_sauce_and_place_it_in_the_basket`のBase行は衝突（240 steps
+でゴール到達後に失格）だったが、その高強度Robot Initial States行は成功（137 steps）
+——摂動を加えたほうが良い結果になった組もあり、n=8の揺れの大きさを示す一例である。
+
+**結論**: **Robot Initial Statesの弱さは摂動量に依存しない。** 3.1節の+17.5%は、
+実際に平均1.6倍大きな摂動量（0.19→0.31、上記の訂正参照）でも再現・悪化せず、
+**元のprobeがたまたま拾った小さな揺れ（n=8）だった可能性が高い**——3.2節のSensor
+Noiseと同じ結論になった。文献
+（[20 §3](../reference/20_track2_perturbation_categories.md)）が報告するRobot
+Initial Statesの突出した弱さ（π0系モデルでの実測、mix-SFT後も+8.6pt止まり）は、
+自チームのモデル・データには当たらないという判断材料が1つ増えた。**Tier1の優先度を
+支える根拠はCamera Viewpoints（+34.6%）にほぼ絞られる、という3.2節の結論は変わらない。**
 
 ---
 
@@ -234,7 +449,7 @@ Track2 疑似検証スイート（`compe/val/TRACK2_PROBE.csv`）に 5 行入っ
 |---|---|---|
 | **a. 実装が正しいか** | ノイズを混ぜる関数が仕様どおりに動くか（シミュレータ不要） | σ=0.05 の指定に対して届いた標準偏差が概ね 0.05 になっている・σ=0 は素通し・指と向きは不変・値の範囲は ±1 の内・同じ種で再現し違う種で別の列になる・昔の npz も読める、という**配列レベルの性質**をコード側で確かめる |
 | **b. σ をどこに決めるか** | Tier 0 で使う σ の値そのもの | `work/scripted/sweep_action_noise.sh` の結果。**台本自身の成功率がσごとにどう落ちるか**を、同じ種を使った対応のある比較で見る。**「落ち始める直前の σ」を選ぶ**のが決め方。ステップ数の中央値が 300 ステップの打ち切りへ寄っていないかも見る（伸びていれば、1 本 100 秒の撮影が打ち切りで捨てられる本が増える兆候になる） |
-| **c. Tier 0/1/2 全体の効果** | 増やしたデータが実際に Track2 対策として効いたか | **追加学習の前後で suite・scene・condition を揃えた比較評価**（Track2 疑似検証スイート）。チェックポイントも training loss ではなく条件別・タスク別の検証成績で選ぶ |
+| **c. Tier 0/1/2 全体の効果** | 増やしたデータが実際に Track2 対策として効いたか | **追加学習の前後で suite・scene・condition を揃えた比較評価**（Track2 疑似検証スイート）。**その表は成功率だけでなく、基準で完走していた件だけのステップ数と 300 打ち切り率の 3 列で作る**（2026-08-22 追記。[07](07_track2_preparation.md) 3.1 節。手元の成功率は本番の順位を付けられないため）。チェックポイントも training loss ではなく条件別・タスク別の検証成績で選ぶ |
 
 **b と c は別の判断である。** b で分かるのは「どこまで混ぜても台本自身が手本を作れるか」
 だけで、**方策が学習した後に効く最適な σ（DART の論文でいう α）は、方策を実際に学習させる
@@ -302,7 +517,7 @@ Track2 疑似検証スイート（`compe/val/TRACK2_PROBE.csv`）に 5 行入っ
 
 | 事実 | 出典 |
 |---|---|
-| Tier 0 の実装内容・3 つの決定・軸飽和の性質 | `solution/tools/scripted_demo.py`（`_noisy()`・`_take_step()` の docstring と実装を直接読んで確認） |
+| Tier 0 の実装内容・3 つの決定・軸飽和の性質 | `solution/tools/scripted_demo/scripted_demo.py`（`_noisy()`・`_take_step()` の docstring と実装を直接読んで確認） |
 | σ スイープの対象タスク・σ の候補・実行方法 | `work/scripted/sweep_action_noise.sh`（実際に読んで確認） |
 | 台本のあるタスクが 2 つであること | `work/scripted/sweep_action_noise.sh` のコメント（`scripted_demo.TASK_PLANS` を指す）。メッセージの「1 つ」は誤りで、訂正後の記述に一致 |
 | Track2 の背景・4 カテゴリ・mix-SFT の実測・Tier 0/1/2 の設計・優先順位 | [07_track2_preparation.md](07_track2_preparation.md) |
@@ -311,3 +526,10 @@ Track2 疑似検証スイート（`compe/val/TRACK2_PROBE.csv`）に 5 行入っ
 | `KITCHEN_SCENE3_...` が Track2 疑似検証スイートに 5 行入っていること | `compe/val/TRACK2_PROBE.csv`（`grep` で実際に数えて確認、40 行中 5 行） |
 | Tier 0 実装の配列レベルの確認結果（標準偏差・再現性等） | 別セッションで受け取った報告メッセージ。この文書を書く際に `_Rollout._noisy()` をホスト側の Python から直接呼んで再確認し、一致した（`docker run` を介していない） |
 | `docker run` は拒否されるが `docker exec`（既存コンテナ）は拒否されないこと | 実際に `docker exec quant_train echo ...` を実行して確認した |
+| σ をタスクごとに異なる値（SCENE3=0.05・SCENE8=0.12）で採用することに決定したこと（いったん共通0.05案を検討した後の再考） | ユーザーとの会話で決定（2026-08-22） |
+| Track2疑似検証スイート40行の結果（総合成功率・カテゴリ別成功率・衝突の切り分け） | `work/gpu_eval/0822_092556_track2_probe_n16_ep1_max300_ema03_blend0_s1/summary.txt`・`eval.log`（実際に確認） |
+| 成功率だけの読みが誤りで、ステップ数（基準で完走していた件だけ）で読むべきという指摘 | 全体を統括する別セッションからの依頼メッセージ。[07_track2_preparation.md §3.1](07_track2_preparation.md#31-完了条件に使う指標2026-08-22-追記)・`knowledge/07_local_eval_cannot_rank.md`・`knowledge/06_step_count_drives_score.md`を実際に読んで確認 |
+| カテゴリ別ステップ比の実測値（Camera +34.6%等） | `solution/tools/probe/summarize_probe_by_category.py`を新規実装し、同じ`eval.log`・`VAL_TASKS.csv`に対して実行して確認。手計算でも1カテゴリ分（Camera）を検算し一致 |
+| Sensor Noise 8行の強度が`_noise_3`〜`_noise_14`（motion/gaussian_blurの低〜中強度のみ）で、zoom_blur・fog・glass_blurを含んでいないこと | `compe/val/TRACK2_PROBE.csv`のSensor Noise行を`grep`で実際に確認 |
+| 高強度Sensor Noise（severity 25/35/45/50）が`ControlEnv`の構築・resetでクラッシュしないこと | `parc2026_verify`コンテナで実際に4つのseverityを構築・reset・レンダリングして確認 |
+| 高強度Sensor Noise probe（32行）の結果、severity別の成功率・ステップ数、CRT論文のような崩壊が再現されなかったこと | `work/gpu_eval/0822_120617_sensor_noise_high_n16_ep1_max300_ema03_blend0_s1/summary.txt`・`eval.log`（実際に確認。severity別の集計は`eval.log`の`[結果]`行とCSVを対にして実行して確認） |

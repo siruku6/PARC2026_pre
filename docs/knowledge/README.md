@@ -42,6 +42,9 @@
 | [10_deciding_under_deadline.md](10_deciding_under_deadline.md) | **本選に出られる最低点を越えないと意味がない勝負での危険の取り方。運ぶと出すを切り離す** | 2, 3, 4 |
 | [11_primary_sources.md](11_primary_sources.md) | **1 次資料の当たり方。実際にやってしまった 4 件の間違い** | 2, 3 |
 | [12_workbench_accidents.md](12_workbench_accidents.md) | ディスク満杯・並行実行・大容量の運び方 | 2, 3 |
+| [13_runpod_operations.md](13_runpod_operations.md) | **時間貸しの GPU マシンは期限ではなく残高で止まる。**ストレージの種類で $0 のとき消えるかが決まる・チェックポイント 25 GB の間引き・持ち帰りの経路 | 2, 3 |
+| [14_quantization_and_eval_bottleneck.md](14_quantization_and_eval_bottleneck.md) | **低精度化が速さになる条件は3つあり、1つ欠けると効果がゼロか逆になる。**手元の評価は方策ではなくCPU描画で律速されている（方策は壁時計の18〜29%） | 2, 3 |
+
 
 ## 成果物 2 —— 出来た skill の日本語版（確認用）
 
@@ -73,5 +76,5 @@
 | [02](02_model_identity.md) [03](03_training_info.md) [05](05_score_history.md) の値 | S2〜S5・付録 A2 |
 | [05](05_score_history.md) の公開された順位 | **S4**（42 位・分布の形）・S23 |
 
-**次は成果物 3（人間側で意識すること）。**06〜12 の「人間側」の欄が材料になる。
+**次は成果物 3（人間側で意識すること）。**06〜13 の「人間側」の欄が材料になる。
 

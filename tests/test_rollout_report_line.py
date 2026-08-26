@@ -1,9 +1,9 @@
 """`[結果]` 行を、書く側と読む側の両方から確かめる。
 
 **書式が 1 か所で決まっていても、読み手がずれれば意味が無い。**
-[rollout_recorder.py](../solution/tools/rollout_recorder.py) の
+[rollout_recorder.py](../solution/tools/eval/rollout_recorder.py) の
 `format_result_line` が書いた行を、
-[summarize_gpu_eval.py](../solution/tools/summarize_gpu_eval.py) の
+[summarize_gpu_eval.py](../solution/tools/eval/summarize_gpu_eval.py) の
 `_parse_log` にそのまま食わせて、項目が復元できることを見る。
 
 **採点環境でしか分からないことを、手元で確かめられるようにするための試験である。**
@@ -24,7 +24,7 @@ from typing import Any
 import pytest
 
 _ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_ROOT / "solution" / "tools"))
+sys.path.insert(0, str(_ROOT / "solution" / "tools" / "eval"))
 
 import rollout_recorder as recorder  # noqa: E402
 
@@ -36,7 +36,7 @@ def _load_summarizer() -> Any:
     **`_parse_log` などの private な名前をすべて「無い」と言う**
     （動的に読んだモジュールの中身は静的には見えない）。
     """
-    path = _ROOT / "solution" / "tools" / "summarize_gpu_eval.py"
+    path = _ROOT / "solution" / "tools" / "eval" / "summarize_gpu_eval.py"
     spec = importlib.util.spec_from_file_location("summarize_gpu_eval", path)
     assert spec is not None and spec.loader is not None, f"読み込めない: {path}"
     module: ModuleType = importlib.util.module_from_spec(spec)

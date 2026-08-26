@@ -14,6 +14,10 @@
 | **次のコンペに持ち越すこと** | [talk/lessons_learned.md](talk/lessons_learned.md) |
 | **レポートに書く値** | [reference/03_report_values.md](reference/03_report_values.md) |
 | **どの重みがどの版で、中身は何か** | **[reference/19_weights_catalog.md](reference/19_weights_catalog.md)** |
+| **今使える計算資源・docker image は何か** | **[resources/infra_and_docker.md](resources/infra_and_docker.md)** |
+| **HF にどのモデルが置いてあるか・ローカルの重みに控えがあるか** | **[resources/huggingface.md](resources/huggingface.md)** |
+| **ディスクを空けたい** | **[howto/09_free_disk_space.md](howto/09_free_disk_space.md)** |
+| **このマシンを作り替える／作り替えた** | **[howto/10_rebuild_machine.md](howto/10_rebuild_machine.md)** |
 
 ## ディレクトリ
 
@@ -24,6 +28,7 @@
 | [solution/](solution/) | 提出物と Colab の説明。コード本体は `../solution/` |
 | [strategy/](strategy/) | 何を狙うか、なぜそうするか。判断の材料 |
 | [reference/](reference/) | 調べて分かった事実（モデル・評価データ・出題元のデータ・設定の意味） |
+| [resources/](resources/) | **今使える** 計算資源・ディスク・メモリ・docker image・HF 上のモデルの一覧。状態が変わるたびに上書きする（履歴は残さない）。**手順や Tips は書かない**（[resources/README.md](resources/README.md) の線引き） |
 | [plan/](plan/) | **1 つずつの手の設計。** 何を測り、出た数字で何を決めるか |
 | [prod_eval_results/](../outputs/prod_eval_results/) | 本番採点の生ログと読み解き |
 
@@ -39,8 +44,9 @@
 | **[howto/03_gpu_eval.md](howto/03_gpu_eval.md)** | **評価を回すとき（GPU マシン。放っておける）** |
 | **[howto/05_scripted_demos.md](howto/05_scripted_demos.md)** | **手本を台本で作るとき（撮影は手元の Mac の Docker。GPU が要るのは学習だけ）** |
 | **[howto/08_hf_transfer_troubleshooting.md](howto/08_hf_transfer_troubleshooting.md)** | **借りた GPU マシンから重みを運ぶとき。`hf upload` が 403 で止まったら** |
-| **[solution/colab_eval/](solution/colab_eval/README.md)** | **評価を回すとき（Colab。貼るのは `colab_eval.py` の呼び出し 8 行）** |
-| [solution/COLAB.md](solution/COLAB.md) | Colab で学習を回すとき |
+| **[howto/09_free_disk_space.md](howto/09_free_disk_space.md)** | **`df` の空きが減ってきたとき。消してよいものの判定と、「消したのに空かない」3 つの罠** |
+| **[howto/10_rebuild_machine.md](howto/10_rebuild_machine.md)** | **マシンを作り替えてディスクが消えるとき。持ち出す 1 本のスクリプト・秘密の 4 件・常駐コンテナの起動コマンド** |
+| **[howto/11_colab_eval.md](howto/11_colab_eval.md)** | **評価を回すとき（Colab。8 ファイルを上げてセルを 5 つ。π0.5 も回せる。T4 で動くかは未確認）** |
 | [strategy/05_実測結果.md](strategy/05_実測結果.md) | 判断する前。数字はすべてここ |
 | **[strategy/06_scripted_demos.md](strategy/06_scripted_demos.md)** | **手本が 300 ステップに収まらないタスクを扱うとき。台本で手本を自分で作る** |
 | **[plan/04_training_targets.md](plan/04_training_targets.md)** | **学習を流す前と、評価が出た直後。**ものさし・天井・候補・外したもの・記録が 1 枚にある |
@@ -57,7 +63,7 @@
 ## 説明とコードの分け方
 
 ```
-docs/solution/     説明（README・COLAB・COLAB_EVAL・DOCKER_TRAIN）
+docs/solution/     説明（README・colab_eval・DOCKER_TRAIN）
 solution/          動かすファイル（policy_server.py・requirements.txt・tools/・train/）
 ```
 

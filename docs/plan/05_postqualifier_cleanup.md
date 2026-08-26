@@ -111,15 +111,13 @@ scripted_mix は 8 件だけで 0.000、lora20k は 0.016）。`smolvla/base` �
 | | `docker system df` の申告 | 実際に空く分 |
 |---|---|---|
 | ビルド用の中間結果 | 56.77 GB | **9.5 GB**（残り 47 GB は現存イメージそのものの層。`SHARED true`） |
+| イメージ `parc2026-train` 1 本 | 9.49 GB | **60 kB**（`parc2026-train-pi05` と共有。4 本まとめて消したときだけ 9.49 GB が空く） |
 
-しかも `docker builder prune --force` は `SHARED` の記録に手を付けないので、
-**申告 9.5 GB のうち 1 バイトも空かなかった。**空けるなら `-a` を付けるしかない。
-
-**イメージは共有レイヤの分を差し引くこと。**`-v` を付けて `UNIQUE SIZE` を見ると、
-`parc2026-train` を消しても 60 kB しか空かない（`parc2026-train-pi05` と
-9.49 GB を共有している）。**4 本まとめて消したときだけ 9.49 GB が空く。**
-6 番で 2 本だけ消したので、この 9.49 GB は残ったままである。**残す判断をした
-学習イメージ 4 本（2 章）が押さえているので、いま空ける手は無い。**
+**この二重計上の読み方と、イメージとビルドキャッシュを消す順番は
+[../howto/09_free_disk_space.md](../howto/09_free_disk_space.md) にまとめた。**
+8/18 に `docker builder prune --force` を流したときは、申告 9.5 GB のうち 1 バイトも
+空かなかった。6 番でイメージを 2 本だけ消したので 9.49 GB は残ったままで、**残す判断を
+した学習イメージ 4 本（2 章）が押さえているので、いま空ける手は無い。**
 
 ### 3.2 判断が要るもの（合計 約 99 GB）
 
@@ -141,18 +139,13 @@ scripted_mix は 8 件だけで 0.000、lora20k は 0.016）。`smolvla/base` �
 **`024000/training_state/`（2.0 GB）だけは残す。**学習を 24,000 歩から続ける道を
 残すためである。
 
-**同じ中身を 2 つの名前で指しているだけの箇所（ハードリンク）が 3 組ある。**
-片方だけ消しても 1 バイトも空かない。**両方消して初めて空く。**
-
-| 組 | inode |
-|---|---|
-| `artifacts/model_weights_pi05_024000/model.safetensors` ＝ `train/pi05_full_local/checkpoints/024000/pretrained_model/model.safetensors` | 25474754 |
-| `artifacts/model_weights_pi05_step500/model.safetensors` ＝ `train/pi05_full_local_old/checkpoints/000500/pretrained_model/model.safetensors` | 540905770 |
-| `artifacts/pi05_rp3000/model.safetensors` ＝ `train/pi05_full_runpod/003000/model.safetensors` | 805401061 |
+**同じ中身を 2 つの名前で指しているだけの箇所（ハードリンク）が 3 組あった。**
+片方だけ消しても 1 バイトも空かない。**両方消して初めて空く。**見つけ方と inode の
+読み方は [../howto/09_free_disk_space.md](../howto/09_free_disk_space.md) にまとめた。
 
 いっぽう `pi05_full_runpod/001000/` は `model.safetensors` と
-`pretrained_model/model.safetensors` を**別の実体として 2 つ持っている**（inode
-811427643 と 540902022）。ここは 8.7 GB がまるごと無駄になっている。
+`pretrained_model/model.safetensors` を**別の実体として 2 つ持っていた**（inode
+811427643 と 540902022）。ここは 8.7 GB がまるごと無駄になっていた。
 
 ### 3.3 HuggingFace 側（当初の案。**3.5 で置き換わった**）
 

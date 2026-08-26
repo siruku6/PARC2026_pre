@@ -32,10 +32,10 @@
 |---|---|---|---|---|
 | `smolvla/base` | **0.1.0・0.2.0・0.3.0** | **追加学習していない素の重み。**`lerobot/smolvla_libero_plus` rev `7bb70aa5`。表示される 20,000 ステップは上流がこれを作るのに回した分。**上流から取り直せるので、どこにも上げていない** | 0.05832・0.096・**0.1409** | `a67a056a…` |
 | `smolvla/lora20k` | **1.0.0** | Colab で LoRA を 20,000 ステップ。**設定の一次資料が残っていないので作り直せない。**どこにも上げていない | **0.016**（素の 8.8 分の 1 に落ちた） | `2cd9faab…` |
-| （重みは残っていない） | **2.0.0** | 素 75% ＋ `lora20k` が学習で動いた分 25%（λ=0.25）。`solution/tools/blend_weights.py` で作り直せる | 0.09507 | — |
+| （重みは残っていない） | **2.0.0** | 素 75% ＋ `lora20k` が学習で動いた分 25%（λ=0.25）。`solution/tools/weights/blend_weights.py` で作り直せる | 0.09507 | — |
 | **`weak3x_20000`**（＝ HF `smolvla-libero-plus-finetunes`。**ここだけ公開**） | **3.0.0〜3.7.0** | SmolVLA に LoRA を 20,000 ステップ。**苦手なタスクの手本を 3 倍に増やし、300 ステップを超える手本を落とした**（`weak3x` はこの 2 つを指す） | 0.144 → **0.184**（SmolVLA 系の最高。版 3.6.0／3.6.1） | `a8cb8aee…` |
 | `smolvla/text40k_40000` | **なし（見送り）** | LoRA を当てる先を言語を扱う側まで広げて 40,000 ステップ。**weak3x の 2 条件を外しており、`train_config.json` も残っていない。**どこにも上げていない | — | `ed9b6372…` |
-| `smolvla/scripted_mix_20000` | **なし** | 台本で自分で作った手本（`solution/tools/scripted_demo.py`）を混ぜて 20,000 ステップ。**測ったのは moka の 8 件だけで 0.000。**`train_config.json` も残っていない。どこにも上げていない | — | `0793c54e…` |
+| `smolvla/scripted_mix_20000` | **なし** | 台本で自分で作った手本（`solution/tools/scripted_demo/scripted_demo.py`）を混ぜて 20,000 ステップ。**測ったのは moka の 8 件だけで 0.000。**`train_config.json` も残っていない。どこにも上げていない | — | `0793c54e…` |
 | `pi05/full_local_old_000500` | **なし** | π0.5 に切り替えた最初の 500 ステップ。**成功率を測った記録が無い。**この実行の `optimizer_state` は 8/14 の容量整理で消したので、ここから学習を再開する道は無い | — | `deaaed6b…` |
 | **`pi05/full_local_024000`**（＝ HF `pi05_stage1_24000`・**1 回目の学習**） | **3.8.0〜3.13.0** | π0.5 を `lerobot/pi05_libero_base` rev `a217bfd3` から **行動側だけ** 24,000 ステップ。更新したのは **693M** パラメータ。batch 16・学習率 2.5e-5 → 2.5e-6・ローカル H100-20C で 9 時間 31 分 | 0.177（3.8.0）・**0.264（3.9.0）**・0.169（3.10.0） | `d46bffcf…` |
 | **`pi05/full_runpod_003000`**（＝ HF `pi05_full_runpod`・**2 回目の学習**） | **4.0.0〜4.4.0** | **1 回目の学習の 24,000 ステップから出発**し、固定を全部外して 3,000 ステップ。更新したのは **4.14B** パラメータ（全部）。batch 64・学習率 5e-6 → 2.5e-6・RunPod A100 80GB で 8 時間 33 分 | **0.485（4.2.0）＝予選の最終提出・42 位** | `0c5d542e…` |
@@ -136,10 +136,10 @@
 # 1. policy_server.py の __version__ と、上の表の値に合う既定値を書き換える
 #    （今のコードは 4.4.0 そのままなので、4.4.0 なら 1 文字も触らない）
 # 2. 組む。--weights で重みの置き場を指す（zip の中では model_weights/ になる）
-work/venv310/bin/python solution/tools/build_submission.py \
+work/venv310/bin/python solution/tools/build/build_submission.py \
     --weights work/artifacts/pi05_rp3000 \
     --output work/submission_4.3.0.zip
-work/venv310/bin/python solution/tools/validate_submission.py --static
+work/venv310/bin/python validate_submission.py --static
 ```
 
 **書き換える既定値の行**（[policy_server.py](../../solution/policy_server.py)）:
@@ -156,7 +156,7 @@ work/venv310/bin/python solution/tools/validate_submission.py --static
 | `PARC_NORMALIZE_INSTRUCTION` | 763 |
 
 **手元の評価だけなら書き換えは要らない。**7 つとも環境変数で上書きできるので、
-`PARC_NUM_INFERENCE_STEPS=20 bash solution/tools/run_docker_eval.sh …` で足りる。
+`PARC_NUM_INFERENCE_STEPS=20 bash solution/tools/eval/run_docker_eval.sh …` で足りる。
 **採点環境はこちらの環境変数を渡してくれないので、提出するときだけ既定値を直す。**
 
 **組み直した zip の sha256 は元と一致しない**（時刻が入る）。提出済みの版の

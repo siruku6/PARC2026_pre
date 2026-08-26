@@ -39,17 +39,10 @@ ENV HF_HOME=/hf_home
 ENV HOME=/tmp
 ENV USER=trainer
 ENV LOGNAME=trainer
-
-# **2026-08-22 に実機で踏んだ既知の罠。** torch.compile（inductor）は上記の
-# `USER=trainer` から `/tmp/torchinductor_trainer` という名前でキャッシュ置き場を
-# 決める。このディレクトリは(何が作ったにせよ)一度でも別の uid（典型的には
-# `docker exec` を `-u root` で叩いたときなど）で作られると、既定の `755` の
-# ままでは他の uid が中に書き込めず `PermissionError` で `--policy.compile_model=true`
-# が丸ごと落ちる（`/tmp` 自体は `drwxrwxrwt` だが、その中の個々のディレクトリは
-# 誰が作ったかの権限をそのまま引き継ぐため）。**ビルド時に `/tmp` 自身と同じ
-# `1777`（sticky + 全員書き込み可）で先に作っておけば、誰が後から触っても
-# 同じ問題が起きない。**
-RUN mkdir -p /tmp/torchinductor_trainer && chmod 1777 /tmp/torchinductor_trainer
+# `/tmp/torchinductor_trainer`（torch.compile のキャッシュ置き場）の権限修正は
+# ここではなく、下の「ここから下は変更が起きやすい層」の節にある
+# （2026-08-22。理由は書き込む git ログ・そちらの節を参照。ここに直置きすると
+# 下の重いレイヤー全部のキャッシュを毎回無効にしてしまう）。
 
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cu128
 ARG TORCH_VERSION=2.11.0
@@ -79,6 +72,34 @@ ARG LEROBOT_TAG=v0.6.0
 RUN git clone --quiet --depth 1 --branch ${LEROBOT_TAG} \
         https://github.com/huggingface/lerobot.git /opt/lerobot \
     && pip install --no-cache-dir -e "/opt/lerobot[training,pi]"
+
+# ============================================================================
+# ここから下は変更・追加が起きやすい層（量子化ライブラリ・その場しのぎでない
+# 恒久対応・RunPod 追い足し・COPY するスクリプト）。
+#
+# **触るならなるべくここから下に留めること。** 上の apt-get・torch/torchcodec/
+# torchvision のインストール・lerobot の git clone は重く時間がかかる
+# （ネットワーク次第で 15〜30 分規模）。docker のレイヤーキャッシュは
+# 「最初に変わった行より後ろ全部」を無効にする方式なので、この境界より上を
+# 直すと下のすべてが毎回作り直しになる。逆にこの境界より下だけを直す分には、
+# 上のレイヤーはキャッシュがそのまま効く。
+#
+# 2026-08-22、torchinductor の権限修正（chmod 1777）を誤ってこの境界の
+# はるか上（ENV HOME/USER/LOGNAME の直後）に置いてしまい、その1行のためだけに
+# 全レイヤーが作り直しになった（ビルドし直し自体はやり切ったが、避けられた
+# 待ち時間だった）。以後はこの境界を守ること。
+# ============================================================================
+
+# **torch.compile（inductor）のキャッシュ置き場の権限修正。** `USER=trainer`
+# （上の ENV）から `/tmp/torchinductor_trainer` という名前でキャッシュ置き場を
+# 決める。このディレクトリは(何が作ったにせよ)一度でも別の uid（典型的には
+# `docker exec` を `-u root` で叩いたときなど）で作られると、既定の `755` の
+# ままでは他の uid が中に書き込めず `PermissionError` で `--policy.compile_model=true`
+# が丸ごと落ちる（`/tmp` 自体は `drwxrwxrwt` だが、その中の個々のディレクトリは
+# 誰が作ったかの権限をそのまま引き継ぐため）。**ビルド時に `/tmp` 自身と同じ
+# `1777`（sticky + 全員書き込み可）で先に作っておけば、誰が後から触っても
+# 同じ問題が起きない。**
+RUN mkdir -p /tmp/torchinductor_trainer && chmod 1777 /tmp/torchinductor_trainer
 
 # **量子化スイープ用の追加ライブラリ（work/quant_sweep/PROGRESS.md 参照）。**
 # 以前ここにあった `pip uninstall -y -q torchao` は、2026-08-20 に調べた結果
@@ -150,19 +171,20 @@ WORKDIR /opt/pi05
 # なのでチェックポイントがそのまま提出用になる。
 # runpod_ssh_start.sh は RunPod の Container Start Command から呼ぶ（上記参照）。
 #
-# quant_optim.py / quant_vision_4bit.py / quant_float8_expert.py は量子化実験の
-# 各候補（work/quant_sweep/CANDIDATES.md 参照）、lerobot_train_with_quant.py は
-# それらを lerobot-train の実行前に import するための薄いラッパー。
+# experiments/quantization/ は量子化実験の候補 C1〜C3（work/quant_sweep/CANDIDATES.md
+# 参照）と、train_pi05.py 側の窓口（__init__.py）。**train_pi05.py が
+# `from experiments import quantization` で読むので、リポジトリと同じ並びのまま置く。**
+# 中の lerobot_train_with_quant.py は、候補を lerobot-train の実行前に import する
+# ための薄いラッパーで、`python /opt/pi05/experiments/quantization/…` として起動される。
 #
-# **`solution/tools/dequantize_bnb4bit_checkpoint.py`（C2 のチェックポイントを評価用に
+# **`solution/tools/quant/dequantize_bnb4bit_checkpoint.py`（C2 のチェックポイントを評価用に
 # bf16 へ戻す道具）はここには COPY しない。** ビルドコンテキストが `solution/train`
 # なので `../tools/` は参照できない（コンテキスト外）。使うときは
 # `docker exec -i quant_train bash -c 'cat > /tmp/dequantize_bnb4bit_checkpoint.py'`
 # のように都度渡す（2026-08-22、実際にこの方法で C2 の再評価用チェックポイントを
 # 作った。work/quant_sweep/PROGRESS.md 参照）。
-COPY train.py train_pi05.py prune_checkpoints.sh runpod_ssh_start.sh \
-     quant_optim.py quant_vision_4bit.py quant_float8_expert.py \
-     lerobot_train_with_quant.py /opt/pi05/
+COPY train.py train_pi05.py prune_checkpoints.sh runpod_ssh_start.sh /opt/pi05/
+COPY experiments /opt/pi05/experiments/
 
 VOLUME ["/out"]
 ENV OUTPUT_ROOT=/out

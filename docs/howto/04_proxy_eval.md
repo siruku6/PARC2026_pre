@@ -141,10 +141,10 @@ python -m pipeline --server-url http://localhost:8000 \
 ```bash
 # 素の重みで 8 本
 MUJOCO_GL=osmesa WEIGHTS=work/artifacts/model_weights_base LABEL=base_t1 \
-    bash solution/tools/run_docker_eval.sh --detach
+    bash solution/tools/eval/run_docker_eval.sh --detach
 # 終わってから、追加学習した重みで 8 本（**同時に流さない**）
 MUJOCO_GL=osmesa WEIGHTS=work/train/smolvla_lora_all_suites/merged_model \
-    LABEL=lora20k_t1 bash solution/tools/run_docker_eval.sh --detach
+    LABEL=lora20k_t1 bash solution/tools/eval/run_docker_eval.sh --detach
 ```
 
 > **`run_docker_eval.sh` は 84 件のスイートを作る作りになっている。**
@@ -156,7 +156,7 @@ MUJOCO_GL=osmesa WEIGHTS=work/train/smolvla_lora_all_suites/merged_model \
 ## 手順 3：採点環境と突き合わせる
 
 ```bash
-python3 solution/tools/compare_with_production.py \
+python3 solution/tools/analysis/compare_with_production.py \
     --pair "outputs/0812_base_t1=outputs/prod_eval_results/260810_評価結果_ema=0.3あり.md" \
     --pair "outputs/0812_lora20k_t1=outputs/prod_eval_results/260811_評価結果_ema=0.3あり_初回学習後.md"
 ```
@@ -231,7 +231,7 @@ LoRA 20k が 2 段目になる（0.095 − 0.016 = 0.079）。
 ### 0-1. 外すタスクの一覧を作る
 
 ```bash
-python3 solution/tools/make_holdout_split.py
+python3 solution/tools/suite/make_holdout_split.py
 ```
 
 **8 タスクを外す**（配布 4 タスク ＋ 同じ 2 カテゴリから 4 つ）。
@@ -276,7 +276,7 @@ python train.py --holdout-tasks compe/val/HOLDOUT_TASKS.csv
 ### 0-3. 検証集合を外したタスクだけにする
 
 ```bash
-python3 solution/tools/make_validation_suite.py \
+python3 solution/tools/eval/make_validation_suite.py \
     --libero-plus work/LIBERO-plus \
     --holdout compe/val/HOLDOUT_TASKS.csv \
     --categories 'Light Conditions' 'Background Textures'
@@ -318,7 +318,7 @@ python3 solution/tools/make_validation_suite.py \
 
 ```bash
 CATEGORIES='Light Conditions,Background Textures' \
-    bash solution/tools/run_docker_eval.sh --detach
+    bash solution/tools/eval/run_docker_eval.sh --detach
 ```
 
 24 件で **39 分**である（実測）。**8 本で差が小さすぎて判別できないときの

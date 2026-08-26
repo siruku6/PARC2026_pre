@@ -30,10 +30,10 @@ flowchart TD
 
 | 段 | 何が落ちるか | 出典 |
 |---|---|---|
-| ① 成功は撮らない | 84 件中 **40 件（成功率 0.476）が録画されない** | `PARC_RECORD_WHICH` の既定は `failures`。成功のときは書き出さない（[rollout_recorder.py](../../solution/tools/rollout_recorder.py) の `_write`） |
+| ① 成功は撮らない | 84 件中 **40 件（成功率 0.476）が録画されない** | `PARC_RECORD_WHICH` の既定は `failures`。成功のときは書き出さない（[rollout_recorder.py](../../solution/tools/eval/rollout_recorder.py) の `_write`） |
 | ② 上限で打ち切り | 失敗 44 件でも、**書き出しは 40 本で止まる** | `PARC_RECORD_MAX` の既定は 40。ログに「上限 40 本に達した」（`outputs/0811_101824_base_n5_ep1_max300/eval.log`） |
 | ③ 手元に来ていない | 書き出した 40 本のうち、**この置き場には 35 本**しか無い | `ls .../videos`（衝突 18・未完了 17） |
-| ④ 名前が切れる | ファイル名は**タスク名を 70 字で切る**ので、末尾に付く変種名が消える | `task_name[:70]`（[rollout_recorder.py](../../solution/tools/rollout_recorder.py) の `_write`） |
+| ④ 名前が切れる | ファイル名は**タスク名を 70 字で切る**ので、末尾に付く変種名が消える | `task_name[:70]`（[rollout_recorder.py](../../solution/tools/eval/rollout_recorder.py) の `_write`） |
 
 **結果、接尾辞で数えられるのは 35 本中 12 本だけ**である。しかも
 **評価で本命の背景テクスチャ 2 種（`table`・`tb`）は、`table` が 1 本・`tb` が 0 本**。
@@ -61,7 +61,7 @@ flowchart TD
 LIBERO-plus のカテゴリ 7 つのうち、名前で見分けが付くものだけを使う。
 `view`/`initstate` は Camera Viewpoints・Robot Initial States・Language の
 3 カテゴリで**同じ形になり、名前だけでは区別できない**ので、`initstate` という
-1 つの束にまとめた（[make_validation_suite.py](../../solution/tools/make_validation_suite.py) の
+1 つの束にまとめた（[make_validation_suite.py](../../solution/tools/eval/make_validation_suite.py) の
 `_place_variant`、および `task_classification.json`）。
 
 | 接尾辞 | カテゴリ | 本数 | 明るさ 平均 | 明るさ 最小〜最大 | コントラスト 平均 | コントラスト 最小〜最大 |
@@ -118,11 +118,11 @@ LIBERO-plus のカテゴリ 7 つのうち、名前で見分けが付くもの�
 | **A. 全部録画して撮り直す** | `PARC_RECORD_WHICH=all` で 84 件を再評価し、成功も残す | 実際にモデルへ渡った画面そのもの。ステップ数の重みも本番どおり | **評価 1 本（2.3 時間）を使う。** GPU 枠が要る |
 | **B. 変種の初期状態から画像を作る** | 方策を動かさず、変種の初期画面だけを描く | GPU 評価が要らない。母集団を広く取れる | 描画（osmesa）の配線が別に要る。1 コマ目だけで動きは見ない |
 
-どちらでも、このスクリプト（`solution/tools/measure_appearance.py`）の測り方は
+どちらでも、このスクリプト（`solution/tools/analysis/measure_appearance.py`）の測り方は
 そのまま使える。**入力の mp4／画像を偏りの無いものに差し替えるだけ**である。
 
 > 案 A は名前の 70 字切れ（偏り④）が残る。長いタスク名の変種を数えるなら、
-> [rollout_recorder.py](../../solution/tools/rollout_recorder.py) の `task_name[:70]`
+> [rollout_recorder.py](../../solution/tools/eval/rollout_recorder.py) の `task_name[:70]`
 > を広げるか、案 B で変種名をファイル名に使わない形にする。
 
 ---
@@ -131,18 +131,18 @@ LIBERO-plus のカテゴリ 7 つのうち、名前で見分けが付くもの�
 
 ```bash
 # 変種の接尾辞ごとの明るさ・コントラストと、1 本ごとの明細
-python3 solution/tools/measure_appearance.py \
+python3 solution/tools/analysis/measure_appearance.py \
     outputs/0811_101824_base_n5_ep1_max300/videos
 
 # ドキュメントへ貼る表だけ
-python3 solution/tools/measure_appearance.py <dir> --markdown
+python3 solution/tools/analysis/measure_appearance.py <dir> --markdown
 
 # 焼かれた文字を切り落とさずに測る（既定は切り落とす）
-python3 solution/tools/measure_appearance.py <dir> --include-text-band
+python3 solution/tools/analysis/measure_appearance.py <dir> --include-text-band
 ```
 
 **焼かれた文字を外している。** 録画にはステップ数やカメラ名が白い文字で焼かれている
-（[rollout_recorder.py](../../solution/tools/rollout_recorder.py) の `_annotate`。
+（[rollout_recorder.py](../../solution/tools/eval/rollout_recorder.py) の `_annotate`。
 上端 y=18、下端 y=高さ-30 と高さ-10）。この帯を残すと明るさが +0.008、
 コントラストが最大 +0.027 水増しされるので、既定では上下の帯を切り落とす。
 `--include-text-band` を付けても表の順位は変わらない（実測で確認）。
@@ -161,7 +161,7 @@ python3 solution/tools/measure_appearance.py <dir> --include-text-band
 ```bash
 # キットの Docker で回すなら（環境を揃える場合）
 docker run --rm -v "$PWD:/w" -w /w parc2026:latest \
-    python solution/tools/measure_appearance.py \
+    python solution/tools/analysis/measure_appearance.py \
     outputs/0811_101824_base_n5_ep1_max300/videos
 ```
 
@@ -171,10 +171,10 @@ docker run --rm -v "$PWD:/w" -w /w parc2026:latest \
 
 | 事実 | 出典 |
 |---|---|
-| 録画は既定で失敗のみ／本数上限 40／名前は 70 字で切る | [solution/tools/rollout_recorder.py](../../solution/tools/rollout_recorder.py)（`_write`・`_annotate`） |
+| 録画は既定で失敗のみ／本数上限 40／名前は 70 字で切る | [solution/tools/eval/rollout_recorder.py](../../solution/tools/eval/rollout_recorder.py)（`_write`・`_annotate`） |
 | 上限 40 本に達して打ち切った | `outputs/0811_101824_base_n5_ep1_max300/eval.log`（「上限 40 本に達した」） |
 | 84 件の内訳（成功 40・衝突 23・未完了 21） | `outputs/0811_101824_base_n5_ep1_max300/summary.txt` |
 | この置き場の録画 35 本（衝突 18・未完了 17） | `ls outputs/0811_101824_base_n5_ep1_max300/videos` |
-| 接尾辞とカテゴリの対応、名前で不可分な 3 カテゴリ | [make_validation_suite.py](../../solution/tools/make_validation_suite.py)（`_place_variant`）、`work/LIBERO-plus/.../task_classification.json` |
-| 明るさ・コントラストの各値 | `solution/tools/measure_appearance.py` を上の環境で実行 |
+| 接尾辞とカテゴリの対応、名前で不可分な 3 カテゴリ | [make_validation_suite.py](../../solution/tools/eval/make_validation_suite.py)（`_place_variant`）、`work/LIBERO-plus/.../task_classification.json` |
+| 明るさ・コントラストの各値 | `solution/tools/analysis/measure_appearance.py` を上の環境で実行 |
 | 外部の 15 コマ集計（比較の相手） | 2026-08-11 に共有された LIBERO-plus の EDA 報告 |

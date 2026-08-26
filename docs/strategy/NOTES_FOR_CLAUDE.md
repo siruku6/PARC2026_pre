@@ -165,9 +165,9 @@ the base task's init states.
 Observed suffix forms differ per category: `_table_7`, `_tb_3`, `_light_15`, `_noise_2`,
 `_language_25`, `_add_13`, `view_0_0_100_0_0_initstate_1`. Since init-states files exist
 **only for base tasks** (`init_files/libero_spatial/` holds 10), resolve by **longest-prefix
-match against the filenames that actually exist**. `solution/tools/make_validation_suite.py`
-does this and emits the result in the CSV's `init_states_file` column; the H cell of
-`docs/solution/colab_eval/05_suite.md` patches `register.py` to honour that column.
+match against the filenames that actually exist**. `solution/tools/eval/make_validation_suite.py`
+does this and emits the result in the CSV's `init_states_file` column;
+`solution/tools/eval/patch_kit_for_variants.py` patches `register.py` to honour that column.
 
 **`task_classification.json` is a dict keyed by suite name**, whose values are lists of
 variant records `{"id", "name", "category", "difficulty_level"}`. **Variant records carry no
@@ -215,10 +215,11 @@ def parse_obj_of_interest(bddl_file):                # pipeline/environment.py:3
 
 The exception propagates to `Pipeline.run`, which catches it per-track and writes
 `_errored_track_score` — so **the run ends with exit code 0 and looks healthy**. On
-2026-08-10 this stopped a supposed 84-task run after 3 tasks in 173 s. The H cell of
-`docs/solution/colab_eval/05_suite.md` patches `parse_obj_of_interest` with the same `_view_` rule.
+2026-08-10 this stopped a supposed 84-task run after 3 tasks in 173 s.
+`solution/tools/eval/patch_kit_for_variants.py` patches `parse_obj_of_interest` with the same
+`_view_` rule.
 
-**Verify before spending an hour on a run:** `solution/tools/check_validation_suite.py`
+**Verify before spending an hour on a run:** `solution/tools/eval/check_validation_suite.py`
 rebuilds all three paths (env bddl, collision bddl, init states) exactly as the harness
 does and names the first row that fails. It **reads `--kit-dir` to decide whether the
 patches are applied** rather than taking a flag — a flag would let "I thought I patched it"
@@ -233,7 +234,7 @@ truncates `pick_up_the_black_bowl_from_table_center_...` to
 Since init-states files exist **only for base tasks** (10 per suite), resolve by
 **longest-prefix match against the filenames that actually exist**, requiring the next
 character to be a separator. Verified: 0 of 10,030 unresolved.
-`solution/tools/make_validation_suite.py` does this and writes the answer to the CSV's
+`solution/tools/eval/make_validation_suite.py` does this and writes the answer to the CSV's
 `init_states_file` column; the H cell patches `register.py` to honour that column.
 
 ---
@@ -324,7 +325,8 @@ Adding `av` to `requirements.txt` would remove the risk at the cost of changing 
 that is already known-good. Not done as of 2026-08-09; revisit if a startup failure appears.
 
 Colab hits this immediately because Colab ships `datasets` — see
-[docs/solution/colab_eval/04_policy_server.md](../solution/colab_eval/04_policy_server.md).
+[docs/howto/11_colab_eval.md](../howto/11_colab_eval.md) ("依存を2プロセスに分けるのと、
+av が要る理由"). `colab_eval.setup_policy()` pins `av>=15.0.0,<16.0.0` for this reason.
 
 ---
 

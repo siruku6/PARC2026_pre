@@ -25,3 +25,7 @@ outputs/submission_logs/*
 venv/
 # レポートの HTML は md と build_report_html.py から作れる生成物
 docs/report/qualifier_report.html
+
+# 妨害あり／なしを並べた検証用の図（1 枚 420 KB）。docs/plan/12 の 5.3 節に
+# 撮り直し方があり、読み取れることは同じ節の数値表に書いてある
+docs/figures/tier2_pair_*.png

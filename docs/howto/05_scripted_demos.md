@@ -88,7 +88,7 @@ docker run --rm \
     -e MUJOCO_GL=osmesa \
     -v "$PWD/solution/tools:/host/tools:ro" \
     -v "$PWD/work/scripted:/out" \
-    parc2026 python /host/tools/scripted_demo.py record \
+    parc2026 python /host/tools/scripted_demo/scripted_demo.py record \
     --task KITCHEN_SCENE8_put_both_moka_pots_on_the_stove \
     --episodes 0 --output /out/base
 
@@ -104,7 +104,7 @@ docker run --rm -v "$PWD/work/scripted:/out" --entrypoint chown parc2026 \
 `EOFError: EOF when reading a line` で落ちる。この設定はキットの
 `setup.sh` がビルド時に `/root/.libero/` へ書いており、`/root` は他の
 利用者から読めない。**root で走らせて、あとで `chown` するのが素直である**
-（評価側の [run_docker_eval.sh](../../solution/tools/run_docker_eval.sh) も同じ形）。
+（評価側の [run_docker_eval.sh](../../solution/tools/eval/run_docker_eval.sh) も同じ形）。
 
 ### 並列にできるが、コア数が上限である
 
@@ -141,7 +141,7 @@ for i in $(seq 0 $((N-1))); do
         -e MUJOCO_GL=osmesa -e LP_NUM_THREADS=1 -e OMP_NUM_THREADS=1 \
         -v "$PWD/solution/tools:/host/tools:ro" \
         -v "$PWD/work/scripted:/out" \
-        parc2026 python /host/tools/scripted_demo.py record \
+        parc2026 python /host/tools/scripted_demo/scripted_demo.py record \
         --task KITCHEN_SCENE8_put_both_moka_pots_on_the_stove \
         --episodes "$eps" --output /out/base
 done
@@ -173,7 +173,7 @@ docker logs -f rec0
 
 ```bash
 docker run --rm -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/data" \
-    parc2026 python /host/tools/npz_to_lerobot.py check --npz-dir /data/base
+    parc2026 python /host/tools/scripted_demo/npz_to_lerobot.py check --npz-dir /data/base
 ```
 
 混ぜる相手の宣言と突き合わせるなら `--against <libero_plus の meta/info.json>` を足す。
@@ -190,7 +190,7 @@ docker run --rm -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/
 ```bash
 docker run --rm \
     -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/data" \
-    parc2026-train python /host/tools/npz_to_lerobot.py build \
+    parc2026-train python /host/tools/scripted_demo/npz_to_lerobot.py build \
     --npz-dir /data/base --output /data/lerobot --repo-id local/scripted_moka
 ```
 
@@ -204,7 +204,7 @@ docker run --rm \
 ```bash
 docker run --rm \
     -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/data" \
-    parc2026-train python /host/tools/npz_to_lerobot.py inspect \
+    parc2026-train python /host/tools/scripted_demo/npz_to_lerobot.py inspect \
     --root /data/lerobot --repo-id local/scripted_moka
 ```
 
@@ -325,7 +325,7 @@ cp -r work/artifacts/model_weights_base/vlm work/artifacts/model_weights_<label>
 見てくれる（書き換えは起きない）。
 
 ```bash
-python solution/tools/install_weights.py work/train/<run 名>/merged_model \
+python solution/tools/weights/install_weights.py work/train/<run 名>/merged_model \
     --destination work/artifacts/model_weights_base --dry-run
 ```
 
@@ -334,12 +334,12 @@ python solution/tools/install_weights.py work/train/<run 名>/merged_model \
 **このタスクは 36 件に入っていない**（146 本すべてが 341 ステップ以上で、
 `--max-demo-steps 300` に全部落ちるため）。**このタスクの変種だけを集めた
 一覧が `compe/val/MOKA_TASKS.csv`（8 件）にある**ので、それを渡す
-（作り直すときは `solution/tools/make_task_suite.py`）。
+（作り直すときは `solution/tools/suite/make_task_suite.py`）。
 
 ```bash
 EVAL_CSV=compe/val/MOKA_TASKS.csv MUJOCO_GL=osmesa \
     WEIGHTS="$PWD/work/artifacts/model_weights_<label>" LABEL=<label> \
-    bash solution/tools/run_docker_eval.sh --detach
+    bash solution/tools/eval/run_docker_eval.sh --detach
 ```
 
 手順の詳細は [03_gpu_eval.md](03_gpu_eval.md) にある。
@@ -375,7 +375,7 @@ df -h .                                                   # 17 GB 以上空い�
 docker run --rm \
     -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work/scripted:/data" \
     -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
-    parc2026-train python /host/tools/npz_to_lerobot.py align \
+    parc2026-train python /host/tools/scripted_demo/npz_to_lerobot.py align \
     --base /root/.cache/huggingface/lerobot/lerobot/libero_plus \
     --add /data/lerobot
 ```
@@ -395,7 +395,7 @@ rm -rf work/merged
 docker run --rm \
     -v "$PWD/solution/tools:/host/tools:ro" -v "$PWD/work:/work" \
     -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
-    parc2026-train python /host/tools/npz_to_lerobot.py merge \
+    parc2026-train python /host/tools/scripted_demo/npz_to_lerobot.py merge \
     --base /root/.cache/huggingface/lerobot/lerobot/libero_plus \
     --add /work/scripted/lerobot --add-repo-id local/scripted_moka \
     --output /work/merged
@@ -468,7 +468,7 @@ ls work/artifacts/model_weights_scripted_mix
 > 手元にある CSV が古いときは作り直す（数秒・GPU 不要）。
 >
 > ```bash
-> python3 solution/tools/make_task_suite.py \
+> python3 solution/tools/suite/make_task_suite.py \
 >     --instruction "put both moka pots on the stove" \
 >     --count 8 --output compe/val/MOKA_TASKS.csv
 > ```
@@ -481,18 +481,18 @@ ls work/artifacts/model_weights_scripted_mix
 # 5. モカポット 8 件で測る（20 分）。**比べる相手を先に測る**
 EVAL_CSV=compe/val/MOKA_TASKS.csv MUJOCO_GL=osmesa \
     WEIGHTS="$PWD/work/artifacts/model_weights_weak3x" LABEL=weak3x_moka \
-    bash solution/tools/run_docker_eval.sh --detach     # 0/8 のはず
+    bash solution/tools/eval/run_docker_eval.sh --detach     # 0/8 のはず
 
 EVAL_CSV=compe/val/MOKA_TASKS.csv MUJOCO_GL=osmesa \
     WEIGHTS="$PWD/work/artifacts/model_weights_scripted_mix" LABEL=scripted_mix_moka \
-    bash solution/tools/run_docker_eval.sh --detach
+    bash solution/tools/eval/run_docker_eval.sh --detach
 ```
 
 ```bash
 # 6. ゲート C：他のタスクを壊していないか（36 件・72 分）
 EVAL_CSV=compe/val/EVAL_TASKS.csv MUJOCO_GL=osmesa \
     WEIGHTS="$PWD/work/artifacts/model_weights_scripted_mix" LABEL=scripted_mix_36 \
-    bash solution/tools/run_docker_eval.sh --detach
+    bash solution/tools/eval/run_docker_eval.sh --detach
 ```
 
 **評価は 2 つ同時に走らせられない。** 起動時に前回の残骸（`parc-policy` と
@@ -547,4 +547,4 @@ GPU マシンで撮る場合は `nproc` から測り直すこと。
 | `docker stats` の CPU% が上限に届かない／BLOCK I/O が数十 GB | **並べすぎで swap を叩いている。** `N` を下げる |
 | コンテナが消える（`Status` が 137） | OOM で殺された。**`N` × 1.25 GB が実装メモリに収まるか**を確かめる |
 | 出力を消せない | root で書かれている。上の `chown` を回す |
-| `ModuleNotFoundError: scripted_demo` | 標準入力から流し込むと `__file__` が使えない。`PYTHONPATH` に道具の置き場を入れる |
+| `ModuleNotFoundError: scripted_demo` | 標準入力から流し込むと `__file__` が使えない。`PYTHONPATH=<リポジトリ>/solution/tools/scripted_demo` を付けて実行する |

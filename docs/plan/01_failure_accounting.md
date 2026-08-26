@@ -47,7 +47,7 @@
 
 ### 集計
 
-[summarize_gpu_eval.py](../../solution/tools/summarize_gpu_eval.py) の出力に
+[summarize_gpu_eval.py](../../solution/tools/eval/summarize_gpu_eval.py) の出力に
 3 つの節が増えた（84 件の擬似ログで確かめた実際の形）。
 
 ```
@@ -119,11 +119,11 @@
 
 | ファイル | 何をしたか |
 |---|---|
-| [rollout_recorder.py](../../solution/tools/rollout_recorder.py) | `measure_motion` と `format_result_line` を足した。**動きの閾値と行の書式が 1 か所に集まった** |
-| [patch_kit_for_variants.py](../../solution/tools/patch_kit_for_variants.py) | 初衝突の歩を数える 2 か所を追加。`[結果]` 行は上の関数を呼ぶだけにした |
-| [summarize_gpu_eval.py](../../solution/tools/summarize_gpu_eval.py) | 新しい項目を読み、上の 4 節を出す。**カテゴリ判定を末尾一致に直した** |
-| [make_validation_suite.py](../../solution/tools/make_validation_suite.py) | CSV に `n_nontarget_objects` 列を足した（**既存の 84 行は 1 文字も変わらない**） |
-| [run_gpu_eval.sh](../../solution/tools/run_gpu_eval.sh) | 集計に CSV を明示して渡す |
+| [rollout_recorder.py](../../solution/tools/eval/rollout_recorder.py) | `measure_motion` と `format_result_line` を足した。**動きの閾値と行の書式が 1 か所に集まった** |
+| [patch_kit_for_variants.py](../../solution/tools/eval/patch_kit_for_variants.py) | 初衝突の歩を数える 2 か所を追加。`[結果]` 行は上の関数を呼ぶだけにした |
+| [summarize_gpu_eval.py](../../solution/tools/eval/summarize_gpu_eval.py) | 新しい項目を読み、上の 4 節を出す。**カテゴリ判定を末尾一致に直した** |
+| [make_validation_suite.py](../../solution/tools/eval/make_validation_suite.py) | CSV に `n_nontarget_objects` 列を足した（**既存の 84 行は 1 文字も変わらない**） |
+| [run_gpu_eval.sh](../../solution/tools/eval/run_gpu_eval.sh) | 集計に CSV を明示して渡す |
 | [tests/test_rollout_report_line.py](../../tests/test_rollout_report_line.py) | 書く側と読む側を突き合わせる試験（15 件） |
 
 ### なぜ書式を別ファイルへ出したか

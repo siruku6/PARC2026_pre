@@ -81,7 +81,7 @@
 #          この 40 種を使い回す）。**そのうち 25 種は学習の書き方とずれている。**
 #          学習データの 40 種のうち最も近いものへ寄せると、**40 種すべてを
 #          正しく寄せ、誤りは 0 だった**（変種 7,280 件すべて。実測は
-#          solution/tools/check_instruction_normalization.py）。
+#          solution/tools/suite/check_instruction_normalization.py）。
 #          運営 Q&A No.29 が「小文字化、"Pick the"→"pick up the" のような言い換えの
 #          統一」を名指しで許容している。No.31 の埋め込み最近傍も許容だが、
 #          **既定では使わない**（下の _USE_EMBEDDING）。
@@ -173,7 +173,7 @@
 #          50 ステップで選ぶと**捨てる区間が選択を奪う**（作った例で再現した）。
 #          版 3.4.0 で samples=3 に差が出なかったのは、**n=2 のとき距離の 96% が
 #          実行しない行動から来ていた**ためという疑いが濃い。
-__version__ = "4.4.0"
+__version__ = "4.5.0"
 
 import argparse
 import math
@@ -233,9 +233,13 @@ class BasePolicy(ABC):
 # 逆正規化統計の min/max がちょうど ±1、std 0.999 のバンバン制御である。
 # 後処理で均してよいのは前半 6 次元だけ。
 _POSE_DIMS = slice(0, 6)
+# 手先の並進の差分（dx, dy, dz）と、向きの差分（droll, dpitch, dyaw）。
+# 運営資料 11 ページの並び `[dx, dy, dz, droll, dpitch, dyaw, gripper]` に対応する。
+_TRANSLATION_DIMS = slice(0, 3)
+_ROTATION_DIMS = slice(3, 6)
 
 # 寄せ先。**学習データ（lerobot/libero_plus）の指示文 40 種そのままである。**
-# 出し方は `python3 solution/tools/instruction_targets.py --emit python`。
+# 出し方は `python3 solution/tools/suite/instruction_targets.py --emit python`。
 # 2 つの独立な資料が一致することを確かめてある —— LIBERO-plus の
 # `task_classification.json` から取った素のタスク名と、学習データのエピソードの
 # メタデータ（`task` 列）。**40 種にならなければ道具がその場で止まる。**
@@ -287,7 +291,7 @@ _WORD_RE = re.compile(r"[a-z0-9]+")
 
 # **語の重なりで寄せると決める合格ライン。** LIBERO-plus の実物 1,597 種
 # （変種 10,030 件）に対して測って決めた
-# （`solution/tools/check_instruction_normalization.py --sweep`）。
+# （`solution/tools/suite/check_instruction_normalization.py --sweep`）。
 #
 # | 合格ライン | 本番の 2 カテゴリ（40 種） | 言い換え（1,527 種） |
 # |---|---|---|
@@ -681,7 +685,7 @@ class MyPolicy(BasePolicy):
             # **秒数だけ払ってステップ数を買う形**で、blend/RTC のように遅くならない
             # （blend4 はステップ数 +29% で本番 0.264 → 0.169 に落ちた）。
             # 本番の見込みは約 150 秒で、1 時間の上限に 24 倍の余裕がある。
-            steps = os.environ.get("PARC_NUM_INFERENCE_STEPS", "20")
+            steps = os.environ.get("PARC_NUM_INFERENCE_STEPS", "10")
             if steps:
                 config.num_inference_steps = int(steps)
             self._policy = self._build_pi05(config, weights)
@@ -697,9 +701,9 @@ class MyPolicy(BasePolicy):
         # 1 バイトも変わらない。C1〜C3（学習時候補）と違い、こちらは
         # **すでにフル精度で読み終えた重みに後掛けする**（再学習が要らない）。
         #
-        # 実体は solution/tools/quant_serve_bnb.py / quant_serve_torchao.py。
+        # 実体は solution/tools/quant/quant_serve_bnb.py / quant_serve_torchao.py。
         # ロジックをここへ埋め込まず薄い分岐だけにしてあるのは、
-        # solution/train/lerobot_train_with_quant.py（C1〜C3 側の分岐）と
+        # solution/train/experiments/quantization/lerobot_train_with_quant.py（C1〜C3 側の分岐）と
         # 同じ流儀に揃えるため。
         #
         # `solution/tools/*.py` はこのファイル自身とは別ディレクトリにある
@@ -766,7 +770,42 @@ class MyPolicy(BasePolicy):
         # summary_compare.txt。**採点環境は環境変数を渡さないので、既定を変えるしかない。**
         self._blend_steps = int(os.environ.get("PARC_BLEND_STEPS", "0"))
         self._ema_alpha = float(os.environ.get("PARC_EMA_ALPHA", "0.3"))
+
+        # **行動に掛ける倍率。既定は 1.0（＝何もしない）である。**
+        # 運営 PDF の「よくいただいたご質問と回答」が
+        # **「全タスク共通・決定論的な action の後段補正 → 禁止事項に該当しません」**
+        # と明言しているので、全タスク・全ステップに同じ定数を掛けるこの形は使える。
+        #
+        # 並進を上げると 1 歩で進む距離が増えて**歩数が減る**。回転を下げると
+        # 本選で採点指標に入った**手先の回転の総量**が下がる。
+        # **どちらも既定のままなら提出時の挙動は 1 ビットも変わらない。**
+        self._gain_translation = float(os.environ.get("PARC_GAIN_TRANSLATION", "1.15"))
+        self._gain_rotation = float(os.environ.get("PARC_GAIN_ROTATION", "1.0"))
         self._n_action_steps = int(self._policy.config.n_action_steps)
+
+        # **`PARC_SEED` を渡すと、エピソードごとに乱数を固定する（既定は固定しない）。**
+        # 行動は flow matching で作るので、毎回ノイズを引き直している
+        # （`_get_action_chunk` に `noise=None` を渡す＝モデル側が引く）。**同じ設定で
+        # 回し直すと結果が変わる。** 手元の 49 回はすべて 1 タスク 1 エピソードで、
+        # この揺れ幅を測ったことがない。
+        #
+        # **これは「2 つの設定を比べられるようにする」ものではない。** 種を揃えても、
+        # `blend_steps` のように行動そのものを書き換える設定は 16 歩目以降で軌道を
+        # 変えてしまい、300 歩の境界にいたタスクはどちらへも転ぶ。**設定の効果と
+        # 境界での転びを分けるには、種を変えた複数回が要る。** 種を揃える意味は、
+        # 複数回で比べるときに対応が取れてばらつきが小さくなる点にある。
+        #
+        # 種はエピソードごとに `PARC_SEED + 通し番号` にする。**同じ値にすると全
+        # エピソードが同じ軌道になり、揺れ幅が 0 に見えてしまう。**
+        # **採点環境は環境変数を渡さないので、既定（固定しない）が提出時の挙動である。**
+        # **【2026-08-26・4.5.0】既定を "0" にした（それまでは空＝固定しない）。**
+        # 種は当たり外れを作らない ── 分布を変えずに 1 つの引きを選ぶだけなので、
+        # 種の有無で期待値は動かない。**得られるのは再現性である。**
+        # 同じ zip を出し直せば同じ点が返り、設定を 1 つ変えた 2 本は
+        # **同じ引きの上で**比べられる。`PARC_SEED=` と空で渡せば従来どおり固定しない。
+        seed_text = os.environ.get("PARC_SEED", "0")
+        self._seed = int(seed_text) if seed_text else None
+        self._episode_index = 0
 
         # chunk を何回引くか。1 なら素の挙動。
         # 版 3.4.0 で 3 にして本番で測ったが、0.166 → 0.168（0.04 本ぶん）で
@@ -776,7 +815,7 @@ class MyPolicy(BasePolicy):
         # n=2 は 2 ステップごとに引き直すので、外れを引いてもすぐ打ち消される。
         # **外れを 16 ステップぶん引きずるのは n が大きいときだけ**で、そこは未測定。
         # π0.5 は n=16 なので、軸を開け直して測る。
-        self._samples = int(os.environ.get("PARC_SAMPLES", "3"))
+        self._samples = int(os.environ.get("PARC_SAMPLES", "1"))
         if self._samples > 1:
             self._install_chunk_sampler()
 
@@ -824,6 +863,8 @@ class MyPolicy(BasePolicy):
             f"num_inference_steps={getattr(self._policy.config, 'num_inference_steps', '-')}  "
             f"n_action_steps={self._n_action_steps}  ema_alpha={self._ema_alpha}  "
             f"blend_steps={self._blend_steps}  samples={self._samples}  "
+            f"gain=({self._gain_translation},{self._gain_rotation})  "
+            f"seed={self._seed if self._seed is not None else 'off'}  "
             f"rtc={f'on(horizon={self._rtc_horizon})' if self._rtc_enabled else 'off'}  "
             f"normalize={self._normalize_mode()}  "
             f"quant_serve={quant_mode or 'off'}"
@@ -1028,8 +1069,17 @@ class MyPolicy(BasePolicy):
             original_predict = policy.predict_action_chunk
 
             def sampled_predict(batch, **kwargs):
+                # **`.clone()` が要る（2026-08-22、compile_model=true の実機検証で発見）。**
+                # `sample_actions` を `torch.compile` した状態だと、CUDA graphs に
+                # 裏打ちされた静的バッファを返すことがある。clone せずに複数回呼んだ
+                # 結果を後から `torch.stack` すると、2回目以降の呼び出しが1回目の
+                # 出力バッファを上書きし、`RuntimeError: accessing tensor output of
+                # CUDAGraphs that has been overwritten by a subsequent run` で落ちる。
+                # `compile_model=false`（これまでの既定）では静的バッファを使わないため
+                # 顕在化していなかった——このバグは compile_model 系の変更としてここに
+                # 記録する（work/quant_sweep/PROGRESS.md 参照）。
                 chunks = torch.stack(
-                    [original_predict(batch, **kwargs) for _ in range(count)]
+                    [original_predict(batch, **kwargs).clone() for _ in range(count)]
                 )
                 return pick_medoid(chunks)
 
@@ -1174,6 +1224,23 @@ class MyPolicy(BasePolicy):
         smoothed : np.ndarray
             後処理後の行動 (7,)。無効時は入力をそのまま返す。
         """
+        # **倍率は EMA より前に掛ける。** EMA も継ぎ目の混ぜも線形なので
+        # 出力は「後で掛ける」場合と厳密に同じだが、**前で掛けると入力と
+        # `_previous_action` の単位がそろう。**「後で掛けて、掛けた値を
+        # `_previous_action` に保存する」実装だと毎ステップ倍率が掛かって発散するので、
+        # その罠を構造的に避けている。
+        if self._gain_translation != 1.0 or self._gain_rotation != 1.0:
+            action = action.copy()
+            action[_TRANSLATION_DIMS] *= self._gain_translation
+            action[_ROTATION_DIMS] *= self._gain_rotation
+            # **各軸を独立に ±1 で切ると、進む向きが変わってしまう**
+            # （環境が受け取れる範囲は ±1.0。配布物の乱数方策が
+            # `np.random.uniform(-1, 1)` を返している）。3 軸をまとめて縮めて向きを保つ。
+            for dims in (_TRANSLATION_DIMS, _ROTATION_DIMS):
+                peak = float(np.max(np.abs(action[dims])))
+                if peak > 1.0:
+                    action[dims] = action[dims] / peak
+
         enabled = self._blend_steps > 0 or self._ema_alpha > 0.0
 
         if not enabled or self._previous_action is None:
@@ -1228,6 +1295,19 @@ class MyPolicy(BasePolicy):
             self._instruction = instruction
         else:
             self._instruction = self._normalizer.normalize(instruction)[0]
+
+        # **種を渡されているときだけ、このエピソードの乱数を固定する。**
+        # 既定（`PARC_SEED` 無し）では何もしない＝提出時の挙動は変わらない。
+        # 何のためかは `__init__` の `PARC_SEED` の注記にある。
+        if self._seed is not None:
+            import torch
+
+            seed = self._seed + self._episode_index
+            torch.manual_seed(seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(seed)
+            np.random.seed(seed % (2**32))
+        self._episode_index += 1
 
         # chunk のキャッシュを捨てる。忘れると前エピソードの action を出し続ける。
         self._policy.reset()

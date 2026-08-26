@@ -52,7 +52,7 @@ LIBERO-plus は 7 種類（物体配置・カメラ視点・ロボット初期�
   > **初期状態ファイルは元タスク分しか存在しない**ので
   > （`init_files/libero_spatial/` は 10 件のみ）、
   > **実在するファイル名との最長前方一致で決めるほうが確実である。**
-  > [make_validation_suite.py](../../solution/tools/make_validation_suite.py) はこの方式で、
+  > [make_validation_suite.py](../../solution/tools/eval/make_validation_suite.py) はこの方式で、
   > 結果を CSV の `init_states_file` 列に書き出す。
 - **タスク数と 1 タスクあたりの試行数は非公開**（Q&A No.3）。
   PDF p.11 の「予選において N は 1 となります」は**運営が誤りと認めた記述**である。

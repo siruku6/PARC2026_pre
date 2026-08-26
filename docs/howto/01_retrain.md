@@ -30,34 +30,6 @@
 一度も見ていない。** 300 ステップでの測定では、背景テクスチャが変わったときの成功率が
 0.60（照明は 0.82）と落ち込んでもいる。
 
-## 0. GPU マシンで始めるとき：Claude の設定を持ち込む
-
-**このリポジトリを clone しただけでは足りない。** Claude 側の方針と skill は
-`~/.claude/` にあり、git の管理外である。無いと「日本語は日常語で」
-「コミットするパスは英語で」「一次情報を出典にする」を知らない状態から始まる。
-
-手元のマシンで固めて、GPU マシンへ渡す。
-
-```bash
-bash solution/tools/export_claude_setup.sh          # work/claude-setup.tgz ができる
-scp work/claude-setup.tgz <GPU マシン>:~/
-```
-
-GPU マシン側で展開する。
-
-```bash
-mkdir -p ~/.claude && tar xzf ~/claude-setup.tgz -C ~/.claude
-ls ~/.claude/skills/                        # 7 個並ぶ
-grep -c "How to apply" ~/.claude/CLAUDE.md  # 3 と出る
-```
-
-**認証情報は入っていない。** GPU マシンでは `claude` を改めて認証すること。
-
-> `Ignoring unknown extended header keyword 'LIBARCHIVE.xattr...'` が並ぶ版が
-> あった。**展開は成功していた**が（Linux の tar が macOS の拡張属性を
-> 読み飛ばしていただけ）、失敗と見分けが付かないので送る側で載せないようにした。
-> 上の 2 行で中身を確かめれば、警告の有無に関わらず判断できる。
-
 ## 全体像
 
 ```mermaid
@@ -75,23 +47,20 @@ flowchart LR
 そのままでは推論に使えない。元の重みへ足し込む操作を**マージ**と呼び、
 `merge.py` がこれを行う。
 
-## どちらで回すか
+## 学習は Docker（GPU マシン）でしか回さない
 
-```mermaid
-flowchart TD
-    Q{"Ubuntu の GPU マシンが<br/>使えるか"} -->|使える| DK["Docker で回す<br/>（このページの A）"]
-    Q -->|使えない| CL["Colab で回す<br/>（このページの B）"]
-```
+**Colab で学習する道は 8/23 に廃止した。** 手順を書いていた
+`docs/solution/COLAB.md` も削除済みである。
 
 | | Colab | Docker（GPU マシン） |
 |---|---|---|
 | 時間の上限 | **セッションが切れる**（実際 9,100 ステップで切れた） | 無し |
 | 出力 | Drive へ同期しないと消える | **ホストのディレクトリに残る** |
-| 切断対策 | [../solution/COLAB.md](../solution/COLAB.md) の A〜F の仕掛けが要る | 不要 |
+| 切断対策 | 300 秒ごとに Drive へ同期する仕掛けを自分で差し込む必要がある | 不要 |
 | 再現性 | ノートブックの手動編集 | **イメージと引数で固定** |
 
-**使えるなら Docker を選ぶ。** Colab は上限で切れるのが確定しており、
-そのための仕掛けを維持し続ける必要がある。
+Colab は上限で切れるのが確定しており、そのための仕掛けを維持し続ける必要がある。
+**16,000 ステップの学習が 3 時間近くかかるので、切断対策があっても完走しない。**
 
 ---
 
@@ -109,7 +78,7 @@ flowchart TD
 
 | ファイル | 役割 |
 |---|---|
-| [../../solution/tools/verify_merge.py](../../solution/tools/verify_merge.py) | **畳み込みが本当に効いたか**を初期重みと比べて確かめる（A-6） |
+| [../../solution/tools/weights/verify_merge.py](../../solution/tools/weights/verify_merge.py) | **畳み込みが本当に効いたか**を初期重みと比べて確かめる（A-6） |
 
 ## A-0. 前提を確かめる
 
@@ -544,12 +513,13 @@ lerobot-train
 | `--policy.*` | **渡さない** | `--policy.path` は `_resolve_pretrained_from_cli()` が優先するため、渡すと**再開が黙って無視される** |
 | `--dataset.*` | **渡さない** | エピソードの選択も画像拡張も config に入っている |
 | `--steps` | **渡さない** | 学習率は `scheduler_decay_steps` で決まる。変えるとスケジュールが途中で別物になる |
-| `--output_dir` | **必ず渡す** | config には**元の環境のパス**（Colab なら `/content/outputs/...`）が入っている |
+| `--output_dir` | **必ず渡す** | config には**元の環境のパス**が入っている。別のマシンで学習した回なら、その環境の置き場が残っている |
 | `--batch_size` / `--num_workers` / `--save_freq` | 渡してよい | 学習条件を壊さない |
 
-## A-4. Colab で作ったチェックポイントから続ける
+## A-4. 別のマシンで作ったチェックポイントから続ける
 
-**必要なのは 2 つのディレクトリで、両方揃っていないと再開できない。**
+**時間貸しの GPU マシンから持ち帰ったチェックポイントで続けるときの話である。**
+必要なのは 2 つのディレクトリで、両方揃っていないと再開できない。
 
 ```
 work/train/<run-name>/checkpoints/009000/
@@ -567,15 +537,14 @@ work/train/<run-name>/checkpoints/009000/
     └── training_step.json                               … **何ステップ目か**
 ```
 
-Drive から丸ごと持ってくればよい。
+`checkpoints/` を丸ごと持ってくればよい。
 
 ```bash
-mkdir -p work/train/smolvla_lora_all_suites
-cp -r "<Drive>/parc2026/260809_smolvla_lora_multiple_suites_001/train/checkpoints" \
-      work/train/smolvla_lora_all_suites/
+mkdir -p work/train/<run-name>
+cp -r "<持ち帰った場所>/checkpoints" work/train/<run-name>/
 
 # 中身の確認。両方あることを必ず見る
-ls work/train/smolvla_lora_all_suites/checkpoints/009000/
+ls work/train/<run-name>/checkpoints/009000/
 ```
 
 **ディレクトリ名はゼロ埋め 6 桁である**（桁数は `max(6, len(str(steps)))`）。
@@ -587,12 +556,12 @@ ls work/train/smolvla_lora_all_suites/checkpoints/009000/
 
 ### 初期重みの置き場所は train.py が直す
 
-LoRA のアダプタは「どの重みへの差分か」を**絶対パスで**覚えている。Colab で作った
-チェックポイントには Colab の置き場（`/content/hf_cache/...`）が入っており、
-コンテナ側（`/root/.cache/huggingface`）では存在しない場所になる。
+LoRA のアダプタは「どの重みへの差分か」を**絶対パスで**覚えている。**マシンをまたぐと
+その場所は存在しない**ため、ここを直さないと落ちる。
 
 LeRobot はこの値を初期重みの指定としてそのまま使い、**場所として存在しなければ
-HF のリポジトリ名として解釈する。** 直さないとこう落ちる。
+HF のリポジトリ名として解釈する。** 出るのはこのエラーである（下の例は
+`/content/hf_cache/...` という別環境の置き場が焼き付いていた回のもの）。
 
 ```
 HFValidationError: Repo id must be in the form 'repo_name' or 'namespace/repo_name':
@@ -624,7 +593,7 @@ HFValidationError: Repo id must be in the form 'repo_name' or 'namespace/repo_na
 
 ### バッチサイズは変えても構わない
 
-Colab では VRAM の都合で小さくしていたはずだが、GPU マシンでは上げてよい。
+VRAM が前のマシンより大きいなら上げてよい。
 食い違うと次の警告が出るが、**エポックとオフセットは正しく復元される。**
 
 ```
@@ -683,7 +652,7 @@ docker run --rm -it \
 初期重みと 1 テンソルずつ比べる。
 
 ```bash
-python3 solution/tools/verify_merge.py work/train2/<run_name>/merged_model \
+python3 solution/tools/weights/verify_merge.py work/train2/<run_name>/merged_model \
     --base-model work/artifacts/model_weights_base
 ```
 
@@ -765,7 +734,7 @@ cp -r work/train2/<run_name>/merged_model work/artifacts/model_weights_<label>
 cp -r work/artifacts/model_weights_base/vlm work/artifacts/model_weights_<label>/vlm
 
 MUJOCO_GL=osmesa WEIGHTS=work/artifacts/model_weights_<label> LABEL=<label> \
-    bash solution/tools/run_docker_eval.sh --detach
+    bash solution/tools/eval/run_docker_eval.sh --detach
 ```
 
 **回ごとに別の名前にする。** そうすれば前の回を消さずに並べて測れる
@@ -775,7 +744,7 @@ MUJOCO_GL=osmesa WEIGHTS=work/artifacts/model_weights_<label> LABEL=<label> \
 ### 提出物に載せるなら —— `install_weights.py` で取り込む
 
 ```bash
-work/venv310/bin/python solution/tools/install_weights.py \
+work/venv310/bin/python solution/tools/weights/install_weights.py \
     work/train2/<run_name>/merged_model --dry-run
 ```
 
@@ -790,25 +759,13 @@ work/venv310/bin/python solution/tools/install_weights.py \
 
 ---
 
-# B. Colab で回す
-
-セルの書き換えが必要なため、手順は [../solution/COLAB.md](../solution/COLAB.md)
-にある。**A〜H の順に読んで差し込む。**
-
-| セル | 何をするか | なぜ必要か |
-|---|---|---|
-| A | Drive のマウントと同期ヘルパー | セッションが切れると `/content` は消える |
-| B〜D | 学習条件の追加と、学習セルの修正 | 途中経過を Drive へ逃がす |
-| E | マージ済みモデルを Drive へ | 持ち帰るのはこれ |
-| H | 学習データの選び方を変える | 40 タスク・明るさで散らす・画像拡張 |
-
-**300 秒ごとに Drive へ同期する。** セッションが切れても、直近の
-チェックポイントから A-4 の手順で続きを回せる。
-
-## 途中で打ち切るとき
+# B. 途中で打ち切るとき
 
 学習率がどこまで落ちているかで、打ち切ってよいかが決まる。
-`--steps 20000` のコサイン減衰なら次のとおりである。
+スケジューラは `CosineDecayWithWarmupSchedulerConfig` で、ピーク 3e-4 から 3e-5 へ
+コサインで落とす。**`--steps` と `--policy.scheduler_decay_steps` には同じ値が渡るので
+自動スケールは働かず、途中で止めれば学習率は高いままである。**
+`--steps 20000` なら次のとおりである。
 
 | 打ち切り | 学習率 | 使えるか |
 |---|---|---|
@@ -817,8 +774,8 @@ work/venv310/bin/python solution/tools/install_weights.py \
 | 15,000 | 7.4e-5（25%） | **実用の下限** |
 | 20,000 | 3.0e-5 | 想定どおり |
 
-詳細は [../solution/COLAB.md](../solution/COLAB.md) の
-「途中のチェックポイントで打ち切るとき」にある。
+**15,000 を超えていれば、打ち切っても大きくは損をしない。** 10,000 以下で止めるくらいなら、
+`--steps` を小さくして最初から回し直した方がよい。
 
 ---
 
@@ -832,7 +789,7 @@ work/venv310/bin/python solution/tools/install_weights.py \
 | `RuntimeError: operator torchvision::nms does not exist` | torch と torchvision の版が対になっていない | A-1 のイメージを作り直す（Dockerfile で torchvision を torch と同じ index から固定済み） |
 | `--resume` したのに step 0 から始まる | `--policy.path` を渡している | A-3 の表のとおり、最小限の引数だけにする |
 | `NotADirectoryError` | `training_state/` が無い | A-4 のとおり両方コピーする |
-| `HFValidationError: Repo id must be in the form ...` で `/content/hf_cache/...` が出る | Colab の置き場所がアダプタに焼き付いている | `train.py` が `--resume` で直す（A-4 の「初期重みの置き場所は train.py が直す」）。古い train.py なら入れ替える |
+| `HFValidationError: Repo id must be in the form ...` で存在しないパスが出る | 学習した側のマシンの置き場所がアダプタに焼き付いている | `train.py` が `--resume` で直す（A-4 の「初期重みの置き場所は train.py が直す」）。古い train.py なら入れ替える |
 | 毎回 6.4 GB を落とし直す | HF キャッシュをマウントしていない | `-v "$HOME/.cache/huggingface:/root/.cache/huggingface"` |
 | 学習は終わったのに推論で使えない | マージしていない | A-5 を実行する |
 | `can't open file '/workspace/merge.py'` | イメージが `train.py` しか持っていない古いもの | A-1 でイメージを作り直す（`COPY train.py merge.py` に修正済み。`COPY` は最後の行なのでキャッシュが効いて数秒で終わる） |

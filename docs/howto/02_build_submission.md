@@ -44,7 +44,7 @@ flowchart TD
 # ケース 1. 作り直すだけ
 
 ```bash
-work/venv310/bin/python solution/tools/build_submission.py
+work/venv310/bin/python solution/tools/build/build_submission.py
 ```
 
 これだけである。出力はこうなる。
@@ -67,15 +67,15 @@ work/venv310/bin/python solution/tools/build_submission.py
 
 ```bash
 # 1. 検査だけする（何も書き換えない）
-work/venv310/bin/python solution/tools/install_weights.py \
+work/venv310/bin/python solution/tools/weights/install_weights.py \
     work/train/smolvla_lora_all_suites/merged_model --dry-run
 
 # 2. 問題なければ取り込む
-work/venv310/bin/python solution/tools/install_weights.py \
+work/venv310/bin/python solution/tools/weights/install_weights.py \
     work/train/smolvla_lora_all_suites/merged_model
 
 # 3. zip を作る
-work/venv310/bin/python solution/tools/build_submission.py
+work/venv310/bin/python solution/tools/build/build_submission.py
 ```
 
 ## なぜ手でコピーしてはいけないのか
@@ -136,7 +136,7 @@ with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as tf:
 (dest / root).rename(target)
 "
 
-work/venv310/bin/python solution/tools/vendor_lerobot.py \
+work/venv310/bin/python solution/tools/build/vendor_lerobot.py \
     --python310 work/venv310/bin/python
 ```
 
@@ -184,7 +184,7 @@ snapshot_download('HuggingFaceTB/SmolVLM2-500M-Video-Instruct',
 ### ① 混ぜる（2 分・GPU 不要）
 
 ```bash
-python3 solution/tools/blend_weights.py --lam 0.25 \
+python3 solution/tools/weights/blend_weights.py --lam 0.25 \
     --base       work/artifacts/model_weights.bak \
     --finetuned  work/artifacts/model_weights \
     --output     work/artifacts/model_weights_lam025
@@ -202,7 +202,7 @@ shasum -a 256 work/artifacts/model_weights*/model.safetensors | cut -c1-16
 
 ```bash
 # λ=1.0 は --finetuned と、λ=0.0 は --base と 1 バイトも違わないはず
-python3 solution/tools/blend_weights.py --lam 1.0 \
+python3 solution/tools/weights/blend_weights.py --lam 1.0 \
     --base work/artifacts/model_weights.bak \
     --finetuned work/artifacts/model_weights --output "$TMPDIR/lam100"
 shasum -a 256 "$TMPDIR/lam100/model.safetensors" \
@@ -213,12 +213,12 @@ shasum -a 256 "$TMPDIR/lam100/model.safetensors" \
 
 ### ② 検証用データで評価してから取り込む
 
-**混ぜた重みを 84 件の検証用データで評価する**（Colab なら 45 分。
-[../solution/colab_eval/](../solution/colab_eval/README.md)）。
+**混ぜた重みを 84 件の検証用データで評価する**（Colab なら 2.6 時間。28 件 × 3 に割る。
+[11_colab_eval.md](11_colab_eval.md)）。
 **素の重みの回と 1 件ずつ対にして比べる。**
 
 ```bash
-python3 solution/tools/summarize_gpu_eval.py \
+python3 solution/tools/eval/summarize_gpu_eval.py \
     --output-dir <混ぜた重みの出力先> --csv <その VAL_TASKS.csv> \
     --compare    <素の重みの出力先>
 ```
@@ -237,10 +237,10 @@ python3 solution/tools/summarize_gpu_eval.py \
 # **素の重みを別名で確保してから。** install_weights.py は .bak を上書きする
 cp -r work/artifacts/model_weights.bak work/artifacts/model_weights_base
 
-work/venv310/bin/python solution/tools/install_weights.py \
+work/venv310/bin/python solution/tools/weights/install_weights.py \
     work/artifacts/model_weights_lam025 --destination work/artifacts/model_weights
-work/venv310/bin/python solution/tools/build_submission.py
-work/venv310/bin/python solution/tools/validate_submission.py --static
+work/venv310/bin/python solution/tools/build/build_submission.py
+work/venv310/bin/python validate_submission.py --static
 ```
 
 > **`.py` を 1 行も変えないなら、リハーサルの枠は要らない。**
@@ -258,11 +258,11 @@ work/venv310/bin/python solution/tools/validate_submission.py --static
 
 ```bash
 # 寄せ先 40 種を出す（policy_server.py に貼ってある値の出し方）
-python3 solution/tools/instruction_targets.py --emit python
+python3 solution/tools/suite/instruction_targets.py --emit python
 
 # 正しく寄せられるかを測る（変種 10,030 件・答え合わせ付き。torch 不要）
-python3 solution/tools/check_instruction_normalization.py
-python3 solution/tools/check_instruction_normalization.py --sweep   # 合格ラインを振って比べる
+python3 solution/tools/suite/check_instruction_normalization.py
+python3 solution/tools/suite/check_instruction_normalization.py --sweep   # 合格ラインを振って比べる
 ```
 
 **本番の 2 カテゴリで 1 件でも誤って寄せたら、道具が終了コードを立てて落ちる。**
@@ -344,7 +344,7 @@ cd /workspace && /opt/subvenv/bin/python validate_submission.py /sub/submission.
 環境をまたいだときは、内容が一致しているかを確認する。
 
 ```bash
-work/venv310/bin/python solution/tools/digest_submission.py --per-entry
+work/venv310/bin/python solution/tools/build/digest_submission.py --per-entry
 ```
 
 ## 既知のハッシュ
@@ -385,8 +385,47 @@ work/venv310/bin/python solution/tools/digest_submission.py --per-entry
 | **4.0.0** | **RunPod フルパラメータ 3,000 ステップ**（`pi05_rp3000`） | blend 4（3.10.0 から引き継ぎ） | `929fbf74…` | **未提出。**blend4 が本番で負けたので破棄した |
 | **4.1.0** | 同上 | samples を π0.5 で使えるようにした（既定 1 なので挙動は 4.0.0 と同じ） | — | zip なし |
 | **4.2.0** | **RunPod フルパラメータ 3,000 ステップ** | **3.9.0 と同一の設定**（n=16・blend 0・infer 10・samples 1）＝**重みだけの 1 変数** | **`5cf6b983…`** | **0.485 ← 過去最高。0.264 を 0.221 上回った**（8/14 21:25 提出）。**ステップ数 1,142 → 991（−13%）・110.4 秒。予選の最終提出はこれ** |
-| **4.3.0** | 同上 | infer 20 | `7a2bc2b3…` | 未提出 |
+| **4.3.0** | 同上 | infer 20 | 8/14 は `7a2bc2b3…`／**8/23 に組み直して `71c6b3c6…`** | 未提出（**本戦 1 の 8/25 用に用意済み**） |
 | **4.4.0** | 同上 | **infer 20 ＋ samples 3** | `02819ca3…` | **未提出。**4.2.0 が 0.485 で壁を超えたので、測っていない版に賭ける理由が消えた |
+
+> **【8/23 12:10】過去の zip が残っているのは HuggingFace だけである。**
+> `work/` は git 管理外なので、**ローカルには直前に組んだ 1 本しか無いのが普通である**
+> （8/23 時点では 4.3.0 の `work/submission_rp3000_i20.zip` だけ）。
+> 非公開リポジトリ `siruku6/parc2026-submission` にある 4 本が過去の現物である。
+>
+> | リポジトリ内の名前 | 版 | sha256 |
+> |---|---|---|
+> | `submission_361.zip` | 3.6.1（SmolVLA・保険） | `e5fdfd3b…` |
+> | `submission_pi05_n16.zip` | 3.9.0 | `5a9eead5…` |
+> | **`submission_rp3000_blend0.zip`** | **4.2.0（本番 0.485）** | `5cf6b983…` |
+> | **`submission_rp3000_i20.zip`** | **4.3.0（8/23 に組み直した）** | `71c6b3c6…` |
+>
+> **HuggingFace は大きいファイルの sha256 を API で返すので、9.4GB を落とさずに
+> 中身が本物かを確かめられる。** 上の 4 本はこの方法で記録と一致を確認した。
+>
+> ```bash
+> .venv/bin/python -c "
+> from huggingface_hub import HfApi
+> for f in HfApi().list_repo_tree('siruku6/parc2026-submission',
+>                                 recursive=True, expand=True):
+>     if f.path.endswith('.zip'):
+>         print(f.path, f.size, f.lfs.sha256)
+> "
+> ```
+>
+> **4.2.0 と 4.3.0 のコードは commit されていない。** `policy_server.py` を触った
+> 32 個の commit を全部見たが、`__version__` が 4.2.0・4.3.0 のものは 1 つも無い。
+> git にあるのは 4.4.0（`653398a`）までで、この 2 つは既定値を書き換えて
+> 組んだだけである。
+>
+> **したがって「4.3.0 が何だったか」は、この表からしか復元できない**
+> —— 4.3.0 は infer 20、4.4.0 は infer 20 ＋ samples 3 なので、
+> **差は `PARC_SAMPLES` の既定 3 → 1 の 1 行**と読める。8/23 の組み直しは
+> この読みに従って `653398a` から行った（`work/build_430/solution/` に置いた）。
+> **原物と突き合わせて確かめたわけではない。**
+> **HEAD から組んではいけない。** HEAD には量子化の分岐（`QUANT_SERVE_MODE`）・
+> samples が 2 以上のときの `.clone()`・起動ログへの `quant_serve=off` の追記が
+> 入っており、**本番で 1 度も走っていない。**
 
 > **【8/14 13:10】3.8.0 は 0.177 で、weak3x の 0.184 に 0.007 届かなかった。**
 > 採点ログは `outputs/260814_114832_pi0.5_bench.md`。**8 本のうち 6 本が
@@ -516,7 +555,7 @@ work/venv310/bin/python solution/tools/digest_submission.py --per-entry
 >   +3 件だった）。**ステップ数で見れば見抜ける。**
 > - **秒数だけ払う施策は事実上ただ** —— `num_inference_steps` と `samples` は
 >   推論の秒数しか増やさず、環境のステップ数を 1 ステップも増やさない。
-> ステップ数で 1 件ずつ突き合わせる道具: `solution/tools/compare_steps.py`。
+> ステップ数で 1 件ずつ突き合わせる道具: `solution/tools/analysis/compare_steps.py`。
 
 > **版と本番ログの表示がずれている点に注意。** 1.0.0 の採点ログには
 > `policy_server 0.3.0` と出ている（版を上げる前に重みだけ差し替えて出したため）。
@@ -620,7 +659,8 @@ Omnicampus に `work/submission.zip` をアップロードする。
 | トラック全体 | 1 時間以内（実測 147.6 秒） |
 
 **出す前に、ローカル評価で成功率を確かめておくこと。** 手順は
-[../solution/colab_eval/](../solution/colab_eval/README.md) にある。
+[03_gpu_eval.md](03_gpu_eval.md)（GPU マシン）か
+[11_colab_eval.md](11_colab_eval.md)（Colab）にある。
 
 > **【8/14 17:30 訂正】「ローカル評価は本番スコアを再現する」は成り立たない。**
 > **手元の 36 件で「差が無い」と出たものが、本番では 5 割増しになった。**

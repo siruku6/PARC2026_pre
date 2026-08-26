@@ -29,7 +29,7 @@ the stove` だけである。** 残りは「多くが超えている」だけで
 
 > **出典。** `outputs/tmp/libero_plus_episodes.parquet`（`lerobot/libero_plus` の
 > `meta/episodes` そのもの）の `length` 列と `tasks` 列。数え直す手順は
-> [scripted_demo.py](../../solution/tools/scripted_demo.py) の冒頭にある。
+> [scripted_demo.py](../../solution/tools/scripted_demo/scripted_demo.py) の冒頭にある。
 
 ## 自分で作った手本を学習に使ってよい
 
@@ -86,8 +86,8 @@ flowchart LR
 
 | 道具 | 何をするか |
 |---|---|
-| [scripted_demo.py](../../solution/tools/scripted_demo.py) | `measure` 寸法を測る / `verify` 通るか数える / `record` 学習データに書き出す |
-| [visualize_demo.py](../../solution/tools/visualize_demo.py) | 元の手本と作った軌道を左右に並べた mp4 と 1 枚絵を作る |
+| [scripted_demo.py](../../solution/tools/scripted_demo/scripted_demo.py) | `measure` 寸法を測る / `verify` 通るか数える / `record` 学習データに書き出す |
+| [visualize_demo.py](../../solution/tools/viz/visualize_demo.py) | 元の手本と作った軌道を左右に並べた mp4 と 1 枚絵を作る |
 
 ### 先に測る 3 つ
 
@@ -414,7 +414,7 @@ docker run --rm --gpus all \
 **採点 8 本がその 4 タスク × 2 なら、300 ステップに張り付く原因は長さではない。**
 
 **これは手元で確かめられる。** 同じ重みで公開 4 タスク × 2 エピソードを回し、
-ステップ数の並びが採点ログと揃うかを見る（[compare_with_production.py](../../solution/tools/compare_with_production.py)）。
+ステップ数の並びが採点ログと揃うかを見る（[compare_with_production.py](../../solution/tools/analysis/compare_with_production.py)）。
 揃えば採点 8 本の正体が決まる。**軌道づくりより先に済ませる価値がある。**
 
 ## 次にやること
