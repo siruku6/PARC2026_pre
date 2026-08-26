@@ -59,7 +59,7 @@ nproc; free -g | head -2
 | ディスク | 489 GB のうち **357 GB 空き** |
 | 評価イメージ | `parc2026-final:latest` `a174b42ff901`・**ディスク上 69.2 GB**（中身 26.8 GB） |
 | GitHub | ssh が通る（`Hi siruku6! You've successfully authenticated`） |
-| `docker` を sudo 無しで | **拒否された**（手順 1 を見る） |
+| `docker` を sudo 無しで | 8/26 は拒否された。**8/27 に解決済み**（手順 1） |
 | 配布キットの場所 | **`~/b_PARC2026_final` では無かった** |
 | リポジトリの置き場 | `~/src/PARC2026_pre`（`main` が最新。8/26 に PR #11 が merge 済み） |
 
@@ -75,19 +75,24 @@ find ~ -maxdepth 4 -type d -name "*PARC2026_final*" 2>/dev/null
 
 ## 手順 1 docker を叩けるようにする
 
-**このマシンでは `docker` に `sudo` が要る。**`run_final_eval.sh` は中で docker を
-16 回叩く。**`DOCKER="sudo docker"` を渡せばそれで済む**（2026-08-26 に
-`run_final_eval.sh` へ `DOCKER` 変数を足した）。
+**`run_final_eval.sh` は中で docker を 16 回叩くので、sudo 無しで叩ける状態にしてから
+始める。**
 
 ```bash
-DOCKER="sudo docker" bash solution/tools/eval/run_final_eval.sh track2
+sudo usermod -aG docker "$USER"
 ```
 
-**スクリプト全体を `sudo` で回すよりこちらが安全である。** スクリプト自身は自分の
-権限で動くので、`$HOME` の解決も出力ファイルの持ち主も変わらない。**sudo の
-パスワードの記憶は使うたびに延びるので、評価の途中で聞かれ直すことはない。**
+**このあと ssh を完全に切って入り直す**（`newgrp docker` でもよいが、そのシェルだけに
+効く）。`docker info >/dev/null && echo OK` で確かめる。
 
-### `usermod -aG docker` が効かなかったときの見分け方
+**2026-08-27 に、この状態にできることを実機で確認した。**`docker images parc2026-final`
+が sudo 無しで通っている。
+
+**代償を 1 行で。** `docker` グループは実質 root と同じ権限になる。共用機では入れない
+方がよく、その場合は `sudo -E bash solution/tools/eval/run_final_eval.sh ...` で通す
+（`-E` を落とすと `$HOME` が `/root` になり、HF キャッシュのマウント元が変わる）。
+
+### 入り直しても拒否されるときの見分け方
 
 2026-08-26 に `sudo usermod -aG docker "$USER"` を実行してログアウト・再接続しても
 `permission denied while trying to connect to the docker API at
@@ -100,11 +105,8 @@ id -nG; getent group docker; ls -l /var/run/docker.sock; systemctl is-active doc
 | 出力 | 原因 | 直し方 |
 |---|---|---|
 | `id -nG` に `docker` が**無い** | 再接続で新しいログインセッションになっていない（ssh の接続共有・端末多重化が残っている） | ssh を完全に切って入り直す。または `newgrp docker`（そのシェルだけに効く） |
-| `id -nG` に `docker` が**有る**のに拒否される | ソケットの持ち主が `docker` グループではない（`ls -l` の 4 列目が `root`） | `sudo chgrp docker /var/run/docker.sock` は再起動で戻る。**`DOCKER="sudo docker"` を使う方が確実** |
-| `getent group docker` が空 | `docker` グループそのものが無い（Docker Desktop などソケットの置き場が違う構成） | `DOCKER="sudo docker"` を使う |
-
-**どの場合でも `DOCKER="sudo docker"` で先へ進める。**グループの整備は後回しにしてよい。
-`docker` グループは実質 root と同じ権限になるので、共用機ならむしろ入れない方がよい。
+| `id -nG` に `docker` が**有る**のに拒否される | ソケットの持ち主が `docker` グループではない（`ls -l` の 4 列目が `root`） | `sudo chgrp docker /var/run/docker.sock`（再起動で戻るので恒久策ではない） |
+| `getent group docker` が空 | `docker` グループそのものが無い（ソケットの置き場が違う構成） | `sudo -E` で通す |
 
 ## 手順 2 コードを置く
 
@@ -143,7 +145,7 @@ ls solution/tools/eval/run_final_eval.sh
 
 ```bash
 cd ~/src/PARC2026_pre/solution/train
-sudo docker build -f Dockerfile.pi05 -t parc2026-train-pi05 .
+docker build -f Dockerfile.pi05 -t parc2026-train-pi05 .
 ```
 
 **所要 20〜60 分**（torch cu128 と LeRobot の pip install が大半）。放っておける。
@@ -155,7 +157,7 @@ JAIST サーバでの出来上がりは 9.86 GB だった。
 終わったら次で確かめる。
 
 ```bash
-sudo docker run --rm --gpus all parc2026-train-pi05 \
+docker run --rm --gpus all parc2026-train-pi05 \
   python -c "import torch; print(torch.__version__, torch.cuda.get_device_name(0))"
 ```
 
@@ -206,8 +208,7 @@ unzip -q /tmp/sub/submission_4.5.0.zip -d /tmp/sub/x   # → /tmp/sub/x/model_we
 
 ```bash
 cd ~/src/PARC2026_pre
-KIT_ROOT=<配布キットの場所> DOCKER="sudo docker" \
-  MUJOCO_GL=egl TRACK_EPISODES=1 LABEL=smoke \
+KIT_ROOT=<配布キットの場所> MUJOCO_GL=egl TRACK_EPISODES=1 LABEL=smoke \
   bash solution/tools/eval/run_final_eval.sh track2
 ```
 
@@ -250,7 +251,7 @@ KIT_ROOT=<配布キットの場所> DOCKER="sudo docker" \
 
 ```bash
 cd ~/src/PARC2026_pre
-export KIT_ROOT=<配布キットの場所> DOCKER="sudo docker"
+export KIT_ROOT=<配布キットの場所>
 for spec in "1.0 0 g100_s0" "1.15 0 g115_s0" "1.3 0 g130_s0" "1.15 1 g115_s1"; do
   set -- $spec
   MUJOCO_GL=egl TRACK_EPISODES=1 LABEL="$3" \

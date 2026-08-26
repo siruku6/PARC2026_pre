@@ -27,8 +27,6 @@
 #                     osmesa（CPU 描画）のままにする。** 会社の RTX6000（Pass-Through の
 #                     実機）では `MUJOCO_GL=egl` を渡す。箱 1 個の描画で 9.7 ms → 0.6 ms。
 #   KIT_ROOT          配布キットの場所。既定は「このリポジトリの隣の b_PARC2026_final」
-#   DOCKER=docker     docker を叩くコマンド。**docker グループに入れないマシンでは
-#                     `DOCKER="sudo docker"` を渡す**
 #
 # Reads:
 #   - solution/policy_server.py
@@ -54,12 +52,6 @@ KIT_IMAGE="${KIT_IMAGE:-parc2026-final}"
 POLICY_IMAGE="${POLICY_IMAGE:-parc2026-train-pi05}"
 MUJOCO_GL="${MUJOCO_GL:-osmesa}"
 
-# **docker を叩くコマンド。**`docker` グループに入れないマシン（会社の RTX6000）では
-# `DOCKER="sudo docker"` を渡す。**スクリプト全体を sudo で回すより安全である**
-# （`$HOME` の解決と出力ファイルの持ち主が変わらない）。sudo のパスワードの記憶は
-# 使うたびに延びるので、評価の途中で聞かれ直すことはない。
-DOCKER="${DOCKER:-docker}"
-
 label="$TRACK"
 [ -n "${LABEL:-}" ] && label="${label}_${LABEL}"
 OUTPUT_DIR="$REPOSITORY_ROOT/work/final_eval/$(date +%m%d_%H%M%S)_${label}"
@@ -73,7 +65,7 @@ exec > >(tee -a "$OUTPUT_DIR/run.log") 2>&1
 # ---------------------------------------------------------------- 0. 前提の確認
 
 for image in "$KIT_IMAGE" "$POLICY_IMAGE"; do
-    if ! $DOCKER image inspect "$image" >/dev/null 2>&1; then
+    if ! docker image inspect "$image" >/dev/null 2>&1; then
         echo "イメージ $image が無い。上のコメントの docker build を先に実行する" >&2
         exit 1
     fi
@@ -90,12 +82,12 @@ done
 #
 # 予選の run_docker_eval.sh と同じやり方で派生イメージを作る。**タグに元イメージの
 # ID を含めるので、元が作り直されたら別タグになり、古い中身が生き残らない。**
-POLICY_IMAGE_ID="$($DOCKER image inspect -f '{{.Id}}' "$POLICY_IMAGE" | cut -d: -f2 | cut -c1-12)"
+POLICY_IMAGE_ID="$(docker image inspect -f '{{.Id}}' "$POLICY_IMAGE" | cut -d: -f2 | cut -c1-12)"
 SERVER_IMAGE="${POLICY_IMAGE}-server-${POLICY_IMAGE_ID}"
-if ! $DOCKER image inspect "$SERVER_IMAGE" >/dev/null 2>&1; then
+if ! docker image inspect "$SERVER_IMAGE" >/dev/null 2>&1; then
     echo "-- $SERVER_IMAGE を作る（HTTP サーバーの依存 3 つを足すだけ）"
     printf 'FROM %s\nRUN pip install --no-cache-dir "fastapi>=0.68" "uvicorn>=0.15" "msgpack>=1.0"\n' \
-        "$POLICY_IMAGE" | $DOCKER build -t "$SERVER_IMAGE" -f - . >/dev/null
+        "$POLICY_IMAGE" | docker build -t "$SERVER_IMAGE" -f - . >/dev/null
 fi
 
 if [ ! -d "$WEIGHTS/vlm" ]; then
@@ -112,14 +104,14 @@ echo "   出力: $OUTPUT_DIR"
 
 NETWORK="parc_final_$$"
 POLICY_HOST="parc_final_policy_$$"
-$DOCKER network create "$NETWORK" >/dev/null
+docker network create "$NETWORK" >/dev/null
 
 cleanup() {
     # **消す前に全ログを保存する。**消したあとでは `docker logs` が引けず、
     # 合計ステップ数（`POST /act` の回数）を数え直せなくなる。
-    $DOCKER logs "$POLICY_HOST" > "$OUTPUT_DIR/server.log" 2>&1 || true
-    $DOCKER rm -f "$POLICY_HOST" >/dev/null 2>&1 || true
-    $DOCKER network rm "$NETWORK" >/dev/null 2>&1 || true
+    docker logs "$POLICY_HOST" > "$OUTPUT_DIR/server.log" 2>&1 || true
+    docker rm -f "$POLICY_HOST" >/dev/null 2>&1 || true
+    docker network rm "$NETWORK" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -133,7 +125,7 @@ for name in PARC_N_ACTION_STEPS PARC_NUM_INFERENCE_STEPS PARC_SAMPLES \
 done
 
 echo "-- 方策サーバーを起動する（重みの読み込みに 1〜2 分）"
-$DOCKER run -d --name "$POLICY_HOST" --gpus all --network "$NETWORK" \
+docker run -d --name "$POLICY_HOST" --gpus all --network "$NETWORK" \
     -v "$REPOSITORY_ROOT/solution/policy_server.py:/app/policy_server.py:ro" \
     -v "$WEIGHTS:/app/model_weights:ro" \
     -v "$HOME/.cache/huggingface:/hf_home" \
@@ -142,22 +134,22 @@ $DOCKER run -d --name "$POLICY_HOST" --gpus all --network "$NETWORK" \
     "$SERVER_IMAGE" python /app/policy_server.py --port 8000 >/dev/null
 
 for _ in $(seq 1 300); do
-    if $DOCKER exec "$POLICY_HOST" python -c \
+    if docker exec "$POLICY_HOST" python -c \
         "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)" \
         2>/dev/null; then
         echo "   /health OK"
         break
     fi
-    if [ "$($DOCKER inspect -f '{{.State.Running}}' "$POLICY_HOST" 2>/dev/null)" != "true" ]; then
+    if [ "$(docker inspect -f '{{.State.Running}}' "$POLICY_HOST" 2>/dev/null)" != "true" ]; then
         echo "   方策サーバーが落ちた。ログを $OUTPUT_DIR/server.log に出す" >&2
-        $DOCKER logs "$POLICY_HOST" > "$OUTPUT_DIR/server.log" 2>&1 || true
+        docker logs "$POLICY_HOST" > "$OUTPUT_DIR/server.log" 2>&1 || true
         exit 1
     fi
     sleep 2
 done
 
 # 採用された設定値は server.log の [parc] 行にある。渡した値ではなくこちらを信じる。
-$DOCKER logs "$POLICY_HOST" > "$OUTPUT_DIR/server.log" 2>&1 || true
+docker logs "$POLICY_HOST" > "$OUTPUT_DIR/server.log" 2>&1 || true
 grep -m1 "\[parc\] policy_server" "$OUTPUT_DIR/server.log" || true
 
 # ---------------------------------------------------------------- 2. 評価側
@@ -174,7 +166,7 @@ if [ "${RECORD:-0}" != "0" ]; then
 fi
 
 echo "-- 評価を回す"
-$DOCKER run --rm --gpus all --network "$NETWORK" \
+docker run --rm --gpus all --network "$NETWORK" \
     --ulimit core=0 \
     -e "MUJOCO_GL=$MUJOCO_GL" \
     "${record_environment[@]}" \
@@ -188,14 +180,14 @@ $DOCKER run --rm --gpus all --network "$NETWORK" \
     2>&1 | tee "$OUTPUT_DIR/eval.log"
 
 # 評価側は root で走るので、結果の持ち主を戻しておく（戻さないと ubuntu では消せない）。
-$DOCKER run --rm -v "$OUTPUT_DIR:/out" --entrypoint chown "$KIT_IMAGE" \
+docker run --rm -v "$OUTPUT_DIR:/out" --entrypoint chown "$KIT_IMAGE" \
     -R "$(id -u):$(id -g)" /out || echo "   持ち主を戻せなかった。消すときは sudo が要る"
 
 # ---------------------------------------------------------------- 3. 読み方
 
 echo
 echo "== 結果"
-$DOCKER logs "$POLICY_HOST" 2>&1 | grep -c "POST /act" \
+docker logs "$POLICY_HOST" 2>&1 | grep -c "POST /act" \
     | sed 's/^/   合計ステップ数（POST \/act の回数）: /' || true
 echo "   json: $OUTPUT_DIR/results/"
 echo "   成功・衝突・軌道の総距離は json の中にある"
