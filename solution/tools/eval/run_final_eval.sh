@@ -1,0 +1,193 @@
+#!/usr/bin/env bash
+# 本選の配布キット（PARC2026_final）で、手元の重みを 3 トラックのどれかで評価する。
+#
+# **予選の run_docker_eval.sh と同じ 2 プロセス構成**である。依存が正面衝突するので
+# 1 つのコンテナに混ぜられない。
+#
+#   parc2026-final      … 本選の配布キット。python3.10・LIBERO-plus・pipeline → 評価側
+#   parc2026-train-pi05 … 学習に使ったイメージ。GPU torch と LeRobot     → 方策側
+#
+# 先に配布キットのイメージを 1 度だけ作る（30〜60 分・30 GB 前後）。
+#
+#   cd /home/ubuntu/lab/b_PARC2026_final && docker build -t parc2026-final .
+#
+# 使い方
+#
+#   bash solution/tools/eval/run_final_eval.sh track3            # 4 タスク × 2 本
+#   TRACK_EPISODES=1 bash solution/tools/eval/run_final_eval.sh track2
+#
+# 環境変数（省略時の既定）
+#   TRACK_EPISODES=2  タスクあたりの本数
+#   MAX_STEPS=300     本番と同じ打ち切り
+#   RECORD=1          各タスクの 1 本目を mp4 に残す（成功／失敗が名前に入る）
+#   WEIGHTS           測る重み。既定は 4.2.0 の重み（work/artifacts/pi05_rp3000）
+#   LABEL             出力先の名前に足す語
+#   PARC_*            推論の設定値。空なら policy_server.py の既定が効く
+#   MUJOCO_GL=osmesa  描画のやり方。**JAIST サーバの vGPU は OpenGL に対応しないので
+#                     osmesa（CPU 描画）のままにする。** 会社の RTX6000（Pass-Through の
+#                     実機）では `MUJOCO_GL=egl` を渡す。箱 1 個の描画で 9.7 ms → 0.6 ms。
+#   KIT_ROOT          配布キットの場所。既定は「このリポジトリの隣の b_PARC2026_final」
+#
+# Reads:
+#   - solution/policy_server.py
+#   - work/artifacts/<重み>/**
+# Generates:
+#   - work/final_eval/<日時>_<トラック>_<LABEL>/results/*.json・server.log
+set -euo pipefail
+
+REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+KIT_ROOT="${KIT_ROOT:-$(cd "$REPOSITORY_ROOT/../b_PARC2026_final" && pwd)}"
+cd "$REPOSITORY_ROOT"
+
+TRACK="${1:-track3}"
+case "$TRACK" in
+    track1 | track2 | track3) ;;
+    *) echo "トラックは track1 / track2 / track3 のいずれか（渡された値: $TRACK）" >&2; exit 2 ;;
+esac
+
+TRACK_EPISODES="${TRACK_EPISODES:-2}"
+MAX_STEPS="${MAX_STEPS:-300}"
+WEIGHTS="${WEIGHTS:-$REPOSITORY_ROOT/work/artifacts/pi05_rp3000}"
+KIT_IMAGE="${KIT_IMAGE:-parc2026-final}"
+POLICY_IMAGE="${POLICY_IMAGE:-parc2026-train-pi05}"
+MUJOCO_GL="${MUJOCO_GL:-osmesa}"
+
+label="$TRACK"
+[ -n "${LABEL:-}" ] && label="${label}_${LABEL}"
+OUTPUT_DIR="$REPOSITORY_ROOT/work/final_eval/$(date +%m%d_%H%M%S)_${label}"
+mkdir -p "$OUTPUT_DIR/results"
+
+# **端末が消えても読めるように、この先の出力を run.log にも落とす。**
+# バックグラウンドへ回したあと SSH を切ると、端末への書き込みが失敗して
+# `set -euo pipefail` でスクリプトが死ぬ。ファイルにも書いておけば結果は残る。
+exec > >(tee -a "$OUTPUT_DIR/run.log") 2>&1
+
+# ---------------------------------------------------------------- 0. 前提の確認
+
+for image in "$KIT_IMAGE" "$POLICY_IMAGE"; do
+    if ! docker image inspect "$image" >/dev/null 2>&1; then
+        echo "イメージ $image が無い。上のコメントの docker build を先に実行する" >&2
+        exit 1
+    fi
+done
+
+# **HF キャッシュを 2 か所へ載せているのは、イメージによって置き場が違うため。**
+# π0.5 学習イメージは `ENV HF_HOME=/hf_home` を持つので `/root/.cache/huggingface` に
+# 載せても読まれない（2026-08-26 に学習側で踏んだ）。両方に載せればどちらでも読まれる。
+
+# **学習イメージには HTTP サーバーの依存が入っていない。**
+# LeRobot が `fastapi` を宣言しているのは遠隔操作用の extra だけで、学習用の
+# extra には入らない。`msgpack` と `uvicorn` も同じである。**入れずに起動すると
+# `ModuleNotFoundError: No module named 'msgpack'` で落ちる**（2026-08-25 に踏んだ）。
+#
+# 予選の run_docker_eval.sh と同じやり方で派生イメージを作る。**タグに元イメージの
+# ID を含めるので、元が作り直されたら別タグになり、古い中身が生き残らない。**
+POLICY_IMAGE_ID="$(docker image inspect -f '{{.Id}}' "$POLICY_IMAGE" | cut -d: -f2 | cut -c1-12)"
+SERVER_IMAGE="${POLICY_IMAGE}-server-${POLICY_IMAGE_ID}"
+if ! docker image inspect "$SERVER_IMAGE" >/dev/null 2>&1; then
+    echo "-- $SERVER_IMAGE を作る（HTTP サーバーの依存 3 つを足すだけ）"
+    printf 'FROM %s\nRUN pip install --no-cache-dir "fastapi>=0.68" "uvicorn>=0.15" "msgpack>=1.0"\n' \
+        "$POLICY_IMAGE" | docker build -t "$SERVER_IMAGE" -f - . >/dev/null
+fi
+
+if [ ! -d "$WEIGHTS/vlm" ]; then
+    echo "$WEIGHTS に vlm/ が無い。評価は 5 秒で落ちる" >&2
+    echo "（pi05_rp3000 から vlm/ を symlink ではなく copy で持ってくること）" >&2
+    exit 1
+fi
+
+echo "== 本選評価  トラック=$TRACK  本数=$TRACK_EPISODES  打ち切り=$MAX_STEPS"
+echo "   重み: $WEIGHTS"
+echo "   出力: $OUTPUT_DIR"
+
+# ---------------------------------------------------------------- 1. 方策側
+
+NETWORK="parc_final_$$"
+POLICY_HOST="parc_final_policy_$$"
+docker network create "$NETWORK" >/dev/null
+
+cleanup() {
+    # **消す前に全ログを保存する。**消したあとでは `docker logs` が引けず、
+    # 合計ステップ数（`POST /act` の回数）を数え直せなくなる。
+    docker logs "$POLICY_HOST" > "$OUTPUT_DIR/server.log" 2>&1 || true
+    docker rm -f "$POLICY_HOST" >/dev/null 2>&1 || true
+    docker network rm "$NETWORK" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+policy_environment=()
+for name in PARC_N_ACTION_STEPS PARC_NUM_INFERENCE_STEPS PARC_SAMPLES \
+            PARC_EMA_ALPHA PARC_BLEND_STEPS PARC_SEED PARC_NORMALIZE_INSTRUCTION \
+            PARC_GAIN_TRANSLATION PARC_GAIN_ROTATION; do
+    if [ -n "${!name:-}" ]; then
+        policy_environment+=(-e "$name=${!name}")
+    fi
+done
+
+echo "-- 方策サーバーを起動する（重みの読み込みに 1〜2 分）"
+docker run -d --name "$POLICY_HOST" --gpus all --network "$NETWORK" \
+    -v "$REPOSITORY_ROOT/solution/policy_server.py:/app/policy_server.py:ro" \
+    -v "$WEIGHTS:/app/model_weights:ro" \
+    -v "$HOME/.cache/huggingface:/hf_home" \
+    -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
+    "${policy_environment[@]}" \
+    "$SERVER_IMAGE" python /app/policy_server.py --port 8000 >/dev/null
+
+for _ in $(seq 1 300); do
+    if docker exec "$POLICY_HOST" python -c \
+        "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)" \
+        2>/dev/null; then
+        echo "   /health OK"
+        break
+    fi
+    if [ "$(docker inspect -f '{{.State.Running}}' "$POLICY_HOST" 2>/dev/null)" != "true" ]; then
+        echo "   方策サーバーが落ちた。ログを $OUTPUT_DIR/server.log に出す" >&2
+        docker logs "$POLICY_HOST" > "$OUTPUT_DIR/server.log" 2>&1 || true
+        exit 1
+    fi
+    sleep 2
+done
+
+# 採用された設定値は server.log の [parc] 行にある。渡した値ではなくこちらを信じる。
+docker logs "$POLICY_HOST" > "$OUTPUT_DIR/server.log" 2>&1 || true
+grep -m1 "\[parc\] policy_server" "$OUTPUT_DIR/server.log" || true
+
+# ---------------------------------------------------------------- 2. 評価側
+
+# **動画を残す。**本選キットは `T3_VIDEO_DIR` が設定されているときだけ、
+# 各タスクの 1 本目（episode_id = 0）を mp4 に書く（`pipeline/rollout.py`）。
+# ファイル名は `<タスク名>__SUCCESS.mp4` / `__FAIL.mp4` になる。
+record_environment=()
+if [ "${RECORD:-0}" != "0" ]; then
+    mkdir -p "$OUTPUT_DIR/videos"
+    record_environment=(-e "T3_VIDEO_DIR=/workspace/videos"
+                        -v "$OUTPUT_DIR/videos:/workspace/videos")
+    echo "-- 動画を残す: $OUTPUT_DIR/videos"
+fi
+
+echo "-- 評価を回す"
+docker run --rm --gpus all --network "$NETWORK" \
+    --ulimit core=0 \
+    -e "MUJOCO_GL=$MUJOCO_GL" \
+    "${record_environment[@]}" \
+    -v "$OUTPUT_DIR/results:/workspace/results" \
+    "$KIT_IMAGE" \
+    python -m pipeline \
+        --server-url "http://$POLICY_HOST:8000" \
+        --track "$TRACK" \
+        --n-episodes "$TRACK_EPISODES" \
+        --max-steps "$MAX_STEPS" \
+    2>&1 | tee "$OUTPUT_DIR/eval.log"
+
+# 評価側は root で走るので、結果の持ち主を戻しておく（戻さないと ubuntu では消せない）。
+docker run --rm -v "$OUTPUT_DIR:/out" --entrypoint chown "$KIT_IMAGE" \
+    -R "$(id -u):$(id -g)" /out || echo "   持ち主を戻せなかった。消すときは sudo が要る"
+
+# ---------------------------------------------------------------- 3. 読み方
+
+echo
+echo "== 結果"
+docker logs "$POLICY_HOST" 2>&1 | grep -c "POST /act" \
+    | sed 's/^/   合計ステップ数（POST \/act の回数）: /' || true
+echo "   json: $OUTPUT_DIR/results/"
+echo "   成功・衝突・軌道の総距離は json の中にある"
