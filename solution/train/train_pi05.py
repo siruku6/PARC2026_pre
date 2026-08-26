@@ -162,9 +162,13 @@ _NORMALIZATION_MAPPING = '{"ACTION": "MEAN_STD", "STATE": "MEAN_STD", "VISUAL": 
 # draccus 0.8.0 だと `--dataset.image_transforms.tfs.affine...` のような鍵ごとの上書きを
 # 受け付けず（`docker exec quant_train` での実測で確認済み。dict 型フィールドは丸ごと
 # JSON で渡すしかない）、既定 6 種（brightness/contrast/saturation/hue/sharpness/affine）を
-# 引いた上で足す・広げる形にする。3 次元の視点回転（方位角・仰角）は 2D 変換では
-# 再現できない——crop+zoom と affine の scale/translate/rotate だけが近似できる範囲
-# （docs/plan/11_tier1_camera_augmentation.md 2 節）。
+# 引いた上で足す・広げる形にする。
+#
+# **【2026-08-26 訂正】「3 次元の視点回転は 2D 変換では再現できない」は誤りだった。**
+# それは平行投影の話である。実際のカメラは中心投影なので、**テーブル面という 1 枚の
+# 平面に限れば、画像を台形にゆがめる変換（homography）はカメラの回転と厳密に一致する。**
+# そこで `RandomPerspective` を足した。**壊れるのは高さのある物体の見え方の分だけ**で、
+# crop+zoom や affine より視点回転にずっと近い。
 _CAMERA_VIEWPOINT_AUGMENT_TFS = {
     "brightness": {"weight": 1.0, "type": "ColorJitter", "kwargs": {"brightness": [0.8, 1.2]}},
     "contrast": {"weight": 1.0, "type": "ColorJitter", "kwargs": {"contrast": [0.8, 1.2]}},
@@ -178,6 +182,11 @@ _CAMERA_VIEWPOINT_AUGMENT_TFS = {
     # ランダムクロップ＋ズーム。256x256 のまま返す（lerobot/libero_plus の画像 shape に合わせる）。
     "camera_crop": {"weight": 1.0, "type": "RandomResizedCrop",
                      "kwargs": {"size": [256, 256], "scale": [0.75, 1.0], "ratio": [0.9, 1.111]}},
+    # **台形のゆがみ。**テーブル面に限ればカメラの回転と厳密に対応する（上の訂正）。
+    # `distortion_scale` は四隅をずらす割合で、0.25 は控えめな側。`p=1.0` にしてあるのは、
+    # どの変換を使うかは `max_num_transforms` の抽選が既に決めているためである。
+    "camera_perspective": {"weight": 1.0, "type": "RandomPerspective",
+                           "kwargs": {"distortion_scale": 0.25, "p": 1.0}},
 }
 
 
