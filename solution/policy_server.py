@@ -173,7 +173,7 @@
 #          50 ステップで選ぶと**捨てる区間が選択を奪う**（作った例で再現した）。
 #          版 3.4.0 で samples=3 に差が出なかったのは、**n=2 のとき距離の 96% が
 #          実行しない行動から来ていた**ためという疑いが濃い。
-__version__ = "4.5.0"
+__version__ = "4.5.1"
 
 import argparse
 import math
@@ -779,7 +779,12 @@ class MyPolicy(BasePolicy):
         # 並進を上げると 1 歩で進む距離が増えて**歩数が減る**。回転を下げると
         # 本選で採点指標に入った**手先の回転の総量**が下がる。
         # **どちらも既定のままなら提出時の挙動は 1 ビットも変わらない。**
-        self._gain_translation = float(os.environ.get("PARC_GAIN_TRANSLATION", "1.15"))
+        # **既定は 1.0（何も掛けない）に戻した。**1.15 で出した版 4.5.0 は
+        # Track1 が 0.370 → 0.136、Track2 が 0.154 → 0.035 と両方下がった
+        # （2026-08-26 の採点。倍率と種以外の設定は 4.2.0 と同一）。
+        # Track1 の歩数が 1,039 → 1,398 に増えており、行き過ぎて戻る動きが
+        # 増えたと読める。**上げる向きは打ち切る。**
+        self._gain_translation = float(os.environ.get("PARC_GAIN_TRANSLATION", "1.0"))
         self._gain_rotation = float(os.environ.get("PARC_GAIN_ROTATION", "1.0"))
         self._n_action_steps = int(self._policy.config.n_action_steps)
 
