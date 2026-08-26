@@ -3,7 +3,7 @@
 **このファイルだけで作業が終わるように書いた。**別のファイルを開く必要はない。
 
 対象マシンは `eng003sasaki01`（会社の RTX6000・Quadro RTX 6000 24 GB・Ubuntu 24.04・
-ディスク残り 455 GB）。**ここへ持ち込む理由は EGL（GPU 描画）が効くことである。**
+ディスク残り 357 GB）。**ここへ持ち込む理由は EGL（GPU 描画）が効くことである。**
 JAIST サーバの vGPU は OpenGL に対応せず CPU 描画しか選べないため、評価の待ち時間の
 大半が描画で消えている。同じ描画スクリプト（240×320 を 50 枚）で 9.7 ms/枚 → **0.6 ms/枚**
 という差を 2026-08-26 に実測した。
@@ -13,7 +13,7 @@ JAIST サーバの vGPU は OpenGL に対応せず CPU 描画しか選べない�
 | # | 手順 | 所要 | 並行 |
 |---|---|---|---|
 | 0 | [前提を数える](#手順-0-前提を数える) | 2 分 | — |
-| 1 | [docker を sudo なしで使えるようにする](#手順-1-docker-を-sudo-なしで使えるようにする) | 2 分 | — |
+| 1 | [docker を叩けるようにする](#手順-1-docker-を叩けるようにする) | 2 分 | — |
 | 2 | [コードを置く](#手順-2-コードを置く) | 5 分 | — |
 | 3 | [方策イメージを作る](#手順-3-方策イメージを作る) | 20〜60 分 | 4 と並行可 |
 | 4 | [重みを落とす](#手順-4-重みを落とす) | 10〜30 分 | 3 と並行可 |
@@ -50,41 +50,78 @@ nproc; free -g | head -2
 **分かること。** 評価イメージがあるか、配布キットがどこにあるか、GitHub へ ssh で
 届くか、ディスクが 20 GB 以上空いているか。
 
-**配布キットの場所が `~/b_PARC2026_final` でない場合**、手順 5・6 のコマンドに
-`KIT_ROOT=<実際の場所>` を足す。`run_final_eval.sh` は既定で「自分のリポジトリの隣の
-`b_PARC2026_final`」を見る。
+**2026-08-26 に実際に流した結果。**
 
-## 手順 1 docker を sudo なしで使えるようにする
+| 項目 | 値 |
+|---|---|
+| GPU | `Quadro RTX 6000` / 24,576 MiB / cc **7.5** / ドライバ **595.84** |
+| vCPU / RAM | 16 / 47 GiB |
+| ディスク | 489 GB のうち **357 GB 空き** |
+| 評価イメージ | `parc2026-final:latest` `a174b42ff901`・**ディスク上 69.2 GB**（中身 26.8 GB） |
+| GitHub | ssh が通る（`Hi siruku6! You've successfully authenticated`） |
+| `docker` を sudo 無しで | **拒否された**（手順 1 を見る） |
+| 配布キットの場所 | **`~/b_PARC2026_final` では無かった** |
+| リポジトリの置き場 | `~/src/PARC2026_pre`（`main` が最新。8/26 に PR #11 が merge 済み） |
 
-**このマシンでは `docker run` に `sudo` が要る。**`run_final_eval.sh` は中で
-`docker run` を 4 回呼ぶので、スクリプト全体を `sudo` で回すか、自分を `docker`
-グループに入れるかの二択になる。**後者を推す。**`sudo` だと `$HOME` の解決と
-出力ファイルの持ち主で毎回つまずく。
+**配布キットの場所は必ず確かめる。**`run_final_eval.sh` は既定で「自分のリポジトリの
+隣の `b_PARC2026_final`」を見るので、そこに無ければ `KIT_ROOT` を渡す。探し方:
 
 ```bash
-sudo usermod -aG docker "$USER"
+find ~ -maxdepth 4 -type d -name "pipeline" 2>/dev/null
+find ~ -maxdepth 4 -type d -name "*PARC2026_final*" 2>/dev/null
 ```
 
-**このあと一度ログアウトして入り直す**（`newgrp docker` でもよいが、そのシェルだけに効く）。
-入り直したら `docker info >/dev/null && echo OK` で確かめる。
+見つかった場所を、手順 5・6 のコマンドの先頭に `KIT_ROOT=<その場所>` として足す。
 
-**代償を 1 行で。** `docker` グループは実質 root と同じ権限になる。共用機なら
-`sudo -E bash solution/tools/eval/run_final_eval.sh ...` で通す道を選ぶ
-（`-E` を落とすと `$HOME` が `/root` になり、HF キャッシュのマウント元が変わる）。
+## 手順 1 docker を叩けるようにする
+
+**このマシンでは `docker` に `sudo` が要る。**`run_final_eval.sh` は中で docker を
+16 回叩く。**`DOCKER="sudo docker"` を渡せばそれで済む**（2026-08-26 に
+`run_final_eval.sh` へ `DOCKER` 変数を足した）。
+
+```bash
+DOCKER="sudo docker" bash solution/tools/eval/run_final_eval.sh track2
+```
+
+**スクリプト全体を `sudo` で回すよりこちらが安全である。** スクリプト自身は自分の
+権限で動くので、`$HOME` の解決も出力ファイルの持ち主も変わらない。**sudo の
+パスワードの記憶は使うたびに延びるので、評価の途中で聞かれ直すことはない。**
+
+### `usermod -aG docker` が効かなかったときの見分け方
+
+2026-08-26 に `sudo usermod -aG docker "$USER"` を実行してログアウト・再接続しても
+`permission denied while trying to connect to the docker API at
+unix:///var/run/docker.sock` が続いた。**原因は 3 つのどれかで、次の 1 コマンドで分かれる。**
+
+```bash
+id -nG; getent group docker; ls -l /var/run/docker.sock; systemctl is-active docker 2>&1
+```
+
+| 出力 | 原因 | 直し方 |
+|---|---|---|
+| `id -nG` に `docker` が**無い** | 再接続で新しいログインセッションになっていない（ssh の接続共有・端末多重化が残っている） | ssh を完全に切って入り直す。または `newgrp docker`（そのシェルだけに効く） |
+| `id -nG` に `docker` が**有る**のに拒否される | ソケットの持ち主が `docker` グループではない（`ls -l` の 4 列目が `root`） | `sudo chgrp docker /var/run/docker.sock` は再起動で戻る。**`DOCKER="sudo docker"` を使う方が確実** |
+| `getent group docker` が空 | `docker` グループそのものが無い（Docker Desktop などソケットの置き場が違う構成） | `DOCKER="sudo docker"` を使う |
+
+**どの場合でも `DOCKER="sudo docker"` で先へ進める。**グループの整備は後回しにしてよい。
+`docker` グループは実質 root と同じ権限になるので、共用機ならむしろ入れない方がよい。
 
 ## 手順 2 コードを置く
 
 **配布キットの隣に `PARC2026_pre` を置く。**並びが崩れるとスクリプトがキットを見つけられない。
 
+**配布キットの隣に置ければ `KIT_ROOT` が要らない。**置けない場所にキットがある場合は、
+手順 5・6 のコマンドで `KIT_ROOT` を渡す（2026-08-26 の実機はこちらだった）。
+
 ```
-~/
+<どこか>/
 ├── b_PARC2026_final/     ← 配布キット（既にある）
 └── PARC2026_pre/         ← これから置く
 ```
 
 ```bash
-cd ~
-git clone -b submission/v1-base-weights git@github.com:siruku6/PARC2026_pre.git
+mkdir -p ~/src && cd ~/src
+git clone git@github.com:siruku6/PARC2026_pre.git
 cd PARC2026_pre
 git log --oneline -1
 ```
@@ -105,8 +142,8 @@ ls solution/tools/eval/run_final_eval.sh
 実行場所: **ホスト**。GPU は要らない。**手順 4 と同時に流してよい。**
 
 ```bash
-cd ~/PARC2026_pre/solution/train
-docker build -f Dockerfile.pi05 -t parc2026-train-pi05 .
+cd ~/src/PARC2026_pre/solution/train
+sudo docker build -f Dockerfile.pi05 -t parc2026-train-pi05 .
 ```
 
 **所要 20〜60 分**（torch cu128 と LeRobot の pip install が大半）。放っておける。
@@ -118,7 +155,7 @@ JAIST サーバでの出来上がりは 9.86 GB だった。
 終わったら次で確かめる。
 
 ```bash
-docker run --rm --gpus all parc2026-train-pi05 \
+sudo docker run --rm --gpus all parc2026-train-pi05 \
   python -c "import torch; print(torch.__version__, torch.cuda.get_device_name(0))"
 ```
 
@@ -138,7 +175,7 @@ python3 -m venv ~/venv-hf
 ```
 
 ```bash
-cd ~/PARC2026_pre
+cd ~/src/PARC2026_pre
 mkdir -p work/artifacts
 ~/venv-hf/bin/hf download siruku6/pi05_full_runpod \
   --local-dir work/artifacts/pi05_rp3000
@@ -168,8 +205,9 @@ unzip -q /tmp/sub/submission_4.5.0.zip -d /tmp/sub/x   # → /tmp/sub/x/model_we
 **本番の 4 本を流す前に、1 タスクだけで通し、EGL が効くかとタスクあたりの秒数を測る。**
 
 ```bash
-cd ~/PARC2026_pre
-MUJOCO_GL=egl TRACK_EPISODES=1 LABEL=smoke \
+cd ~/src/PARC2026_pre
+KIT_ROOT=<配布キットの場所> DOCKER="sudo docker" \
+  MUJOCO_GL=egl TRACK_EPISODES=1 LABEL=smoke \
   bash solution/tools/eval/run_final_eval.sh track2
 ```
 
@@ -189,18 +227,30 @@ MUJOCO_GL=egl TRACK_EPISODES=1 LABEL=smoke \
 
 ## 手順 6 本番の 4 本を流す
 
-**測りたいのは「並進の倍率をどこに置くか」と「その差が雑音より大きいか」である。**
-4 本は互いに 1 変数だけ違う。
+**測りたいのは「手元の 8 行が、採点の結果を再現できるか」である。**
+
+**答えは既に採点側で出ている。**版 4.5.0（並進の倍率 1.15）は 8/26 の採点で
+**Track1 が 0.370 → 0.136、Track2 が 0.154 → 0.035** と両方崩れた（4.2.0 との差は
+倍率と乱数の種だけ）。**だから 1 と 2 の間に大きな差が出るのが正解である。**
 
 | # | 設定 | 何を知るための本か |
 |---|---|---|
-| 1 | 倍率 1.0・種 0 | 基準 |
-| 2 | **倍率 1.15**・種 0 | 提出した 4.5.0 そのもの |
-| 3 | 倍率 1.30・種 0 | 上げ過ぎると崩れるかどうか |
-| 4 | 倍率 1.15・**種 1** | **雑音の大きさ。**これが 1・2 の差より大きければ 2 の結果は読めない |
+| 1 | 倍率 1.0・種 0 | 基準（採点では Track1 0.370・Track2 0.154 に相当） |
+| 2 | **倍率 1.15**・種 0 | **採点では Track2 0.035 だった。ここが 1 より明確に悪くなるか** |
+| 3 | 倍率 1.30・種 0 | もっと上げたときの向き（採点では未測定） |
+| 4 | 倍率 1.15・**種 1** | **雑音の大きさ。**これが 1・2 の差より大きければ、手元の 8 行では何も判定できない |
+
+**この 4 本が「手元の評価は使えるか」の試験そのものである。**
+
+| 結果 | 意味 |
+|---|---|
+| 1 が 2 より明確に良く、4 が 2 に近い | **手元の 8 行は採点の向きを再現する。**以後は設定の絞り込みを手元でやれる |
+| 1 と 2 の差が 4 と 2 の差に埋もれる | **手元の 8 行では判定できない。**エピソード数を増やすか、別の測り方を作る |
+| 1 が 2 より悪い | **手元の評価は採点と逆を向く。**手元の数字で設定を決めてはいけない |
 
 ```bash
-cd ~/PARC2026_pre
+cd ~/src/PARC2026_pre
+export KIT_ROOT=<配布キットの場所> DOCKER="sudo docker"
 for spec in "1.0 0 g100_s0" "1.15 0 g115_s0" "1.3 0 g130_s0" "1.15 1 g115_s1"; do
   set -- $spec
   MUJOCO_GL=egl TRACK_EPISODES=1 LABEL="$3" \
@@ -248,10 +298,10 @@ done
 | 仮定 | 根拠 | 外れると何が変わる |
 |---|---|---|
 | **bf16 が compute capability 7.5 で動く** | 重みは `dtype=bfloat16` で保存されており、cc 7.5 に bf16 の専用回路は無い。torch は多くの演算を代替経路で通すが、全部が通る保証は無い | 落ちるなら fp32 で読む必要があり、VRAM が 11.9 GB → 約 19 GB に増える（24 GB には載るが余裕が消える） |
-| 配布キットが `~/b_PARC2026_final` にある | 評価イメージがビルド済みなので clone はされている、と読んだだけ | `KIT_ROOT` を渡す必要がある |
-| GitHub へ ssh で届く | 未確認 | Personal Access Token で https clone する |
+| **配布キットの場所** | 2026-08-26 の実機では `~/b_PARC2026_final` に**無かった**。まだ探していない | 見つかるまで手順 5・6 が流せない。上の `find` 2 本で探す |
 
-**手順 5 の 1 本で 3 つとも片付く。**
+**GitHub への ssh は 2026-08-26 に通ることを確認した**（`Hi siruku6!` が返った）ので、
+この行は消した。**bf16 は手順 5 の 1 本で片付く。**
 
 ## あとで見る資料
 
