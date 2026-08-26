@@ -28,7 +28,7 @@ JAIST サーバと Docker の欄は 2026-08-26 に `lscpu` / `free` / `df` / `nv
 **時間の上限が無いのは、JAIST サーバと会社の RTX6000 の 2 台である。**Blackwell サーバは
 本選 1 の期間全体で 60 時間しか使えず（本選 1 は 8/24〜9/17 の 24 日間なので 1 日平均 2.5 時間）、
 RunPod は借りた分だけ課金される。**会社の RTX6000 は GPU が Pass-Through の実機なので、
-JAIST サーバでは選べない EGL（GPU 描画）が効けば評価が大きく速くなる。**撮影は Mac マシンの
+JAIST サーバでは選べない EGL（GPU 描画）が効く。**撮影は Mac マシンの
 Docker だけでできて GPU を使わないため、他の作業と同時並行できる。
 
 | 資源 | 呼称 | 学習 | 評価 | 撮影 | GPU | 使える量の上限 |
@@ -65,10 +65,10 @@ vGPU は OpenGL/EGL 描画に対応しない。EGL 指定だと評価が 50〜99
 落ちる実績があるため、評価コンテナは常に `MUJOCO_GL=osmesa`（CPU 描画）を強制している
 （[3 節](#3-提出評価は-http--msgpack-の-2-プロセス構成)参照）。
 
-### 会社の RTX6000 は GPU が Pass-Through の実機で、Docker から GPU を使える
+### 会社の RTX6000 では EGL（GPU 描画）が効く
 
-**GPU は `Quadro RTX`・`Pass-Through` の実機で、JAIST サーバの vGPU では選べない
-EGL（GPU 描画）が効く見込みが立った。`docker run --gpus all` も通る。**（2026-08-26 実測）
+**GPU は `Quadro RTX`・`Pass-Through` の実機で、`docker run --gpus all` が通り、
+JAIST サーバでは選べない EGL が実際に効くことを確認した。**（2026-08-26 実測）
 
 | 項目 | 会社の RTX6000 | JAIST サーバ |
 |---|---|---|
@@ -82,20 +82,37 @@ EGL（GPU 描画）が効く見込みが立った。`docker run --gpus all` も�
 | `docker run` | **通る**（ただし `sudo` が要る） | **拒否される**（org の制約。`docker exec` のみ） |
 | `docker run --gpus all` | **通る**（NVIDIA Container Toolkit 1.20.0-1 を 08-26 に導入） | 通る |
 
-**勝っているのは 3 点である。** (a) GPU が Pass-Through の実機なので **EGL が効く見込みがある**、
-(b) ディスクが 455 GB 空いている（JAIST サーバは 75 GB）、(c) **JAIST サーバと並行して回せる
-2 台目である**。GPU の計算力（cc 9.0 対 7.5）と RAM では JAIST サーバが上。
+**勝っているのは 3 点である。** (a) **EGL が効く**、(b) ディスクが 455 GB 空いている
+（JAIST サーバは 75 GB）、(c) **JAIST サーバと並行して回せる 2 台目である**。
+GPU の計算力（cc 9.0 対 7.5）と RAM では JAIST サーバが上。
 
-**EGL が効くなら、それが一番大きい。**JAIST サーバの vGPU は OpenGL に対応しないため
-`MUJOCO_GL=osmesa`（CPU 描画）しか選べないが、EGL が効けば `env.step` は 431.8 ms から
-38.6 ms 級になった実測がある
-（[knowledge/14_quantization_and_eval_bottleneck.md](../knowledge/14_quantization_and_eval_bottleneck.md)）。
+**EGL が効くことが一番大きい。**JAIST サーバの vGPU は OpenGL に対応しないため
+`MUJOCO_GL=osmesa`（CPU 描画）しか選べない。同じ描画スクリプト（240×320 を 50 枚）で測ると
+次の差がある。
+
+| マシン | イメージ | 描画方式 | 1 枚あたり |
+|---|---|---|---|
+| 会社の RTX6000 | 本選 | **EGL** | **0.6 ms** |
+| 会社の RTX6000 | 本選 | osmesa | 9.7 ms |
+| JAIST サーバ | 予選 | osmesa | 12.1 ms |
+
+**同じマシン・同じイメージで比べて 16 倍速い**（0.6 ms 対 9.7 ms）ので、差は EGL によるもので
+機械差ではない。osmesa どうしなら 2 台に大きな違いは無い（9.7 ms 対 12.1 ms）。
+
+**ただしこれは箱 1 個の軽い場面での値である。**評価全体でどれだけ縮むかは評価を 1 本流して
+測る（JAIST サーバでの実測では、評価の待ち時間の 71〜82% が CPU 描画だった
+── [knowledge/14_quantization_and_eval_bottleneck.md](../knowledge/14_quantization_and_eval_bottleneck.md)）。
+
+**EGL のときだけ、Python の終了時に `EGLError` が出る。描画そのものには影響しない**
+（後片付けの `__del__` の中で起きた例外で、`Exception ignored` として捨てられる。
+osmesa では出ない）。3 通りとも平均輝度は 106.7 で、絵は一致している。
 
 VRAM 24 GB は π0.5 の読み込みに要る約 18 GB を上回るので、評価は載る。
 cc 7.5 なので fp8（cc 8.9 以上が要件）は使えず、bf16 もネイティブには効かない。
 
-**まだイメージも重みも置いていない。**このサーバで動かすには、評価イメージ・学習イメージを
-持ち込む（レジストリ経由か、`docker save` で運ぶ）ところから始まる。
+**本選の評価イメージ `parc2026-final` はビルド済みである**（配布リポジトリを clone して
+`docker build` で作った。本選の `setup.sh` は LIBERO-plus・LIBERO・アセットのコミットを
+固定しているので、どこでビルドしても採点環境と同じ版になる）。**重みはまだ置いていない。**
 
 ### Blackwell サーバは本選 1 で 60 時間、ディスクはほとんどが一時領域
 
@@ -182,6 +199,24 @@ CPU 描画（osmesa）だけなので GPU が要らず、GPU マシン側の学�
 | `<学習イメージ名>-server-<image_id>` | **方策サーバイメージ** | （`run_docker_eval.sh` が自動生成） | 学習イメージ | 要 | 学習イメージに `fastapi`/`uvicorn`/`msgpack` を足したもの。評価のたびに作られる |
 
 ※ ユーザとの会話の中では、認識を一致させるために「呼称」列の名称でイメージを呼ぶこととする。
+
+### 本選の評価イメージは JAIST サーバでは GPU で動かせない
+
+**本選の配布リポジトリの Dockerfile は `nvidia/cuda:13.0.3-...` を土台にしており、
+README が「NVIDIA ドライバ R580 系以降（CUDA 13 対応）」を要求している。**
+JAIST サーバのドライバは 570.133.20 で、これを満たさない。
+
+| | ドライバ | 本選イメージを GPU で動かせるか |
+|---|---|---|
+| JAIST サーバ | 570.133.20 | **× R580 未満** |
+| 会社の RTX6000 | 595.84 | **○** |
+
+イメージ自体は JAIST サーバにもある（`parc2026-final`・40.8 GB・ビルドは通る）が、
+`--gpus all` で動かす段で CUDA が初期化できない。**本選の自己評価は会社の RTX6000 で
+回すことになる**（そちらでも同じイメージをビルド済みで、EGL で描画できることを確認した）。
+
+本選イメージは `ENV MUJOCO_GL=egl`・`NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics`
+を既定にしており、**運営は EGL（GPU 描画）前提で組んでいる。**
 
 **この 3 つはどれも CUDA 12.8（`cu128`）で組んである。**Blackwell サーバに置かれている運営の
 イメージは採点環境と同じ CUDA 13.0・PyTorch 2.11.0+cu130 なので、**版が違う。**Blackwell サーバで
@@ -275,20 +310,8 @@ flowchart LR
 到達する手段が無い（ssh の設定が無く、RunPod と Omnicampus は画面を見るしかない）ため
 確認をお願いしたい。
 
-**先にやる価値が高いのは、会社の RTX6000 で EGL が効くかの確認である。**
-効けば評価をあのサーバへ移す価値が確定し、効かなければ JAIST サーバと同じ CPU 描画のままになる。
-
-### 会社の RTX6000
-
-**2026-08-26 に、素性と GPU の使用可否は確認が済んだ**（VRAM 24 GB・cc 7.5・
-`Quadro RTX` の `Pass-Through`・`sudo docker run --gpus all` が通る）。残っているのは 1 つ。
-
-| 確認すること | どうやって | 分かること |
-|---|---|---|
-| **EGL（GPU 描画）が本当に効くか** | 評価イメージを持ち込み、`MUJOCO_GL=egl` で 1 本流す | 効けば `env.step` が 431.8 ms → 38.6 ms 級になり、評価をこのサーバへ移す価値が確定する |
-
-**これは私からは実行できない**（あのサーバへの ssh 経路が無い）。持ち込みの手順を書くか、
-実行できる形に用意するかは指示をください。
+**会社の RTX6000 の分は 2026-08-26 に片付いた。**残っているのは配布 GPU 環境・RunPod・
+Mac マシンの 3 つである。
 
 ### Blackwell サーバ（実行場所: Omnicampus の Notebook・所要 2 分）
 
