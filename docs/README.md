@@ -13,7 +13,7 @@
 | **提出物のしくみ** | [solution/README.md](solution/README.md) |
 | **次のコンペに持ち越すこと** | [talk/lessons_learned.md](talk/lessons_learned.md) |
 | **レポートに書く値** | [reference/03_report_values.md](reference/03_report_values.md) |
-| **どの重みがどの版で、中身は何か** | **[reference/19_weights_catalog.md](reference/19_weights_catalog.md)** |
+| **流した学習・重み・版・出した点（実験台帳）** | **[reference/19_weights_catalog.md](reference/19_weights_catalog.md)** |
 | **今使える計算資源・docker image は何か** | **[resources/infra_and_docker.md](resources/infra_and_docker.md)** |
 | **HF にどのモデルが置いてあるか・ローカルの重みに控えがあるか** | **[resources/huggingface.md](resources/huggingface.md)** |
 | **ディスクを空けたい** | **[howto/09_free_disk_space.md](howto/09_free_disk_space.md)** |
@@ -46,6 +46,8 @@
 | **[howto/08_hf_transfer_troubleshooting.md](howto/08_hf_transfer_troubleshooting.md)** | **借りた GPU マシンから重みを運ぶとき。`hf upload` が 403 で止まったら** |
 | **[howto/09_free_disk_space.md](howto/09_free_disk_space.md)** | **`df` の空きが減ってきたとき。消してよいものの判定と、「消したのに空かない」3 つの罠** |
 | **[howto/10_rebuild_machine.md](howto/10_rebuild_machine.md)** | **マシンを作り替えてディスクが消えるとき。持ち出す 1 本のスクリプト・秘密の 4 件・常駐コンテナの起動コマンド** |
+| **[howto/12_bring_eval_to_rtx6000.md](howto/12_bring_eval_to_rtx6000.md)** | **会社の RTX6000 で本選の自己評価を回すとき。EGL が効くのでここが評価の主力になる。持ち込む 4 つ（評価イメージ・方策イメージ・重み・コード）と、`docker` が sudo を要るときの回避** |
+| **[howto/13_blackwell_first_session.md](howto/13_blackwell_first_session.md)** | **配布 GPU 環境（Blackwell サーバ）に初めて入るとき。60 時間の減り方・下見・配布データの数え方・止め方。自分の Docker は持ち込めない** |
 | **[howto/11_colab_eval.md](howto/11_colab_eval.md)** | **評価を回すとき（Colab。8 ファイルを上げてセルを 5 つ。π0.5 も回せる。T4 で動くかは未確認）** |
 | [strategy/05_実測結果.md](strategy/05_実測結果.md) | 判断する前。数字はすべてここ |
 | **[strategy/06_scripted_demos.md](strategy/06_scripted_demos.md)** | **手本が 300 ステップに収まらないタスクを扱うとき。台本で手本を自分で作る** |
@@ -53,7 +55,7 @@
 | [plan/01_failure_accounting.md](plan/01_failure_accounting.md) | 評価の結果を読むとき。**ゴール到達と衝突の読み分け方** |
 | **[plan/07_track2_preparation.md](plan/07_track2_preparation.md)** | **本選 Track2 に手をつけるとき。摂動 4 カテゴリの中身・関連研究・対策・推奨アクションが 1 枚にある。まず 2.0 節（方針改訂）と 3 節（推奨アクション）** |
 | **[plan/08_training_data_creation_cautions.md](plan/08_training_data_creation_cautions.md)** | **学習用デモを作る前。成功例だけでは復帰を学べない等、データ作成の落とし穴。07 の方針改訂の根拠** |
-| **[reference/19_weights_catalog.md](reference/19_weights_catalog.md)** | **`pi05/full_local_024000` のような名前を見たとき。重みの名前・出した版・中身・置き場所が 1 行に並ぶ** |
+| **[reference/19_weights_catalog.md](reference/19_weights_catalog.md)** | **学習を流したあと、点が返ってきたあと、`pi05/full_local_024000` のような名前を見たとき。流した学習・重み・版ごとの設定・本選のトラック別の点が 1 ファイルに並ぶ** |
 | [reference/04_track1_population.md](reference/04_track1_population.md) | 出題元のデータを確かめるとき |
 | **[reference/05_perturbation_categories.md](reference/05_perturbation_categories.md)** | **摂動 7 カテゴリの中身と、どれが出るか（運営回答の原文つき）** |
 | **[reference/06_training_data_composition.md](reference/06_training_data_composition.md)** | **学習データ 14,347 本の中身。摂動カテゴリで絞れるかの判定** |
