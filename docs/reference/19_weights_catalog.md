@@ -396,7 +396,7 @@ HuggingFace の両方にある。違うのは `policy_server.py` の既定値だ
 `../howto/02_build_submission.md` の版の表に記録した `ea951d5d…` という値だけである。
 提出済みの 3 本のうち 3.9.0 と 4.2.0 は現物を残したので、そちらは示せる。
 
-片づけの段取りと、消した理由は `../plan/05_postqualifier_cleanup.md` にある。
+片づけの段取りと、消した理由は `../plan/archive/05_postqualifier_cleanup.md` にある。
 
 ## 引き直すコマンド
 

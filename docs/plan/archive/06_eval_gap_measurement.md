@@ -1,5 +1,7 @@
 # 依頼 06 — 手元の採点と本番の採点のずれを 1 回測る
 
+**【退避・2026-08-27】2026-08-22 に本文の冒頭で取り下げられている。**手元評価と本番のずれについての結論は [../../knowledge/07_local_eval_cannot_rank.md](../../knowledge/07_local_eval_cannot_rank.md) にある。
+
 > # 【取り下げ・2026-08-22】この依頼は実行しないこと。
 >
 > **[../knowledge/07_local_eval_cannot_rank.md](../knowledge/07_local_eval_cannot_rank.md)
