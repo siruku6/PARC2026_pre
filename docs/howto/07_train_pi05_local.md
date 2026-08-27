@@ -2,7 +2,7 @@
 
 SmolVLAの提出は保険としてそのまま残し、**並行してπ0.5が間に合うか試す**。
 この文書は、そのローカル側(H100 20GB 1枚)の本番学習を実際に回す手順である。
-出発点の調査は[docs/reference/14_pi05_switch_feasibility.md](../reference/14_pi05_switch_feasibility.md)、
+出発点の調査は[docs/reference/14_pi05_switch_feasibility.md](../reference/archive/14_pi05_switch_feasibility.md)、
 学習スクリプト自体は[solution/train/train_pi05.py](../../solution/train/train_pi05.py)を参照。
 
 **RunPodを借りてフルパラメータ学習を試す線は[docs/howto/06](06_runpod_pi05.md)に
@@ -32,7 +32,7 @@ SmolVLAの提出は保険としてそのまま残し、**並行してπ0.5が間
 **段2の段取り・注意・時間の割り振りは
 [docs/talk/handoff_pi05_stage2.md](../talk/handoff_pi05_stage2.md)にまとめてある。**
 データの選び方の根拠は[docs/reference/16](../reference/16_weak3x_for_pi05.md)、
-学習率は[docs/reference/15](../reference/15_pi05_lr_schedule.md)。
+学習率は[docs/reference/15](../reference/archive/15_pi05_lr_schedule.md)。
 
 
 ## batch sizeは16に決めた
@@ -286,7 +286,7 @@ root所有のまま残る」という同じ根に行き着く。**`--user "$(id 
 | `chunk_size` / `n_action_steps` | 50 / 10 | `chunk_size`は学習後に変えてはいけない。`n_action_steps`は推論時に変えてよい([docs/reference/07](../reference/07_chunk_params.md)) |
 | ライセンス | gemma(`google/paligemma-3b-pt-224`の規約に同意したアカウントで`hf auth login`) | 同意していないと初期重みの取得で止まる |
 
-**値の根拠はすべて[docs/reference/14_pi05_switch_feasibility.md](../reference/14_pi05_switch_feasibility.md)に
+**値の根拠はすべて[docs/reference/14_pi05_switch_feasibility.md](../reference/archive/14_pi05_switch_feasibility.md)に
 出典付きで置いてある**(この文書の表は写しなので、食い違ったら14の方を信じること)。
 
 ## 学習が終わったら

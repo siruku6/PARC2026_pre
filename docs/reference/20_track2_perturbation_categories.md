@@ -1,5 +1,13 @@
 # 20. Track2 で発生すると見込まれる摂動の種類
 
+**摂動の話は 3 本に分かれている。統合していないのは、見ている母集団が違うためである。**
+
+| ファイル | 何の母集団か |
+|---|---|
+| [05_perturbation_categories.md](05_perturbation_categories.md) | **LIBERO-plus の 7 カテゴリ全体と、Track1 に出る範囲。**運営 Q&A の原文つき |
+| **この 20** | **Track2 に出ると見込む種類。**配布キットの `T2_TASKS.csv` の `category` 列が正本 |
+| [21_weakness_map.md](21_weakness_map.md) | **カテゴリごとに、この方策がどれだけ崩れるか。**投資先を決めるための実測 |
+
 **Track2（本選、8/24〜）の「位置・視点・ノイズ」という文言が何を指すかの前提を、
 1 か所にまとめた記録である。** これまで [07_track2_preparation.md](../plan/07_track2_preparation.md)
 の §1.1・§1.2 に埋め込まれていた事実に、[08_training_data_creation_cautions.md](../plan/08_training_data_creation_cautions.md)・

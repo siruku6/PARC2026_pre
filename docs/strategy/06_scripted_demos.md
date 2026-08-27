@@ -394,7 +394,7 @@ docker run --rm --gpus all \
 
 **この軌道が本番のスコアに効くかは、まだ分からない。**
 
-採点環境は 8 エピソードで、**中身は非公開**である（[reference/12_production_scale.md](../reference/12_production_scale.md)）。
+採点環境は 8 エピソードで、**中身は非公開**である（[reference/22_production_scale.md](../reference/22_production_scale.md)）。
 採点ログから読めるのはステップ数の並びだけで、5 回の提出すべてで
 **1〜4 本目が 300 ステップに張り付いている。**
 

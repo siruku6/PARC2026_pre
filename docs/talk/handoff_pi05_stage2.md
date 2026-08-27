@@ -2,7 +2,7 @@
 
 **この文書は会話をまたぐための覚書である。** 決めたこと・いま動いていること・
 次に打つコマンドを、あとから読んで再開できる形で置く。
-根拠は[docs/reference/15](../reference/15_pi05_lr_schedule.md)(学習率)と
+根拠は[docs/reference/15](../reference/archive/15_pi05_lr_schedule.md)(学習率)と
 [docs/reference/16](../reference/16_weak3x_for_pi05.md)(データの選び方)にある。
 
 ## 1. 決めた方針——2段に分ける
@@ -34,7 +34,7 @@
 | チェックポイント | 1個 **11GB**(`pretrained_model` 8.8GB ＋ `training_state` 2.1GB)。`save_freq` 500 なので**約11分に1回**保存される |
 | ディスク | 298GBのうち**81GB空き**。この学習が使っているのは22GB |
 
-`lr` が既に2.5e-05なのは想定どおり([15](../reference/15_pi05_lr_schedule.md)——
+`lr` が既に2.5e-05なのは想定どおり([15](../reference/archive/15_pi05_lr_schedule.md)——
 立ち上げは自動で800 ステップに縮み、そこが頂点)。
 
 ### ディスクの注意——cronは「5個残す」で登録されている
@@ -153,7 +153,7 @@ docker run -d --gpus all --rm -it \
 `--learning-rate 5e-6`のように、終わった地点の2倍程度に抑える
 (下限の`scheduler_decay_lr`は2.5e-6のままなので、5e-6→2.5e-6の緩やかな形になる)。
 
-**形そのものは自動で縮む**([15](../reference/15_pi05_lr_schedule.md))。
+**形そのものは自動で縮む**([15](../reference/archive/15_pi05_lr_schedule.md))。
 `--steps 6000`なら立ち上げ200 ステップ・6,000 ステップで下げきる。
 
 ### 注意2: 3,000 ステップでは差が測れない見込み
