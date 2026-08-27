@@ -1,0 +1,125 @@
+# 15. 指示文の正規化が、Track3 の 1 文を逆の意味に書き換えていた
+
+**結論。**`policy_server.py` の指示文の正規化が、Track3 の課題の 1 つを
+**「皿から下ろす」から「皿に載せる」へ**書き換えていた。しきい値を 0.50 → **0.65**
+に上げて止めた（版 4.6.0）。**配布キットに入っている 16 文すべてで確かめた。**
+
+発見日: 2026-08-27。**きっかけは学習ではなく、配布キットの課題定義を読んだことである。**
+
+| # | 節 | 結論 |
+|---|---|---|
+| 1 | [何が起きていたか](#1-何が起きていたか) | 0.607 の弱い一致で意味が反転した |
+| 2 | [16 文すべてを測った](#2-16-文すべてを測った) | 正しい 9 文は 0.708 以上、間違いは 1 件だけで 0.607 |
+| 3 | [なぜ 0.65 なのか](#3-なぜ-065-なのか) | 0.607 と 0.708 の間に何も無い。その真ん中 |
+| 4 | [効果の見積もり](#4-効果の見積もりと限界) | Track3 の 8 本のうち 2 本。**本番のタスクは別集合なので上限は読めない** |
+
+## 1. 何が起きていたか
+
+**正規化のねらいは「モデルは 40 種の言い方しか見ていないので、評価が書き換えて渡してくる
+文を元へ戻す」ことである。** 予選ではこれが効いた（版 3.1.0 → 3.5.0 で
+0.166 → 0.181、歩数 1,922 → 1,617）。
+
+**ところが Track3 の 1 文で、寄せ先が意味の逆だった。**
+
+```
+入力: take the white mug off the left plate and the yellow and white mug off the
+      right plate, then place the white mug to the left of the red mug and ...
+出力: put the white mug on the left plate and put the yellow and white mug on ...
+語の重なり: 0.607（しきい値 0.50 を超えたので書き換えられた）
+```
+
+**「皿から下ろす」課題に「皿に載せろ」と指示していた。** 語の重なりだけで測ると、
+`white mug`・`left plate`・`yellow and white mug`・`right plate` が全部一致するので
+高く出る。**否定や方向を見ていないので、逆の文がいちばん近くなりうる。**
+
+## 2. 16 文すべてを測った
+
+出典は配布キットの `compe/t1/T1_TASKS.csv`・`compe/t2/T2_TASKS.csv`（`instruction` 列）と
+`compe/t3/assets/bddl_files/libero_t3/*.bddl`（`:language`）。
+
+| トラック | 文の数 | 語の重なりの範囲 | 判定 |
+|---|---|---|---|
+| Track1 | 4 | 0.708・0.963・0.970・1.000 | **4 件とも正しい。**「top layer of the wooden cabinet」→「top drawer of the wooden cabinet」も当たっている |
+| Track2 | 8 | 0.762〜1.000 | **8 件とも正しい** |
+| Track3 | 4 | 0.317・0.357・0.402・**0.607** | **0.607 の 1 件だけが逆。**他の 3 件は寄せない方が正しく、実際に寄っていない |
+
+**分布に隙間がある。**
+
+```
+0.317  0.357  0.402        0.607        0.708  0.762  0.805 ... 1.000
+└──── 寄せない方が正しい ────┘  └ 逆 ┘  └──────── 寄せて正しい ────────┘
+```
+
+## 3. なぜ 0.65 なのか
+
+**0.607（間違い）と 0.708（正しい）の間に、ほかの文が 1 つも無い。** その真ん中が
+0.6575 なので、**0.65** にした。上下に 0.043 ずつ余裕がある。
+
+**この向きの変更は安全側である。** しきい値を上げると寄せる回数が減る。**正規化が
+害を出せるのは「寄せたとき」だけで、寄せなければ評価が渡した文がそのままモデルへ行く。**
+だから未知の文に対して危険が増えることはない。**減るのは「本来寄せるべき文を
+取りこぼす」可能性で、そちらは 0.708 という実測の下限で押さえてある。**
+
+**予選で 0.50 に決めた根拠は失われている。** 版 3.5.0 の採点ログで 8 本すべてが
+`lexical` だったことを根拠にしていたが、**その判定を印字する行は版 3.6.1 で落とした**ので、
+採点ログから決め直すことはもうできない。**今後この値は配布キットの課題定義で決める。**
+
+## 4. 効果の見積もりと限界
+
+| | 値 |
+|---|---|
+| 直る example の課題 | Track3 の 4 つのうち **1 つ**（8 エピソードのうち 2 本） |
+| Track3 のいまの点 | **0.000**（8 本すべて 300 歩で打ち切り） |
+
+**example の 4 課題は本番のタスク集合ではない。** 配布キットの `compe/t3/README.md` に
+「本番評価は非公開タスクを含む別のタスクセットで実施される」と書かれている。**だから
+「2 本直る」は上限でも下限でもない。**本番で同じ形の反転が何件起きていたかは分からない。
+
+**それでも入れる理由は、これがバグの除去であって賭けではないことである。**
+16 文で測って、正しい寄せを 1 件も壊していない。
+
+## 5. Track3 について、同時に分かったこと
+
+**課題定義を読んで、思い込みが 1 つ崩れた。**「Track3 は課題の組み合わせなので
+300 歩では原理的に足りないのではないか」と考えていたが、**4 つのうち 3 つは
+物を 1 つ動かすだけである。**
+
+| 課題 | 目標条件 | 物の数 |
+|---|---|---|
+| take the alphabet soup out of the tray... | `(On alphabet_soup_1 ...)` | **1** |
+| take the red mug off the left plate... | `(On red_coffee_mug_1 ...)` | **1** |
+| take the yellow book off the shelf... | `(On yellow_book_2 ...)` | **1** |
+| take the two mugs off the plates... | `(And (On porcelain_mug_1 ...) (On white_yellow_mug_1 ...))` | **2** |
+
+**つまり Track3 が 0.000 なのは「歩数が足りない」ためではない可能性が高い。**
+1 つ動かすだけの課題で 300 歩を使い切っている。**言い方（「棚から下ろす」「トレイから
+出す」といった、学習データに無い言い回しと空間の指定）か、物・置き場の見た目が
+未知であることが原因だと読める。**
+
+**次に確かめること。**`RECORD=1` で Track3 の動画を録り、**そもそも正しい物へ手を
+伸ばしているか**を見る。伸ばしていないなら言葉と見た目の問題、伸ばして落としている
+なら制御の問題である。
+
+## 確かめ直すコマンド
+
+```bash
+cd /home/ubuntu/lab/PARC2026_pre
+python - <<'PY'
+import sys, types, pathlib, csv
+for name in ("msgpack","fastapi","uvicorn","torch"):
+    m = types.ModuleType(name); m.__getattr__ = lambda n: None; sys.modules.setdefault(name, m)
+sys.modules["fastapi"].FastAPI = sys.modules["fastapi"].Request = sys.modules["fastapi"].Response = object
+src = pathlib.Path("solution/policy_server.py").read_text()
+ns = {"__name__": "x"}
+exec(compile(src[:src.index("class MyPolicy")], "policy_server.py", "exec"), ns)
+N = ns["InstructionNormalizer"]()
+base = "/home/ubuntu/lab/b_PARC2026_final/compe"
+for t in ("t1", "t2"):
+    for r in csv.DictReader(open(f"{base}/{t}/T{t[1]}_TASKS.csv")):
+        print(t, "%.3f" % N.normalize(r["instruction"])[2], N.normalize(r["instruction"])[1])
+PY
+grep -h ":language" /home/ubuntu/lab/b_PARC2026_final/compe/t3/assets/bddl_files/libero_t3/*.bddl
+```
+
+**`policy_server.py` は `msgpack` を import するので、そのまま読み込むと止まる。**
+上のように偽の module を差してからクラス定義だけを実行する。
