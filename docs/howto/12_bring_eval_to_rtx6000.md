@@ -248,21 +248,31 @@ MUJOCO_GL=egl TRACK_EPISODES=1 LABEL=smoke \
 崩れた。向きが一致している。**ただしマシンと描画方式も同時に変わっているので、
 **手順 6 の 1 本目（倍率 1.0・EGL）を流すまでは 1 変数ではない。**
 
-### 指標が 2 つ足りない（未解決）
+### 指標が 2 つ足りなかった原因と、直した内容（8/27・解決済み）
 
-**この回の json には `mean_collision_rate` と `mean_sparc` が入っていない。**
-JAIST 側の同じスクリプトの出力には 16 個あるが、こちらは 14 個である。
+**この回の json には `mean_collision_rate` と `mean_sparc` が入っていなかった。**
+JAIST 側の同じスクリプトの出力には 16 個あるのに、こちらは 14 個だった。
 **衝突は採点のゲートなので、無いままでは手元の点が衝突を見ていない。**
 
-**確かめたいこと。**配布キットの版が JAIST 側（`fa916de`）と違う可能性が高い。
+**原因はキットの版ではなかった。**両方 `2059989`（配布そのもの）の上にあり、
+`pipeline` のコードに差は無い。**JAIST 側の `pipeline/scorer.py` に、コミットして
+いない作業ツリーの変更が入っていた**（30 行の追加）。本選の配布版はこの 2 つの計算を
+落としており、予選の配布版から戻したものが JAIST にだけ残っていた。
+**clone した RTX6000 にはそれが無い。**
+
+**直し方。**キットの中を直すとまたマシンごとにズレるので、
+`solution/tools/eval/kit_patches/scorer.py` としてこちらのリポジトリに置き、
+**`run_final_eval.sh` が評価コンテナの `/workspace/pipeline/scorer.py` へ
+上書きマウントする**ようにした。`git pull` すれば RTX6000 でも同じ指標が出る。
+**評価イメージの作り直しは要らない。**
 
 ```bash
-git -C ~/src/b_PARC2026_final log --oneline -1
-ls ~/src/b_PARC2026_final/*.json
+cd ~/src/PARC2026_pre && git pull
+ls solution/tools/eval/kit_patches/scorer.py     # あれば効く
 ```
 
-**版が違っていれば、キットを合わせて評価イメージを作り直す**（30〜60 分）。
-`total_score_config.json` が置かれていて衝突を切っている場合は、そのファイルを外す。
+**効いていることは、次の評価の出力に `-- 採点器を差し替える` の行が出て、
+json に `mean_collision_rate` が入ることで分かる。**
 
 **落ちたときの報告のしかた。** `work/final_eval/<日時>_track2_smoke/` の
 `server.log` の末尾 40 行と `eval.log` の末尾 40 行を送ってもらえれば読める。
@@ -338,7 +348,6 @@ done
 
 | 仮定 | 根拠 | 外れると何が変わる |
 |---|---|---|
-| **配布キットの版が JAIST 側と同じ** | 8/27 の疎通で `mean_collision_rate` と `mean_sparc` が出なかった。版が違う可能性が高い | **衝突を見ないまま点を比べることになる。**衝突は採点のゲートなので、判断を誤る |
 | 配布キットが `~/b_PARC2026_final` にある | 評価イメージがビルド済みなので clone はされている、と読んだだけ | `KIT_ROOT` を渡す必要がある |
 | GitHub へ ssh で届く | 未確認 | Personal Access Token で https clone する |
 

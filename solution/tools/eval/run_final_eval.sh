@@ -26,7 +26,8 @@
 #   MUJOCO_GL=osmesa  描画のやり方。**JAIST サーバの vGPU は OpenGL に対応しないので
 #                     osmesa（CPU 描画）のままにする。** 会社の RTX6000（Pass-Through の
 #                     実機）では `MUJOCO_GL=egl` を渡す。箱 1 個の描画で 9.7 ms → 0.6 ms。
-#   KIT_ROOT          配布キットの場所。既定は「このリポジトリの隣の b_PARC2026_final」
+#   KIT_ROOT          配布キットの場所。既定は「このリポジトリの隣の b_PARC2026_final」。
+#                     **存在確認にしか使わない**（pipeline は評価イメージの中にある）
 #
 # Reads:
 #   - solution/policy_server.py
@@ -165,10 +166,22 @@ if [ "${RECORD:-0}" != "0" ]; then
     echo "-- 動画を残す: $OUTPUT_DIR/videos"
 fi
 
+# **配布キットの採点器を、衝突率と SPARC を出す版で上書きする。**
+# 本選の配布版はこの 2 つを出さない。キットの中を直すとマシンごとにズレるので
+# （8/27 に JAIST と会社の RTX6000 で指標の数が 16 個と 14 個に食い違った）、
+# こちらのリポジトリに置いたものをマウントする。
+SCORER_PATCH="$REPOSITORY_ROOT/solution/tools/eval/kit_patches/scorer.py"
+scorer_mount=()
+if [ -f "$SCORER_PATCH" ]; then
+    scorer_mount=(-v "$SCORER_PATCH:/workspace/pipeline/scorer.py:ro")
+    echo "-- 採点器を差し替える（衝突率と SPARC を出す版）"
+fi
+
 echo "-- 評価を回す"
 docker run --rm --gpus all --network "$NETWORK" \
     --ulimit core=0 \
     -e "MUJOCO_GL=$MUJOCO_GL" \
+    "${scorer_mount[@]}" \
     "${record_environment[@]}" \
     -v "$OUTPUT_DIR/results:/workspace/results" \
     "$KIT_IMAGE" \
