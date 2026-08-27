@@ -10,15 +10,15 @@ JAIST サーバの vGPU は OpenGL に対応せず CPU 描画しか選べない�
 
 作成: 2026-08-26。
 
-| # | 手順 | 所要 | 並行 |
-|---|---|---|---|
-| 0 | [前提を数える](#手順-0-前提を数える) | 2 分 | — |
-| 1 | [docker を叩けるようにする](#手順-1-docker-を叩けるようにする) | 2 分 | — |
-| 2 | [コードを置く](#手順-2-コードを置く) | 5 分 | — |
-| 3 | [方策イメージを作る](#手順-3-方策イメージを作る) | 20〜60 分 | 4 と並行可 |
-| 4 | [重みを落とす](#手順-4-重みを落とす) | 10〜30 分 | 3 と並行可 |
-| 5 | [疎通を 1 本流す](#手順-5-疎通を-1-本流す) | 10 分 | — |
-| 6 | [本番の 4 本を流す](#手順-6-本番の-4-本を流す) | 40 分〜 | — |
+| # | 手順 | 所要 | 並行 | 状態 |
+|---|---|---|---|---|
+| 0 | [前提を数える](#手順-0-前提を数える) | 2 分 | — | **済** |
+| 1 | [docker を sudo なしで使えるようにする](#手順-1-docker-を-sudo-なしで使えるようにする) | 2 分 | — | **済** |
+| 2 | [コードを置く](#手順-2-コードを置く) | 5 分 | — | **済** |
+| 3 | [方策イメージを作る](#手順-3-方策イメージを作る) | 20〜60 分 | 4 と並行可 | |
+| 4 | [重みを落とす](#手順-4-重みを落とす) | 10〜30 分 | 3 と並行可 | |
+| 5 | [疎通を 1 本流す](#手順-5-疎通を-1-本流す) | 10 分 | — | |
+| 6 | [本番の 4 本を流す](#手順-6-本番の-4-本を流す) | 40 分〜 | — | |
 
 読み終えたときに分かること: **この 6 手順を順に踏めば、`run_final_eval.sh` が
 会社の RTX6000 で EGL で回る状態になる。**
@@ -50,90 +50,57 @@ nproc; free -g | head -2
 **分かること。** 評価イメージがあるか、配布キットがどこにあるか、GitHub へ ssh で
 届くか、ディスクが 20 GB 以上空いているか。
 
-**2026-08-26 に実際に流した結果。**
+**2026-08-26〜27 に実際に流した結果。**
 
 | 項目 | 値 |
 |---|---|
 | GPU | `Quadro RTX 6000` / 24,576 MiB / cc **7.5** / ドライバ **595.84** |
 | vCPU / RAM | 16 / 47 GiB |
-| ディスク | 489 GB のうち **357 GB 空き** |
+| ディスク | 489 GB のうち **357 GB 空き**（評価イメージを作ったあと） |
 | 評価イメージ | `parc2026-final:latest` `a174b42ff901`・**ディスク上 69.2 GB**（中身 26.8 GB） |
 | GitHub | ssh が通る（`Hi siruku6! You've successfully authenticated`） |
-| `docker` を sudo 無しで | 8/26 は拒否された。**8/27 に解決済み**（手順 1） |
-| 配布キットの場所 | **`~/src/b_PARC2026_final`**。リポジトリの隣なので `KIT_ROOT` は不要 |
-| リポジトリの置き場 | `~/src/PARC2026_pre`（`main` が最新。8/26 に PR #11 が merge 済み） |
+| `docker` を sudo 無しで | 8/26 は拒否された。**8/27 に解決**（手順 1 と [13](13_docker_sudo_group_troubleshooting.md)） |
+| **配布キットの場所** | **`~/src/b_PARC2026_final`。`~/src/PARC2026_pre` の隣なので `KIT_ROOT` は要らない** |
 
-**配布キットの場所は確かめる。ただし中身は使わない。**`pipeline` は評価イメージの中に
-入っているので、`run_final_eval.sh` はキットのディレクトリを**存在確認にしか使っていない**
-（39 行目で場所を求めるだけで、そのあと参照していない）。**それでも隣に無いと
-`set -e` で落ちるので、無い場合は `KIT_ROOT` を渡す。**探し方:
+**`KIT_ROOT` は存在確認にしか使われていない。**`pipeline` は評価イメージの中に入っている
+ので、`run_final_eval.sh` は 39 行目でキットの場所を求めるだけで、そのあと参照していない。
+**それでも隣に無いと `set -e` で落ちるので、無い場合だけ `KIT_ROOT=<実際の場所>` を渡す。**
+探し方:
 
 ```bash
-find ~ -maxdepth 4 -type d -name "pipeline" 2>/dev/null
 find ~ -maxdepth 4 -type d -name "*PARC2026_final*" 2>/dev/null
 ```
 
-見つかった場所を、手順 5・6 のコマンドの先頭に `KIT_ROOT=<その場所>` として足す。
+## 手順 1 docker を sudo なしで使えるようにする
 
-## 手順 1 docker を叩けるようにする
-
-**`run_final_eval.sh` は中で docker を 16 回叩くので、sudo 無しで叩ける状態にしてから
-始める。**
+**このマシンでは `docker run` に `sudo` が要る。**`run_final_eval.sh` は中で
+`docker run` を 4 回呼ぶので、スクリプト全体を `sudo` で回すか、自分を `docker`
+グループに入れるかの二択になる。**後者を推す。**`sudo` だと `$HOME` の解決と
+出力ファイルの持ち主で毎回つまずく。
 
 ```bash
 sudo usermod -aG docker "$USER"
 ```
 
-**このあと ssh を完全に切って入り直す**（`newgrp docker` でもよいが、そのシェルだけに
-効く）。`docker info >/dev/null && echo OK` で確かめる。
+**このあと一度ログアウトして入り直す**（`newgrp docker` でもよいが、そのシェルだけに効く）。
+入り直したら `docker info >/dev/null && echo OK` で確かめる。
 
-**2026-08-27 に、この状態にできることを実機で確認した。**`docker images parc2026-final`
-が sudo 無しで通っている。**ただし「入り直す」の意味が普通の ssh とは違った。**
-
-### VS Code の Remote-SSH で作業している場合、ウィンドウを閉じ直しても足りない
-
-**`usermod -aG docker` を実行しても、`permission denied while trying to connect to
-the docker API at unix:///var/run/docker.sock` が続いた**（2026-08-27）。
-
-**原因。** Linux のグループ所属はログイン時にセッションへ読み込まれる。VS Code の
-Remote-SSH はホスト側の `vscode-server` プロセスを常駐させ続けるので、**ウィンドウを
-閉じて繋ぎ直しても、新しい端末は古いセッションのグループを引き継ぐ。**
-`id -nG` に `docker` が出ないことで判別できる。
-
-**直し方。** コマンドパレット（Cmd/Ctrl+Shift+P）から
-`Remote-SSH: Kill VS Code Server on Host` を実行し、ホスト側の `vscode-server` を
-完全に終了させる。そのうえでウィンドウを閉じ、Remote-SSH で繋ぎ直す。
-**`Reload Window` では足りない。**
-
-**代償を 1 行で。** `docker` グループは実質 root と同じ権限になる。共用機では入れない
-方がよく、その場合は `sudo -E bash solution/tools/eval/run_final_eval.sh ...` で通す
+**代償を 1 行で。** `docker` グループは実質 root と同じ権限になる。共用機なら
+`sudo -E bash solution/tools/eval/run_final_eval.sh ...` で通す道を選ぶ
 （`-E` を落とすと `$HOME` が `/root` になり、HF キャッシュのマウント元が変わる）。
 
-### 入り直しても拒否されるときの見分け方
-
-2026-08-26 に `sudo usermod -aG docker "$USER"` を実行してログアウト・再接続しても
-`permission denied while trying to connect to the docker API at
-unix:///var/run/docker.sock` が続いた。**原因は 3 つのどれかで、次の 1 コマンドで分かれる。**
-
-```bash
-id -nG; getent group docker; ls -l /var/run/docker.sock; systemctl is-active docker 2>&1
-```
-
-| 出力 | 原因 | 直し方 |
-|---|---|---|
-| `id -nG` に `docker` が**無い** | 再接続で新しいログインセッションになっていない | **VS Code の Remote-SSH なら上の `Kill VS Code Server on Host`。**素の ssh なら接続共有（`ControlMaster`）を切って入り直す。応急処置は `newgrp docker`（そのシェルだけに効く） |
-| `id -nG` に `docker` が**有る**のに拒否される | ソケットの持ち主が `docker` グループではない（`ls -l` の 4 列目が `root`） | `sudo chgrp docker /var/run/docker.sock`（再起動で戻るので恒久策ではない） |
-| `getent group docker` が空 | `docker` グループそのものが無い（ソケットの置き場が違う構成） | `sudo -E` で通す |
+**ログインし直しても直らないことがある**（VS Code Remote-SSH の Reload Window だけでは
+足りなかった実例）。[13_docker_sudo_group_troubleshooting.md](13_docker_sudo_group_troubleshooting.md)
+に切り分け手順を残した。
 
 ## 手順 2 コードを置く
 
 **配布キットの隣に `PARC2026_pre` を置く。**並びが崩れるとスクリプトがキットを見つけられない。
 
-**配布キットの隣に置ければ `KIT_ROOT` が要らない。**置けない場所にキットがある場合は、
-手順 5・6 のコマンドで `KIT_ROOT` を渡す（2026-08-26 の実機はこちらだった）。
+**2026-08-27 の実機は `~/src/` の下に 2 つ並べた。**
 
 ```
-<どこか>/
+~/src/
 ├── b_PARC2026_final/     ← 配布キット（既にある）
 └── PARC2026_pre/         ← これから置く
 ```
@@ -144,6 +111,8 @@ git clone git@github.com:siruku6/PARC2026_pre.git
 cd PARC2026_pre
 git log --oneline -1
 ```
+
+**`main` が最新である**（8/26 に PR #11 が merge された）。ブランチを指定する必要は無い。
 
 **GitHub へ ssh で届かない場合**、`https://github.com/siruku6/PARC2026_pre.git` に
 Personal Access Token で clone する。
@@ -187,37 +156,49 @@ docker run --rm --gpus all parc2026-train-pi05 \
 
 Ubuntu 24.04 は `pip install` をシステムに直接させないので、仮想環境を 1 つ作る。
 
+[pyenv install 手順](https://github.com/pyenv/pyenv?utm_source=chatgpt.com#installation)
+
 ```bash
-python3 -m venv ~/venv-hf
-~/venv-hf/bin/pip install -q -U "huggingface_hub[cli,hf_xet]"
-~/venv-hf/bin/hf auth login          # 対話。write 権限は要らない
+git clone git@github.com:pyenv/pyenv.git ~/.pyenv
+
+# 一般のUbuntuの場合
+echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
+echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
+echo 'eval "$(pyenv init -)"' >> ~/.bashrc
+
+source .bashrc
+pyenv install --list
+pyenv install 3.12.14
+pyenv local 3.12.14
+python --version
+
+python -m venv ~/.venv
+source ~/.venv/bin/activate
+
+pip install -q -U huggingface_hub
+hf auth login          # 対話。write 権限は要らない
 ```
 
 ```bash
 cd ~/src/PARC2026_pre
 mkdir -p work/artifacts
-~/venv-hf/bin/hf download siruku6/pi05_full_runpod \
+hf download siruku6/pi05_full_runpod \
   --local-dir work/artifacts/pi05_rp3000
 du -sh work/artifacts/pi05_rp3000
 ls work/artifacts/pi05_rp3000/vlm
 ```
 
-**期待する結果。** 8.8 GB。`model.safetensors` が 9,354,xxx,xxx バイト、`vlm/` に
-`tokenizer.json` ほか 4 ファイル。**`vlm/` が無いと評価は 5 秒で落ちる。**
+**期待する結果。** 8.8 GB。`model.safetensors` が 9,354,xxx,xxx バイト、`vlm/` に `tokenizer.json` ほか 4 ファイル。**`vlm/` が無いと評価は 5 秒で落ちる。**
 
-**この重みは予選最終提出（版 4.2.0）のものであり、`policy_server.py` 4.5.0 が
-既定で使う重みと同じである。**HF 上の `siruku6/pi05_full_runpod` は非公開なので
-`hf auth login` が要る。
+**この重みは予選最終提出（版 4.2.0）のものであり、`policy_server.py` 4.6.0 が既定で使う重みと同じである。**
 
-**別の道。** `siruku6/parc2026-submission` の `submission_4.5.0.zip`（9.378 GB）を
-落として展開すると、`model_weights/` として同じ重みが出てくるうえ、提出した
-`policy_server.py` そのものも入っている。**提出物の中身を確かめたいときはこちら。**
+<!-- **別の道。** `siruku6/parc2026-submission` の `submission_4.5.0.zip`（9.378 GB）を落として展開すると、`model_weights/` として同じ重みが出てくるうえ、提出した `policy_server.py` そのものも入っている。**提出物の中身を確かめたいときはこちら。**
 展開に 9.4 GB 余分に要る。
 
 ```bash
-~/venv-hf/bin/hf download siruku6/parc2026-submission submission_4.5.0.zip --local-dir /tmp/sub
-unzip -q /tmp/sub/submission_4.5.0.zip -d /tmp/sub/x   # → /tmp/sub/x/model_weights
-```
+hf download siruku6/parc2026-submission submission_4.5.0.zip --local-dir work/artifacts/submission_4.5.0.zip
+unzip -q work/artifacts/submission_4.5.0.zip -d work/artifacts/submission_4.5.0   # → work/artifacts/submission_4.5.0/model_weights
+``` -->
 
 ## 手順 5 疎通を 1 本流す
 
@@ -282,7 +263,7 @@ done
 終わったら次を送ってもらえれば私が読む。
 
 ```bash
-cd ~/PARC2026_pre
+cd ~/src/PARC2026_pre
 for d in work/final_eval/*_track2_g*/; do
   echo "== $d"
   python3 -c "
@@ -315,9 +296,10 @@ done
 | 仮定 | 根拠 | 外れると何が変わる |
 |---|---|---|
 | **bf16 が compute capability 7.5 で動く** | 重みは `dtype=bfloat16` で保存されており、cc 7.5 に bf16 の専用回路は無い。torch は多くの演算を代替経路で通すが、全部が通る保証は無い | 落ちるなら fp32 で読む必要があり、VRAM が 11.9 GB → 約 19 GB に増える（24 GB には載るが余裕が消える） |
+| 配布キットが `~/b_PARC2026_final` にある | 評価イメージがビルド済みなので clone はされている、と読んだだけ | `KIT_ROOT` を渡す必要がある |
+| GitHub へ ssh で届く | 未確認 | Personal Access Token で https clone する |
 
-**GitHub への ssh は 2026-08-26 に通ることを確認した**（`Hi siruku6!` が返った）ので、
-この行は消した。**bf16 は手順 5 の 1 本で片付く。**
+**手順 5 の 1 本で 3 つとも片付く。**
 
 ## あとで見る資料
 
@@ -326,5 +308,6 @@ done
 | どのマシンに何があるか | [../resources/infra_and_docker.md](../resources/infra_and_docker.md) |
 | HF に何が置いてあるか | [../resources/huggingface.md](../resources/huggingface.md) |
 | HF の転送で詰まったとき | [08_hf_transfer_troubleshooting.md](08_hf_transfer_troubleshooting.md) |
+| docker がログインし直しても sudo なしで使えないとき | [13_docker_sudo_group_troubleshooting.md](13_docker_sudo_group_troubleshooting.md) |
 | 評価が CPU 描画で遅い話の実測 | [../knowledge/14_quantization_and_eval_bottleneck.md](../knowledge/14_quantization_and_eval_bottleneck.md) |
 | ディスクを空ける | [09_free_disk_space.md](09_free_disk_space.md) |

@@ -47,7 +47,8 @@
 | **[howto/09_free_disk_space.md](howto/09_free_disk_space.md)** | **`df` の空きが減ってきたとき。消してよいものの判定と、「消したのに空かない」3 つの罠** |
 | **[howto/10_rebuild_machine.md](howto/10_rebuild_machine.md)** | **マシンを作り替えてディスクが消えるとき。持ち出す 1 本のスクリプト・秘密の 4 件・常駐コンテナの起動コマンド** |
 | **[howto/12_bring_eval_to_rtx6000.md](howto/12_bring_eval_to_rtx6000.md)** | **会社の RTX6000 で本選の自己評価を回すとき。EGL が効くのでここが評価の主力になる。持ち込む 4 つ（評価イメージ・方策イメージ・重み・コード）と、`docker` が sudo を要るときの回避** |
-| **[howto/13_blackwell_first_session.md](howto/13_blackwell_first_session.md)** | **配布 GPU 環境（Blackwell サーバ）に初めて入るとき。60 時間の減り方・下見・配布データの数え方・止め方。自分の Docker は持ち込めない** |
+| **[howto/13_docker_sudo_group_troubleshooting.md](howto/13_docker_sudo_group_troubleshooting.md)** | **`usermod -aG docker` を入れたのに `permission denied` が続くとき。`id -nG` での切り分けと、VS Code の Remote-SSH で必要になる操作** |
+| **[howto/14_blackwell_first_session.md](howto/14_blackwell_first_session.md)** | **配布 GPU 環境（Blackwell サーバ）に初めて入るとき。60 時間の減り方・下見・配布データの数え方・止め方。自分の Docker は持ち込めない** |
 | **[howto/11_colab_eval.md](howto/11_colab_eval.md)** | **評価を回すとき（Colab。8 ファイルを上げてセルを 5 つ。π0.5 も回せる。T4 で動くかは未確認）** |
 | [strategy/05_実測結果.md](strategy/05_実測結果.md) | 判断する前。数字はすべてここ |
 | **[strategy/06_scripted_demos.md](strategy/06_scripted_demos.md)** | **手本が 300 ステップに収まらないタスクを扱うとき。台本で手本を自分で作る** |
