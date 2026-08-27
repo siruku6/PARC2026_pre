@@ -97,7 +97,7 @@ SmolVLA 期は本数を絞った回がある（`lora20k` は 200 本、`weak3x_2
    移動しているだけである。
 
 **これが「画像側も学習する」を RunPod でやる理由の実測の裏付けである**
-（[../howto/06_runpod_pi05.md](../howto/06_runpod_pi05.md) 14 節）。
+（[../plan/15_runpod_fullparam_with_augment.md](../plan/15_runpod_fullparam_with_augment.md)）。
 
 ### 手元の 8 行は、並進の倍率については採点の向きを再現した（8/27）
 

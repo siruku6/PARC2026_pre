@@ -280,7 +280,7 @@ flow matching（行動を少しずつ形にしていく作り方）のサンプ�
 
 | これまでの主張 | 実際 | なぜ間違えたか |
 |---|---|---|
-| **Track2 の摂動は、採点ハーネスの `PerturbationConfig`（`robot_init_pos_noise` ほか 5 つ）で入る可能性が高い**（[13](13_finals_exploration_menu.md) の 1 節、2026-08-24 に書いた） | **違う。`compe/t2/T2_TASKS.csv` の 8 行は LIBERO-plus のタスク変種で、`category` 列は Sensor Noise 2・Camera Viewpoints 2・Objects Layout 2・Robot Initial States 2 である。**[07](07_track2_preparation.md) の 1.1 節の推測がそのまま当たっていた | 配布キットに `PerturbationConfig` という設定があり、Track2 の文言と同じ 3 語がフィールド名に並んでいたことを根拠にした。**しかしタスクの一覧そのものを見れば直接分かる話だった。**本選のキットが配られてから CSV を 1 つ開けば済んだ。**新しい配布物が来たら、推論より先に中身を数える** |
+| **Track2 の摂動は、採点ハーネスの `PerturbationConfig`（`robot_init_pos_noise` ほか 5 つ）で入る可能性が高い**（2026-08-24 に書いた。その文書は 8/26 に [07](07_track2_preparation.md) の 1.3.4 節へ統合して消した） | **違う。`compe/t2/T2_TASKS.csv` の 8 行は LIBERO-plus のタスク変種で、`category` 列は Sensor Noise 2・Camera Viewpoints 2・Objects Layout 2・Robot Initial States 2 である。**[07](07_track2_preparation.md) の 1.1 節の推測がそのまま当たっていた | 配布キットに `PerturbationConfig` という設定があり、Track2 の文言と同じ 3 語がフィールド名に並んでいたことを根拠にした。**しかしタスクの一覧そのものを見れば直接分かる話だった。**本選のキットが配られてから CSV を 1 つ開けば済んだ。**新しい配布物が来たら、推論より先に中身を数える** |
 | **`num_inference_steps` と `samples` は秒数しか増やさないので事実上ただである**（[../knowledge/06](../knowledge/06_step_count_drives_score.md)） | **1 リクエストが 10 秒を超えると、そのトラック全体が 0 点になる。**平均でも累積でもない | トラック全体の 1 時間の上限（実測 110.4 秒で 32 倍の余り）だけを見て、**リクエスト単位の上限を「余裕がある側」と同じ扱いにした。**2 つは別の制約で、後者は崖である |
 
 ## 決めてほしいこと

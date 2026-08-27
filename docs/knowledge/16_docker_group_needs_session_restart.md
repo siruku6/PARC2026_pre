@@ -1,6 +1,6 @@
-# 13. docker を sudo なしで使うのに、グループに入れただけでは直らないとき
+# 16. docker を sudo なしで使うのに、グループに入れただけでは直らないとき
 
-**[12_bring_eval_to_rtx6000.md](12_bring_eval_to_rtx6000.md) の「手順 1 docker を sudo なしで
+**[../howto/12_bring_eval_to_rtx6000.md](../howto/12_bring_eval_to_rtx6000.md) の「手順 1 docker を sudo なしで
 使えるようにする」で書いた `usermod -aG docker` + ログインし直す、が
 `eng003sasaki01`（会社の RTX6000）では効かなかった。**
 
@@ -70,4 +70,4 @@ flowchart LR
 
 | 知りたいこと | ファイル |
 |---|---|
-| このマシンで docker を使う手順の全体像 | [12_bring_eval_to_rtx6000.md](12_bring_eval_to_rtx6000.md) |
+| このマシンで docker を使う手順の全体像 | [../howto/12_bring_eval_to_rtx6000.md](../howto/12_bring_eval_to_rtx6000.md) |

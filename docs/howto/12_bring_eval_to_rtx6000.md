@@ -59,7 +59,7 @@ nproc; free -g | head -2
 | ディスク | 489 GB のうち **357 GB 空き**（評価イメージを作ったあと） |
 | 評価イメージ | `parc2026-final:latest` `a174b42ff901`・**ディスク上 69.2 GB**（中身 26.8 GB） |
 | GitHub | ssh が通る（`Hi siruku6! You've successfully authenticated`） |
-| `docker` を sudo 無しで | 8/26 は拒否された。**8/27 に解決**（手順 1 と [13](13_docker_sudo_group_troubleshooting.md)） |
+| `docker` を sudo 無しで | 8/26 は拒否された。**8/27 に解決**（手順 1 と [knowledge/16](../knowledge/16_docker_group_needs_session_restart.md)） |
 | **配布キットの場所** | **`~/src/b_PARC2026_final`。`~/src/PARC2026_pre` の隣なので `KIT_ROOT` は要らない** |
 
 **`KIT_ROOT` は存在確認にしか使われていない。**`pipeline` は評価イメージの中に入っている
@@ -90,7 +90,7 @@ sudo usermod -aG docker "$USER"
 （`-E` を落とすと `$HOME` が `/root` になり、HF キャッシュのマウント元が変わる）。
 
 **ログインし直しても直らないことがある**（VS Code Remote-SSH の Reload Window だけでは
-足りなかった実例）。[13_docker_sudo_group_troubleshooting.md](13_docker_sudo_group_troubleshooting.md)
+足りなかった実例）。[../knowledge/16_docker_group_needs_session_restart.md](../knowledge/16_docker_group_needs_session_restart.md)
 に切り分け手順を残した。
 
 ## 手順 2 コードを置く
@@ -360,6 +360,6 @@ done
 | どのマシンに何があるか | [../resources/infra_and_docker.md](../resources/infra_and_docker.md) |
 | HF に何が置いてあるか | [../resources/huggingface.md](../resources/huggingface.md) |
 | HF の転送で詰まったとき | [08_hf_transfer_troubleshooting.md](08_hf_transfer_troubleshooting.md) |
-| docker がログインし直しても sudo なしで使えないとき | [13_docker_sudo_group_troubleshooting.md](13_docker_sudo_group_troubleshooting.md) |
+| docker がログインし直しても sudo なしで使えないとき | [../knowledge/16_docker_group_needs_session_restart.md](../knowledge/16_docker_group_needs_session_restart.md) |
 | 評価が CPU 描画で遅い話の実測 | [../knowledge/14_quantization_and_eval_bottleneck.md](../knowledge/14_quantization_and_eval_bottleneck.md) |
 | ディスクを空ける | [09_free_disk_space.md](09_free_disk_space.md) |
