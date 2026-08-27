@@ -4,7 +4,7 @@
 
 | 探しているもの | 行き先 |
 |---|---|
-| **今なにをやるべきか** | [talk/open_items.md](talk/open_items.md) |
+| **今なにをやるべきか（候補の板）** | **[talk/open_items.md](talk/open_items.md)** ── 1 行ごとに「何が決まるか・誰が・資源・所要・前提・打つもの」を持つ。**アイデアを思いついたらここへ足す** |
 | **手を動かす手順** | [howto/](howto/) |
 | **測った数字** | [strategy/05_実測結果.md](strategy/05_実測結果.md) |
 | **次にどこを直して学習するか** | **[plan/04_training_targets.md](plan/04_training_targets.md)** |
@@ -36,7 +36,7 @@
 
 | ファイル | いつ |
 |---|---|
-| [talk/open_items.md](talk/open_items.md) | 作業を始めるとき。**本選 Track2 の板**（3,300 文字。8/21 に作り直した） |
+| **[talk/open_items.md](talk/open_items.md)** | **作業を始めるとき、次の手に迷ったとき。本選 1 の板**（8/27 に作り直した。それ以前は [talk/open_items_archive_260821.md](talk/open_items_archive_260821.md)） |
 | [talk/archive_qualifier_board.md](talk/archive_qualifier_board.md) | **予選の板の退避先。**他の文書が「`open_items.md` の 29」のように**番号で指しているものはここにある** |
 | [talk/lessons_learned.md](talk/lessons_learned.md) | コンペが終わったあと。**次の 3 日の組み立て方**まで書いてある |
 | [howto/01_retrain.md](howto/01_retrain.md) | 追加学習を回すとき |
