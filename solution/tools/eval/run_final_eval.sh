@@ -177,11 +177,36 @@ if [ -f "$SCORER_PATCH" ]; then
     echo "-- 採点器を差し替える（衝突率と SPARC を出す版）"
 fi
 
+# **評価する行を、こちらの CSV に差し替える。**
+# 配布キットは `compe/t2/T2_TASKS.csv` の 8 行を読むだけで、行を選び直す口が無い。
+# **その 8 行は Track1 の摂動（背景・照明）しか含まないので、Track2 の摂動で
+# 候補を比べたいときは行ごと入れ替える必要がある**（docs/plan/16 の 2 節）。
+# 変種名の数値は一覧を参照せず文字列から読まれるので、一覧に無い組み合わせも走る
+# （docs/reference/20 の 2.3 節）。
+tasks_mount=()
+if [ -n "${TASKS_CSV:-}" ]; then
+    if [ ! -f "$TASKS_CSV" ]; then
+        echo "TASKS_CSV が見つからない: $TASKS_CSV" >&2
+        exit 1
+    fi
+    case "$TRACK" in
+        track1) csv_in_kit=/workspace/compe/t1/T1_TASKS.csv ;;
+        track2) csv_in_kit=/workspace/compe/t2/T2_TASKS.csv ;;
+        track3) echo "track3 には CSV が無い（compe/t3 は paths.py と assets から組む）" >&2; exit 1 ;;
+        *) echo "TRACK が読めない: $TRACK" >&2; exit 1 ;;
+    esac
+    tasks_mount=(-v "$(cd "$(dirname "$TASKS_CSV")" && pwd)/$(basename "$TASKS_CSV"):$csv_in_kit:ro")
+    # **入力の一覧を実行ディレクトリへ写す。**次の週に同じ CSV があるとは限らない。
+    cp "$TASKS_CSV" "$OUTPUT_DIR/TASKS_CSV.csv"
+    echo "-- 評価する行を差し替える: $TASKS_CSV（$(( $(wc -l < "$TASKS_CSV") - 1 )) 行）→ $csv_in_kit"
+fi
+
 echo "-- 評価を回す"
 docker run --rm --gpus all --network "$NETWORK" \
     --ulimit core=0 \
     -e "MUJOCO_GL=$MUJOCO_GL" \
     "${scorer_mount[@]}" \
+    "${tasks_mount[@]}" \
     "${record_environment[@]}" \
     -v "$OUTPUT_DIR/results:/workspace/results" \
     "$KIT_IMAGE" \
