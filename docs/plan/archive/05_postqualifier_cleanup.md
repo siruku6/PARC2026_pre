@@ -116,7 +116,7 @@ scripted_mix は 8 件だけで 0.000、lora20k は 0.016）。`smolvla/base` �
 | イメージ `parc2026-train` 1 本 | 9.49 GB | **60 kB**（`parc2026-train-pi05` と共有。4 本まとめて消したときだけ 9.49 GB が空く） |
 
 **この二重計上の読み方と、イメージとビルドキャッシュを消す順番は
-[../howto/09_free_disk_space.md](../howto/09_free_disk_space.md) にまとめた。**
+[../howto/09_free_disk_space.md](../../howto/09_free_disk_space.md) にまとめた。**
 8/18 に `docker builder prune --force` を流したときは、申告 9.5 GB のうち 1 バイトも
 空かなかった。6 番でイメージを 2 本だけ消したので 9.49 GB は残ったままで、**残す判断を
 した学習イメージ 4 本（2 章）が押さえているので、いま空ける手は無い。**
@@ -143,7 +143,7 @@ scripted_mix は 8 件だけで 0.000、lora20k は 0.016）。`smolvla/base` �
 
 **同じ中身を 2 つの名前で指しているだけの箇所（ハードリンク）が 3 組あった。**
 片方だけ消しても 1 バイトも空かない。**両方消して初めて空く。**見つけ方と inode の
-読み方は [../howto/09_free_disk_space.md](../howto/09_free_disk_space.md) にまとめた。
+読み方は [../howto/09_free_disk_space.md](../../howto/09_free_disk_space.md) にまとめた。
 
 いっぽう `pi05_full_runpod/001000/` は `model.safetensors` と
 `pretrained_model/model.safetensors` を**別の実体として 2 つ持っていた**（inode

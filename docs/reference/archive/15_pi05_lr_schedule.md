@@ -5,7 +5,7 @@
 **結論を先に。学習率の高さ(2.5e-5)と下げ方(cosineで10分の1まで)は、
 lerobotのπ0.5既定値・Physical Intelligence自身のπ0既定値と完全に一致している。**
 SmolVLA側で踏んだ「出典のない組み合わせを作ってしまう」失敗
-([11_training_schedule.md](11_training_schedule.md))は、今回は起きていない。
+([11_training_schedule.md](../11_training_schedule.md))は、今回は起きていない。
 
 **ただし、Physical Intelligenceが公開しているLIBERO向けの設定
 (`pi05_libero`)とは形が違う。** あちらは「バッチ256で、学習率を下げずに
@@ -101,7 +101,7 @@ EMAが無いぶんの揺れを終盤で抑える役目を部分的に担って�
 
 ## 4. SmolVLAで踏んだ失敗との違い
 
-[11_training_schedule.md](11_training_schedule.md)に記録した失敗は、
+[11_training_schedule.md](../11_training_schedule.md)に記録した失敗は、
 **「配布ノートブックの学習率(3e-4、3,000 ステップ×バッチ1向け)を、20,000 ステップの
 学習にそのまま持ち込んだ」**というものだった。本番スコアが0.1409から
 0.016に落ちている。

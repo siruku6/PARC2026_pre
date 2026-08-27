@@ -4,7 +4,7 @@
 
 > # 【取り下げ・2026-08-22】この依頼は実行しないこと。
 >
-> **[../knowledge/07_local_eval_cannot_rank.md](../knowledge/07_local_eval_cannot_rank.md)
+> **[../knowledge/07_local_eval_cannot_rank.md](../../knowledge/07_local_eval_cannot_rank.md)
 > が既に答えを出している** ——「手元の評価は本番の順位を付けられない」。決定的な 2 例
 > （3.10.0 と 4.2.0 がどちらも手元 36 件で +3 件、本番は 0.264 → 0.169 と 0.264 → 0.485）
 > つきで確立済みである。この依頼の T3（順位の一致）は、決着した問いを 3.5 時間かけて
@@ -16,7 +16,7 @@
 > いないが、単独で 3.5 時間を使う価値はない。探査 40 行を回すときに 1 行だけ 2 回回して
 > 比べれば足りる。
 >
-> **代わりに読むもの:** [07_track2_preparation.md](07_track2_preparation.md) 3.1 節
+> **代わりに読むもの:** [07_track2_preparation.md](../07_track2_preparation.md) 3.1 節
 > （完了条件に使う 3 列）。
 
 - **状態:** 取り下げ（2026-08-22）

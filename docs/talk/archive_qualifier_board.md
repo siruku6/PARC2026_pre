@@ -443,7 +443,7 @@ python3 solution/tools/suite/instruction_targets.py --emit python   # 貼る形�
 **貼るのは 4 行 ＋ 呼び出し 8 行になった。** 手順は
 [colab_eval.py](../../solution/tools/colab/colab_eval.py) の関数で、編集するのは
 [colab_eval_config.py](../../solution/tools/colab/colab_eval_config.py) だけである。
-**呼び出し方は [colab_eval/README.md](../solution/colab_eval/README.md) の「最短の道順」。**
+**呼び出し方は [colab_eval/README.md](../howto/11_colab_eval.md) の「最短の道順」。**
 
 **畳んだことで、手順の順番に由来する事故が構造的に消えた**（notes の 36）。
 **Colab で 1 度通すまでは、01〜09 のセルを控えとして残してある。**

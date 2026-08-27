@@ -26,7 +26,7 @@
 ## state=8 / action=7 は今の観測変換とそのまま一致する
 
 `lerobot/pi05_libero_base` の入力宣言（state 8・action 7）は、このコンペの
-`LiberoProcessorStep`（[10_observation_interface.md](10_observation_interface.md)）が
+`LiberoProcessorStep`（[10_observation_interface.md](../10_observation_interface.md)）が
 作る形とそのまま一致する。カメラ名は `--policy.pretrained_path` 使用時に
 学習データ側（`lerobot/libero_plus` の `front`/`wrist`）へ自動的に差し替わるため、
 SmolVLA と同様 rename_map は要らない見込み——ただし **pi05 側で実機テストはしていない。**
@@ -38,7 +38,7 @@ SmolVLA と同様 rename_map は要らない見込み——ただし **pi05 側�
    gradient checkpointing）が要り、載るかは実測するまで分からない。
 2. **libero_plus 向けの公開チェックポイントが無い。** SmolVLA の出発点
    `lerobot/smolvla_libero_plus` は既にこのコンペのデータで一度学習済みだが
-   （[01_base_model.md](01_base_model.md)）、pi05 は素の `lerobot/pi05_libero_base`
+   （[01_base_model.md](../01_base_model.md)）、pi05 は素の `lerobot/pi05_libero_base`
    （通常の LIBERO）からしか始められない。
 3. **推論速度が未測定。** 採点環境は L4 24GB・10秒/推論（PDF p.12）。
    パラメータが 9 倍になった分、同じ chunk_size でも推論が遅くなる可能性が高い。

@@ -30,7 +30,7 @@
 | [reference/](reference/) | 調べて分かった事実（モデル・評価データ・出題元のデータ・設定の意味） |
 | [resources/](resources/) | **今使える** 計算資源・ディスク・メモリ・docker image・HF 上のモデルの一覧。状態が変わるたびに上書きする（履歴は残さない）。**手順や Tips は書かない**（[resources/README.md](resources/README.md) の線引き） |
 | [plan/](plan/) | **1 つずつの手の設計。** 何を測り、出た数字で何を決めるか |
-| [prod_eval_results/](../outputs/prod_eval_results/) | 本番採点の生ログと読み解き |
+| [outputs/submission_logs/](../outputs/submission_logs/) | 本番採点の生ログ。**トラックごとに `<日付>_<版>.txt`**（本選は `b_PARC2026_final/outputs/submission_logs/`） |
 
 ## よく開くファイル
 
