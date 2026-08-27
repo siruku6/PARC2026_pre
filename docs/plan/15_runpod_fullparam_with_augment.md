@@ -43,42 +43,67 @@ AdamW の状態だけで 33 GB 必要になるので 20 GB には載らない。
 `--num-workers 16` にして、`data_s`（データ待ちの秒数）が `updt_s` に対して
 大きくなっていないかを最初の 100 歩で見る。**大きければ workers を増やす。**
 
-### 先にやること 3 つ（Pod を作る前）
+### Pod の作り方は 2 通りある。**どちらでも同じ環境になる**
 
-**(1) 押してあるイメージの `train_pi05.py` は 8/14 のものであり、`--camera-viewpoint-augment`
-が入っていない。** `Dockerfile.pi05` はビルド時に `train_pi05.py` を `COPY` するので、
-イメージを作り直して push し直すか、Pod の中でファイルを差し替えるかになる。
-**押し直しは 1 時間と 10 GB の上りを使うので、差し替えを推す。**
+**8/14 に Docker Hub へ push したイメージの名前を記録していない**（[howto/06](../howto/06_runpod_pi05.md)
+4 節は `<Docker Hubのユーザー名>/parc2026-train-pi05:v1` という書き方のままで、
+実際に使ったタグが残っていない）。**手元の `docker images` にもそのタグは無い。**
+そこで 2 通り用意した。
 
-Pod へ入ったあと、このマシンから 3 つを送る（合計 200 KB 未満）。
+| 道 | やること | 所要 | どんなときに |
+|---|---|---|---|
+| **A: 8/14 のイメージを使う** | Docker Hub に `parc2026-train-pi05` が残っていれば、その名前で Pod を作る | **15 分** | **まず Docker Hub を見て、あればこちら** |
+| **B（確実）: 公式テンプレート ＋ `runpod_setup.sh`** | 「RunPod PyTorch」テンプレートで Pod を作り、`bash runpod_setup.sh` を 1 回流す | **35 分**（pip の時間） | イメージが無い／名前が分からないとき |
 
-```bash
-# JAIST サーバ側で実行する。<pod> は 5.3 節で確認した接続先
-cd /home/ubuntu/lab/PARC2026_pre/solution/train
-scp -P <ポート> train.py train_pi05.py root@<ホスト>:/workspace/
-scp -P <ポート> -r experiments root@<ホスト>:/workspace/
-```
+**B は確実に通る。**`runpod_setup.sh` は torch 2.11.0+cu128・torchcodec 0.11.1・
+torchvision 0.26.0・lerobot v0.6.0 を版まで固定して `/opt/lerobot` へ入れる。
+**`Dockerfile.pi05` と同じ組み合わせである。**イメージを作り直して 9.7 GB を
+上げ直す必要は無い（上り回線が読めないので、そちらの方が危ない）。
 
-**Pod 側では `/workspace` から起動する**（`train_pi05.py` は隣の `train.py` と
-`experiments/` を import するので、3 つが同じ場所に無いと動かない）。
+### 先にやること 3 つ（Pod を作る前ではなく、Pod へ入った直後）
 
-**(2) 出発点の重みを Pod へ落とす。** `rp3000` は HF の非公開リポジトリにある。
+**(1) コードを落とす。**押してあるイメージの `train_pi05.py` は 8/14 のもので、
+`--camera-viewpoint-augment` が入っていない。**scp は要らない。HF に置いた。**
 
 ```bash
 pip install -q -U "huggingface_hub[cli,hf_xet]"
 hf auth login
-hf download siruku6/pi05_full_runpod --local-dir /workspace/rp3000
-du -sh /workspace/rp3000        # 8.8 GB になる
+cd /workspace
+hf download siruku6/parc2026-submission runpod_code_260827.tar.gz --local-dir /tmp/code
+tar -xzf /tmp/code/runpod_code_260827.tar.gz -C /workspace
+ls /workspace          # train.py train_pi05.py experiments/ runpod_setup.sh prune_checkpoints.sh
 ```
 
-**(3) チェックポイントの間引きを先に仕掛ける。** フルパラメータ学習の
-チェックポイントは **1 個 25 GB** で、LeRobot は古いものを消さない。
-Volume Disk 150 GB のうち、初期重みとデータセットで 30 GB 使うので、
-**間引き無しだと 4 個目で尽きる。**[howto/06](../howto/06_runpod_pi05.md) 11 節の `nohup` の 1 行をそのまま使う。
+`sha256` は `128b8fd34e1ba064ea3c196f0c35c64272cc1c2bdcb28205b4790c9e3b3df5e4`。
+**`train_pi05.py` は隣の `train.py` と `experiments/` を import するので、3 つが
+同じ場所に無いと動かない。**だから `/workspace` に展開して `/workspace` から起動する。
+
+**(2) 出発点の重みを落とす。**
+
+```bash
+hf download siruku6/pi05_full_runpod --local-dir /workspace/rp3000
+du -sh /workspace/rp3000        # 8.8 GB
+```
+
+**(3) チェックポイントの置き場を数える。**フルパラメータのチェックポイントは
+**1 個 25 GB**。`--save-freq 1500` で 1,500 / 3,000 / 4,500 の 3 個が残るので
+**75 GB** 使う。Volume Disk 150 GB のうち初期重みとデータセットで 30 GB 使うので、
+**105 GB で収まる。間引きは要らない。**
+
+```bash
+df -h /workspace
+```
+
+**105 GB を超える見込みになったら**、[howto/06](../howto/06_runpod_pi05.md) 11 節の
+`nohup` の 1 行で間引きを仕掛ける。
 
 ### 本番のコマンド
 
+**`--num-workers` は Pod の vCPU 数を見てから決める**（[howto/06](../howto/06_runpod_pi05.md)
+0 節）。`nproc` の半分から 16 の小さい方でよい。
+
 ```bash
+nproc                      # ここを見てから下の 16 を決める
 tmux new -s train
 cd /workspace
 python train_pi05.py --run-name pi05_full2_aug \
@@ -90,6 +115,10 @@ python train_pi05.py --run-name pi05_full2_aug \
 ```
 
 `Ctrl+b` → `d` で抜ける。戻るのは `tmux attach -t train`。
+
+**渡した 2 つのフラグは、そのまま LeRobot へ届く**（`train_pi05.py:329-330` で
+`--policy.freeze_vision_encoder=false --policy.train_expert_only=false` を組み立てる）。
+**`false` は小文字である。**
 
 ### 立ち上がったことを 3 点で確かめる（最初の 20 歩）
 
