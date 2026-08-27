@@ -45,15 +45,21 @@ AdamW の状態だけで 33 GB 必要になるので 20 GB には載らない。
 
 ### Pod の作り方は 2 通りある。**どちらでも同じ環境になる**
 
-**8/14 に Docker Hub へ push したイメージの名前を記録していない**（[howto/06](../howto/06_runpod_pi05.md)
-4 節は `<Docker Hubのユーザー名>/parc2026-train-pi05:v1` という書き方のままで、
-実際に使ったタグが残っていない）。**手元の `docker images` にもそのタグは無い。**
-そこで 2 通り用意した。
+**イメージは `sirukufarios/parc2026-train-pi05` である**（2026-08-14 に push。
+名前を記録していなかったので 8/27 に
+[../resources/infra_and_docker.md](../resources/infra_and_docker.md) へ書いた）。
 
 | 道 | やること | 所要 | どんなときに |
 |---|---|---|---|
-| **A: 8/14 のイメージを使う** | Docker Hub に `parc2026-train-pi05` が残っていれば、その名前で Pod を作る | **15 分** | **まず Docker Hub を見て、あればこちら** |
+| **A（推奨）: 8/14 のイメージを使う** | **`sirukufarios/parc2026-train-pi05`** で Pod を作る | **15 分** | **こちらでよい。**作り直す必要は無い（下） |
 | **B（確実）: 公式テンプレート ＋ `runpod_setup.sh`** | 「RunPod PyTorch」テンプレートで Pod を作り、`bash runpod_setup.sh` を 1 回流す | **35 分**（pip の時間） | イメージが無い／名前が分からないとき |
+
+**古いイメージのままでよい。**8/14 以降に `Dockerfile.pi05` へ入った変更は量子化の
+配線だけ（`bitsandbytes`・`torchao` の追加と `experiments/` の COPY）で、量子化の
+5 候補はすべて廃止した。現在の `train_pi05.py` は `from experiments import quantization`
+を実行するが、**その `__init__.py` は `argparse`・`os`・`pathlib` しか import せず、
+重い候補は量子化のオプションを渡したときだけ遅延して読まれる。**
+**古いのは焼き込まれた `train_pi05.py` だけで、それは `/workspace` の版で上書きする。**
 
 **B は確実に通る。**`runpod_setup.sh` は torch 2.11.0+cu128・torchcodec 0.11.1・
 torchvision 0.26.0・lerobot v0.6.0 を版まで固定して `/opt/lerobot` へ入れる。

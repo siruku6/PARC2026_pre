@@ -231,6 +231,28 @@ CPU 描画（osmesa）だけなので GPU が要らず、GPU マシン側の学�
 | `parc2026-train-pi05` | **π0.5 学習イメージ** | [`solution/train/Dockerfile.pi05`](../../solution/train/Dockerfile.pi05) | `python:3.12-slim` | 要 | extra は `pi`。bitsandbytes/torchao 同梱（量子化スイープ用）。RunPod 用に sshd/tmux も追加 |
 | `<学習イメージ名>-server-<image_id>` | **方策サーバイメージ** | （`run_docker_eval.sh` が自動生成） | 学習イメージ | 要 | 学習イメージに `fastapi`/`uvicorn`/`msgpack` を足したもの。評価のたびに作られる |
 
+### Docker Hub に置いてあるのは 1 つ（RunPod 用）
+
+**`sirukufarios/parc2026-train-pi05`。**2026-08-14 に π0.5 学習イメージを push した
+もので、RunPod の Pod をこのイメージで作る。**タグを記録していなかったので
+2026-08-27 に書き足した。**
+
+**作り直す必要は無い。**8/14 以降に `Dockerfile.pi05` へ入った変更は量子化の配線だけ
+（`bitsandbytes==0.49.2`・`torchao==0.17.0` の追加と `experiments/` の COPY）であり、
+**量子化の 5 候補はすべて廃止した。**現在の `train_pi05.py` は
+`from experiments import quantization` を実行するが、**その `__init__.py` は
+`argparse`・`os`・`pathlib` しか import せず、重い候補モジュールは量子化の
+オプションを渡したときだけ遅延して読まれる。**
+
+**古いのは焼き込まれた `train_pi05.py` と `train.py` だけである。**RunPod では
+現在のコードを `/workspace` へ展開してそこから起動するので、焼き込まれた版は使わない
+（[../plan/15_runpod_fullparam_with_augment.md](../plan/15_runpod_fullparam_with_augment.md)）。
+**作り直すと 1 時間のビルドと 9.7 GB の上りを払って、得るものが無い。**
+
+**イメージが見つからない・動かないときの逃げ道**は、RunPod の公式テンプレート ＋
+[`solution/train/runpod_setup.sh`](../../solution/train/runpod_setup.sh)（35 分）。
+版を固定して同じ環境を作る。
+
 ※ ユーザとの会話の中では、認識を一致させるために「呼称」列の名称でイメージを呼ぶこととする。
 
 ### 本選の評価イメージは JAIST サーバでは GPU で動かせない
