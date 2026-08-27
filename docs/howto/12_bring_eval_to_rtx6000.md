@@ -60,11 +60,13 @@ nproc; free -g | head -2
 | 評価イメージ | `parc2026-final:latest` `a174b42ff901`・**ディスク上 69.2 GB**（中身 26.8 GB） |
 | GitHub | ssh が通る（`Hi siruku6! You've successfully authenticated`） |
 | `docker` を sudo 無しで | 8/26 は拒否された。**8/27 に解決済み**（手順 1） |
-| 配布キットの場所 | **`~/b_PARC2026_final` では無かった** |
+| 配布キットの場所 | **`~/src/b_PARC2026_final`**。リポジトリの隣なので `KIT_ROOT` は不要 |
 | リポジトリの置き場 | `~/src/PARC2026_pre`（`main` が最新。8/26 に PR #11 が merge 済み） |
 
-**配布キットの場所は必ず確かめる。**`run_final_eval.sh` は既定で「自分のリポジトリの
-隣の `b_PARC2026_final`」を見るので、そこに無ければ `KIT_ROOT` を渡す。探し方:
+**配布キットの場所は確かめる。ただし中身は使わない。**`pipeline` は評価イメージの中に
+入っているので、`run_final_eval.sh` はキットのディレクトリを**存在確認にしか使っていない**
+（39 行目で場所を求めるだけで、そのあと参照していない）。**それでも隣に無いと
+`set -e` で落ちるので、無い場合は `KIT_ROOT` を渡す。**探し方:
 
 ```bash
 find ~ -maxdepth 4 -type d -name "pipeline" 2>/dev/null
@@ -86,7 +88,22 @@ sudo usermod -aG docker "$USER"
 効く）。`docker info >/dev/null && echo OK` で確かめる。
 
 **2026-08-27 に、この状態にできることを実機で確認した。**`docker images parc2026-final`
-が sudo 無しで通っている。
+が sudo 無しで通っている。**ただし「入り直す」の意味が普通の ssh とは違った。**
+
+### VS Code の Remote-SSH で作業している場合、ウィンドウを閉じ直しても足りない
+
+**`usermod -aG docker` を実行しても、`permission denied while trying to connect to
+the docker API at unix:///var/run/docker.sock` が続いた**（2026-08-27）。
+
+**原因。** Linux のグループ所属はログイン時にセッションへ読み込まれる。VS Code の
+Remote-SSH はホスト側の `vscode-server` プロセスを常駐させ続けるので、**ウィンドウを
+閉じて繋ぎ直しても、新しい端末は古いセッションのグループを引き継ぐ。**
+`id -nG` に `docker` が出ないことで判別できる。
+
+**直し方。** コマンドパレット（Cmd/Ctrl+Shift+P）から
+`Remote-SSH: Kill VS Code Server on Host` を実行し、ホスト側の `vscode-server` を
+完全に終了させる。そのうえでウィンドウを閉じ、Remote-SSH で繋ぎ直す。
+**`Reload Window` では足りない。**
 
 **代償を 1 行で。** `docker` グループは実質 root と同じ権限になる。共用機では入れない
 方がよく、その場合は `sudo -E bash solution/tools/eval/run_final_eval.sh ...` で通す
@@ -104,7 +121,7 @@ id -nG; getent group docker; ls -l /var/run/docker.sock; systemctl is-active doc
 
 | 出力 | 原因 | 直し方 |
 |---|---|---|
-| `id -nG` に `docker` が**無い** | 再接続で新しいログインセッションになっていない（ssh の接続共有・端末多重化が残っている） | ssh を完全に切って入り直す。または `newgrp docker`（そのシェルだけに効く） |
+| `id -nG` に `docker` が**無い** | 再接続で新しいログインセッションになっていない | **VS Code の Remote-SSH なら上の `Kill VS Code Server on Host`。**素の ssh なら接続共有（`ControlMaster`）を切って入り直す。応急処置は `newgrp docker`（そのシェルだけに効く） |
 | `id -nG` に `docker` が**有る**のに拒否される | ソケットの持ち主が `docker` グループではない（`ls -l` の 4 列目が `root`） | `sudo chgrp docker /var/run/docker.sock`（再起動で戻るので恒久策ではない） |
 | `getent group docker` が空 | `docker` グループそのものが無い（ソケットの置き場が違う構成） | `sudo -E` で通す |
 
@@ -208,7 +225,7 @@ unzip -q /tmp/sub/submission_4.5.0.zip -d /tmp/sub/x   # → /tmp/sub/x/model_we
 
 ```bash
 cd ~/src/PARC2026_pre
-KIT_ROOT=<配布キットの場所> MUJOCO_GL=egl TRACK_EPISODES=1 LABEL=smoke \
+MUJOCO_GL=egl TRACK_EPISODES=1 LABEL=smoke \
   bash solution/tools/eval/run_final_eval.sh track2
 ```
 
@@ -251,7 +268,6 @@ KIT_ROOT=<配布キットの場所> MUJOCO_GL=egl TRACK_EPISODES=1 LABEL=smoke \
 
 ```bash
 cd ~/src/PARC2026_pre
-export KIT_ROOT=<配布キットの場所>
 for spec in "1.0 0 g100_s0" "1.15 0 g115_s0" "1.3 0 g130_s0" "1.15 1 g115_s1"; do
   set -- $spec
   MUJOCO_GL=egl TRACK_EPISODES=1 LABEL="$3" \
@@ -299,7 +315,6 @@ done
 | 仮定 | 根拠 | 外れると何が変わる |
 |---|---|---|
 | **bf16 が compute capability 7.5 で動く** | 重みは `dtype=bfloat16` で保存されており、cc 7.5 に bf16 の専用回路は無い。torch は多くの演算を代替経路で通すが、全部が通る保証は無い | 落ちるなら fp32 で読む必要があり、VRAM が 11.9 GB → 約 19 GB に増える（24 GB には載るが余裕が消える） |
-| **配布キットの場所** | 2026-08-26 の実機では `~/b_PARC2026_final` に**無かった**。まだ探していない | 見つかるまで手順 5・6 が流せない。上の `find` 2 本で探す |
 
 **GitHub への ssh は 2026-08-26 に通ることを確認した**（`Hi siruku6!` が返った）ので、
 この行は消した。**bf16 は手順 5 の 1 本で片付く。**
