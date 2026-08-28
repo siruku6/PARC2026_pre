@@ -53,6 +53,26 @@ KIT_IMAGE="${KIT_IMAGE:-parc2026-final}"
 POLICY_IMAGE="${POLICY_IMAGE:-parc2026-train-pi05}"
 MUJOCO_GL="${MUJOCO_GL:-osmesa}"
 
+# **`TASKS_CSV` はここで解決して存在を確かめる。**方策サーバーの起動（重みの読み込みに
+# 1〜2 分）より前に落とさないと、綴りを 1 文字間違えただけで 2 分待たされる
+# （2026-08-28 に実際に起きた）。**相対パスはリポジトリの根から見る**——
+# `compe/val/...` と書いて別のディレクトリから叩けるようにするためである。
+if [ -n "${TASKS_CSV:-}" ]; then
+    case "$TASKS_CSV" in
+        /*) ;;
+        *) TASKS_CSV="$REPOSITORY_ROOT/$TASKS_CSV" ;;
+    esac
+    if [ ! -f "$TASKS_CSV" ]; then
+        echo "TASKS_CSV が見つからない: $TASKS_CSV" >&2
+        echo "  リポジトリの根は $REPOSITORY_ROOT である。" >&2
+        echo "  ここに置いてあるもの:" >&2
+        ls "$REPOSITORY_ROOT/compe/val/"*.csv 2>/dev/null | sed 's/^/    /' >&2
+        echo "  新しく作った CSV は git pull で降りてくる。" >&2
+        exit 2
+    fi
+    TASKS_CSV="$(cd "$(dirname "$TASKS_CSV")" && pwd)/$(basename "$TASKS_CSV")"
+fi
+
 label="$TRACK"
 [ -n "${LABEL:-}" ] && label="${label}_${LABEL}"
 OUTPUT_DIR="$REPOSITORY_ROOT/work/final_eval/$(date +%m%d_%H%M%S)_${label}"
@@ -201,17 +221,14 @@ fi
 # （docs/reference/20 の 2.3 節）。
 tasks_mount=()
 if [ -n "${TASKS_CSV:-}" ]; then
-    if [ ! -f "$TASKS_CSV" ]; then
-        echo "TASKS_CSV が見つからない: $TASKS_CSV" >&2
-        exit 1
-    fi
+    # 存在確認と絶対パス化は、方策サーバーを起動する前に済ませてある。
     case "$TRACK" in
         track1) csv_in_kit=/workspace/compe/t1/T1_TASKS.csv ;;
         track2) csv_in_kit=/workspace/compe/t2/T2_TASKS.csv ;;
         track3) echo "track3 には CSV が無い（compe/t3 は paths.py と assets から組む）" >&2; exit 1 ;;
         *) echo "TRACK が読めない: $TRACK" >&2; exit 1 ;;
     esac
-    tasks_mount=(-v "$(cd "$(dirname "$TASKS_CSV")" && pwd)/$(basename "$TASKS_CSV"):$csv_in_kit:ro")
+    tasks_mount=(-v "$TASKS_CSV:$csv_in_kit:ro")
     # **入力の一覧を実行ディレクトリへ写す。**次の週に同じ CSV があるとは限らない。
     cp "$TASKS_CSV" "$OUTPUT_DIR/TASKS_CSV.csv"
     echo "-- 評価する行を差し替える: $TASKS_CSV（$(( $(wc -l < "$TASKS_CSV") - 1 )) 行）→ $csv_in_kit"
