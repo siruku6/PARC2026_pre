@@ -140,7 +140,7 @@ trap cleanup EXIT
 policy_environment=()
 for name in PARC_N_ACTION_STEPS PARC_NUM_INFERENCE_STEPS PARC_SAMPLES \
             PARC_EMA_ALPHA PARC_BLEND_STEPS PARC_SEED PARC_NORMALIZE_INSTRUCTION \
-            PARC_GAIN_TRANSLATION PARC_GAIN_ROTATION; do
+            PARC_GAIN_TRANSLATION PARC_GAIN_ROTATION PARC_GEO_IMAGE_SIZE; do
     if [ -n "${!name:-}" ]; then
         policy_environment+=(-e "$name=${!name}")
     fi
@@ -150,6 +150,7 @@ echo "-- 方策サーバーを起動する（重みの読み込みに 1〜2 分�
 docker run -d --name "$POLICY_HOST" --gpus all --network "$NETWORK" \
     -v "$REPOSITORY_ROOT/solution/policy_server.py:/app/policy_server.py:ro" \
     -v "$REPOSITORY_ROOT/solution/geometry_graft.py:/app/geometry_graft.py:ro" \
+    -v "$REPOSITORY_ROOT/work/artifacts/vendor/vggt:/app/vendor/vggt:ro" \
     -v "$WEIGHTS:/app/model_weights:ro" \
     -v "$HOME/.cache/huggingface:/hf_home" \
     -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
