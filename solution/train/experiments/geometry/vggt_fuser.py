@@ -89,7 +89,9 @@ def install(model_id: str | None = None, image_size: int | None = None) -> None:
             print(
                 f"[geometry] 学習済みの接ぎ木を当てた: {len(moved)} 個 / "
                 f"当たらなかった {len(missing)} 個 / 余った {len(unexpected)} 個 / "
-                f"fusion_gate={float(fuser.fusion_gate):.6f}",
+                f"out_proj の絶対値の平均="
+                f"{float(fuser.cross_attention.out_proj.weight.abs().mean()):.6f}"
+                f"（0 なら学習していない）",
                 flush=True,
             )
             stash.clear()

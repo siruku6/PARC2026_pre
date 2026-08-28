@@ -50,9 +50,9 @@ LeRobot v0.6.0 には差し込み口が無いので、`quant_vision_4bit.py` と
 
 ## 学習の始まりで base を壊さないための細工
 
-**混ぜる量に係数を 1 つ置き、0 で初期化してある**（`fusion_gate`）。
-**学習ステップ 0 の出力は素の π0.5 と 1 ビットも違わない。**
-壊れるとすればそれは学習が進んだ結果であって、接いだこと自体ではない。
+**交差注意の最後の射影を 0 で初期化してある。** 学習ステップ 0 の出力は素の π0.5 と
+1 ビットも違わない。**係数 1 つを 0 で初期化する形は、内側の層が学習できなくなって
+失敗した**（`__init__` の中のコメント）。
 """
 from __future__ import annotations
 
@@ -134,8 +134,25 @@ class VGGTFuser(nn.Module):
         self.cross_attention = nn.MultiheadAttention(
             embed_dim, num_heads=num_heads, batch_first=True
         )
-        # 0 で初期化する。**学習ステップ 0 では素の π0.5 と出力が一致する。**
-        self.fusion_gate = nn.Parameter(torch.zeros(1))
+        # **最後の射影を 0 で初期化する。**これで学習ステップ 0 の出力は素の π0.5 と
+        # 一致する（`attended` が恒等的に 0 になる）。**壊れるとすればそれは学習が
+        # 進んだ結果であって、接いだこと自体ではない。**
+        #
+        # ## 係数 1 つを 0 で初期化する形は失敗した（2026-08-28）
+        #
+        # 最初は `y = x + gate × 交差注意` の形で `gate` を 0 から始めた。
+        # **内側の層の勾配が `gate` 倍されるので、`gate` が 0 に近いあいだ内側が
+        # 学習できない。** 6,000 学習ステップ回した実測はこうだった。
+        #
+        # | 見たもの | 値 | 初期値 |
+        # |---|---|---|
+        # | `gate` | **−0.0078** | 0 |
+        # | `to_policy_dim` の標準偏差 | **0.01278** | **0.01276**（動いていない） |
+        #
+        # **最後の射影を 0 にすれば、同じ安全性を保ったまま勾配が素通りする**
+        # ——`out_proj` への勾配は 0 に近い値で割り引かれない。
+        nn.init.zeros_(self.cross_attention.out_proj.weight)
+        nn.init.zeros_(self.cross_attention.out_proj.bias)
 
         # **学習時の画像の大きさをチェックポイントに残す。** 推論側がこれを取り違えると、
         # VGGT に入る画像の大きさが変わって特徴がずれる。学習した重みが意味を失うので、
@@ -227,7 +244,7 @@ class VGGTFuser(nn.Module):
         keys = self.norm_key(self.to_policy_dim(geometry_tokens.to(work_dtype)))
         queries = self.norm_query(image_embeddings.to(work_dtype))
         attended, _ = self.cross_attention(queries, keys, keys, need_weights=False)
-        return image_embeddings + (self.fusion_gate * attended).to(image_embeddings.dtype)
+        return image_embeddings + attended.to(image_embeddings.dtype)
 
 
 def trainable_parameter_names(fuser: VGGTFuser) -> list[str]:

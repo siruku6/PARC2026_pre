@@ -93,28 +93,45 @@ Total Score    = (1/N) * Σ successᵢ * (1 - collision penaltyᵢ) * smooth met
 
 ### `/workspace` の `train_pi05.py` は古い。`/opt/pi05` の方を使う
 
-**Pod の中に 2 つある。2026-08-28 に実機で確かめた。**
+**Pod の中に 2 つあり、作りたての Pod ではどちらにも `--camera-viewpoint-augment` が
+無い。転送が要る**（2026-08-28 に訂正）。
 
-| 場所 | `--camera-viewpoint-augment` |
-|---|---|
-| `/opt/pi05/train_pi05.py` | **ある** |
-| `/workspace/train_pi05.py` | **無い** |
+| 場所 | 中身 | `--camera-viewpoint-augment` |
+|---|---|---|
+| `/opt/pi05/train_pi05.py` | イメージ `:v2` に焼き込まれた **08-13 19:07 の版** | **無い。転送すれば入る** |
+| `/workspace/train_pi05.py` | 永続 Volume に残っている 8/17 の写し | **無い** |
 
-**`/workspace` は永続 Volume なので、8/17 の学習で置いた古い写しが残っている。**
-イメージ `sirukufarios/parc2026-train-pi05` は 8/14 のものだが、
-**`--camera-viewpoint-augment` が入ったのは 8/24 である**（コミット `6ee31db`）。
+**`--camera-viewpoint-augment` が入ったのは 08-24 00:21 である**（コミット `6ee31db`）。
+**イメージはそれより 11 日前のビルドなので、焼き込まれている版には入っていない。**
+`:v1` と `:v2` の違いは
+[../../knowledge/13_runpod_operations.md](../../knowledge/13_runpod_operations.md) ⑥。
 
 **まず `--help` で確かめてから始めること。** 古い方を叩くと
 `unrecognized arguments: --camera-viewpoint-augment` で即座に落ちる。
 
 ```bash
-/opt/pi05/train_pi05.py --help 2>/dev/null | grep -c camera-viewpoint-augment   # 1 なら使える
-python /workspace/train_pi05.py --help | grep -c camera-viewpoint-augment       # 0 なら古い
+python /opt/pi05/train_pi05.py --help | grep -c camera-viewpoint-augment   # 1 以上なら使える
+python /workspace/train_pi05.py --help | grep -c camera-viewpoint-augment  # 0 なら古い
 ```
 
-**このリポジトリの現在の `train_pi05.py` は持ち込まなくてよい。**
-今日 `from experiments import geometry` が入ったので、`experiments/` ごと運ばないと
-起動しない。**今回の学習に幾何の接ぎ木は使わないので、`/opt/pi05` の版で足りる。**
+**このリポジトリの現在の `train_pi05.py` を、`experiments/` ごと持ち込む。**
+現在の版は `from experiments import geometry, quantization` を実行するので、
+`experiments/` が無いと import で落ちる。**幾何の接ぎ木は `--geometry-fuse` を
+渡さないかぎり動かないので、持ち込んでも今回の学習には影響しない**
+（`experiments/` の 3 つの `__init__.py` は `argparse`・`os`・`pathlib` しか
+import せず、`bitsandbytes` も `torchao` も要らない）。
+
+**lab マシンから 1 本で送れる**（116 KB、10 秒）。
+
+```bash
+cd /home/ubuntu/lab/PARC2026_pre/solution/train && \
+tar czf - --exclude='__pycache__' experiments train.py train_pi05.py | \
+ssh -p <port> -i ~/.ssh/id_ed25519 root@<IP> 'tar xzf - -C /opt/pi05'
+```
+
+**`train_pi05.py` は `sys.path.insert(0, Path(__file__).parent)` を持っているので、
+`cd /workspace` のまま `python /opt/pi05/train_pi05.py` と叩いてよい**（`train` と
+`experiments` は `/opt/pi05` から解決される）。
 
 ### 学習の設定
 
@@ -154,9 +171,19 @@ python /workspace/train_pi05.py --help | grep -c camera-viewpoint-augment       
 | チェックポイント 1 個 | **25 GB**（うち `pretrained_model` が 8.8 GB） |
 | 3 個 ＋ 初期重み ＋ データ | **約 105 GB**（Volume Disk 150 GB に収まる） |
 
-**`df -h /workspace` を学習の前に必ず見ること。**
-**ディスクが埋まると、書いている途中のファイルが壊れる**——過去に `write_text` が
-0 バイトのファイルを残した事故がある。
+**学習の前に必ず空きを見ること。ディスクが埋まると、書いている途中のファイルが壊れる**
+——過去に `write_text` が 0 バイトのファイルを残した事故がある。
+
+**ただし Network Volume では `df` が答えない**（2026-08-28 に踏んだ）。
+`df -h /workspace` が `mfs#<地域>.runpod.net:9421` と数百 TB を出したら Network Volume で、
+**その数字はクラスタ全体のものであって、自分の枠の残りではない**
+（[../../knowledge/13_runpod_operations.md](../../knowledge/13_runpod_operations.md) ③）。
+**使用量は `du` で、枠の大きさは RunPod の Storage → Network Volumes で見る。**
+
+```bash
+df -h /workspace                    # 種類を見分けるためだけに打つ
+du -sh /workspace/* | sort -h       # 実際の使用量
+```
 
 ### 評価に渡すときの罠
 
@@ -174,10 +201,19 @@ cp -r work/artifacts/pi05_rp3000/vlm <新しい重みのディレクトリ>/
 **上げるのは `pretrained_model` だけでよい**（8.8 GB）。25 GB の
 `training_state` は評価に要らない。
 
+**送り先を歩数ごとに分けること。** `hf upload` の 3 番目の引数はリポジトリ内の置き場所で、
+**`.` にすると 3 つが同じ場所へ上がって上書きし合う。**
+
 ```bash
-hf upload siruku6/<リポジトリ名> \
-  /workspace/out/pi05_trial1500/checkpoints/000500/pretrained_model . --private
+# ログを先に上げる（45 KB。重みより先）
+hf upload siruku6/pi05_trial1500 /workspace/out/pi05_trial1500.log . --private
+
+# 重みは歩数の名前のディレクトリへ
+hf upload siruku6/pi05_trial1500 \
+  /workspace/out/pi05_trial1500/checkpoints/000500/pretrained_model 000500 --private
 ```
+
+1000・1500 は末尾の `000500` を `001000`・`001500` に変えるだけである。
 
 **Xet の重複排除が効くので、2 個目・3 個目は速い**（ほぼ同じ中身のとき、
 9.38 GB の上げ直しが 30 秒で終わった実測がある）。
@@ -186,17 +222,28 @@ hf upload siruku6/<リポジトリ名> \
 
 ## やること
 
-1. **Pod を作る。** イメージは `sirukufarios/parc2026-train-pi05`。
+1. **Pod を作る。** イメージは **`sirukufarios/parc2026-train-pi05:v2`**（`:v1` は使えない）。
+   **Container Start Command に `bash /opt/pi05/runpod_ssh_start.sh` を入れる**——
+   空にすると起動を延々と繰り返して SSH でも入れなくなる
+   （[../../knowledge/13_runpod_operations.md](../../knowledge/13_runpod_operations.md) ⑥）。
 
-2. **`/opt/pi05` の版に `--camera-viewpoint-augment` があることを確かめる**（上のコマンド）。
-   **無ければそこで止めて報告すること。**`/workspace` の古い版で回してはいけない。
+2. **`experiments/` と現在の `train_pi05.py` を転送し、`--camera-viewpoint-augment` が
+   あることを確かめる**（上のコマンド 2 本）。**転送しても 0 のままなら、そこで止めて
+   報告すること。**`/workspace` の古い版で回してはいけない。
 
 3. **初期重みを取り、`config.json` と `model.safetensors` が root にあることを確かめる。**
 
    ```bash
+   hf auth login    # 先にこれ。read 権限のトークンを貼る
    hf download siruku6/pi05_full_runpod --local-dir /workspace/rp3000
    ls /workspace/rp3000/config.json /workspace/rp3000/model.safetensors
    ```
+
+   **`hf auth login` を飛ばすと `Error: Model 'siruku6/pi05_full_runpod' not found.` になる**
+   （2026-08-28 に踏んだ）。このリポジトリは非公開で、**HF は権限の無いアクセスに対して
+   存在そのものを隠す**ので、「無い」と言われても名前の間違いではない。
+   `HF_HOME=/workspace/hf_home` は Volume 上なので、**一度入れれば Pod を止めても残る。**
+   同じログインが gemma ライセンス（7 節）にも効く。
 
    **`--init-from` に渡すディレクトリの直下にこの 2 つが要る。**
    無いと `--init-from` の検査で落ちる（1 階層浅い／深い間違いが起きやすい）。
@@ -204,8 +251,11 @@ hf upload siruku6/<リポジトリ名> \
 4. **場所と CPU を数える。** `--num-workers` は `nproc` の半分か 16 の小さい方。
 
    ```bash
-   df -h /workspace && nproc
+   du -sh /workspace/* | sort -h && nproc
    ```
+
+   **`df` の空きは見ないこと**（Network Volume ではクラスタ全体の数字が出る。上の
+   「ディスク」の節）。**枠の大きさは RunPod の Storage → Network Volumes で見る。**
 
 5. **学習を始める。`tmux` の中で回すこと**（切れても続く）。
 
