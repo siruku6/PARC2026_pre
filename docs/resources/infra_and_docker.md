@@ -237,6 +237,16 @@ CPU 描画（osmesa）だけなので GPU が要らず、GPU マシン側の学�
 もので、RunPod の Pod をこのイメージで作る。**タグを記録していなかったので
 2026-08-27 に書き足した。**
 
+**タグは 2 つあり、使えるのは `v2` だけである。**
+
+| タグ | push | CMD | `openssh-server`・`runpod_ssh_start.sh` |
+|---|---|---|---|
+| `v1` | 2026-08-13 17:40 JST | `python /workspace/train_pi05.py --smoke-test` | **無し。使えない** |
+| **`v2`** | **2026-08-14 07:27 JST** | `python /opt/pi05/train_pi05.py --smoke-test` | 有り |
+
+**`v1` で Pod を作ると起動を繰り返して入れなくなる**——
+[../knowledge/13](../knowledge/13_runpod_operations.md) ⑥。
+
 **作り直す必要は無い。**8/14 以降に `Dockerfile.pi05` へ入った変更は量子化の配線だけ
 （`bitsandbytes==0.49.2`・`torchao==0.17.0` の追加と `experiments/` の COPY）であり、
 **量子化の 5 候補はすべて廃止した。**現在の `train_pi05.py` は

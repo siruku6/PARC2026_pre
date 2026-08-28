@@ -54,6 +54,17 @@ AdamW の状態だけで 33 GB 必要になるので 20 GB には載らない。
 | **A（推奨）: 8/14 のイメージを使う** | **`sirukufarios/parc2026-train-pi05`** で Pod を作る | **15 分** | **こちらでよい。**作り直す必要は無い（下） |
 | **B（確実）: 公式テンプレート ＋ `runpod_setup.sh`** | 「RunPod PyTorch」テンプレートで Pod を作り、`bash runpod_setup.sh` を 1 回流す | **35 分**（pip の時間） | イメージが無い／名前が分からないとき |
 
+**タグは `v2` にすること。** Docker Hub には `v1`（08-13 17:40 JST push）と
+`v2`（08-14 07:27 JST push）があり、**`v1` には `openssh-server` も
+`runpod_ssh_start.sh` も入っていない。** さらに `v1` の CMD は
+`python /workspace/train_pi05.py --smoke-test` で、`/workspace` は Volume Disk が
+覆うのでこのファイルは見えない。**`v1` を選んで起動コマンドを空にすると、同じ
+エラーを延々と吐いて再起動を繰り返し、sshd も立たないので入れなくなる**
+（2026-08-28 に踏んだ。[../knowledge/13](../knowledge/13_runpod_operations.md) ⑥）。
+**`v2` でも Pod の「Container Start Command」に
+`bash /opt/pi05/runpod_ssh_start.sh` を入れること**（空だと `--smoke-test` が
+勝手に動き出す）。
+
 **古いイメージのままでよい。**8/14 以降に `Dockerfile.pi05` へ入った変更は量子化の
 配線だけ（`bitsandbytes`・`torchao` の追加と `experiments/` の COPY）で、量子化の
 5 候補はすべて廃止した。現在の `train_pi05.py` は `from experiments import quantization`

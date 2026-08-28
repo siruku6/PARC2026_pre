@@ -146,7 +146,7 @@ from train import (  # noqa: E402
 
 # 量子化候補（C1〜C3）の窓口。**このファイルは import して呼ぶだけで、
 # 何をどう低精度にするかは一切持たない**（experiments/quantization/__init__.py）。
-from experiments import quantization  # noqa: E402
+from experiments import geometry, quantization  # noqa: E402
 
 _BASE_MODEL_REPO = "lerobot/pi05_libero_base"
 _BASE_MODEL_REVISION = "a217bfd3b14673cf2ce597e69997ab21866438dd"
@@ -235,6 +235,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--dtype", type=str, default="bfloat16",
                         choices=("bfloat16", "float32"))
     quantization.add_arguments(parser)
+    geometry.add_arguments(parser)
     parser.add_argument("--camera-viewpoint-augment", action="store_true",
                         help="Tier 1（Camera Viewpoints 対策）の安価な近似。LeRobot の "
                              "image_transforms を有効化し、既定 6 種に加えて crop+zoom "
@@ -315,12 +316,24 @@ def _resolve_init_from(path: Path) -> Path:
     return resolved
 
 
+def _command_head(args: argparse.Namespace) -> list[str]:
+    """学習コマンドの先頭を決める。**ラッパーは 1 つしか選べない。**
+
+    量子化と幾何の接ぎ木は、どちらも「候補を import してから lerobot-train の
+    main() を呼ぶ」ラッパーを使う。同時には選べないので、両方が選ばれていたら
+    `geometry.validate` が先に止める（この関数に届く時点で片方以下である）。
+    """
+    if geometry.selected(args):
+        return geometry.command_head(args)
+    return quantization.command_head(args)
+
+
 def _build_command(
     args: argparse.Namespace, base_model: Path,
     episode_indices: list[int] | None, output_dir: Path,
 ) -> list[str]:
     command = [
-        *quantization.command_head(args),
+        *_command_head(args),
         "--policy.type=pi05",
         f"--policy.pretrained_path={base_model}",
         f"--policy.normalization_mapping={_NORMALIZATION_MAPPING}",
@@ -356,6 +369,7 @@ def _build_command(
     if episode_indices is not None:
         command.append(f"--dataset.episodes=[{','.join(map(str, episode_indices))}]")
     command += quantization.extra_arguments(args)
+    command += geometry.extra_arguments(args)
     if args.camera_viewpoint_augment:
         command += [
             "--dataset.image_transforms.enable=true",
@@ -375,7 +389,7 @@ def _build_resume_command(args: argparse.Namespace, output_dir: Path,
     # 前回選んだ設定がそのまま復元される。ただし --optimizer-mode 等は呼び出しのたびに
     # 明示し直すこと（train_pi05.py 自体は前回どのモードだったかを覚えていない）。
     return [
-        *quantization.command_head(args),
+        *_command_head(args),
         "--resume=true",
         f"--config_path={resume_from / 'pretrained_model' / 'train_config.json'}",
         f"--output_dir={output_dir}",
@@ -462,6 +476,8 @@ def main() -> None:
     args = _parse_args()
     quantization.set_environment(args)
     quantization.validate(args)
+    geometry.set_environment(args)
+    geometry.validate(args)
 
     output_dir: Path = (args.output_root / args.run_name).resolve()
 
@@ -542,7 +558,7 @@ def main() -> None:
             f"freeze_vision_encoder={args.freeze_vision_encoder}、"
             f"train_expert_only={args.train_expert_only}、"
             f"dtype={args.dtype}、grad_ckpt={args.gradient_checkpointing}、"
-            f"{quantization.describe(args)}）"
+            f"{quantization.describe(args)}、{geometry.describe(args)}）"
         )
         if args.smoke_test:
             print("[train_pi05] **smoke test** — 20 ステップで OOM しないか・"

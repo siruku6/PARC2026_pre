@@ -241,12 +241,16 @@ HF_HOME=/workspace/hf_home
 (`/hf_home`・`HOME=/tmp`)はRunPod側では要らなくなる(Podは既定でrootのまま
 動くため)が、入っていても害はないのでそのまま流用できる。
 
+**Docker Hubには`v1`と`v2`が既にある**(中身の違いは5.2の1番)。**新しく作るなら
+`v3`以降にして、既存のタグに上書きしない**——上書きすると、どのPodがどの中身で
+動いているのかが後から辿れなくなる。
+
 ```bash
-docker build -t <Docker Hubのユーザー名>/parc2026-train-pi05:v1 \
+docker build -t <Docker Hubのユーザー名>/parc2026-train-pi05:v3 \
     -f solution/train/Dockerfile.pi05 solution/train
 
 docker login   # 初回だけ。Docker Hubのアカウントが要る(無料で作れる)
-docker push <Docker Hubのユーザー名>/parc2026-train-pi05:v1
+docker push <Docker Hubのユーザー名>/parc2026-train-pi05:v3
 ```
 
 **RunPodはlinux/amd64のイメージを前提にしている。** このマシンがx86_64
@@ -289,25 +293,58 @@ cat ~/.ssh/id_ed25519.pub
 
 ### 5.2 テンプレートとPodを作る
 
-1. RunPodの「Templates」→「New Template」で、4節でpushしたイメージ名
-   (`<ユーザー名>/parc2026-train-pi05:v1`)を指定する。
+1. RunPodの「Templates」→「New Template」で、4節でpushしたイメージ名を指定する。
+   **タグは`v2`にすること——`sirukufarios/parc2026-train-pi05:v2`。**
+
+   | タグ | pushした時刻 | 中身 | 使えるか |
+   |---|---|---|---|
+   | `v1` | 08-13 17:40 JST | CMDが`python /workspace/train_pi05.py --smoke-test`。**`openssh-server`も`runpod_ssh_start.sh`も入っていない** | **使えない**(下の5番) |
+   | **`v2`** | **08-14 07:27 JST** | CMDが`python /opt/pi05/train_pi05.py --smoke-test`。`openssh-server`・`openssh-sftp-server`・`tmux`と`/opt/pi05/runpod_ssh_start.sh`が入っている | **こちら** |
+
+   **`v1`は`Dockerfile.pi05`の最初のコミット(08-13 17:01)から作ったもので、
+   その後の2つの修正——CMDのパスを`/opt/pi05/`へ直したもの(18:00)と、
+   フルSSHを入れたもの(19:07)——がどちらも入っていない。** どちらの修正も
+   `v2`には入っている。
 2. **Container Diskは20GB程度、Volume Diskは150GB**にする(3節)。
 3. **「Environment Variables」に`OUTPUT_ROOT=/workspace/out`と
    `HF_HOME=/workspace/hf_home`を追加する**(3節)。
 4. **「Expose TCP Ports」に`22`を追加する。** これが無いとRunPod側が
    SSH用のポートを割り当てないので、5.3のフルSSHが使えない。
-5. **Container Start Commandを次で上書きする。**
+5. **Container Start Commandを次で上書きする。空のままにしてはいけない。**
 
    ```
    bash /opt/pi05/runpod_ssh_start.sh
    ```
 
-   空のままだとイメージの既定CMD(`python /opt/pi05/train_pi05.py --smoke-test`)が
-   デプロイ直後に動き出してしまうが、**7節のライセンス同意より前に初期重みの
-   取得を試みて確実に失敗する。** 上のスクリプトは
+   **`v1`で、しかもこの欄を空にすると、Podはこの1行を延々と吐き続ける状態になる**
+   (2026-08-28に実際に踏んだ)。
+
+   ```
+   python: can't open file '/workspace/train_pi05.py': [Errno 2] No such file or directory
+   ```
+
+   **理由が3段に重なっている。**
+
+   | 段 | 何が起きるか |
+   |---|---|
+   | 1 | 空にするとイメージのCMDが動く。**`v1`のCMDは`python /workspace/train_pi05.py --smoke-test`である**(上の1番) |
+   | 2 | `/workspace`にはVolume Diskがマウントで上書きされるので(3節「スクリプト自体の置き場所は別問題」)、**イメージに焼き込んだ`/workspace/train_pi05.py`は隠れて見えない。** よってCMDは必ず失敗する |
+   | 3 | **落ちたコンテナはRunPodが作り直す。** だから同じ1行が延々と出る。**sshdも立たないので、SSHでは入れない**——直すにはWebコンソールから起動コマンドを入れ直すしかない |
+
+   **`v1`ではこの欄に`bash /opt/pi05/runpod_ssh_start.sh`と書いても直らない。**
+   そのスクリプトは`v1`に入っていないので、エラーの文言が変わるだけで
+   同じ繰り返しになる。**`v1`を選んでしまったときは、イメージを`v2`にした
+   Podを作り直す。**
+
+   **`v2`でも、この欄は埋めること。** `v2`のCMDは
+   `python /opt/pi05/train_pi05.py --smoke-test`で、こちらはファイルが見えるので
+   動き出してしまい、**7節のライセンス同意より前に初期重みの取得を試みて
+   確実に失敗する。** 上のスクリプトは
    [runpod_ssh_start.sh](../../solution/train/runpod_ssh_start.sh)で、
    **sshdを起動してから`sleep infinity`で待つ**だけなので、学習は自分の手で
-   始められる。
+   始められる。**RunPod自身も、SSHで使うなら`sleep infinity`のような遊ばせておく
+   ジョブを入れることと書いている**(出典:
+   [Manage Pods](https://docs.runpod.io/pods/manage-pods) 2026-08-28に読んだ)。
 6. 「Deploy」→「GPU Pod」で、作ったテンプレートを選び、GPUは
    **A100 80GBまたはH100 80GB(Secure Cloud)**を選ぶ。
 

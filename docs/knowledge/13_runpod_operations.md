@@ -2,8 +2,10 @@
 
 **手順は [../howto/06_runpod_pi05.md](../howto/06_runpod_pi05.md) にある。**
 ここに置くのは、**手順を追うだけでは分からなかった性質**である。
-どれも 2026-08-14 に A100 80GB PCIe を 1 台借りて 3,000 ステップ回したときに
+①〜⑤ は 2026-08-14 に A100 80GB PCIe を 1 台借りて 3,000 ステップ回したときに
 実際に踏んだもので、**課金・ストレージ・見張りの 3 つ**に分かれる。
+**⑥⑦ は 2026-08-28 に、お試し学習用の Pod を作ったときに踏んだ**もので、
+どちらも **Pod を作る画面と止める操作**の性質である。
 
 ## ① 「何日借りる」という設定は無い。止まるのは残高が尽きたとき
 
@@ -115,6 +117,61 @@ Basic SSH でも `scp` は通らない。**`22` を公開し忘れると、`scp`
 [Storage types](https://docs.runpod.io/pods/storage/types) の
 "Editing a running Pod resets it completely"）。**途中でディスクを増やす手は、
 学習を殺す手でもある。**間引きで足りるなら触らない。
+
+## ⑥ Docker Hub の同じ名前のイメージに、SSH が入っていない版が混じっている
+
+**`sirukufarios/parc2026-train-pi05` の `v1` と `v2` は、中身が違う。**
+`v1` を選んで起動コマンドを空にすると、Pod は同じ 1 行を延々と吐き続ける。
+
+```
+python: can't open file '/workspace/train_pi05.py': [Errno 2] No such file or directory
+```
+
+| タグ | push した時刻 | CMD | `openssh-server` と `runpod_ssh_start.sh` |
+|---|---|---|---|
+| `v1` | 08-13 17:40 JST | `python /workspace/train_pi05.py --smoke-test` | **入っていない** |
+| **`v2`** | **08-14 07:27 JST** | `python /opt/pi05/train_pi05.py --smoke-test` | 入っている |
+
+**`v1` は `Dockerfile.pi05` の最初のコミット（08-13 17:01）から作ったもので、
+その後の 2 つの修正——CMD のパスを直したもの（18:00）とフル SSH を入れたもの
+（19:07）——が入っていない。** 起動が繰り返す仕組みは 3 段である。
+
+| 段 | 何が起きるか |
+|---|---|
+| 1 | 起動コマンドが空なので、イメージの CMD が動く |
+| 2 | `/workspace` は Volume Disk がマウントで覆うので、**焼き込んだ `/workspace/train_pi05.py` は隠れて見えない**（③ の性質の裏返し） |
+| 3 | **落ちたコンテナは RunPod が作り直す**ので、同じ 1 行が延々と出る |
+
+**いちばん効くのは 3 段目である。** 起動コマンドが落ちると `sshd` も立たないので、
+**SSH では中へ入れない。**直せる場所は Web コンソールの起動コマンドの欄だけになる。
+**そして `v1` では、その欄に `bash /opt/pi05/runpod_ssh_start.sh` と書いても直らない**
+——そのスクリプトが `v1` に入っていないので、文言が変わるだけで同じ繰り返しになる。
+**`v1` を選んでしまったら、`v2` の Pod を作り直すしかない。**
+
+**教訓は、イメージの名前だけを記録してタグを記録しなかったことである。**
+[../resources/infra_and_docker.md](../resources/infra_and_docker.md) には
+「2026-08-14 に push」とだけ書いてあり、それは `v2` を指していたが、
+[../howto/06_runpod_pi05.md](../howto/06_runpod_pi05.md) の手順には `v1` と
+書いてあった。**手順は 2026-08-28 に `v2` へ直した。**
+
+## ⑦ Stop は GPU を手放す操作である。同じ GPU が戻る保証は無い
+
+**「あとで Start すれば続きから」ではない。** Stop すると GPU は解放され、
+**Start のときに空いていなければ GPU 0 枚の Pod として起動する**
+（`/workspace` と環境は戻る）。出典:
+[Manage Pods](https://docs.runpod.io/pods/manage-pods)
+（"Stopping a Pod releases the GPU"・"You may be allocated zero GPUs if capacity
+has changed."、2026-08-28 に読んだ）。**2026-08-28 に実際に取られた。**
+
+| したいこと | Stop で足りるか |
+|---|---|
+| 課金を止める | **足りない。**GPU 代は止まるが、**Volume Disk の保管料は Stop 中も続く** |
+| 設定を直して続ける | **危ない。**GPU を手放すので、直す前に取られる。**Pod を作り直す前提で動くほうが速い** |
+| GPU の種類を変える | **できない。**Pod の GPU は後から変えられないので、作り直しになる |
+
+**既存の Pod の GPU が取られた後にできるのは、空くのを待つか、Terminate して
+作り直すかの 2 つだけである。** Network Volume を付けている場合、作り直す Pod は
+**同じデータセンタでしか作れない**（② の性質）ので、**選べる GPU もその中に限られる。**
 
 ## 測り直すコマンド
 
