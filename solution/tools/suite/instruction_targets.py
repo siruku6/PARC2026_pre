@@ -26,13 +26,13 @@ the plate` である。**同じタスクなのに綴りが違う。**
         --output outputs/instruction_norm/pairs.json               # 対応表
 
 **寄せ先は 2 つの独立な資料が一致することで確かめている。** 1 つは
-`task_classification.json` の変種名から素のタスク名を取り出したもの
+`task_classification.json` の variant 名から素のタスク名を取り出したもの
 （`make_holdout_split.py` が配布ノートブックと突き合わせて自己検査している）、
 もう 1 つは学習データのエピソードのメタデータ（`--episodes-parquet`）である。
 **40 種にならなければ、その場で止まる。**
 
 Reads:
-  - <libero-plus>/libero/libero/benchmark/task_classification.json（変種 10,030 件）
+  - <libero-plus>/libero/libero/benchmark/task_classification.json（variant 10,030 件）
   - <libero-plus>/libero/libero/bddl_files/**/*.bddl（`(:language ...)` が渡る文）
   - <episodes-parquet>（任意。あれば寄せ先を突き合わせる）
 Generates:
@@ -91,9 +91,9 @@ def _bddl_index(libero_plus: Path) -> dict[str, Path]:
 
 
 def _resolve_bddl(index: dict[str, Path], variant_name: str) -> Path | None:
-    """変種の名前から、実際に読まれる BDDL を割り出す。
+    """variant の名前から、実際に読まれる BDDL を割り出す。
 
-    **変種名と BDDL の名前は一致しない。** 言い換えの変種は
+    **variant 名と BDDL の名前は一致しない。** 言い換えの variant は
     `..._language_1_view_0_0_100_0_0_initstate_0` という名前だが、BDDL は
     `..._language_1.bddl` である（`_view_...` と `_initstate_...` は
     カメラと初期姿勢の指定で、BDDL を作り分けない）。
@@ -138,18 +138,18 @@ def language_of(path: Path) -> str | None:
 
 
 def build_pairs(libero_plus: Path) -> list[dict]:
-    """変種 10,030 件それぞれについて「渡る文」と「寄せ先」を並べる。
+    """variant 10,030 件それぞれについて「渡る文」と「寄せ先」を並べる。
 
     Returns
     -------
     pairs : list[dict]
         `delivered`（評価が渡す文）・`target`（学習データの書き方）・
-        `category`（摂動の種類）・`suite`・`name`（変種名）を持つ。
+        `category`（摂動の種類）・`suite`・`name`（variant 名）を持つ。
 
     Raises
     ------
     RuntimeError
-        BDDL が見つからない変種がある、または `(:language ...)` が無いとき。
+        BDDL が見つからない variant がある、または `(:language ...)` が無いとき。
         **黙って数を減らさない** —— 減ったまま精度を測ると良く見える。
     """
     classification = libero_plus / "libero/libero/benchmark/task_classification.json"
@@ -178,7 +178,7 @@ def build_pairs(libero_plus: Path) -> list[dict]:
 
     if unresolved:
         raise RuntimeError(
-            f"BDDL を割り出せない変種が {len(unresolved)} 件あります"
+            f"BDDL を割り出せない variant が {len(unresolved)} 件あります"
             f"（例 {unresolved[0]}）。_SUFFIX_PATTERNS が LIBERO-plus の版と"
             "合っていません"
         )
@@ -232,7 +232,7 @@ def _print_summary(pairs: list[dict], targets: tuple[str, ...]) -> None:
         1 for text, target in delivered.items() if " ".join(text.lower().split()) == target
     )
 
-    print(f"[targets] 変種            {len(pairs)} 件")
+    print(f"[targets] variant         {len(pairs)} 件")
     print(f"[targets] 寄せ先          {len(targets)} 種（学習データの指示文）")
     print(f"[targets] 渡ってくる文    {len(delivered)} 種")
     print(f"[targets]   うち寄せ先と一致（小文字化のみ） {already} 種")
@@ -240,7 +240,7 @@ def _print_summary(pairs: list[dict], targets: tuple[str, ...]) -> None:
     print(f"[targets] 同じ文が 2 つの寄せ先を持つ       {len(clashes)} 種")
     for text, conflict in list(clashes.items())[:3]:
         print(f"[targets]   {text!r} -> {conflict}")
-    print("[targets] 摂動の種類ごとの変種の数")
+    print("[targets] 摂動の種類ごとの variant の数")
     for category, count in by_category.most_common():
         texts = {pair["delivered"] for pair in pairs if pair["category"] == category}
         print(f"[targets]   {category:<22} {count:>5} 件 / 文 {len(texts):>5} 種")

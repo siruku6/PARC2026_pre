@@ -68,7 +68,7 @@ _UPLOAD_FILES: tuple[tuple[str, str], ...] = (
     ),
     (
         "solution/tools/eval/summarize_rollout_videos.py",
-        "撮れた mp4 を見るべき順に並べ、コマ並べ画像にする。run() が呼ぶ。",
+        "作れた mp4 を見るべき順に並べ、コマ並べ画像にする。run() が呼ぶ。",
     ),
 )
 

@@ -59,8 +59,10 @@ Language Instructions  ..._place_it_on_the_plate_language_1_view_0_0_100_0_0_ini
 
 ### 接尾辞は末尾で見る
 
+**variant** = 元のタスク 1 つに摂動を 1 つ当てたもの（`.bddl` 1 個）。初期配置は元タスクのものを共有するので、**1 つの variant から最大 50 エピソード作れる。**
+
 `table` と `tb` を「`_table_` を含むか」で分けると **636 / 440** になり、
-正しい 613 / 463 と **23 件ずれる。** 名前の途中に `table` を含む `_tb_N` の変種があるためである。
+正しい 613 / 463 と **23 件ずれる。** 名前の途中に `table` を含む `_tb_N` の variant があるためである。
 
 ```
 pick_up_the_black_bowl_from_table_center_and_place_it_on_the_plate_tb_1

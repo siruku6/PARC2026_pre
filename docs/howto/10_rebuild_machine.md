@@ -353,7 +353,7 @@ bash solution/tools/eval/run_docker_eval.sh --check
 | 量子化・compile の実験チェックポイント 5 本 | 55 GB | 量子化の候補 5 つはすべて撤退済み。`-53%` は `torch.compile` の効果だと対照実験で確定していて、float8 は速度もメモリも動かさなかった |
 | `work/train/pi05_full_local` の `training_state` | 2.1 GB | 24000 ステップから学習を再開する予定が無い。重み側は HF にある |
 | 評価の mp4 470 本 | 1.26 GB | 数字は log・json・csv 側にあり、そちらは tar に入っている |
-| `work/scripted` の撮影データ | 200 MB | `record_tier2_robot_init.sh` などで撮り直せる |
+| `work/scripted` で作ったエピソード | 200 MB | `record_tier2_robot_init.sh` などで作り直せる |
 | docker image 7 本 | 87 GB | Dockerfile が git 管理下。**そもそも CPU が変わるので作り直しになる** |
 | `~/.cache/huggingface` | 29 GB | 5 節のとおり HF から取り直す |
 | `work/LIBERO-plus`・`work/lerobot-src`・`.venv`・`.mypy_cache`・`~/.vscode-server` | 2.4 GB | すべて生成物 |

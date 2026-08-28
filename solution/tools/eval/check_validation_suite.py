@@ -93,7 +93,7 @@ def _bddl_path_for_collision(bddl_path: Path, patched: bool) -> Path:
     """衝突判定が開く bddl を返す。
 
     出典: `pipeline/environment.py` の `parse_obj_of_interest`。
-    **配布キットのままだと `_view_` を切らずに開くため、変種名の実体が
+    **配布キットのままだと `_view_` を切らずに開くため、variant 名の実体が
     無ければここで `FileNotFoundError` になる。** 手順 5-1 のパッチを当てると
     `_view_` を切るようになる。
     """
@@ -113,7 +113,7 @@ def _init_states_path(row: dict, init_root: Path, patched: bool) -> Path:
     摂動の初期状態は `libero_newobj/<suite>/` にある）。
 
     **パッチ前は** `<task_id>.pruned_init` から `_SUFFIX_RE` で接尾辞を剥がすので、
-    `_view_` を含む変種では存在しない名前になる。ここを patched と
+    `_view_` を含む variant では存在しない名前になる。ここを patched と
     無関係に CSV 列で計算してしまうと、「未パッチの世界」を再現できない。
     """
     if patched:
@@ -140,12 +140,12 @@ def _count_bddl_objects(bddl_path: Path) -> int | None:
 
 def _check_init_states_origin(row: dict, bddl_root: Path, init_root: Path,
                               patched: bool) -> str | None:
-    """初期状態が、その変種のために作られたものかを確かめる。
+    """初期状態が、その variant のために作られたものかを確かめる。
 
     **見るのは 2 つ。順番に意味がある。**
 
     1. **専用の初期状態が実在するのに使っていないか。** 物体を増やす摂動
-       （`_add_` / `_level`）は `libero_newobj/<suite>/` に変種名そのものの
+       （`_add_` / `_level`）は `libero_newobj/<suite>/` に variant 名そのものの
        ファイルを持つ。元タスクの状態で代用すると、物体数が違えば落ち、
        **同じなら落ちずに摂動だけが消える**（後者のほうが厄介である）。
     2. **物体の数が合っているか。** 1 に当てはまらない摂動でも、
@@ -166,7 +166,7 @@ def _check_init_states_origin(row: dict, bddl_root: Path, init_root: Path,
         return None
     name = row.get("init_states_file") or ""
     if "/" in name:
-        return None   # 変種そのものの初期状態を指しているので合っている
+        return None   # variant そのものの初期状態を指しているので合っている
 
     dedicated = f"{row['task_id']}{_INIT_SUFFIX}"
     if (init_root / _NEWOBJ_DIR / row["suite"] / dedicated).is_file():

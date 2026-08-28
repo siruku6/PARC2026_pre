@@ -75,7 +75,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _base_task(task_id: str) -> str:
-    """変種名から元タスク名を取る。`.bddl` は変種名より前の部分にしか無い。"""
+    """variant 名から元タスク名を取る。`.bddl` は variant 名より前の部分にしか無い。"""
     return _VARIANT_RE.sub("", task_id)
 
 

@@ -13,7 +13,7 @@
 - **同じ元タスクの中でのカテゴリ差** … 摂動そのものの難しさ
 - **手本の長さとの関係** … `MAX_STEPS=300` に原理的に収まるか
 
-元タスクの識別には CSV の `init_states_file` を使う（変種名を切り出す必要がない。
+元タスクの識別には CSV の `init_states_file` を使う（variant 名を切り出す必要がない。
 1 タスク 1 ファイルで対応している）。手本の長さは `--demo-lengths` の JSON から引く。
 
     python3 solution/tools/analysis/decompose_failures.py outputs/0811_101824_base_n5_ep1_max300
@@ -98,7 +98,7 @@ def _base_task(row: dict[str, str]) -> str:
 def _instruction_of(row: dict[str, str]) -> str:
     """元タスク名から、学習データ側の指示文を組み立てる。
 
-    **CSV の `instruction` 列は使えない。** あれは変種が実際に受け取る文で、
+    **CSV の `instruction` 列は使えない。** あれは variant が実際に受け取る文で、
     `Language Instructions` では言い換えられており、他のカテゴリでも
     綴りが学習データと違う（`Pick the akita black bowl …` 対
     `pick up the black bowl …`）。**元タスク名のほうが学習データと一致する。**
@@ -147,7 +147,7 @@ def _report_within_task(rows: list[dict[str, str]],
     元タスクごとに「そのタスクの平均」を引いた値を、カテゴリごとに平均する。
     **マイナスなら、その摂動はタスクの平均より難しい。**
 
-    **変種が 1 本だけの元タスクは使えない。** そのタスクの平均がその 1 本自身
+    **variant が 1 本だけの元タスクは使えない。** そのタスクの平均がその 1 本自身
     なので、引くと必ず 0 になる。**混ぜると「差が無い」と読めてしまう**
     （物体が増える摂動は全件がこれに当たる）。
     """

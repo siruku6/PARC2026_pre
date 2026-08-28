@@ -30,9 +30,9 @@
 | `tools/build/fetch_base_weights.sh` | **素の重み（0.1409 の構成）を revision 固定で取り寄せる** |
 | `tools/run_gpu_eval.sh` | 同じことをホスト直で。**LeRobot 入りの venv がある場合だけ** |
 | `tools/summarize_gpu_eval.py` | 上の結果を集計する。件数・結末・**ゴール到達と衝突の内訳**・動き・カテゴリ別・衝突の偏り |
-| `tools/patch_kit_for_variants.py` | 配布キットを、変種で測れて結末と映像が残る状態に書き換える |
-| `tools/rollout_recorder.py` | ロールアウトを mp4 に撮り、`[結果]` 行を組み立てる。**上のパッチがキットへ複製して使う** |
-| `tools/summarize_rollout_videos.py` | 撮れた mp4 を、見るべき順に並べてコマ並べ画像にする |
+| `tools/patch_kit_for_variants.py` | 配布キットを、variant で測れて結末と映像が残る状態に書き換える |
+| `tools/rollout_recorder.py` | ロールアウトを mp4 で録画し、`[結果]` 行を組み立てる。**上のパッチがキットへ複製して使う** |
+| `tools/summarize_rollout_videos.py` | 作れた mp4 を、見るべき順に並べてコマ並べ画像にする |
 
 `tools/` の Python スクリプトは**どのディレクトリから実行してもよい**。入出力は
 スクリプト自身の位置から求めたリポジトリルート基準で解決する。
@@ -288,7 +288,7 @@ PARC_BLEND_STEPS=3 bash solution/tools/eval/run_local_eval.sh
 
 **録画するのは採点ハーネス側で、提出物には手を入れていない。**
 採点環境はファイルを返さないため（返るのは標準出力のログだけ）、提出物側に
-仕込んでも映像は持ち帰れない。撮れるのは手元と Colab で回した回である。
+仕込んでも映像は持ち帰れない。作れるのは手元と Colab で回した回である。
 
 ```mermaid
 flowchart LR
@@ -336,7 +336,7 @@ python3 solution/tools/eval/summarize_rollout_videos.py /out/videos
 | 1 ステップの上乗せ | **0.33 ms**（本番の `env.step` 39 ms に対して 0.8%） |
 | メモリの山 | 31 MB（300 ステップ・2 カメラ。等倍で貯めて書き出し時に拡大する） |
 | 書き出し | 1 エピソードにつき約 2 秒 |
-| 84 件を全部撮った場合 | 90 分の測定に **+2.9 分** |
+| 84 件を全部作った場合 | 90 分の測定に **+2.9 分** |
 
 **録画が壊れても評価は続く。** `cv2` が無い、画像のキーが違う、書き込めない —
 どの場合も 1 度だけ警告を出して以降は諦める。**90 分の測定を録画のために

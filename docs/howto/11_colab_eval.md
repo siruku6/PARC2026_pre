@@ -206,7 +206,7 @@ Drive への退避まで通る。前の関数が作ったものが無ければ�
 | `CHUNKS` | `3` | 36 件なら 1 塊 12 件。落ちるなら増やす |
 | `PER_CELL` | `3` | 84 件を生成するときだけ効く。**CSV を上げているときは使われない** |
 | `POLICY_ENV` | 推論の設定値 5 つ | **π0.5 は手元の 36 件評価と同じ 5 つを明示する。**値は `policy_server.py` の既定と同じなので挙動は変わらないが、保存先の名前と記録に残る |
-| `RECORD_DIR` / `RECORD_WHICH` | `/content/videos` / `failures` | 録画。`None` で撮らない |
+| `RECORD_DIR` / `RECORD_WHICH` | `/content/videos` / `failures` | 録画。`None` で作らない |
 
 **`ce.run()` は使う値を全部画面に出す。** 意図と違えばそこで止められる。
 

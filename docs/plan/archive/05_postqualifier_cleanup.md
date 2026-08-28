@@ -194,7 +194,7 @@ huggingface_hub.errors.BadRequestError:
 **実際に消したのは未提出の 2 本だけ**（3.12.0・3.13.0＝18.76 GB）で、
 畳んだことで blend4 の 9.38 GB も一緒に落ちた。
 
-台本は `work/admin/cleanup_hf.py` にある。**既定では何もせず、何をするかだけ表示する。**
+scripted policy は `work/admin/cleanup_hf.py` にある。**既定では何もせず、何をするかだけ表示する。**
 
 ```bash
 .venv/bin/python work/admin/cleanup_hf.py              # 表示だけ
@@ -261,7 +261,7 @@ CONFIRM=yes .venv/bin/python work/admin/cleanup_hf.py  # 実行
 | 上限 100 GB までの余裕 | 約 3 GB | 約 33 GB | **約 62 GB** |
 
 **`rm` はこちらから実行できない**（`docs/knowledge/12_workbench_accidents.md`）。
-5〜10 は台本を用意してユーザーが流す。
+5〜10 は scripted policy を用意してユーザーが流す。
 
 ## 5. まだ決まっていないこと
 
@@ -289,7 +289,7 @@ CONFIRM=yes .venv/bin/python work/admin/cleanup_hf.py  # 実行
 
 | 手 | 空く分 | 確度 | 判断 |
 |---|---|---|---|
-| SmolVLA の HF キャッシュ 2 本 | **2.74 GB** | 高い | **3.2 に書いてあったのに台本から漏れていた。**`work/admin/cleanup_extra.sh` で拾う |
+| SmolVLA の HF キャッシュ 2 本 | **2.74 GB** | 高い | **3.2 に書いてあったのに scripted policy から漏れていた。**`work/admin/cleanup_extra.sh` で拾う |
 | `datasets/parquet` と pip のキャッシュ | **1.47 GB** | 高い | 同上。どちらも使うときに作り直される |
 | `docker builder prune -a --force` | 申告 9.5 GB | **低い**。`--force` は申告どおりに空かなかった | 次に学習イメージを組むとき、キャッシュ無しで丸ごと組み直しになる |
 | 学習イメージ 4 本をまとめて消す | 9.49 GB | 高い（実測済み） | **やらない。**本戦の学習と評価にそのまま使う（2 章） |

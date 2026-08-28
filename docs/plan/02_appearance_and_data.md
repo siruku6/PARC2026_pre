@@ -40,7 +40,7 @@
 ## 切り分け方 — 見た目の分布を測る
 
 **方策を動かさずに測れる。** 環境を作って初期状態を流し込み、10 ステップだけ進めて
-画像を撮り、統計を取るだけである。84 件で数分。
+画像を描き、統計を取るだけである。84 件で数分。
 
 ### 道具の仕様（未実装）
 
@@ -53,7 +53,7 @@ solution/tools/analysis/measure_appearance.py --csv compe/val/VAL_TASKS.csv \
 |---|---|
 | 読むもの | 検証用スイートの CSV（`task_id` / `suite` / `init_states_file` / `category`） |
 | 環境の作り方 | **評価と同じ手順**（`register_t1` → `create_env` → 初期状態 → ゼロ入力 10 ステップ） |
-| 撮るもの | `agentview_image` と `robot0_eye_in_hand_image`、128×128 |
+| 作るもの | `agentview_image` と `robot0_eye_in_hand_image`、128×128 |
 | 出す統計 | 平均・標準偏差・5/50/95 パーセンタイル・RGB ごとの平均・**対象物と背景の差** |
 | 出力 | 1 行 1 タスクの CSV と、接尾辞（`light`/`table`/`tb`）別の要約 |
 | 突き合わせる相手 | 学習データの `stats/observation.images.front/*`（parquet。**描画不要**） |

@@ -14,7 +14,7 @@
 
     # 選び直す（**後から変えられる**）
     ... --per-task 2                      # 指示文ごとの件数を増やす
-    ... --offset 1                        # 同じ指示文から別の変種を選ぶ
+    ... --offset 1                        # 同じ指示文から別の variant を選ぶ
     ... --categories 'Light Conditions'   # カテゴリを絞る
     ... --dry-run                          # 書かずに内容だけ見る
 
@@ -26,12 +26,12 @@
 | | |
 |---|---|
 | **言える** | その指示文には、**学習が 1 度も引かなかった実演があり、しかもその見た目は学習に使った実演のどれとも違う** |
-| **言えない** | 選んだ変種そのものが学習に入っていないこと |
+| **言えない** | 選んだ variant そのものが学習に入っていないこと |
 
-**変種とエピソードは対応付けられない。** 変種は 10,030 件、データセットの実演は
+**variant とエピソードは対応付けられない。** variant は 10,030 件、データセットの実演は
 14,347 本で、指示文ごとの比は 0.58〜2.95（中央 1.45）と整数にならない。
-データセットは変種の一部を不揃いな本数で収録している。**だから
-「この変種は学習に使っていない」とは言えない。** 強めるには、変種の初期画面を
+データセットは variant の一部を不揃いな本数で収録している。**だから
+「この variant は学習に使っていない」とは言えない。** 強めるには、variant の初期画面を
 描いて明るさを測り、`.meta.json` の `seen_brightness` の外側にあるものだけを
 残す（描画には GPU マシンが要る）。
 
@@ -70,7 +70,7 @@ _BRIGHTNESS_RESOLUTION = 3
 # 評価側が接尾辞を正規表現で剥がして初期状態を探すことになり、
 # **`_tb_N` のように剥がせない摂動で「ファイルが無い」と落ちる**
 # （`compe/t1/register.py` の `_SUFFIX_RE` は `_light_*` と `_table_\d+` だけ）。
-# 物体が増える摂動は変種名そのものの初期状態を持つため、相対パスも要る。
+# 物体が増える摂動は variant 名そのものの初期状態を持つため、相対パスも要る。
 # **置き場の解決は 1 か所に置く。** ここで作り直すと必ず食い違う。
 
 
@@ -85,9 +85,9 @@ def _parse_args() -> argparse.Namespace:
                         default=_REPO_ROOT / "work/LIBERO-plus",
                         help="LIBERO-plus の clone 先")
     parser.add_argument("--per-task", type=int, default=1,
-                        help="指示文ごとに選ぶ変種の数（既定 1）")
+                        help="指示文ごとに選ぶ variant の数（既定 1）")
     parser.add_argument("--offset", type=int, default=0,
-                        help="同じ指示文から別の変種を選び直すときにずらす数")
+                        help="同じ指示文から別の variant を選び直すときにずらす数")
     parser.add_argument("--categories", type=str,
                         default=",".join(_PRODUCTION_CATEGORIES),
                         help="使う摂動カテゴリ。**読点で区切る**")
@@ -215,7 +215,7 @@ def _novel_by_instruction(
 
 
 def _load_variants(libero_plus: Path, categories: list[str]) -> dict[str, list[dict]]:
-    """指示文ごとに、使えるカテゴリの変種を集める。
+    """指示文ごとに、使えるカテゴリの variant を集める。
 
     素のタスク名の取り出しは `make_holdout_split` と共通にする。
     **同じ正規表現を 2 か所に置くと必ず片方が古くなる。**
@@ -226,7 +226,7 @@ def _load_variants(libero_plus: Path, categories: list[str]) -> dict[str, list[d
     path = (libero_plus / "libero" / "libero" / "benchmark"
             / "task_classification.json")
     if not path.is_file():
-        raise SystemExit(f"[eval] 変種の一覧がありません: {path}")
+        raise SystemExit(f"[eval] variant の一覧がありません: {path}")
 
     wanted = set(categories)
     variants: dict[str, list[dict]] = defaultdict(list)
@@ -237,7 +237,7 @@ def _load_variants(libero_plus: Path, categories: list[str]) -> dict[str, list[d
             key = to_instruction(base_task(item["name"]))
             variants[key].append({**item, "suite": suite})
     # **並びを固定する。** 難易度、次に名前で並べれば、同じ引数なら同じものが出る。
-    # **難易度が入っていない変種がある**ので、その分は後ろへ回す（`None` は
+    # **難易度が入っていない variant がある**ので、その分は後ろへ回す（`None` は
     # `int` と比べられず、そのまま並べ替えると例外になる）。
     for key in variants:
         variants[key].sort(
@@ -253,7 +253,7 @@ def _load_variants(libero_plus: Path, categories: list[str]) -> dict[str, list[d
 def _pick(items: list[dict], count: int, offset: int) -> list[dict]:
     """難易度で並べた中から、両端を含めて等間隔に選ぶ。
 
-    `offset` は選ぶ位置をずらす。**同じ指示文から別の変種へ替えたいときに使う。**
+    `offset` は選ぶ位置をずらす。**同じ指示文から別の variant へ替えたいときに使う。**
     """
     if not items:
         return []
@@ -287,9 +287,9 @@ def main() -> None:
     eligible = [name for name in eligible if variants.get(name)]
 
     print(f"[eval] 未使用かつ見た目も未知の実演がある指示文 "
-          f"{len(eligible)} 種（変種がある分）")
+          f"{len(eligible)} 種（variant がある分）")
     if without_variants:
-        print(f"[eval]   **このカテゴリに変種が無い指示文 {len(without_variants)} 種は外した**")
+        print(f"[eval]   **このカテゴリに variant が無い指示文 {len(without_variants)} 種は外した**")
     dropped = sorted(
         name for name, info in summary.items() if info["novel"] == 0
     )
@@ -300,11 +300,11 @@ def main() -> None:
         item for name in eligible
         for item in _pick(variants[name], args.per_task, args.offset)
     ]
-    print(f"[eval] 選んだ変種 {len(selected)} 件")
+    print(f"[eval] 選んだ variant {len(selected)} 件")
 
     # **行の組み立ては `make_validation_suite` に任せる。**
     # bddl と初期状態が実際に在る置き場を探し、`init_states_file` を決めきる。
-    # **実体が無い変種はここで落ちる。** 黙って減らさず、下で名指しする。
+    # **実体が無い variant はここで落ちる。** 黙って減らさず、下で名指しする。
     from make_validation_suite import (
         _build_rows, _index_init_state_stems, _report, _resolve_libero_path,
     )
@@ -322,8 +322,8 @@ def main() -> None:
     )
     _report(rows, skipped)
     if len(rows) < len(selected):
-        print(f"[eval] **実体が無くて落ちた変種 {len(selected) - len(rows)} 件。**")
-        print("[eval]   `--offset` をずらして別の変種にすると埋まることがある")
+        print(f"[eval] **実体が無くて落ちた variant {len(selected) - len(rows)} 件。**")
+        print("[eval]   `--offset` をずらして別の variant にすると埋まることがある")
     if not rows:
         raise SystemExit("[eval] 1 件も載せられませんでした。上の理由を読むこと")
     counts: dict[str, int] = defaultdict(int)

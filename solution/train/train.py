@@ -176,7 +176,7 @@ def _parse_args() -> argparse.Namespace:
                              "**上限 300 ステップの採点では再現できないことが証明済み**である"
                              "（成功した回は手本の 0.95 倍のステップ数で終わっている）")
     # **検証専用にするタスクを学習から外す。** 摂動版は元のタスクの実演を
-    # 共有するため、変種の id を抜いても同じ指示文の別の変種が学習に残る。
+    # 共有するため、variant の id を抜いても同じ指示文の別の variant が学習に残る。
     # **指示文で丸ごと外さないと、手元の検証は「覚えた度合い」を測ってしまう。**
     # 一覧は solution/tools/suite/make_holdout_split.py が作り、
     # **検証集合も同じ CSV を読む**（docs/howto/04_proxy_eval.md）。
@@ -184,7 +184,7 @@ def _parse_args() -> argparse.Namespace:
                         metavar="CSV",
                         help="このCSVの instruction 列にあるタスクを学習から外す。"
                              "**データセットに無い指示文があればその場で止める**")
-    # **台本の手本を混ぜたデータセットで学習するための口。**
+    # **scripted policy の手本を混ぜたデータセットで学習するための口。**
     # 既定では番号選びが `lerobot/libero_plus` のメタデータを Hub から落とすので、
     # **混ぜたデータセットとエピソード番号が対応しない**（足した分が丸ごと
     # 学習に入らないまま、黙って通ってしまう）。ここを渡すと
@@ -231,7 +231,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--resume", action="store_true",
                         help="直近のチェックポイントから再開する")
     # **`--` の後ろは `lerobot-train` へそのまま渡す。**
-    # ここを用意しないと、この台本が旗を持たない設定（拡張の強さなど）に
+    # ここを用意しないと、この scripted policy が旗を持たない設定（拡張の強さなど）に
     # 手が届かない。旗を 1 つずつ足していくよりも、通し口を 1 つ開けるほうがよい。
     #
     #   python train.py --image-transforms -- \
@@ -687,7 +687,7 @@ def _load_holdout(path: Path) -> list[str]:
     """検証専用にするタスクの指示文を読む。
 
     **摂動版の id ではなく指示文で外す。** 摂動版は元のタスクの実演データを
-    共有するため、変種の id を抜いても同じ指示文の別の変種が学習に残り、
+    共有するため、variant の id を抜いても同じ指示文の別の variant が学習に残り、
     中身は見たままになる。
 
     一覧は `solution/tools/suite/make_holdout_split.py` が作る。

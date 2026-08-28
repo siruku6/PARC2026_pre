@@ -23,14 +23,14 @@
     1 番号を 12 タスクへ当てたので、向きが 3 通りしか入っていなかった。
     番号が違えば摂動の向きが違うので、これで 48 通りの向きが入る。
 
-変種の選び方:
+variant の選び方:
   1. `TRACK2_VAL72.csv` の `category` が `Base` の 12 行を元タスクとする。
      これは 8/24 に摂動なしで 3 回とも 300 歩未満で完走したタスクである。
   2. `task_classification.json` から、その元タスクの
-     `Robot Initial States` 変種を難易度ごとに集める。
+     `Robot Initial States` variant を難易度ごとに集める。
   3. 難易度ごとに 1 件ずつ選ぶ。**選び方は固定の種の擬似乱数**で、
      同じ引数なら同じ CSV になる。
-  4. その難易度の変種を持たないタスクは、**代わりに一つ上の難易度から
+  4. その難易度の variant を持たないタスクは、**代わりに一つ上の難易度から
      もう 1 件取る**（`--fallback-level`）。落とすと段の本数が減るため。
 
 使い方:
@@ -45,7 +45,7 @@
 
 Reads:
   - compe/val/TRACK2_VAL72.csv（元タスク 12 件の出どころ）
-  - work/LIBERO-plus/libero/libero/benchmark/task_classification.json（変種と難易度）
+  - work/LIBERO-plus/libero/libero/benchmark/task_classification.json（variant と難易度）
 Generates:
   - --output に渡した CSV
 """
@@ -64,7 +64,7 @@ _REPO = Path(__file__).resolve().parents[3]
 _CLASSIFICATION = _REPO / "work/LIBERO-plus/libero/libero/benchmark/task_classification.json"
 _BASE_CSV = _REPO / "compe/val/TRACK2_VAL72.csv"
 _CATEGORY = "Robot Initial States"
-# 変種名の形。`_view_<方位角>_<仰角>_<拡大率>_<レンズ回転>_<レンズ上下>_initstate_<番号>`。
+# variant 名の形。`_view_<方位角>_<仰角>_<拡大率>_<レンズ回転>_<レンズ上下>_initstate_<番号>`。
 _VARIANT_RE = re.compile(r"_view_0_0_100_0_0_initstate_(\d+)$")
 _COLUMNS = [
     "task_num", "task_id", "instruction", "libero_plus_id",
@@ -80,7 +80,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--levels", default="2,3,4,5",
                    help="測る難易度の段（既定: 2,3,4,5）")
     p.add_argument("--fallback-level", type=int, default=5,
-                   help="その段の変種が無いタスクで代わりに取る段（既定: 5）")
+                   help="その段の variant が無いタスクで代わりに取る段（既定: 5）")
     p.add_argument("--seed", type=int, default=20260828, help="選ぶときの種")
     return p.parse_args()
 
@@ -140,7 +140,7 @@ def main() -> None:
         key = (base["suite"], base["task_id"])
         by_level = variants.get(key)
         if by_level is None:
-            raise SystemExit(f"公式一覧に {_CATEGORY} の変種が無い: {key}")
+            raise SystemExit(f"公式一覧に {_CATEGORY} の variant が無い: {key}")
 
         rows.append({
             "task_num": 0,

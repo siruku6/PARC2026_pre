@@ -1,4 +1,4 @@
-# 04. Track 1 に出そうな変種の母集団
+# 04. Track 1 に出そうな variant の母集団
 
 外部でまとめられた LIBERO-plus の集計（2026-08-11 に共有されたもの）を、
 **手元の LIBERO-plus とベースモデルのソースで数え直した記録**である。
@@ -17,7 +17,7 @@
 | 分かったこと | 効くところ |
 |---|---|
 | Track 1 候補は **2,218 件**（全 10,030 件の 22.1%）。`light` 1,142 / `table` 613 / `tb` 463 | 検証用スイートの割り方 |
-| **接尾辞は末尾で判定しないと 23 件ずれる**（`_table_` を名前の途中に含む `_tb_` の変種） | 集計コード。**直した** |
+| **接尾辞は末尾で判定しないと 23 件ずれる**（`_table_` を名前の途中に含む `_tb_` の variant） | 集計コード。**直した** |
 | 衝突しうる相手は平均 **3.10 個**・最多 5 個。**55 件は 0 個** | 衝突率の読み方。**CSV に列を足した** |
 | LeRobot の画像拡張は**明るさ ±20% まで**。評価側の振れ幅（×0.71〜×1.70）を**覆えていない** | 学習の設定（項目 22） |
 | ただし**学習データ自体は 0.086〜0.723 を含む。** 足りないのは拡張ではなく密度の可能性 | 同上。**先に測る** |
@@ -75,8 +75,10 @@ PY
 
 ## 接尾辞は末尾で見る — 含むかどうかで見ると 23 件ずれる
 
+**variant** = 元のタスク 1 つに摂動を 1 つ当てたもの（`.bddl` 1 個）。初期配置は元タスクのものを共有するので、**1 つの variant から最大 50 エピソード作れる。**
+
 `table` と `tb` を「名前に `_table_` を含むか」で分けると **636 / 440** になる。
-正しい 613 / 463 との差 23 件は、**名前の途中に `table` を含む `_tb_N` の変種**である。
+正しい 613 / 463 との差 23 件は、**名前の途中に `table` を含む `_tb_N` の variant**である。
 
 ```
 pick_up_the_black_bowl_from_table_center_and_place_it_on_the_plate_tb_1
@@ -88,7 +90,7 @@ pick_up_the_black_bowl_from_table_center_and_place_it_on_the_plate_tb_1
 **末尾一致に直した**。試験で固定してある
 （[tests/test_rollout_report_line.py](../../tests/test_rollout_report_line.py)）。
 
-**同時に、もっと大きな穴が見つかった。** 変種名から摂動カテゴリを当てるのは
+**同時に、もっと大きな穴が見つかった。** variant 名から摂動カテゴリを当てるのは
 **7 つのうち 4 つまでしかできない。**
 
 | カテゴリ | 名前の形 | 名前から分かるか |
@@ -219,7 +221,7 @@ sed -n '/^class ImageTransformsConfig/,/^def make_transform/p' \
 | 事実 | 出典 |
 |---|---|
 | 摂動カテゴリと件数、難易度 | `work/LIBERO-plus/libero/libero/benchmark/task_classification.json`（revision `4976dc3`） |
-| 変種の物体と操作対象 | 同 `bddl_files/<suite>/<変種名>.bddl` を 2,218 件読んだ |
+| variant の物体と操作対象 | 同 `bddl_files/<suite>/<variant 名>.bddl` を 2,218 件読んだ |
 | 出題は 7 カテゴリ全部ではない | Q&A CSV No.21（西浦） |
 | 成功判定に衝突が入ること | [pipeline/rollout.py](../../pipeline/rollout.py) |
 | 画像拡張の既定値 | `work/lerobot-src/src/lerobot/transforms/transforms.py` の `ImageTransformsConfig` |

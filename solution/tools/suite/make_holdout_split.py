@@ -6,7 +6,7 @@
 見えたが（0.500 対 0.476）、採点環境では 8.8 倍悪かった（0.016 対 0.1409）。
 **手元の数字は「覚えた度合い」を測っていた。**
 
-**摂動版は元のタスクの実演データを共有する。** 検証に使う変種の id を学習から
+**摂動版は元のタスクの実演データを共有する。** 検証に使う variant の id を学習から
 抜いても、同じ指示文の別の摂動版が学習に残るので中身は見たままになる。
 **だから指示文（タスク）単位で丸ごと分ける。**
 
@@ -315,7 +315,7 @@ def _report(variants: list[dict], holdout: list[dict]) -> None:
         if entry["instruction"] in held
         and entry["category"] in _PRODUCTION_CATEGORIES
     ]
-    print(f"[holdout] 外したタスクのうち、本番と同じ 2 カテゴリの変種は "
+    print(f"[holdout] 外したタスクのうち、本番と同じ 2 カテゴリの variant は "
           f"{len(in_production)} 件（検証に使える上限）")
 
 

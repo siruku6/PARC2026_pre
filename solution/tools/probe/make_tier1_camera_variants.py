@@ -1,27 +1,27 @@
 #!/usr/bin/env python3
-"""Tier 1（Camera Viewpoints 対策）の撮り直しに使う `--variant` の一覧を作る。
+"""Tier 1（Camera Viewpoints 対策）の作り直しに使う `--variant` の一覧を作る。
 
-**台本がある 2 タスク専用。** Tier 1 の「撮り直し」（`docs/plan/09_demo_perturbation_pipeline.md`
-2.2 節）は、`scripted_demo.py --variant` へ LIBERO-plus の公式 Camera Viewpoints 変種名
+**scripted policy がある 2 タスク専用。** Tier 1 の「作り直し」（`docs/plan/09_demo_perturbation_pipeline.md`
+2.2 節）は、`scripted_demo.py --variant` へ LIBERO-plus の公式 Camera Viewpoints variant 名
 （`<task>_view_<horizon>_<vertical>_<scale*100>_<rot>_<vert>_initstate_0` の形）を渡すだけで
 動く。**`scripted_demo.py` 自体の変更は要らない**——`ControlEnv.__init__`
 （`env_wrapper.py`）がこの文字列を自分でパースしてカメラ設定を組み立てるためで、この
-スクリプトはその変種名を選ぶだけの下ごしらえである。
+スクリプトはその variant 名を選ぶだけの下ごしらえである。
 
-台本は実測の位置から目標への差分を毎ステップ計算する閉ループ制御で、カメラ設定は
+scripted policy は実測の位置から目標への差分を毎ステップ計算する閉ループ制御で、カメラ設定は
 描画にしか関わらない（`libero_tabletop_manipulation.py` の `_setup_camera` が使うだけ）。
-**つまり撮り直しは物理・行動列を変えない**——同じ初期状態番号なら Base 撮影と全く同じ
+**つまり作り直しは物理・行動列を変えない**——同じ初期状態番号なら Base で作ったものと全く同じ
 成功／失敗になり、画素だけが変わる。σ スイープのような成功率の確認は要らない
 （[docs/plan/11_tier1_camera_augmentation.md](../../docs/plan/11_tier1_camera_augmentation.md) 3 節）。
 
-**学習と評価で使う変種を分けること。** `compe/val/TRACK2_PROBE.csv` に載っている
-Camera Viewpoints の変種を学習データにも使うと、検証が「見た条件を再現できたか」を
+**学習と評価で使う variant を分けること。** `compe/val/TRACK2_PROBE.csv` に載っている
+Camera Viewpoints の variant を学習データにも使うと、検証が「見た条件を再現できたか」を
 測るだけになる（08_training_data_creation_cautions.md 2.8 節）。このスクリプトは
 `--exclude` に渡した CSV の `task_id` 列をそのまま除外する。
 
 選び方: 難易度・`id` の昇順に並べ、等間隔に `--count` 件を取る
 （`make_track2_probe.py` の `_pick_tasks` と同じ考え方）。**乱数は使わない**——
-同じ引数なら同じ変種になる。
+同じ引数なら同じ variant になる。
 
 使い方:
 
@@ -54,15 +54,15 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--task", action="append", required=True, dest="tasks",
                         metavar="NAME",
-                        help="台本がある元タスク名。複数回渡せる")
+                        help="scripted policy がある元タスク名。複数回渡せる")
     parser.add_argument("--suite", type=str, default="libero_10",
-                        help="task_classification.json の外側の鍵。台本がある"
+                        help="task_classification.json の外側の鍵。scripted policy がある"
                              "2 タスクはどちらも libero_10")
     parser.add_argument("--count", type=int, default=6,
-                        help="タスクごとに選ぶ変種の数")
+                        help="タスクごとに選ぶ variant の数")
     parser.add_argument("--exclude", type=Path, action="append", default=[],
                         metavar="CSV",
-                        help="この CSV の task_id 列にある変種名を除外する"
+                        help="この CSV の task_id 列にある variant 名を除外する"
                              "（評価スイートとの重複を避ける。複数回渡せる）")
     parser.add_argument("--libero-plus", type=Path,
                         default=_REPO_ROOT / "work/LIBERO-plus",
@@ -73,7 +73,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _load_camera_variants(libero_plus: Path, suite: str, task: str) -> list[dict]:
-    """分類表から、そのタスクの Camera Viewpoints 変種だけを取る。"""
+    """分類表から、そのタスクの Camera Viewpoints variant だけを取る。"""
     path = libero_plus / "libero/libero/benchmark/task_classification.json"
     if not path.is_file():
         raise SystemExit(f"[tier1-camera] 分類表が見つかりません: {path}")
@@ -101,8 +101,8 @@ def _load_excluded_names(paths: list[Path]) -> set[str]:
 def _pick_evenly(variants: list[dict], count: int) -> list[dict]:
     """難易度・id の昇順に並べ、等間隔に `count` 件取る。
 
-    **先頭から `count` 件取ってはいけない。** 分類表は変種を強さの順に
-    並べていることがあり、先頭だけ取ると弱い摂動しか撮り直さない
+    **先頭から `count` 件取ってはいけない。** 分類表は variant を強さの順に
+    並べていることがあり、先頭だけ取ると弱い摂動しか作り直さない
     （`make_track2_probe.py` の `_pick_variant` と同じ注意点）。
     """
     ordered = sorted(variants, key=lambda entry: (entry["difficulty_level"], entry["id"]))
@@ -150,7 +150,7 @@ def main() -> None:
         writer.writerows(rows)
     print(f"[tier1-camera] 書き出し: {args.output}（{len(rows)} 行）")
 
-    print("\n[tier1-camera] 撮る例（1 行につき、既存の record と同じ手順）:")
+    print("\n[tier1-camera] 作る例（1 行につき、既存の record と同じ手順）:")
     for row in rows:
         print(f"[tier1-camera]   MUJOCO_GL=osmesa python3 solution/tools/scripted_demo/scripted_demo.py "
               f"record --task {row['task']} --variant {row['variant']} "

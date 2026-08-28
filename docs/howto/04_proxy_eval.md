@@ -241,7 +241,7 @@ python3 solution/tools/suite/make_holdout_split.py
 [holdout] 自己検査: libero_spatial の 10 件が一致した
 [holdout] 素のタスク 全 40 種 / 外す 8 種 / 学習に残る 32 種
 [holdout] 摂動版で数えると 全 10030 件 / 学習に残る 8049 件
-[holdout] 外したタスクのうち、本番と同じ 2 カテゴリの変種は 464 件（検証に使える上限）
+[holdout] 外したタスクのうち、本番と同じ 2 カテゴリの variant は 464 件（検証に使える上限）
 ```
 
 **`自己検査` の行を必ず確かめる。** 摂動版の名前から素のタスク名を取り出す処理が

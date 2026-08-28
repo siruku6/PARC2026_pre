@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""指示文を 1 つ指定して、そのタスクの変種だけの評価用 CSV を作る。
+"""指示文を 1 つ指定して、そのタスクの variant だけの評価用 CSV を作る。
 
-**36 件では答えられない問いがあるために作った。** 台本で手本を作った
+**36 件では答えられない問いがあるために作った。** scripted policy で手本を作った
 `put both moka pots on the stove` は、**実演が 146 本すべて 341 ステップ以上**で
 300 ステップの打ち切りでは解けないため、`make_eval_split.py` の 36 件に入らない。
-**つまり「台本を混ぜたら解けるようになったか」を測る場所が無い。**
+**つまり「scripted policy を混ぜたら解けるようになったか」を測る場所が無い。**
 
-**このスクリプトは、そのタスクの変種だけを並べた小さな一覧を作る。**
+**このスクリプトは、そのタスクの variant だけを並べた小さな一覧を作る。**
 学習の前後で同じ一覧を回せば、**そのタスクだけの成否を直接比べられる。**
 
     # モカポットのタスクを 8 件（本番と同じ 2 カテゴリから）
@@ -65,7 +65,7 @@ def _spread(items: list, count: int) -> list:
 
 def collect_variants(libero_plus: Path, wanted: str,
                      categories: tuple[str, ...]) -> list[dict]:
-    """指定した指示文の変種を、分類表から集める。
+    """指定した指示文の variant を、分類表から集める。
 
     Parameters
     ----------
@@ -127,7 +127,7 @@ def main() -> None:
     variants = collect_variants(args.libero_plus, args.instruction, categories)
     if not variants:
         raise SystemExit(
-            f"[suite] 変種が 1 つも見つかりません: {args.instruction!r}"
+            f"[suite] variant が 1 つも見つかりません: {args.instruction!r}"
             f"（摂動 {categories or '全部'}）。"
             "**指示文は学習データの綴りと完全一致でなければならない**"
         )
@@ -166,7 +166,7 @@ def main() -> None:
         raise SystemExit("[suite] 1 件も載せられませんでした。上の理由を読むこと")
     if len(rows) < len(chosen):
         raise SystemExit(
-            f"[suite] **実体が無くて落ちた変種が {len(chosen) - len(rows)} 件ある。**"
+            f"[suite] **実体が無くて落ちた variant が {len(chosen) - len(rows)} 件ある。**"
             "黙って減った一覧は使わない。--count を増やして選び直すこと"
         )
     print(f"[suite]   渡る指示文: {rows[0]['instruction']!r}")

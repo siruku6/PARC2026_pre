@@ -2,7 +2,7 @@
 
 本番の 8 本中 4 本が、2 回とも 300 ステップを使い切ってゴールに届いていない。
 **止まっているのか、往復しているのか、掴めずに空振りしているのか——
-成功率と衝突率では区別できない。** それを見るために撮る。
+成功率と衝突率では区別できない。** それを見るために録画する。
 
 **映像と `[結果]` 行の両方をここで作る。** 動きの判定（`静止` / `往復`）に使う
 閾値が 1 か所で済むからである。映像は既定で失敗した回・最大 40 本までしか
@@ -29,14 +29,14 @@
 | `PARC_RECORD_WHICH` | `failures` | `failures`＝失敗だけ／`all`＝全部 |
 | `PARC_RECORD_FPS` | `20` | `control_freq` が 20 なので既定で実時間 |
 | `PARC_RECORD_SCALE` | `3` | 128 px を何倍に伸ばすか（文字を読むため） |
-| `PARC_RECORD_MAX` | `40` | 撮る本数の上限。ディスクの保険 |
+| `PARC_RECORD_MAX` | `40` | 録画する本数の上限。ディスクの保険 |
 
 使い方（コンテナ内・評価を回すシェルで）::
 
     export PARC_RECORD_DIR=/out/videos
     bash solution/tools/eval/run_local_eval.sh
 
-**撮れる映像はモデルに渡るのと同じ向き**（180 度回転後）である。評価環境の
+**作れる映像はモデルに渡るのと同じ向き**（180 度回転後）である。評価環境の
 生画像は上下逆で、回転して初めて学習データと揃う。詳細は
 `docs/strategy/05_実測結果.md`「観測変換の正しさ」。
 
@@ -47,7 +47,7 @@
 | 1 ステップの上乗せ | **0.33 ms**（本番の `env.step` 39 ms に対して 0.8%） |
 | メモリの山 | 31 MB（300 ステップ・2 カメラ） |
 | 書き出し | 1 エピソードにつき約 2 秒 |
-| 84 タスク全部撮った場合 | 90 分の測定に **+2.9 分** |
+| 84 タスク全部作った場合 | 90 分の測定に **+2.9 分** |
 
 Reads:
   - 環境変数（上の表）
@@ -312,21 +312,21 @@ def format_result_line(
 
 
 def _shorten_task_name(task_name: str, limit: int = 70) -> str:
-    """ファイル名に使えるよう短くする。**変種名（末尾）は必ず残す。**
+    """ファイル名に使えるよう短くする。**variant 名（末尾）は必ず残す。**
 
-    以前は `task_name[:70]` と前から切っていた。**変種名は末尾に付く**ので、
+    以前は `task_name[:70]` と前から切っていた。**variant 名は末尾に付く**ので、
     長いタスク名では `_light_24` や `_tb_6` が消えてしまう。
-    8/11 の 35 本のうち **23 本が変種不明**になり、
+    8/11 の 35 本のうち **23 本が variant 不明**になり、
     見た目の振れ幅を数える材料が 12 本しか残らなかった
     （`docs/reference/08_appearance_spread.md`）。
 
     **だから中央を落として両端を残す。** 前半で場面（`KITCHEN_SCENE3` など）、
-    後半で変種（`_view_0_0_100_6_10_initstate_0` など）が読める。
+    後半で variant（`_view_0_0_100_6_10_initstate_0` など）が読める。
 
     Parameters
     ----------
     task_name : str
-        変種名まで含むタスク名。
+        variant 名まで含むタスク名。
     limit : int
         使う文字数の上限。
 
@@ -345,7 +345,7 @@ def _shorten_task_name(task_name: str, limit: int = 70) -> str:
     if len(task_name) <= limit:
         return task_name
 
-    # 末尾を優先して残す。変種名は最長でも 30 字ほど（`_view_0_0_100_6_10_initstate_0`）。
+    # 末尾を優先して残す。variant 名は最長でも 30 字ほど（`_view_0_0_100_6_10_initstate_0`）。
     tail = (limit - 2) * 2 // 3
     head = limit - 2 - tail
     return f"{task_name[:head]}--{task_name[-tail:]}"
@@ -417,7 +417,7 @@ class _Recorder:
         return np.hstack(panels)
 
     def finalize(self, outcome: str, offenders: dict[str, float]) -> Path | None:
-        """結末が決まったので mp4 を書く。撮らない回は None を返す。
+        """結末が決まったので mp4 を書く。作らない回は None を返す。
 
         Parameters
         ----------
@@ -429,7 +429,7 @@ class _Recorder:
         Returns
         -------
         path : Path | None
-            書き出した mp4。撮らなかった場合は None。
+            書き出した mp4。作らなかった場合は None。
         """
         try:
             return self._write(outcome, offenders)
@@ -451,7 +451,7 @@ class _Recorder:
         if _written >= limit:
             if _written == limit:
                 logger.info(
-                    "  [録画] 上限 %d 本に達した。以降は撮らない"
+                    "  [録画] 上限 %d 本に達した。以降は作らない"
                     "（PARC_RECORD_MAX で変えられる）", limit,
                 )
                 _written += 1                            # この案内を 1 度だけ出す
@@ -568,7 +568,7 @@ def _put_text(frame: np.ndarray, text: str, origin: tuple[int, int]) -> None:
         )
 
 
-# 撮った本数と、無効化した理由。**評価を止めないため、失敗しても例外にしない。**
+# 作った本数と、無効化した理由。**評価を止めないため、失敗しても例外にしない。**
 _written = 0
 _disabled_reason: str | None = None
 
@@ -596,7 +596,7 @@ def begin_episode(task_name: str, episode_id: int) -> Any:
     Parameters
     ----------
     task_name : str
-        タスク（変種）の名前。ファイル名に使う。
+        タスク（variant）の名前。ファイル名に使う。
     episode_id : int
         エピソード番号。
 

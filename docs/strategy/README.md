@@ -20,7 +20,7 @@ LIBERO（元のベンチマーク）
         └── デモ ── 元の LIBERO では 1 タスクあたり 50 本の人手デモ
 
 LIBERO-plus（LIBERO に摂動を加えた拡張）
-└── タスク変種 ── 40 タスクに摂動を掛けたもの、計 10,030 個
+└── variant ── 40 タスクに摂動を掛けたもの、計 10,030 個
     ├── id ─────────────── T1_TASKS.csv の libero_plus_id と同じ
     ├── name ───────────── <元タスク名>_<接尾辞>_<番号>   例：..._table_2
     ├── category ───────── 摂動カテゴリ 7 種
@@ -35,7 +35,7 @@ LIBERO-plus（LIBERO に摂動を加えた拡張）
 | **スイート** suite | LIBERO の 4 分類 | LIBERO のコードでは `problem_folder` |
 | **ベンチマーク** benchmark | LIBERO への登録単位 | 実質スイートと同義に使われる |
 | **タスク** task | 40 個の基本タスク | 学習データでは「指示 instruction」1 つ = 1 タスク |
-| **タスク変種** | 摂動を掛けた 10,030 個 | `T1_TASKS.csv` の `task_id` はこちら |
+| **variant** | 摂動を掛けた 10,030 個 | `T1_TASKS.csv` の `task_id` はこちら |
 | **摂動** perturbation | 見た目や初期状態を変える操作 | |
 | **摂動カテゴリ** category | 摂動の種類 7 つ | `task_classification.json` の `category` |
 | **エピソード** episode | 1 回のロールアウト | 学習データの 1 本 ＝ 評価の 1 試行 |
@@ -47,7 +47,7 @@ LIBERO-plus（LIBERO に摂動を加えた拡張）
 |---|---|
 | `T1_TASKS.csv` の **`suite` 列** | **元の**スイート（libero_spatial 等）。`compe/t1` が登録する `libero_t1` とは別物 |
 | `compe/t1` の **`libero_t1`** | example 4 件をまとめた**新しいスイート**。中身は 3 つの元スイートにまたがる |
-| `T1_TASKS.csv` の **`task_id`** | タスク**変種**の名前（接尾辞つき）。`instruction` は自然言語の指示文 |
+| `T1_TASKS.csv` の **`task_id`** | タスク**variant**の名前（接尾辞つき）。`instruction` は自然言語の指示文 |
 | LeRobot データセットの **`task`** | 自然言語の指示文 40 種。**摂動のラベルは付いていない** |
 
 ### 接尾辞と摂動カテゴリの対応
@@ -227,7 +227,7 @@ flowchart TD
 | [02_環境戦略.md](02_環境戦略.md) | STEP 1。Python 3.10 / 3.12 問題の判断材料 |
 | [03_学習とデータの方針.md](03_学習とデータの方針.md) | STEP 3。配布ノートブックの**どこを変えるか（なぜ）** |
 | **[05_実測結果.md](05_実測結果.md)** | **測った数字はすべてここ。** 判断の前に必ず見る |
-| **[06_scripted_demos.md](06_scripted_demos.md)** | **手本が全部 300 ステップを超えるタスクを、台本で 230 ステップにした記録。** 手本を自分で作る |
+| **[06_scripted_demos.md](06_scripted_demos.md)** | **手本が全部 300 ステップを超えるタスクを、scripted policy で 230 ステップにした記録。** 手本を自分で作る |
 | [../howto/11_colab_eval.md](../howto/11_colab_eval.md) | Colab GPU で評価を回す（84 件 2.6 時間。28 件 × 3 に割る） |
 | **[../howto/01_retrain.md](../howto/01_retrain.md)** | **手を動かすとき。** 再学習の手順（Docker / Colab） |
 | **[../howto/02_build_submission.md](../howto/02_build_submission.md)** | **手を動かすとき。** zip の組み立てから提出まで |

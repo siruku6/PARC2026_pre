@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""手本より速い軌道を、シミュレータの中で台本から作る。
+"""手本より速い軌道を、シミュレータの中で scripted policy から作る。
 
 **学習データの手本より速く動くことはできない。** 方策は手本を真似るので、
 手本が 400 ステップかけている動きを 300 ステップで終えるようには育たない。実際
@@ -16,7 +16,7 @@
 持っているので、画像から推測する必要がない。** 掴む・運ぶ・置くの中継点を
 物体の位置から決め、腕をそこへ寄せる行動を1 ステップごとに計算する。
 
-    # 1. 場面の寸法を測る（新しいタスクの台本を書く前に必ずやる）
+    # 1. 場面の寸法を測る（新しいタスクの scripted policy を書く前に必ずやる）
     python3 solution/tools/scripted_demo/scripted_demo.py measure \\
         --task KITCHEN_SCENE8_put_both_moka_pots_on_the_stove
 
@@ -46,7 +46,7 @@
 速くする手は並列だけである（`--episodes` を分けて同時に流す。手順は
 `docs/howto/05_scripted_demos.md` の 3 節）。
 
-**台本を書くときに必ず先に測ること**（`measure` が出す）。
+**scripted policy を書くときに必ず先に測ること**（`measure` が出す）。
 
 | 測るもの | なぜ | moka pots で実際に踏んだ穴 |
 |---|---|---|
@@ -55,11 +55,11 @@
 | 1 ステップで進む距離 | ステップ数の見積もり | OSC の追従の限界で **1 ステップ 1.25cm**。行動の上限 5cm には届かない |
 
 Reads:
-  - <libero-root>/bddl_files/<suite>/<変種>.bddl
+  - <libero-root>/bddl_files/<suite>/<variant>.bddl
   - <libero-root>/init_files/<suite>/<元タスク>.pruned_init
 Generates:
   - 標準出力
-  - `record` のときのみ <output>/<変種>_ep<n>.npz（観測・行動・成否）
+  - `record` のときのみ <output>/<variant>_ep<n>.npz（観測・行動・成否）
 """
 
 from __future__ import annotations
@@ -109,7 +109,7 @@ class PickPlace:
         掴む物体の観測名（`moka_pot_1` なら観測の `moka_pot_1_pos` を見る）。
     place_site : str
         置く先の基準にする site。**ゴール判定に使われている枠そのものを指す。**
-        什器は初期配置ごとに数 mm ずれるので、**絶対座標で書くと変種で外れる。**
+        什器は初期配置ごとに数 mm ずれるので、**絶対座標で書くと variant で外れる。**
     place_offset : tuple[float, float]
         `place_site` の中心から見た、置く先の水平方向のずれ。
     grasp_dz : float
@@ -174,7 +174,7 @@ class TurnKnob:
 
 @dataclass
 class TaskPlan:
-    """1 タスクぶんの台本。
+    """1 タスクぶんの scripted policy。
 
     Attributes
     ----------
@@ -232,8 +232,8 @@ class TaskPlan:
     smoothing: float = 1.0
 
 
-# **台本はここに足していく。** 鍵は元タスクの名前（bddl から摂動の接尾辞を
-# 落としたもの）。摂動が見た目だけなら（照明・背景）、同じ台本がそのまま通る。
+# **scripted policy はここに足していく。** 鍵は元タスクの名前（bddl から摂動の接尾辞を
+# 落としたもの）。摂動が見た目だけなら（照明・背景）、同じ scripted policy がそのまま通る。
 TASK_PLANS: dict[str, TaskPlan] = {
     "KITCHEN_SCENE8_put_both_moka_pots_on_the_stove": TaskPlan(
         suite="libero_10",
@@ -294,7 +294,7 @@ class EpisodeRecord:
     # `actions` と違う（学習データに入れるのは `actions` のほうである）。
     # 送ったほうも残すのは、**ノイズが本当に効いていたかを後から確かめる**ため。
     executed_actions: list[np.ndarray] = field(default_factory=list)
-    # 台本に混ぜたノイズの大きさ（標準偏差）。0.0 なら混ぜていない。
+    # scripted policy に混ぜたノイズの大きさ（標準偏差）。0.0 なら混ぜていない。
     action_noise: float = 0.0
     # **一度だけ大きく妨害した記録**（`--disturb-scale`）。0.0 なら妨害していない。
     # 何を・いつ・どちらへ・何歩やったかを残す（後から条件別に選び直せるように）。
@@ -586,7 +586,7 @@ class _Rollout:
 
         DART（Laskey+ 2017）のやり方をそのまま写している。手本を書いた側に
         ノイズを混ぜて動かし、**正解としては混ぜる前の行動を記録する。**
-        こうすると台本は「ずれた場所から目標へ戻す」行動を自分で作るので、
+        こうすると scripted policy は「ずれた場所から目標へ戻す」行動を自分で作るので、
         **成功した軌道だけを集めても復帰のしかたが学習データに入る。**
         混ぜずに集めた手本は、ずれた状態を一度も通らない
         （`docs/plan/08_training_data_creation_cautions.md` 4 節）。
@@ -603,7 +603,7 @@ class _Rollout:
            そのまま成り立つ。
         3. **指の開閉（`action[6]`）と手首の向き（`action[3:6]`）には混ぜない。**
            指に混ぜると掴んでいる物を無作為に落とすだけで、復帰は学べない。
-           向きは台本が閉ループで直していない（`turn_arc` が固定値を入れるだけ）
+           向きは scripted policy が閉ループで直していない（`turn_arc` が固定値を入れるだけ）
            ので、混ぜるとずれが誰にも直されずに溜まり、**手本として誤った
            正解になる。** 手先の位置（`action[:3]`）は `follow` が観測から
            毎ステップ引き直すので、ここだけが直される。
@@ -631,7 +631,7 @@ class _Rollout:
 
         `_noisy` は毎ステップ独立に小さく揺らすので、**連続した微小なずれ**になる。
         こちらは**1 本につき一度だけ、数歩まとめて大きく押す**ので、
-        「途中で一度失敗し、そこから戻る」形の手本になる。台本は閉ループなので、
+        「途中で一度失敗し、そこから戻る」形の手本になる。scripted policy は閉ループなので、
         押しのけられた先から目標へ戻す行動を自分で作る（`_noisy` と同じ仕組み）。
 
         **決めたことが 4 つある。どれも変えると別物になる。**
@@ -644,7 +644,7 @@ class _Rollout:
            「揺れ続ける」**になる。
         3. **指の開閉（`action[6]`）と手首の向き（`action[3:6]`）には触らない。**
            `_noisy` と同じ理由である ── 指に触ると物を落とすだけで復帰は学べず、
-           向きは台本が閉ループで直していないので誤った正解になる。
+           向きは scripted policy が閉ループで直していないので誤った正解になる。
         4. **開始する歩は本ごとに範囲から引く。** ご要望の「異なるタイミングで
            一度失敗」を、1 つのコマンドで本数ぶん作るためである。段の途中で押すか
            境目で押すかによって、崩れ方の種類が変わる。
@@ -893,7 +893,7 @@ def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
                 noise_seed: int | None = None, disturb_scale: float = 0.0,
                 disturb_steps: int = 10,
                 disturb_at: tuple[int, int] | None = None) -> EpisodeRecord:
-    """台本を 1 本ぶん実行し、採点と同じ基準で成否を付ける。
+    """scripted policy を 1 本ぶん実行し、採点と同じ基準で成否を付ける。
 
     Parameters
     ----------
@@ -902,7 +902,7 @@ def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
     init_state : np.ndarray
         `.pruned_init` から取り出した 1 本ぶんの初期状態。
     plan : TaskPlan
-        実行する台本。
+        実行する scripted policy。
     max_steps : int
         ステップ数の上限。**本番の打ち切りは 300 である。**
     record_images : bool
@@ -959,7 +959,7 @@ def _bddl_path(libero_root: Path, suite: str, variant: str) -> Path:
 
 
 def _init_states(libero_root: Path, suite: str, task: str) -> np.ndarray:
-    """初期状態の一覧。**変種ではなく元タスクの名前で引く**（1 タスク 1 file）。"""
+    """初期状態の一覧。**variant ではなく元タスクの名前で引く**（1 タスク 1 file）。"""
     import torch
 
     path = libero_root / "init_files" / suite / f"{task}.pruned_init"
@@ -1011,19 +1011,19 @@ def reset_to(env: Any, init_state: np.ndarray) -> dict[str, np.ndarray]:
 def _resolve_plan(task: str, smoothing: float | None = None,
                   blend_radius: float | None = None,
                   suite: str | None = None) -> TaskPlan:
-    """台本を引く。滑らかさの設定値だけ、その場で差し替えられる。
+    """scripted policy を引く。滑らかさの設定値だけ、その場で差し替えられる。
 
-    **`measure` は台本より先に走る。** 寸法を測ってから台本を書くのに、
-    台本が無いと測れないのでは順序が逆になる。`--suite` を渡した場合だけ、
-    **空の台本**を作って場面を開けるようにする（`measure` 専用）。
+    **`measure` は scripted policy より先に走る。** 寸法を測ってから scripted policy を書くのに、
+    scripted policy が無いと測れないのでは順序が逆になる。`--suite` を渡した場合だけ、
+    **空の scripted policy**を作って場面を開けるようにする（`measure` 専用）。
     """
     if task not in TASK_PLANS:
         if suite is not None:
             return TaskPlan(suite=suite, steps=[], carry_z=0.0,
                             place_z=0.0, retreat_z=0.0)
         raise SystemExit(
-            f"台本が無い: {task}\n  ある台本: {', '.join(sorted(TASK_PLANS))}\n"
-            "  **測るだけなら `--suite libero_10` を渡す**（台本より先に測る）")
+            f"scripted policy が無い: {task}\n  ある scripted policy: {', '.join(sorted(TASK_PLANS))}\n"
+            "  **測るだけなら `--suite libero_10` を渡す**（scripted policy より先に測る）")
     plan = TASK_PLANS[task]
     if smoothing is not None:
         plan = replace(plan, smoothing=smoothing)
@@ -1136,7 +1136,7 @@ def _report_articulation(env: Any, sim: Any) -> None:
 
 def _setup(args: argparse.Namespace, with_images: bool
            ) -> tuple[TaskPlan, str, Any, np.ndarray]:
-    """3 つの口に共通の下ごしらえ。台本・変種名・環境・初期状態を揃える。
+    """3 つの口に共通の下ごしらえ。scripted policy・variant 名・環境・初期状態を揃える。
 
     **`--variant` 省略時は元タスクそのもの**という決まりを 1 か所に置く。
     """
@@ -1150,9 +1150,9 @@ def _setup(args: argparse.Namespace, with_images: bool
 
 
 def command_measure(args: argparse.Namespace) -> None:
-    """台本を書く前に、場面の寸法を測って印字する。
+    """scripted policy を書く前に、場面の寸法を測って印字する。
 
-    **推測で台本を書かない。** 指の開き・物体の幅・什器の上端は
+    **推測で scripted policy を書かない。** 指の開き・物体の幅・什器の上端は
     ここで出た値をそのまま使う。
     """
     plan, variant, env, init_states = _setup(args, with_images=False)
@@ -1231,11 +1231,11 @@ def _report_disturbance(env: Any, plan: TaskPlan, init_states: np.ndarray,
     print(f"  遅れ 中央 {int(np.median(delays)):+d} 歩"
           f"（最小 {delays.min():+d} 最大 {delays.max():+d}）")
     print(f"  **残る本 {kept}/{len(rows)}**"
-          f"（撮影は 1 本 95 秒。捨てる割合がそのまま無駄になる）")
+          f"（エピソードの作成は 1 本 95 秒。捨てる割合がそのまま無駄になる）")
 
 
 def command_verify(args: argparse.Namespace) -> None:
-    """初期配置すべてで台本が通るかを数える。**描画しないので速い。**"""
+    """初期配置すべてで scripted policy が通るかを数える。**描画しないので速い。**"""
     plan, variant, env, init_states = _setup(args, with_images=False)
     if args.episodes:
         init_states = init_states[args.episodes]
@@ -1294,7 +1294,7 @@ def command_record(args: argparse.Namespace) -> None:
     そのまま σ が大きすぎる合図**なので、印字を読むこと。
 
     Generates:
-      - <output>/<変種>_ep<n>.npz（`--action-noise` を付けると `_n<σ>` が入る）
+      - <output>/<variant>_ep<n>.npz（`--action-noise` を付けると `_n<σ>` が入る）
     """
     plan, variant, env, init_states = _setup(args, with_images=True)
     indices = args.episodes if args.episodes else list(range(len(init_states)))
@@ -1323,10 +1323,10 @@ def command_record(args: argparse.Namespace) -> None:
             print(f"  ep{index:02d} 失敗（{record.steps} 歩）—— 書き出さない")
             continue
         # **ノイズの大きさを名前に入れる。** 入れないと、σ を変えて作った組が
-        # 同じ名前になって上書きし合う（同じ変種・同じ番号で作るため）。
+        # 同じ名前になって上書きし合う（同じ variant・同じ番号で作るため）。
         tag = "" if args.action_noise <= 0.0 else f"_n{args.action_noise:g}"
         # **妨害の大きさも名前に入れる。** 妨害あり／なしを同じ置き場に
-        # 混ぜて撮るので、入れないと同じ名前になって上書きし合う。
+        # 混ぜて作るので、入れないと同じ名前になって上書きし合う。
         if args.disturb_scale > 0.0:
             tag += f"_d{args.disturb_scale:g}"
         destination = args.output / f"{variant}{tag}_ep{index:03d}.npz"
@@ -1367,10 +1367,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--task", required=True,
                         help="元タスクの名前（bddl から摂動の接尾辞を落としたもの）")
     parser.add_argument("--variant", default=None,
-                        help="実際に使う変種の bddl 名。省略時は元タスクそのもの")
+                        help="実際に使う variant の bddl 名。省略時は元タスクそのもの")
     parser.add_argument("--suite", default=None,
-                        help="**台本を書く前に measure だけ回すときに渡す**"
-                             "（例 libero_10）。台本があるときは要らない")
+                        help="**scripted policy を書く前に measure だけ回すときに渡す**"
+                             "（例 libero_10）。scripted policy があるときは要らない")
     parser.add_argument("--libero-root", type=Path, default=_DEFAULT_LIBERO_ROOT,
                         help=f"LIBERO-plus の libero/libero（既定 {_DEFAULT_LIBERO_ROOT}）")
     parser.add_argument("--episodes", default=None,
@@ -1382,7 +1382,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--keep-failures", action="store_true",
                         help="失敗した回も書き出す（見て直すため）")
     parser.add_argument("--smoothing", type=float, default=None,
-                        help="指令をなます強さ（1.0 でなまさない）。台本の値を上書きする")
+                        help="指令をなます強さ（1.0 でなまさない）。scripted policy の値を上書きする")
     parser.add_argument("--action-noise", type=float, default=0.0,
                         help="送る行動の手先の位置に混ぜる正規ノイズの標準偏差"
                              "（行動の範囲は ±1）。**記録する行動は混ぜる前の"
@@ -1410,7 +1410,7 @@ def _parse_args() -> argparse.Namespace:
                              "**その範囲から本ごとに引く**（タイミングを"
                              "散らすにはこちら）。省略時は妨害しない")
     parser.add_argument("--blend-radius", type=float, default=None,
-                        help="通過点を見切る距離 [m]。台本の値を上書きする")
+                        help="通過点を見切る距離 [m]。scripted policy の値を上書きする")
     parser.add_argument("--verbose", action="store_true",
                         help="1 本目だけ段ごとのステップ数を出す")
     args = parser.parse_args()

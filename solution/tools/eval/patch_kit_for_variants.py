@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """配布キットを、検証用スイートで測れる状態に書き換える。
 
-**キットは変種のうち 6,287 件を開けない。** カメラ視点・ロボット初期姿勢・
-観測ノイズの摂動は変種名そのものに数値として埋め込まれており、その名前の
+**キットは variant のうち 6,287 件を開けない。** カメラ視点・ロボット初期姿勢・
+観測ノイズの摂動は variant 名そのものに数値として埋め込まれており、その名前の
 bddl は存在しない（`libero/libero/envs/env_wrapper.py` が `_view_` で切って
 元タスクの bddl を開く仕組みになっている）。キットの 2 か所がこれを知らない。
 
@@ -87,7 +87,7 @@ _PATCHES: tuple[tuple[str, str, str, str], ...] = (
         "    root = get_libero_path(\"init_states\")\n"
         "    # CSV が `/` を含む相対パスを書いていれば、接尾辞を剥がさず\n"
         "    # そのまま開く。**物体が増える摂動（`_add_` / `_level`）は\n"
-        "    # 変種名そのものの初期状態を持っており**、元タスクの状態を\n"
+        "    # variant 名そのものの初期状態を持っており**、元タスクの状態を\n"
         "    # 当てると自由度が合わずに落ちる。\n"
         "    #   ValueError: could not broadcast input array\n"
         "    #               from shape (23,) into shape (49,)\n"
@@ -129,8 +129,8 @@ _PATCHES: tuple[tuple[str, str, str, str], ...] = (
         "def parse_obj_of_interest(bddl_file: str | Path) -> set[str]:\n"
         "    txt = Path(bddl_file).read_text()",
         "def parse_obj_of_interest(bddl_file: str | Path) -> set[str]:\n"
-        "    # LIBERO-plus の 6,287 変種は自分の名前の bddl を持たない。摂動は\n"
-        "    # 変種名に数値として埋め込まれており、実体は `_view_` より前にある\n"
+        "    # LIBERO-plus の variant 6,287 件は自分の名前の bddl を持たない。摂動は\n"
+        "    # variant 名に数値として埋め込まれており、実体は `_view_` より前にある\n"
         "    # （envs/env_wrapper.py が環境生成時に同じ切り方をしている）。\n"
         "    path = Path(bddl_file)\n"
         '    if not path.is_file() and "_view_" in path.name:\n'
@@ -399,7 +399,7 @@ def _refuse_own_repository(kit_dir: Path) -> None:
     実際の呼び出し先（Docker の `/workspace`、Colab の clone）は
     使い捨てなので、この制限に当たらない。
 
-    **この台本は `/content/` へ 1 枚だけコピーして使われる**（Colab）。
+    **この scripted policy は `/content/` へ 1 枚だけコピーして使われる**（Colab）。
     そのとき `parents` は `/content` と `/` の 2 つしかないので、
     `parents[3]` は `IndexError` になる。**リポジトリの外に置かれている
     ということは、守るべきリポジトリも無い**ので、その場合は何もしない。

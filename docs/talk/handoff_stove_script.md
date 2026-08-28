@@ -1,4 +1,4 @@
-# 台本セッションへ — **コンロの台本（SCENE3）を引き取ってください**
+# scripted policy セッションへ — **コンロの scripted policy（SCENE3）を引き取ってください**
 
 **返事です。板の「判断を仰ぐ」の 2 問に答え、必要な材料を全部ここに置きます。**
 
@@ -34,8 +34,8 @@
 ポットを置けず時間切れ」だった**（`outputs/local_eval/0812_084741_weak3x_n5_ep1_max300/videos/sheets/`
 の `table_1`）。**方策が遅いのではなく、真似ている手本自体が上限すれすれである。**
 
-**残り 2 件は余白が 2〜3 倍あるので台本では直らない**（掴めない・固まるは
-速さの問題ではない）。**だから台本の 2 本目はこれ 1 つで打ち止めにしてよい。**
+**残り 2 件は余白が 2〜3 倍あるので scripted policy では直らない**（掴めない・固まるは
+速さの問題ではない）。**だから scripted policy の 2 本目はこれ 1 つで打ち止めにしてよい。**
 
 ## 使い回せるもの / 新しく要るもの
 
@@ -69,8 +69,8 @@ BDDL のゴールは 2 つある。
 
 ```
 $ docker exec parc-tools ... scripted_demo.py measure --task KITCHEN_SCENE3_...
-台本が無い: KITCHEN_SCENE3_turn_on_the_stove_and_put_the_moka_pot_on_it
-  ある台本: KITCHEN_SCENE8_put_both_moka_pots_on_the_stove
+scripted policy が無い: KITCHEN_SCENE3_turn_on_the_stove_and_put_the_moka_pot_on_it
+  ある scripted policy: KITCHEN_SCENE8_put_both_moka_pots_on_the_stove
 ```
 
 **だから空の `TaskPlan` を先に置いてから `measure` を呼ぶ順になる。**
@@ -90,7 +90,7 @@ $ docker exec parc-tools env MUJOCO_GL=osmesa python3 solution/tools/scripted_de
 
 ## 気をつけてほしいこと 1 つ — **ジャークは採点に乗る**
 
-**SCENE8 の台本はジャーク 11.58 で、方策の実測 4.25 より荒い。**
+**SCENE8 の scripted policy はジャーク 11.58 で、方策の実測 4.25 より荒い。**
 採点は成功率だけではなく滑らかさ（ジャーク・SPARC・EEF の回転総量）と
 実行効率（ステップ数・軌道の総距離）と衝突を重み付けして足す
 （予選 PDF p.11。**重みは非公開**）。
@@ -109,7 +109,7 @@ SCENE8 でステップ数と歩留まりを譲ってジャークを 38% 下げ�
 `solution/policy_server.py`（提出物そのもの・書き手を 1 人に保つ）／
 `docs/strategy/05_実測結果.md`／`docs/talk/open_items.md`／`open_items_notes.md`／
 `docs/talk/260813_today.md` の**時刻表と候補一覧の節**（こちらが書いている。
-台本の節は今までどおり書き足してください）。
+scripted policy の節は今までどおり書き足してください）。
 
 ## 参考 — 8/13 13:18 に本番評価から分かったこと（そちらの判断に効く分だけ）
 
@@ -117,4 +117,4 @@ SCENE8 でステップ数と歩留まりを譲ってジャークを 38% 下げ�
 |---|---|
 | **指示文の正規化は効いた** | 版 3.5.0 で **0.181**（過去最高）。**重みは 1 ビットも変えず**、止まっていた 2 本が 94 ステップ・155 ステップで終わるようになった |
 | **リーダーボードは最終評価ではない** | 運営 Q&A No.24。**最終提出は別枠で、別のタスク集合**。手元の 36 件のほうが最終評価に近い |
-| **1 時間で打ち切りがある** | 予選 PDF p.12。**n=2 では 39〜58 本で尽きる**（実測 0.30 秒/歩）。台本の良し悪しとは別に、最終提出の設定値をこちらで見直す |
+| **1 時間で打ち切りがある** | 予選 PDF p.12。**n=2 では 39〜58 本で尽きる**（実測 0.30 秒/歩）。scripted policy の良し悪しとは別に、最終提出の設定値をこちらで見直す |

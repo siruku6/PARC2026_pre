@@ -4,7 +4,7 @@
 **提出物に入っている `InstructionNormalizer` そのものを呼ぶ。** 別に書き写した
 実装ではないので、しきい値を変えたらこの数字も動く。
 
-答えは分かっている。LIBERO-plus の変種名から素のタスク名が取れるので
+答えは分かっている。LIBERO-plus の variant 名から素のタスク名が取れるので
 （`make_holdout_split.py` が配布ノートブックと突き合わせて自己検査している）、
 **「渡ってくる文」と「本来の学習データの文」の対が 10,030 件そろう。**
 
@@ -120,7 +120,7 @@ def _group_of(categories: set[str]) -> str:
 
 
 def _collapse(pairs: list[dict]) -> list[dict]:
-    """同じ文をまとめる。**変種の数も持たせる**（重み付けに使う）。"""
+    """同じ文をまとめる。**variant の数も持たせる**（重み付けに使う）。"""
     merged: dict[tuple[str, str], dict] = {}
     for pair in pairs:
         key = (pair["delivered"], pair["target"])
@@ -161,7 +161,7 @@ def _print_table(judged: list[dict]) -> dict[str, collections.Counter]:
         by_group[item["group"]][item["verdict"]] += 1
         by_group[item["group"]]["文の種類"] += 1
         weighted[item["group"]][item["verdict"]] += item["variants"]
-        weighted[item["group"]]["変種"] += item["variants"]
+        weighted[item["group"]]["variant"] += item["variants"]
 
     order = ("本番の 2 カテゴリ", "その他の摂動", "言い換え")
     print()
@@ -174,15 +174,15 @@ def _print_table(judged: list[dict]) -> dict[str, collections.Counter]:
         print(f"| {group} | {counts['文の種類']} | {counts['正しい']} | "
               f"**{counts['誤り']}** | {counts['触らない']} |")
     print()
-    print("**変種の数で重み付けすると**（同じ文が複数の変種に出るため）")
+    print("**variant の数で重み付けすると**（同じ文が複数の variant に出るため）")
     print()
-    print("| 束 | 変種 | 寄せた（正しい） | **誤り** | 触らない |")
+    print("| 束 | variant | 寄せた（正しい） | **誤り** | 触らない |")
     print("|---|---|---|---|---|")
     for group in order:
         counts = weighted.get(group)
         if not counts:
             continue
-        print(f"| {group} | {counts['変種']} | {counts['正しい']} | "
+        print(f"| {group} | {counts['variant']} | {counts['正しい']} | "
               f"**{counts['誤り']}** | {counts['触らない']} |")
 
     print()
@@ -298,7 +298,7 @@ def main() -> None:
     pairs = build_pairs(args.libero_plus)
     targets = training_instructions(pairs)
     entries = _collapse(pairs)
-    print(f"[check] 変種 {len(pairs)} 件 / 渡ってくる文 {len(entries)} 種 / "
+    print(f"[check] variant {len(pairs)} 件 / 渡ってくる文 {len(entries)} 種 / "
           f"寄せ先 {len(targets)} 種")
 
     normalizer = normalizer_class(targets)

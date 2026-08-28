@@ -42,7 +42,7 @@
 | [howto/01_retrain.md](howto/01_retrain.md) | 追加学習を回すとき |
 | [howto/02_build_submission.md](howto/02_build_submission.md) | zip を作って出すとき |
 | **[howto/03_gpu_eval.md](howto/03_gpu_eval.md)** | **評価を回すとき（GPU マシン。放っておける）** |
-| **[howto/05_scripted_demos.md](howto/05_scripted_demos.md)** | **手本を台本で作るとき（撮影は手元の Mac の Docker。GPU が要るのは学習だけ）** |
+| **[howto/05_scripted_demos.md](howto/05_scripted_demos.md)** | **手本を scripted policy で作るとき（エピソードの作成は手元の Mac の Docker。GPU が要るのは学習だけ）** |
 | **[howto/08_hf_transfer_troubleshooting.md](howto/08_hf_transfer_troubleshooting.md)** | **借りた GPU マシンから重みを運ぶとき。`hf upload` が 403 で止まったら** |
 | **[howto/09_free_disk_space.md](howto/09_free_disk_space.md)** | **`df` の空きが減ってきたとき。消してよいものの判定と、「消したのに空かない」3 つの罠** |
 | **[howto/10_rebuild_machine.md](howto/10_rebuild_machine.md)** | **マシンを作り替えてディスクが消えるとき。持ち出す 1 本のスクリプト・秘密の 4 件・常駐コンテナの起動コマンド** |
@@ -52,7 +52,7 @@
 | **[howto/14_blackwell_first_session.md](howto/14_blackwell_first_session.md)** | **配布 GPU 環境（Blackwell サーバ）に初めて入るとき。60 時間の減り方・下見・配布データの数え方・止め方。自分の Docker は持ち込めない** |
 | **[howto/11_colab_eval.md](howto/11_colab_eval.md)** | **評価を回すとき（Colab。8 ファイルを上げてセルを 5 つ。π0.5 も回せる。T4 で動くかは未確認）** |
 | [strategy/05_実測結果.md](strategy/05_実測結果.md) | 判断する前。数字はすべてここ |
-| **[strategy/06_scripted_demos.md](strategy/06_scripted_demos.md)** | **手本が 300 ステップに収まらないタスクを扱うとき。台本で手本を自分で作る** |
+| **[strategy/06_scripted_demos.md](strategy/06_scripted_demos.md)** | **手本が 300 ステップに収まらないタスクを扱うとき。scripted policy で手本を自分で作る** |
 | **[plan/04_training_targets.md](plan/04_training_targets.md)** | **学習を流す前と、評価が出た直後。**ものさし・天井・候補・外したもの・記録が 1 枚にある |
 | [plan/01_failure_accounting.md](plan/01_failure_accounting.md) | 評価の結果を読むとき。**ゴール到達と衝突の読み分け方** |
 | **[plan/07_track2_preparation.md](plan/07_track2_preparation.md)** | **本選 Track2 に手をつけるとき。摂動 4 カテゴリの中身・関連研究・対策・推奨アクションが 1 枚にある。まず 2.0 節（方針改訂）と 3 節（推奨アクション）** |

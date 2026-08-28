@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""元の手本と、台本で作った軌道を、同じ画面に並べて見る。
+"""元の手本と、scripted policy で作った軌道を、同じ画面に並べて見る。
 
 **数字だけでは「なぜ 400 ステップかかるのか」が分からない。** 元の手本は人が
-遠隔操作したもので、迷い・行き過ぎ・持ち直しがそのまま入っている。台本で
+遠隔操作したもので、迷い・行き過ぎ・持ち直しがそのまま入っている。scripted policy で
 作った軌道はそれが無い。**並べて初めて、削れたステップ数の中身が見える。**
 
-左が元の手本（`lerobot/libero_plus` の実フレーム）、右が台本で作った軌道
+左が元の手本（`lerobot/libero_plus` の実フレーム）、右が scripted policy で作った軌道
 （[scripted_demo.py](../scripted_demo/scripted_demo.py) の `record` が書いた npz）である。
 **どちらも 180 度回した向き**で、学習時にモデルへ入るのと同じ絵になる。
 
-    # 1. 台本の軌道を書き出す（先にこちらを済ませる）
+    # 1. scripted policy の軌道を書き出す（先にこちらを済ませる）
     MUJOCO_GL=egl python3 solution/tools/scripted_demo/scripted_demo.py record \\
         --task KITCHEN_SCENE8_put_both_moka_pots_on_the_stove \\
         --episodes 0 --output /out/scripted
@@ -267,7 +267,7 @@ def _compose(original: np.ndarray, generated: np.ndarray, original_steps: int,
     """左右に並べたコマを 1 枚ずつ返す。
 
     **短いほうは最後のコマで埋めて、長さを揃える。** 埋めずに切ると
-    「台本のほうが短い」ことが画面から消えてしまう。
+    「scripted policy のほうが短い」ことが画面から消えてしまう。
     """
     for index in range(max(len(original), len(generated))):
         left = _panel(
@@ -289,7 +289,7 @@ def _contact_sheet(original: np.ndarray, generated: np.ndarray,
     """等間隔に抜いたコマを 2 段に並べた 1 枚絵。**RGB のまま返す。**
 
     **動画より先にこれを見る。** 掴み損ね・行き過ぎ・ぶつけは、静止画を
-    並べたほうが早く見つかる。上段が元の手本、下段が台本である。
+    並べたほうが早く見つかる。上段が元の手本、下段が scripted policy である。
     """
     def _row(frames: np.ndarray, label: str) -> np.ndarray:
         picked = np.linspace(0, len(frames) - 1, columns).astype(int)
@@ -368,17 +368,17 @@ def _heading_change(track: np.ndarray) -> np.ndarray:
 def _report_actions(original_length: int, generated: SavedEpisode) -> None:
     """ステップ数と行動の癖を並べて印字する。
 
-    **台本の行動は振り切れている**（速く動かすため）。元の手本は人の操作なので
+    **scripted policy の行動は振り切れている**（速く動かすため）。元の手本は人の操作なので
     中間の値が多い。**この違いは学習に効きうる**ので数字で出しておく。
     """
     actions = np.asarray(generated.action)
     saturated = float(np.mean(np.abs(actions[:, :3]) > 0.99))
     print("\n--- ステップ数と行動 ---")
-    print(f"  元の手本   {original_length:4d} 歩")
-    print(f"  台本       {generated.steps:4d} 歩 "
+    print(f"  元の手本         {original_length:4d} 歩")
+    print(f"  scripted policy  {generated.steps:4d} 歩 "
           f"（{generated.steps / original_length:.2f} 倍）")
-    print(f"  台本の行動のうち、位置の指令が振り切れている割合 {saturated:.1%}")
-    print(f"  台本の行動の絶対値の平均 {np.abs(actions[:, :3]).mean():.3f}")
+    print(f"  scripted policy の行動のうち、位置の指令が振り切れている割合 {saturated:.1%}")
+    print(f"  scripted policy の行動の絶対値の平均 {np.abs(actions[:, :3]).mean():.3f}")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -414,7 +414,7 @@ def main() -> None:
     args.output.mkdir(parents=True, exist_ok=True)
 
     generated = SavedEpisode(args.generated)
-    print(f"台本の軌道: {generated.steps} 歩  成功 {generated.success}")
+    print(f"scripted policy の軌道: {generated.steps} 歩  成功 {generated.success}")
     print(f"指示文: {generated.instruction}")
 
     rows = _list_originals(args.episodes_parquet, args.task)

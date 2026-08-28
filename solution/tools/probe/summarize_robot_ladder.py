@@ -64,7 +64,7 @@ def _two_sided_binomial(n_up: int, n: int) -> float:
 
 
 class _Episodes:
-    """1 行（タスク変種）ぶんのエピソードをまとめて持つ。"""
+    """1 行（variant）ぶんのエピソードをまとめて持つ。"""
 
     def __init__(self, episodes: list[dict]) -> None:
         self.steps = [e["total_steps"] for e in episodes]

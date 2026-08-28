@@ -12,7 +12,7 @@
 | `lerobot-src/` | LeRobot v0.6.0 の展開元（vendor化前のソース） |
 | `patch/` | 配布キットへのパッチ関連の作業ファイル |
 | `replay/` | ロールアウト再生の作業ファイル |
-| `scripted/` | 台本から作った手本データ |
+| `scripted/` | scripted policy から作った手本データ |
 | `train2/` | 学習系docker bind mountの予約名（`docs/howto/01_retrain.md`・`03_gpu_eval.md`が名前を前提にしている）。現在は空 |
 | `episode_lists/` | エピソード設定のjsonリスト（`text_lora32_40k_episodes.json`, `weak3x_max300_episodes.json`） |
 | `logs/` | 過去の実行ログ。`eval/`（推論・提出物の実行ログ）・`build/`（zip組み立てログ）・`blend/`（重みブレンド関連ログ）に分類 |

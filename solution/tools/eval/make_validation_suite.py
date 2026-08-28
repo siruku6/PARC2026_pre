@@ -5,7 +5,7 @@
 本番は非公開タスクで採点される（`compe/t1/README.md`）。実際、この 4 件で
 成功率 0.713 を出しても本番は 0.141 だった。**手元の評価が本番を予測できない。**
 
-そこで LIBERO-plus の 10,030 タスク変種から、example と重ならないものを
+そこで LIBERO-plus の 10,030 variant から、example と重ならないものを
 選んで CSV にする。`compe/t1/register.py` は CSV を読んでスイートを組み立てる
 だけなので、この CSV に差し替えれば評価パイプラインはそのまま動く。
 
@@ -52,7 +52,7 @@ from pathlib import Path
 
 # 素のタスク名の取り出しは `make_holdout_split` と共通にする。
 # **同じ正規表現を 2 か所に置くと必ず片方が古くなる。**
-# 兄弟の台本を読む書き方は `check_validation_suite.py` と同じである。
+# 兄弟の scripted policy を読む書き方は `check_validation_suite.py` と同じである。
 # **`make_holdout_split` は `solution/tools/suite/` へ移った。** このファイル自身も
 # 2026-08-23 に `solution/tools/eval/` へ移ったので、**兄弟ではなく 1 つ上の
 # `tools/` の下の `suite/` を見る**（`parents[1] / "suite"`）。
@@ -124,14 +124,14 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _load_classification(libero_plus: Path) -> list[dict]:
-    """タスク変種の分類表を読み、スイート名を各件に持たせて返す。
+    """variant の分類表を読み、スイート名を各件に持たせて返す。
 
-    実物（revision `main`）は **スイート名を鍵にした辞書**で、値が変種の列である。
+    実物（revision `main`）は **スイート名を鍵にした辞書**で、値が variant の列である。
 
         {"libero_spatial": [{"id": 1, "name": "...", "category": "...",
                              "difficulty_level": 2}, ...], ...}
 
-    **変種そのものには `suite` 鍵が無い。** スイートは外側の鍵にしか現れないため、
+    **variant そのものには `suite` 鍵が無い。** スイートは外側の鍵にしか現れないため、
     ここで各件へ写しておく。これを取り違えると `category` にスイート名が入り、
     摂動カテゴリでの絞り込みが 1 件も通らなくなる（実際に起きた）。
 
@@ -234,8 +234,8 @@ def _resolve_newobj_init(
     LIBERO-plus は専用の初期状態を **`init_files/libero_newobj/<suite>/`** に
     2,400 件持っており、本家の `benchmark/__init__.py` も `_add_` と `_level`
     のときだけそこを見ている（`get_task_init_states`）。
-    **公式カタログの変種名（`_add_N`単独）には前方一致は要らない**——
-    ファイル名がそのまま変種名と一致する。
+    **公式カタログの variant 名（`_add_N`単独）には前方一致は要らない**——
+    ファイル名がそのまま variant 名と一致する。
 
     **Camera・Robot Initial States・Sensor Noiseと組み合わせた複合摂動名
     （`<add系のベース>_view_..._initstate_..._noise_...`）は、この関数が
@@ -248,7 +248,7 @@ def _resolve_newobj_init(
     Returns
     -------
     relative_path : str | None
-        初期状態の置き場からの相対パス（`libero_newobj/<suite>/<変種名>.pruned_init`）。
+        初期状態の置き場からの相対パス（`libero_newobj/<suite>/<variant 名>.pruned_init`）。
         **`/` を含めることがパッチ側の分岐の目印になる。** 無ければ None。
     """
     candidates = dict.fromkeys((task_id, task_id.split("_view_")[0]))
@@ -262,9 +262,9 @@ def _resolve_newobj_init(
 def _resolve_init_state_stem(
     task_id: str, suite: str, stems_by_suite: dict[str, list[str]]
 ) -> str | None:
-    """変種名に対応する初期状態ファイルの名前を、最長前方一致で決める。
+    """variant 名に対応する初期状態ファイルの名前を、最長前方一致で決める。
 
-    LIBERO-plus は変種の bddl を大量に持つが、**初期状態ファイルは元タスク分しか
+    LIBERO-plus は variant の bddl を大量に持つが、**初期状態ファイルは元タスク分しか
     無い**（`libero_spatial` なら 10 件）。`register.py` は正規表現で接尾辞を
     剥がしているが、摂動の付け方はカテゴリごとに違うため列挙しきれない。
     実在する名前に当てるほうが確実である。
@@ -272,7 +272,7 @@ def _resolve_init_state_stem(
     Parameters
     ----------
     task_id : str
-        変種のタスク名（例 `pick_up_..._on_the_plate_view_0_0_100_0_0_initstate_1`）。
+        variant のタスク名（例 `pick_up_..._on_the_plate_view_0_0_100_0_0_initstate_1`）。
     suite : str
         元のスイート名。
     stems_by_suite : dict[str, list[str]]
@@ -293,11 +293,11 @@ def _resolve_init_state_stem(
 
 
 def _resolve_bddl(task_id: str, suite: str, bddl_root: Path) -> Path | None:
-    """変種の bddl を返す。**変種専用のファイルが無いのが普通である。**
+    """variant の bddl を返す。**variant 専用のファイルが無いのが普通である。**
 
-    LIBERO-plus の 10,030 変種のうち **6,287 件は自分の名前の bddl を持たない。**
+    LIBERO-plus の variant 10,030 件のうち **6,287 件は自分の名前の bddl を持たない。**
     カメラ視点・ロボット初期姿勢・観測ノイズの摂動は、bddl ではなく
-    **変種名そのものに数値として埋め込まれている**（`libero/libero/envs/
+    **variant 名そのものに数値として埋め込まれている**（`libero/libero/envs/
     env_wrapper.py` の `_view_` / `_initstate_` / `_noise_` の解釈）。
 
         ..._place_it_on_the_plate_view_0_0_100_2_352_initstate_0
@@ -328,7 +328,7 @@ def _place_variant(
     init_states_root: Path,
     stems_by_suite: dict[str, list[str]],
 ) -> tuple[str, Path, str] | None:
-    """変種の bddl と初期状態がそろって存在する置き場を決める。
+    """variant の bddl と初期状態がそろって存在する置き場を決める。
 
     `register.py` は `problem_folder` **1 つ**で bddl と初期状態の両方を探す
     （`bddl_files/<folder>/<...>.bddl` と `init_files/<folder>/<init_states_file>`）。
@@ -537,7 +537,7 @@ def _build_rows(
 ) -> tuple[list[dict], list[dict]]:
     """CSV の行を作り、実体が無いものは落とす。
 
-    **`task_id` は一切書き換えずに CSV へ入れる。** 摂動の値は変種名そのものに
+    **`task_id` は一切書き換えずに CSV へ入れる。** 摂動の値は variant 名そのものに
     埋め込まれており、`env_wrapper.py` が `_view_` で切って解釈する。
     ここで実体のある名前（`_view_` より前）に置き換えてしまうと、
     **ファイルは開けるのに摂動がすべて無効になり、素のタスクを測ってしまう。**
@@ -590,7 +590,7 @@ def _build_rows(
             # **どのファイルを開くかをここで決めきる。** 評価側で regex を
             # 当て直させると、カテゴリごとに違う摂動の付け方を取りこぼす。
             #
-            # 物体が増える摂動だけ `libero_newobj/<suite>/<変種名>.pruned_init`
+            # 物体が増える摂動だけ `libero_newobj/<suite>/<variant 名>.pruned_init`
             # という**相対パス**を書く。`/` の有無がパッチ側の分岐になっており、
             # `problem_folder` には畳めない（あちらは bddl の置き場でもある）。
             # それ以外は接尾辞を剥がした元タスク名のファイル名だけを書く。
@@ -620,7 +620,7 @@ def _report(rows: list[dict], skipped: list[dict]) -> None:
     落としたものは**カテゴリ × 理由で束ねて数える。** 1 件ずつ並べると数十行になり、
     ノートブックが末尾しか表示しない設定だと**全部流れて消える**（実際に起きた）。
     """
-    print(f"\n選んだタスク変種: {len(rows)} 件")
+    print(f"\n選んだ variant: {len(rows)} 件")
     counts = collections.Counter((row["suite"], row["category"]) for row in rows)
     for (suite, category), count in sorted(counts.items()):
         print(f"  {suite:16s} {category:22s} {count}")

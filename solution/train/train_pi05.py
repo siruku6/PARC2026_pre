@@ -55,7 +55,7 @@ state=8・action=7 は、このコンペの観測変換（`processor/env_process
    （[docs/reference/01_base_model.md](../../docs/reference/01_base_model.md) 参照）。
 3. **LoRA の対応は未確認。** `train.py` は SmolVLA 向けに `--peft.method_type=LORA`
    を使っているが、pi05 の公式ドキュメントは PEFT に触れていない。
-   **この台本は LoRA を使わず、公式レシピどおり `train_expert_only` の
+   **この scripted policy は LoRA を使わず、公式レシピどおり `train_expert_only` の
    フルパラメータ学習にしている。** マージ手順（`merge.py`）も不要になる —
    出力はそのまま提出用チェックポイントとして読める。
 
@@ -176,7 +176,7 @@ _CAMERA_VIEWPOINT_AUGMENT_TFS = {
     "hue": {"weight": 1.0, "type": "ColorJitter", "kwargs": {"hue": [-0.05, 0.05]}},
     "sharpness": {"weight": 1.0, "type": "SharpnessJitter", "kwargs": {"sharpness": [0.5, 1.5]}},
     # 既定の affine（degrees ±5・translate 5%）を広げる。scale を新たに足して
-    # LIBERO-plus の scale_factor（公式変種は 1.00〜2.00 の範囲。7 節）の低め側を近似する。
+    # LIBERO-plus の scale_factor（公式 variant は 1.00〜2.00 の範囲。7 節）の低め側を近似する。
     "affine": {"weight": 1.0, "type": "RandomAffine",
                "kwargs": {"degrees": [-15.0, 15.0], "translate": [0.12, 0.12], "scale": [0.82, 1.22]}},
     # ランダムクロップ＋ズーム。256x256 のまま返す（lerobot/libero_plus の画像 shape に合わせる）。

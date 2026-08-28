@@ -279,7 +279,7 @@ work/venv310/bin/python validate_submission.py --static
 # 寄せ先 40 種を出す（policy_server.py に貼ってある値の出し方）
 python3 solution/tools/suite/instruction_targets.py --emit python
 
-# 正しく寄せられるかを測る（変種 10,030 件・答え合わせ付き。torch 不要）
+# 正しく寄せられるかを測る（variant 10,030 件・答え合わせ付き。torch 不要）
 python3 solution/tools/suite/check_instruction_normalization.py
 python3 solution/tools/suite/check_instruction_normalization.py --sweep   # 合格ラインを振って比べる
 ```
@@ -498,6 +498,8 @@ work/venv310/bin/python solution/tools/build/digest_submission.py --per-entry
 > 33 倍の余裕。1 ステップは `0.065 + 0.303/10 = 0.095 秒`の見込みで、
 > **n=5 の SmolVLA（0.154 秒）より速い。**
 
+> **variant** = 元のタスク 1 つに摂動を 1 つ当てたもの（`.bddl` 1 個）。初期配置は元タスクのものを共有するので、**1 つの variant から最大 50 エピソード作れる。**
+>
 > **3.6.0 の狙いはスコアではなく打ち切りである。** 予選 PDF p.12 の
 > 「Track 評価に 1 時間以上かかる場合はタイムアウト」に、採点 10 回ぶんの
 > 秒数とステップ数から出した `0.065 秒 + 0.464 秒 / n`（1 ステップあたり）を当てると、
@@ -510,7 +512,7 @@ work/venv310/bin/python solution/tools/build/digest_submission.py --per-entry
 > **同時に `[parc] reset` の点数の印字を落とした**（挙動は変わらない）。
 > 3.5.0 の採点ログで点数が **0.851, 0.851, 0.819, 0.819, 0.972, 0.972,
 > 0.902, 0.902** と並び、**4 タスク × 2 エピソード**と読めたうえ、手元の
-> 10,030 変種と突き合わせれば**タスク名まで特定できてしまう。**
+> variant 10,030 件と突き合わせれば**タスク名まで特定できてしまう。**
 > 運営 Q&A No.33 が禁じるのはまさにこれなので、**特定できる状態を消した。**
 
 > **3.5.0 は samples を 1 に戻してある。** 一度 samples=3 で組んだ
@@ -521,7 +523,7 @@ work/venv310/bin/python solution/tools/build/digest_submission.py --per-entry
 > 渡ってくる文は **40 種**しかなく、そのうち **25 種が学習データの書き方と
 > ずれている**（配布 4 タスクの CSV が `Pick the akita black bowl …` を渡すのに、
 > 学習データは `pick up the black bowl …`）。**40 種すべてを正しく寄せ、誤りは 0**
-> だった（変種 7,280 件で実測。下の「指示文の正規化を測る」）。
+> だった（variant 7,280 件で実測。下の「指示文の正規化を測る」）。
 
 **`n_action_steps` の実測（weak3x・EMA 0.3・samples=1 で固定＝n だけの差）。**
 

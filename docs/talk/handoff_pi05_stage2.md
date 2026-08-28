@@ -107,12 +107,12 @@ Dockerfileが`COPY train.py train_pi05.py ... /opt/pi05/`でビルド時に焼�
 | やり方 | コマンド |
 |---|---|
 | **A. 作り直す**(素直。段1と並行してやれる) | `docker build -t parc2026-train-pi05 -f solution/train/Dockerfile.pi05 solution/train` |
-| **B. ホスト側の台本を被せる**(作り直さない) | `docker run` に `-v "$PWD/solution/train:/opt/pi05_src:ro"` を足し、`python /opt/pi05_src/train_pi05.py ...` を呼ぶ |
+| **B. ホスト側の scripted policy を被せる**(作り直さない) | `docker run` に `-v "$PWD/solution/train:/opt/pi05_src:ro"` を足し、`python /opt/pi05_src/train_pi05.py ...` を呼ぶ |
 
 Bが効くのは、`train_pi05.py`が`sys.path.insert(0, Path(__file__).resolve().parent)`で
 **自分と同じディレクトリから`train.py`を輸入する**ためである(112〜122行)。
 ディレクトリごと被せれば、直した2ファイルがまとめて差し替わる。
-`/opt/pi05`ではなく別の名前に当てているのは、**イメージ側の元の台本を残して
+`/opt/pi05`ではなく別の名前に当てているのは、**イメージ側の元の scripted policy を残して
 見比べられるようにするため**で、`/opt/pi05`に直接被せても動く。
 
 **このマシンでは`docker build`の実行が許可されていないので、Claudeは

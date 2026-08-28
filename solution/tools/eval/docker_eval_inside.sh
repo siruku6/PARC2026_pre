@@ -10,7 +10,7 @@
 #   MAX_STEPS    1 エピソードの打ち切り
 #   N_EPISODES   タスクあたりのエピソード数
 #   PER_CELL     スイート × カテゴリあたりの本数
-#   RECORD       空でなければ mp4 を撮る
+#   RECORD       空でなければ mp4 で録画する
 set -euo pipefail
 
 KIT="${KIT:-/workspace}"

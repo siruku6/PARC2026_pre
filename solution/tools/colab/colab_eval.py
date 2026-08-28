@@ -780,7 +780,7 @@ def build_suite() -> None:
     """検証用スイートへ差し替え、Colab の切断に耐える大きさへ割る。
 
     **example 4 件での成功率は本番を予測できない**（0.875 に対し本番 0.096）。
-    LIBERO-plus の 10,030 変種から example 以外を選び、7 カテゴリを全部入れる。
+    LIBERO-plus の variant 10,030 件から example 以外を選び、7 カテゴリを全部入れる。
     **前の回の CSV が /content/VAL_TASKS.csv にあれば、作り直さずにそれを使う**
     —— 1 件でも違うタスクが混ざると、1 件ずつ対にした比較が成り立たない。
 
@@ -952,7 +952,7 @@ def _resolve_plan(
             parts.append(f"{key.replace('PARC_', '').lower()}{value}".replace(".", ""))
 
     # **録画も塊ごとに分ける。** 1 つのディレクトリへ溜めると、退避のときに
-    # 前の塊の動画も一緒に写り、どの 28 件で撮れたのか分からなくなる。
+    # 前の塊の動画も一緒に写り、どの 28 件で作れたのか分からなくなる。
     record_dir = None
     if record_dir_setting:
         record_dir = Path(str(record_dir_setting))
@@ -1309,7 +1309,7 @@ def _print_log_summary(plan: EvalPlan, eval_log: Path) -> Path | None:
 
 
 def _summarize_videos(plan: EvalPlan, eval_log: Path) -> None:
-    """撮れた動画を**見るべき順に並べ**、コマ並べ画像を作る。
+    """作れた動画を**見るべき順に並べ**、コマ並べ画像を作る。
 
     打ち切りに張り付いた回が先頭に来るので、再生する前に当たりを付けられる。
     """
@@ -1414,7 +1414,7 @@ def run(
           + (f" / **疎通確認 {plan.max_tasks} タスクだけ**" if plan.max_tasks else ""))
     print(f"  設定値  {plan.policy_env or '既定（n_action_steps=5 / ema_alpha=0.3）'}")
     print(f"  出力先  {plan.results_dir}")
-    print(f"  録画    {plan.record_dir or '（撮らない）'}")
+    print(f"  録画    {plan.record_dir or '（作らない）'}")
     print(f"  名前    {plan.label}")
 
     # **1 本目が 200 秒を超えていたら EGL が効いていない。** 100〜130 秒が想定。

@@ -16,22 +16,22 @@ Track2 で加わる**カメラ位置・ロボット初期姿勢・物体配置�
     2 カテゴリの差が 1 件（12.5 pt）なら偶然と区別できない。**順位を見るための
     道具であって、値を報告するための道具ではない。**
 
-変種の選び方:
+variant の選び方:
   1. `EVAL_TASKS.csv` の `init_states_file` から元タスク名を取る
      （`instruction` では引けない。**あちらの指示文は運営の言い換えで、
      学習データの綴りと違う**ため、名前で引かないと 0 件になる）。
   2. スイート 4 つから均等にタスクを取る（既定は各 2 件）。
-  3. そのタスク × カテゴリの変種のうち、**難易度が中央値のものを 1 件**取る。
+  3. そのタスク × カテゴリの variant のうち、**難易度が中央値のものを 1 件**取る。
      `id` の小さい順に取ると系統的にいちばん弱い摂動だけを測ってしまう。
   4. 乱数を使わない。同じ引数なら同じ CSV になる。
 
-**出た CSV は、学習用の変種を作るときの除外一覧としてそのまま渡せる。**
+**出た CSV は、学習用の variant を作るときの除外一覧としてそのまま渡せる。**
 `make_validation_suite.py --exclude` は `task_id` 列だけを読むので、
 
     python3 solution/tools/eval/make_validation_suite.py \
         --exclude compe/val/TRACK2_PROBE.csv ...
 
-とすれば、検証で測る変種が学習データに混ざることを防げる
+とすれば、検証で測る variant が学習データに混ざることを防げる
 （`docs/plan/07_track2_preparation.md` 2.2 節の評価スイート設計要件 2）。
 
 使い方:
@@ -105,9 +105,9 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _load_classification(libero_plus: Path) -> list[dict]:
-    """変種の分類表を読み、スイート名を各件に写して返す。
+    """variant の分類表を読み、スイート名を各件に写して返す。
 
-    **変種そのものには `suite` 鍵が無く、スイートは外側の鍵にしかない。**
+    **variant そのものには `suite` 鍵が無く、スイートは外側の鍵にしかない。**
     `make_validation_suite._load_classification` と同じ扱いにそろえてある。
     """
     path = libero_plus / "libero/libero/benchmark/task_classification.json"
@@ -176,7 +176,7 @@ def _pick_tasks(base_tasks: list[dict], count: int) -> list[dict]:
 
 
 def _pick_variant(entries: list[dict], base: str, category: str) -> dict | None:
-    """そのタスク × カテゴリの変種から、難易度が中央値の 1 件を選ぶ。
+    """そのタスク × カテゴリの variant から、難易度が中央値の 1 件を選ぶ。
 
     **`id` 順の先頭を取ってはいけない。** 分類表は摂動の強さの順に並んでいる
     ことがあり、いちばん弱い摂動だけを 8 件測って「Track2 でも落ちない」と
@@ -215,13 +215,13 @@ def _select(
     -------
     selected : list[dict]
     missing : list[str]
-        変種が 1 件も無かった（タスク, カテゴリ）の説明。**黙って減らさない。**
+        variant が 1 件も無かった（タスク, カテゴリ）の説明。**黙って減らさない。**
     """
     selected: list[dict] = []
     missing: list[str] = []
     for task in tasks:
         if with_base:
-            # **摂動なしの行。** 変種名ではなく元タスク名をそのまま入れる。
+            # **摂動なしの行。** variant 名ではなく元タスク名をそのまま入れる。
             # 分類表に無いので `difficulty_level` と `id` は空にする。
             selected.append({
                 "name": task["name"], "suite": task["suite"],
@@ -282,7 +282,7 @@ def main() -> None:
 
     selected, missing = _select(entries, tasks, categories, not args.no_base)
     if missing:
-        print(f"\n[probe] **変種が無かった組 {len(missing)} 件**")
+        print(f"\n[probe] **variant が無かった組 {len(missing)} 件**")
         for text in missing:
             print(f"[probe]   {text}")
 
@@ -300,7 +300,7 @@ def main() -> None:
         raise SystemExit("[probe] 1 件も載せられませんでした。上の理由を読むこと")
     if len(rows) < len(selected):
         raise SystemExit(
-            f"[probe] **実体が無くて落ちた変種が {len(selected) - len(rows)} 件ある。**"
+            f"[probe] **実体が無くて落ちた variant が {len(selected) - len(rows)} 件ある。**"
             "黙って減った一覧では、そのカテゴリの弱さが見えない"
         )
     _report_design(rows, categories)

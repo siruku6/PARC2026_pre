@@ -80,7 +80,7 @@ _GRIP_RE = re.compile(r"握り x(\d+)")
 # これ以上開閉していたら「掴み直しで空回りしている」と数える。
 _GRIP_CHATTER_THRESHOLD = 20
 
-# 変種名の**末尾**の接尾辞 → 摂動カテゴリ。CSV が読めればそちらを使う。
+# variant 名の**末尾**の接尾辞 → 摂動カテゴリ。CSV が読めればそちらを使う。
 #
 # **末尾で見る。** `_table_` を含むかどうかで見ると、
 # `pick_up_the_black_bowl_from_table_center_..._tb_1` のような名前を
@@ -247,7 +247,7 @@ def _load_nontarget_counts(csv_path: Path | None) -> dict[str, int]:
 
 
 def _category_of(task_name: str, known: dict[str, str]) -> str:
-    """摂動カテゴリを決める。CSV を優先し、無ければ変種名から当てる。
+    """摂動カテゴリを決める。CSV を優先し、無ければ variant 名から当てる。
 
     **名前からは 7 カテゴリのうち 4 つしか分からない**（上の
     `_AMBIGUOUS_CATEGORY` の説明）。CSV が読めているかどうかで
@@ -1202,7 +1202,7 @@ def _guess_csv(output_dir: Path) -> Path | None:
     **`run_gpu_eval.sh` の既定は `<リポジトリ>/work/eval-kit` である。**
     出力先が `<リポジトリ>/work/gpu_eval/<日時>_<設定>` なので、キットは
     **1 つ上**（`parents[1]`）にある。ここを 1 段間違えると CSV が見つからず、
-    **摂動カテゴリ別の表が静かに変種名からの推定に落ちる**（視点・指示文・
+    **摂動カテゴリ別の表が静かに variant 名からの推定に落ちる**（視点・指示文・
     初期姿勢が 1 行に束ねられる）。**気づけないまま学習の的を決めうる。**
 
     上の階層から順に見て、`KIT_DIR` を変えた場合でも当たるようにする。
@@ -1216,7 +1216,7 @@ def _guess_csv(output_dir: Path) -> Path | None:
 
 
 def _report_videos(lines: list[str], output_dir: Path) -> None:
-    """撮れた mp4 の本数を出す。**中身の確認は別の道具でやる。**"""
+    """作れた mp4 の本数を出す。**中身の確認は別の道具でやる。**"""
     videos = sorted((output_dir / "videos").glob("*.mp4"))
     lines.append("")
     lines.append("=== 録画 ===")
@@ -1249,7 +1249,7 @@ def main() -> None:
     lines: list[str] = [f"評価ログ  {log_path}"]
     lines.append(
         f"CSV       {csv_path}" if categories
-        else "CSV       **見つからない**（摂動カテゴリは変種名から当てる）"
+        else "CSV       **見つからない**（摂動カテゴリは variant 名から当てる）"
     )
 
     # **件数の確認は絞り込む前の全件で行う。** 「最後まで走ったか」は
@@ -1260,7 +1260,7 @@ def main() -> None:
         if not categories:
             raise SystemExit(
                 "**--only-categories は CSV が無いと使えない。**"
-                "変種名からは 7 カテゴリのうち 4 つしか分からないため、"
+                "variant 名からは 7 カテゴリのうち 4 つしか分からないため、"
                 "絞った結果が静かに間違う。--csv で渡すこと"
             )
         episodes = _filter_by_categories(all_episodes, categories, only)

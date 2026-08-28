@@ -102,6 +102,6 @@
 学習でしか届かないところにある。**残り期間で解ける見込みが薄い。
 
 **副産物として使えるものが 2 つある。** 物体の変位を記録する仕掛け
-（`solution/tools/eval/kit_patches/rollout.py`）と、動画が撮れるようになったこと
+（`solution/tools/eval/kit_patches/rollout.py`）と、動画が作れるようになったこと
 （`cv2` の `mp4v` で書き、読み戻して確かめられなければ GIF・PNG 連番へ落ちる）。
 **どちらも Track1・Track2 に効く。**

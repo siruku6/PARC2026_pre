@@ -8,13 +8,15 @@
 作り方の手順は [../howto/04_proxy_eval.md](../howto/04_proxy_eval.md)、
 回し方は [../howto/03_gpu_eval.md](../howto/03_gpu_eval.md) にある。
 
+> **variant** = 元のタスク 1 つに摂動を 1 つ当てたもの（`.bddl` 1 個）。初期配置は元タスクのものを共有するので、**1 つの variant から最大 50 エピソード作れる。**
+>
 > **出典。**
 >
 > | 出典 | 何が分かるか |
 > |---|---|
 > | `outputs/train2/weak3x_max300/episodes.json` | **その学習が使ったエピソード番号**（`train.py` が書く） |
 > | `outputs/tmp/libero_plus_episodes.parquet` | `lerobot/libero_plus` の `meta/episodes/*.parquet` を 1 つにしたもの |
-> | `work/LIBERO-plus/.../task_classification.json` | 変種 10,030 件の名前・カテゴリ・難易度 |
+> | `work/LIBERO-plus/.../task_classification.json` | variant 10,030 件の名前・カテゴリ・難易度 |
 > | 運営 Q&A CSV No.21 / No.33 | 採点の摂動カテゴリ、自己評価の使用可否 |
 >
 > **`solution/` 以下の説明文と `docs/` の他の `.md` は出典にしていない。**
@@ -59,25 +61,25 @@ print([n for n in t.column_names if not n.startswith(('videos/', 'data/'))][:8])
 さらに `--emphasize-tasks` で強調した 3 タスクは
 **エピソードを全部使っている**ので、長さで落ちた分を除けば未使用が無い。
 
-## 「未使用だから未知」とは言えない —— 変種と対応付けられない
+## 「未使用だから未知」とは言えない —— variant と対応付けられない
 
-**評価はデータセットの実演を再生するのではなく、LIBERO-plus の変種を環境として
+**評価はデータセットの実演を再生するのではなく、LIBERO-plus の variant を環境として
 走らせる。** そこを繋げるかを確かめたが、繋がらなかった。
 
 | 調べたこと | 結果 |
 |---|---|
-| データセットは変種を区別しているか | **していない。** `stats/task_index` は **40 種**しかなく、指示文と 1 対 1 |
-| 変種の数と実演の数は対応するか | **しない。** 変種 10,030 に対し実演 14,347。指示文ごとの比は **0.58〜2.95（中央 1.45）** で整数にならない |
+| データセットは variant を区別しているか | **していない。** `stats/task_index` は **40 種**しかなく、指示文と 1 対 1 |
+| variant の数と実演の数は対応するか | **しない。** variant 10,030 に対し実演 14,347。指示文ごとの比は **0.58〜2.95（中央 1.45）** で整数にならない |
 
-**データセットは変種の一部を不揃いな本数で収録している。**
-したがって「この変種は学習に使っていない」とは言えない。
+**データセットは variant の一部を不揃いな本数で収録している。**
+したがって「この variant は学習に使っていない」とは言えない。
 
 | | |
 |---|---|
 | **言える** | その指示文には、**学習が 1 度も引かなかった実演があり、その見た目は学習に使った実演のどれとも違う** |
-| **言えない** | 選んだ変種そのものが学習に入っていないこと |
+| **言えない** | 選んだ variant そのものが学習に入っていないこと |
 
-**強めるなら**、変種の初期画面を描いて明るさを測り、
+**強めるなら**、variant の初期画面を描いて明るさを測り、
 `EVAL_TASKS.meta.json` の `seen_brightness` の外側にあるものだけを残す。
 描画には GPU マシンが要る。
 
@@ -92,7 +94,7 @@ print([n for n in t.column_names if not n.startswith(('videos/', 'data/'))][:8])
 | `pick up the chocolate pudding and place it in the basket` | 500 | 0.100〜0.676 | 115 |
 | `open the top drawer and put the bowl inside` | 200 | 0.163〜0.544 | 75 |
 
-**約 4 本が同じ明るさを共有する**形なので、見た目の変種ごとに初期状態が
+**約 4 本が同じ明るさを共有する**形なので、見た目の variant ごとに初期状態が
 数本ある構造だと読める。**エピソードは同じ場面の焼き直しではない。**
 
 ## 落とした指示文
@@ -200,7 +202,7 @@ print(f'使った {len(used):,} / 見た目が同じ {same:,} / 未知 {novel:,}
       f'/ 未知かつ 300 ステップ以下 {candidates:,}')
 PY
 
-# 変種と実演が対応しないこと
+# variant と実演が対応しないこと
 PYTHONPATH=work/pylibs:solution/tools/suite python3 - <<'PY'
 import json, statistics as st
 from collections import Counter, defaultdict
@@ -220,8 +222,8 @@ episodes = Counter(
     value if isinstance(value, str) else str(value[0])
     for value in table.column('tasks').to_pylist())
 ratios = [episodes[name] / variants[name] for name in episodes if variants[name]]
-print(f'変種 {sum(variants.values()):,} / 実演 {sum(episodes.values()):,}')
-print(f'ep/変種  最小 {min(ratios):.2f} 中央 {st.median(ratios):.2f} '
+print(f'variant {sum(variants.values()):,} / 実演 {sum(episodes.values()):,}')
+print(f'ep/variant  最小 {min(ratios):.2f} 中央 {st.median(ratios):.2f} '
       f'最大 {max(ratios):.2f}  → 整数にならない')
 PY
 ```
@@ -231,7 +233,7 @@ PY
 | 事柄 | 確かめ方 |
 |---|---|
 | ~~36 件に判別力があるか~~ | **済み（8/13）。素の重みで 21/36 = 0.583**（打ち切りは 8 件だけ）。**天井も床もない**（[../howto/03_gpu_eval.md](../howto/03_gpu_eval.md)）。**残るのは順序の検定** ——LoRA 20k を同じ設定値で回して、本番の 0.1409 > 0.016 を再現するか |
-| **摂動カテゴリ別の表が読めるか** | **読めない。**1 指示文 1 変種なので、タスクの難しさと分けられない（[../plan/04_training_targets.md](../plan/04_training_targets.md) の 5 節）。**引き算ができるのは 84 件だけ** |
-| 選んだ変種が本当に未知か | 変種の初期画面を描いて明るさを測り、`seen_brightness` の外か見る |
+| **摂動カテゴリ別の表が読めるか** | **読めない。**1 指示文 variant 1 件なので、タスクの難しさと分けられない（[../plan/04_training_targets.md](../plan/04_training_targets.md) の 5 節）。**引き算ができるのは 84 件だけ** |
+| 選んだ variant が本当に未知か | variant の初期画面を描いて明るさを測り、`seen_brightness` の外か見る |
 | 明るさ以外の軸 | `stats/observation.state` の min/max で初期姿勢や動きの範囲を比べる。**未着手** |
 | 2 つの学習データが同じ軌道か | `pepijn223/libero_plus_lerobot` と `lerobot/libero_plus` の `meta/info.json` を突き合わせる |

@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""変種ごとに、台本（`scripted_demo.py`）が通るかどうかを数えて表に残す。
+"""variant ごとに、scripted policy（`scripted_demo.py`）が通るかどうかを数えて表に残す。
 
 **同じ検査は 2026-08-26 に一度やっているが、通った番号が保存されていない。**
-[plan/12](../../../docs/plan/12_tier2_recording_spec.md) 4.2 節は「78 変種のうち
+[plan/12](../../../docs/plan/12_tier2_recording_spec.md) 4.2 節は「variant 78 件のうち
 3 回とも通ったのは 30」という**個数だけ**を残していて、どの `initstate` が通ったのかが
-残っていない。**だから 8/28 に「手先のずれ 2 cm 以上から 12 変種を選び直す」と決めた
+残っていない。**だから 8/28 に「手先のずれ 2 cm 以上から variant 12 件を選び直す」と決めた
 ときに、選び直す母集団が引けなかった。**このスクリプトは同じ検査を、
-**1 変種 1 行の JSONL** に残す形でやり直すためのものである。
+**variant 1 件 1 行の JSONL** に残す形でやり直すためのものである。
 
-やっていることは 1 変種につき `scripted_demo.py verify` を 1 回呼ぶだけである。
-**描画しないので GPU は要らず、1 変種 13 秒ほどで終わる。**変種ごとに独立なので
+やっていることは variant 1 件につき `scripted_demo.py verify` を 1 回呼ぶだけである。
+**描画しないので GPU は要らず、variant 1 件 13 秒ほどで終わる。**variant ごとに独立なので
 `--workers` で並列にできる。
 
-**台本が通ることは、学習データを撮れることと同義である。** 通らない変種は
+**scripted policy が通ることは、学習データを作れることと同義である。** 通らない variant は
 `record` に回しても失敗の山しか出ない（[plan/12](../../../docs/plan/12_tier2_recording_spec.md)
-4.1 節）。**通る変種の一覧が、Tier2 で撮れる範囲そのものである。**
+4.1 節）。**通る variant の一覧が、Tier2 で作れる範囲そのものである。**
 
 使い方（コンテナの中で回す）:
 
@@ -28,9 +28,9 @@
 
 Reads:
   - --tasks-csv に渡した CSV（`task_id`・`suite`・`category`・`difficulty_level`）
-  - <libero-root>/bddl_files/<suite>/<変種>.bddl
+  - <libero-root>/bddl_files/<suite>/<variant>.bddl
 Generates:
-  - --output に渡した JSONL（1 変種 1 行）
+  - --output に渡した JSONL（variant 1 件 1 行）
   - 標準出力の要約
 """
 from __future__ import annotations
@@ -73,7 +73,7 @@ def _base_task(task_id: str) -> str:
 
 
 def _verify_one(row: dict, args: argparse.Namespace) -> dict:
-    """1 変種ぶん `verify` を呼び、成功数とステップ数を拾う。"""
+    """variant 1 件ぶん `verify` を呼び、成功数とステップ数を拾う。"""
     task_id = row["task_id"]
     command = [
         args.python, _SCRIPT, "verify",
@@ -108,7 +108,7 @@ def main() -> None:
     with open(args.tasks_csv, newline="") as f:
         rows = [r for r in csv.DictReader(f) if r["category"] != "Base"]
 
-    print(f"{len(rows)} 変種を {args.workers} 並列で検査する", flush=True)
+    print(f"{len(rows)} variant を {args.workers} 並列で検査する", flush=True)
     started = time.time()
     results: list[dict] = []
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
@@ -127,7 +127,7 @@ def main() -> None:
 
     full = [r for r in results if r["n_success"] == r["n_episodes"] and r["n_episodes"]]
     broken = [r for r in results if r["n_success"] is None]
-    print(f"3 回とも通った変種: {len(full)} / {len(results)}"
+    print(f"3 回とも通った variant: {len(full)} / {len(results)}"
           f"（検査そのものが落ちた: {len(broken)}）")
     by_task = collections.Counter(r["base_task"] for r in full)
     for task, count in sorted(by_task.items()):

@@ -15,7 +15,7 @@
 #   PER_CELL=3     スイート × カテゴリあたりの本数（CSV 全体は 84 件になる）
 #   TOOLS_DIR=/host/tools/eval   スクリプトの置き場
 #   OUT_DIR=/out            出力先
-#   RECORD=1       ロールアウトを mp4 に撮る（$OUT_DIR/videos へ）。
+#   RECORD=1       ロールアウトを mp4 で録画する（$OUT_DIR/videos へ）。
 #                  **ランダム方策なので中身に意味は無い。** 録画の配線が
 #                  通っているかだけを、本測定の前に確かめる用である
 set -euo pipefail
@@ -34,10 +34,10 @@ mkdir -p "$OUT_DIR"
 # 録画は既定で無効。**空でない値のときだけ**出力先を渡す。
 if [ -n "$RECORD" ]; then
     export PARC_RECORD_DIR="$OUT_DIR/videos"
-    # 疎通確認では**全部撮る**。ランダム方策では成功がまず出ないため、
+    # 疎通確認では**全部録画する**。ランダム方策では成功がまず出ないため、
     # `failures` のままでも実害は無いが、配線の確認が目的なので確実にする。
     export PARC_RECORD_WHICH="${PARC_RECORD_WHICH:-all}"
-    # 前回の mp4 が残っていると、今回撮れたものと区別が付かない。
+    # 前回の mp4 が残っていると、今回作れたものと区別が付かない。
     rm -rf "$PARC_RECORD_DIR"
     echo "[smoke] 録画あり: $PARC_RECORD_DIR （which=$PARC_RECORD_WHICH）"
 fi
@@ -102,13 +102,13 @@ echo "  [結果] 行: $(grep -c '\[結果\]' "$OUT_DIR/eval.log" || true)"
 
 if [ -n "$RECORD" ]; then
     echo
-    echo "[録画] 撮れた mp4"
+    echo "[録画] 作れた mp4"
     # **本数を数えるだけでは足りない。** 0 フレームでもヘッダは書かれるので、
     # 読み返して再生できることまで確かめる（集計側が読み返している）。
     # 1 本も無ければ集計は終了コード 1 で抜けるため、そこで案内を出す。
     if ! "$PY" "$TOOLS_DIR/summarize_rollout_videos.py" \
             "$PARC_RECORD_DIR" --no-sheets 2>&1 | sed 's/^/  /'; then
-        echo "  **撮れていない。** eval.log の [録画] 行を見ること:"
+        echo "  **作れていない。** eval.log の [録画] 行を見ること:"
         grep '\[録画\]' "$OUT_DIR/eval.log" | sed 's/^/    /' || \
             echo "    1 行も無い。パッチが当たっていないか、PARC_RECORD_DIR が渡っていない"
     fi

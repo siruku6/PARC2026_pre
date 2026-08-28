@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""録画済みロールアウトの 1 コマ目から、変種ごとの見た目の散らばりを測る。
+"""録画済みロールアウトの 1 コマ目から、variant ごとの見た目の散らばりを測る。
 
 **なぜ要るか。** 画像を明るくしたり暗くしたりして学習に混ぜる「画像拡張」の
-振れ幅（既定は明るさ ×0.8〜1.2）が、評価で出てくる変種の見た目の幅を覆えて
+振れ幅（既定は明るさ ×0.8〜1.2）が、評価で出てくる variant の見た目の幅を覆えて
 いるかを判断したい。いま拠りどころにしているのは他人が 15 コマで作った集計で、
 **こちらの手元では 1 度も数えていない。** 手元の 84 件の評価には録画があり、
-各タスクの 1 コマ目はその変種の初期画面そのものなので、そこから測る。
+各タスクの 1 コマ目はその variant の初期画面そのものなので、そこから測る。
 
 **測り方。** [rollout_recorder.py](rollout_recorder.py) が書いた mp4 の 1 コマ目を
 読み、灰色にしてから 2 つの数を出す。
@@ -26,9 +26,9 @@
 **必ず頭に入れる偏り。録画は失敗した回だけ残る。**
 [rollout_recorder.py](rollout_recorder.py) の既定は `PARC_RECORD_WHICH=failures`
 で、成功した回（84 件中 40 件）は 1 コマも書き出されない。**さらにファイル名は
-70 文字で切られる**ので、名前の末尾にある変種名が消えた回が多い。よってここで
+70 文字で切られる**ので、名前の末尾にある variant 名が消えた回が多い。よってここで
 出る数は**母集団の振れ幅ではなく、失敗した回・名前が残った回だけの振れ幅**である。
-母集団を出すには `PARC_RECORD_WHICH=all` で撮り直すか、変種の初期状態から直接
+母集団を出すには `PARC_RECORD_WHICH=all` で作り直すか、variant の初期状態から直接
 画像を作る（`docs/reference/08_appearance_spread.md` の末尾）。
 
     # 一覧を標準出力に
@@ -41,7 +41,7 @@
 Reads:
   - <dir>/*.mp4（rollout_recorder.py が書いたもの）
 Generates:
-  - 標準出力に、変種の接尾辞ごとの明るさ・コントラストと、1 本ごとの明細
+  - 標準出力に、variant の接尾辞ごとの明るさ・コントラストと、1 本ごとの明細
 """
 
 from __future__ import annotations
@@ -60,11 +60,11 @@ _NAME_RE = re.compile(
 )
 
 # rollout_recorder.py はタスク名を 70 文字で切る（`self._task_name[:70]`）。
-# ちょうど 70 文字なら切られたとみなす。切られた回は末尾の変種名が消えている
+# ちょうど 70 文字なら切られたとみなす。切られた回は末尾の variant 名が消えている
 # ので、接尾辞での集計から外す。
 _TASK_NAME_CAP = 70
 
-# 変種名の末尾に付く目印。LIBERO-plus のカテゴリ 7 つのうち、名前で見分けが
+# variant 名の末尾に付く目印。LIBERO-plus のカテゴリ 7 つのうち、名前で見分けが
 # 付くもの（docs/reference/04_track1_population.md・make_validation_suite.py）。
 # `view`/`initstate` は Camera Viewpoints・Robot Initial States・Language の
 # 3 カテゴリで同じ形になり、名前だけでは区別できない（分類表の category 列が要る）。
@@ -98,9 +98,9 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _variant_suffix(task_name: str) -> str:
-    """タスク名から、変種の接尾辞（`light` など）を取り出す。
+    """タスク名から、variant の接尾辞（`light` など）を取り出す。
 
-    **70 字で切れている名前からは取らない。** 変種名は末尾に付くので、
+    **70 字で切れている名前からは取らない。** variant 名は末尾に付くので、
     切られた回は接尾辞が消えているか、数字が途中で切れて別物に見える。
     そういう回は集計から外し、後で件数だけ数える。
 
@@ -205,7 +205,7 @@ def _summarize_suffix(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """接尾辞ごとに front の明るさ・コントラストの平均と幅をまとめる。
 
     **接尾辞が不明な回（名前が切れている・見当たらない）は数えるだけで、
-    平均には入れない。** 変種が特定できない見た目を混ぜると意味が薄れる。
+    平均には入れない。** variant が特定できない見た目を混ぜると意味が薄れる。
 
     Returns
     -------
@@ -238,7 +238,7 @@ def _summarize_suffix(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _is_measurable(suffix: str) -> bool:
-    """接尾辞が特定できて、平均に使える変種か。"""
+    """接尾辞が特定できて、平均に使える variant か。"""
     return suffix not in (_TRUNCATED, _NO_SUFFIX)
 
 

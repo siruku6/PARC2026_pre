@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ロボット初期姿勢（Robot Initial States）の摂動下で、学習データを撮る。
+# ロボット初期姿勢（Robot Initial States）の摂動下で、学習データのエピソードを作る。
 #
 # **GPU は要らない。** 物理と描画だけなので手元の Mac の Docker でも回る
 # （描画はどちらのマシンでも CPU＝osmesa。GPU マシンの vGPU は OpenGL 非対応）。
@@ -12,7 +12,7 @@
 #     docker run --rm parc2026 nproc                  # 使えるコア数
 #     docker info --format 'CPUs={{.NCPU}}'
 #
-# 撮り終わったら、**同じ Mac で LeRobot 形式へ変換してから運ぶ**。
+# 作り終わったら、**同じ Mac で LeRobot 形式へ変換してから運ぶ**。
 # npz のままだと 26 GB、変換後は約 390 MB で 67 分の 1 になる。
 #     docker run --rm -v "$PWD/solution/tools:/host/tools:ro" \
 #         -v "$PWD/work/scripted:/data" \
@@ -37,21 +37,21 @@ DISTURB_STEPS="${DISTURB_STEPS:-10}"
 DISTURB_AT="${DISTURB_AT:-0,74}"
 
 # **初期配置 0〜8 は妨害なし、9〜27 は妨害あり。** 妨害なしが 3 分の 1 になる
-# 割り当てで、残る見込みは 9×0.9 + 19×0.7 ≒ 21 本／変種。
+# 割り当てで、残る見込みは 9×0.9 + 19×0.7 ≒ 21 本／variant。
 SMOOTH_EPISODES="${SMOOTH_EPISODES:-0,1,2,3,4,5,6,7,8}"
 DISTURB_EPISODES="${DISTURB_EPISODES:-9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27}"
 
-# **学習用の変種。検証用とは排他にしてある**（08 の 2.8 節：分けないと
+# **学習用の variant。検証用とは排他にしてある**（08 の 2.8 節：分けないと
 # 「未知ドメインへの汎化」ではなく「見た条件を再現できたか」を測ることになる）。
-# **検証用に SCENE3 は 38 変種・SCENE8 は 28 変種残る。**
+# **検証用に SCENE3 は variant 38 件・SCENE8 は variant 28 件残る。**
 #
 # **選び方を 2026-08-23 に差し替えた。** 最初は難易度ラベル
 # （`benchmark/task_classification.json` の `difficulty_level`）がばらけるように
-# 選んだが、**そのラベルは台本が通るかどうかを予測しない**と実測で分かった
+# 選んだが、**そのラベルは scripted policy が通るかどうかを予測しない**と実測で分かった
 # （難易度 1 の initstate_113 が 9 回中 1 回しか成功せず、難易度 5 の
 # initstate_139 が 9 回中 6 回成功した）。
-# いまの 12 変種は、**用意されている 78 変種すべてを妨害なしで 3 回ずつ試し、
-# 3 回とも成功した 30 変種**（タスクごとに 15）から、難易度がばらけるように
+# いまの variant 12 件は、**用意されている variant 78 件すべてを妨害なしで 3 回ずつ試し、
+# 3 回とも成功した variant 30 件**（タスクごとに 15）から、難易度がばらけるように
 # 選んだものである（12_tier2_recording_spec.md の 4 節に実測値）。
 SCENE3="KITCHEN_SCENE3_turn_on_the_stove_and_put_the_moka_pot_on_it"
 SCENE8="KITCHEN_SCENE8_put_both_moka_pots_on_the_stove"
@@ -67,7 +67,7 @@ for pair in "$SCENE3:$SCENE3_VARIANTS" "$SCENE8:$SCENE8_VARIANTS"; do
         printf '%s\t%s\tdisturb\n' "$task" "$variant" >> "$jobs_file"
     done
 done
-echo "撮る組み合わせ $(wc -l < "$jobs_file") 件（変種 12 × 妨害あり／なし）"
+echo "作る組み合わせ $(wc -l < "$jobs_file") 件（variant 12 × 妨害あり／なし）"
 
 run_one() {
     local task="$1" variant="$2" mode="$3"
@@ -97,7 +97,7 @@ tr '\t' '\n' < "$jobs_file" | xargs -n 3 -P "$PARALLEL" \
 rm -f "$jobs_file"
 
 echo ""
-echo "撮れた本数: $(ls work/scripted/tier2_robot_init/*.npz 2>/dev/null | wc -l)"
+echo "作れた本数: $(ls work/scripted/tier2_robot_init/*.npz 2>/dev/null | wc -l)"
 echo "  うち妨害あり: $(ls work/scripted/tier2_robot_init/*_d1*.npz 2>/dev/null | wc -l)"
 echo "**Linux では root で書かれる。持ち主を戻す:**"
 echo "  docker run --rm -v \"\$PWD/work/scripted:/out\" --entrypoint chown parc2026 -R \"\$(id -u):\$(id -g)\" /out"

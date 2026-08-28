@@ -147,7 +147,7 @@ Total Score = (1/N) * Σ successᵢ * (1 - collision penaltyᵢ) * smooth metric
      solution/tools/eval/run_final_eval.sh track2
    ```
 
-5. **同じ `rollout.py` の `_write_video` を直す。動画がいま撮れていない。**
+5. **同じ `rollout.py` の `_write_video` を直す。動画がいま作れていない。**
    `RECORD=1` で回すと **8 バイトの空ファイル**しかできない。中身は `49 49 2a 00 ...` で、
    **MP4 ではなく空の TIFF** である。`eval.log` に理由が出ている。
 

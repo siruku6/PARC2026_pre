@@ -429,8 +429,10 @@ docker run --gpus all -d --name parc-train \
 > `pa_ds.field("episode_index").isin(episodes)` で**集合として**扱うため、
 > 同じ番号を並べても 1 回になる。**得意タスクを間引いて割合を上げるしかない。**
 
+> **variant** = 元のタスク 1 つに摂動を 1 つ当てたもの（`.bddl` 1 個）。初期配置は元タスクのものを共有するので、**1 つの variant から最大 50 エピソード作れる。**
+>
 > **絞るときに摂動カテゴリでは選べない。** LeRobot のメタデータ
-> （`meta/episodes/*.parquet`、62 列）に**変種名が入っていない。**
+> （`meta/episodes/*.parquet`、62 列）に**variant 名が入っていない。**
 > あるのは指示文（40 種類）と動画の位置と統計値だけである。
 > **`_light_N` や `_table_N` で直に絞る道は無い**（8/11 に確認）。
 >
