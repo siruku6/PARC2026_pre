@@ -1,6 +1,6 @@
 # 001 衝突と判定されたとき、どの物体がどれだけ動いたかを数える
 
-> **状態: 依頼中** ／ 受け側: 未定 ／ 更新: 2026-08-28
+> **状態: 仕掛けは完成・実行待ち** ／ 受け側: 別セッション ／ 更新: 2026-08-28
 
 ## 背景（先に読んでほしい）
 
@@ -160,4 +160,67 @@ Total Score = (1/N) * Σ successᵢ * (1 - collision penaltyᵢ) * smooth metric
 
 ## 報告
 
-（受け側がここに書く）
+### 仕掛けはできた。あとは 1 本回すだけである（2026-08-28）
+
+**作ったもの 2 つ。**
+
+| もの | 場所 | 中身 |
+|---|---|---|
+| 記録する仕掛け | `solution/tools/eval/kit_patches/rollout.py` | 配布キットの `pipeline/rollout.py` の写しに、1 行 1 ロールアウトの JSONL を書く処理を足したもの。`run_final_eval.sh` が `/workspace/pipeline/rollout.py` へ上書きマウントする |
+| 分布を出す道具 | `solution/tools/eval/summarize_object_disp.py` | JSONL を読んで、依頼の 3 つの表をそのまま出す |
+
+**`collided` の判定は 1 文字も変えていない。**足したのは「値を書き出す」処理と、
+実距離（L2）を並行して追う 5 行だけである。
+
+### 依頼から変えたところが 2 つある
+
+**1. 距離を 2 通り書き出すことにした。** 元の `rollout.py:212` は
+`np.sum(np.abs(cur - p0))` で、**3 軸の絶対値の和（L1）を取っている。**
+ユークリッド距離ではないので、**実際に動いた距離を最大 √3 倍だけ大きく見せる。**
+1〜3 mm か数 cm かを分ける依頼で、この差は結論を動かしうる。
+
+**しきい値 1 mm と比べられている値は L1 なので、衝突したかどうかは L1 のままで数え、
+何 mm 動いたかは L2 で読む。**JSONL には `max_disp_m`（L1・依頼どおりのキー）と
+`max_disp_l2_m`（L2）の両方が入り、表も既定で両方出る。
+
+**2. 書き出し先を `results/object_disp.jsonl` にした。**依頼は「実行ディレクトリの
+`object_disp.jsonl`」だったが、**評価側の `docker run` は実行ディレクトリの直下を
+コンテナへ見せていない。**見せているのは `$OUTPUT_DIR/results` と、`RECORD=1` のときの
+`$OUTPUT_DIR/videos` の 2 つだけである。
+外から見えるのは `work/final_eval/<日時>_track2_collision_probe/results/object_disp.jsonl` である。
+
+### 1 行の中身
+
+```json
+{"collided": true, "collision_threshold_m": 0.001, "done": true, "episode": 0,
+ "max_disp_l2_m": {"wooden_tray_1": 0.003},
+ "max_disp_m": {"wooden_tray_1": 0.003},
+ "obj_of_interest": ["alphabet_soup_1"], "success": false,
+ "task": "put_the_bowl_on_the_plate", "total_steps": 30}
+```
+
+**1 度も動かなかった物体はキーごと現れない**（キット本来の挙動で、`object_max_disp`
+に 0 のまま登録されないため）。**変位が 0 の物体は「衝突していない」と同じなので、
+表の読みには影響しない。**
+
+### 確かめたこと
+
+**`docker run` はこのマシンから通らず、常駐コンテナも無い**（`docker ps -a` は
+`quant_train` と `parc2026_verify` の 2 つで、どちらも Exited）。**そこで環境と方策を
+偽物に差し替えて、パッチ版の `_run_episode` をそのまま動かした。**
+
+| 確かめたこと | 結果 |
+|---|---|
+| 1 エピソードにつき JSONL が 1 行出る | 3 エピソードで 3 行 |
+| `collided` と `success` が JSONL と戻り値で一致する | 一致 |
+| 操作対象（`obj_of_interest`）と `_to_robot0_eef_pos` が監視から外れる | 外れた |
+| L1 と L2 の比が、3 軸に等しく動かしたとき √3 になる | なった（L1 0.09 に対し L2 0.052） |
+| `summarize_object_disp.py` が 216 行から 3 つの表を出す | 出た（8/28 の実行の衝突率で偽の JSONL を作って通した） |
+
+**確かめていないのは「本物のキットの中で import が通るか」だけである。**足したのは
+`json` の import と純粋な Python だけなので、依存は増えていない。
+
+### 分布の表
+
+（1 本回したあとにここへ書く）
+

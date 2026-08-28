@@ -177,6 +177,21 @@ if [ -f "$SCORER_PATCH" ]; then
     echo "-- 採点器を差し替える（衝突率と SPARC を出す版）"
 fi
 
+# **衝突と判定された根拠を残す。**キットの `pipeline/rollout.py` は、操作対象でない
+# 物体が初期位置からどれだけ動いたか（`object_max_disp`）を計算しておきながら、
+# しきい値 1 mm と比べた真偽だけを使って値を捨てている。**「かすった」のか「倒した」の
+# かが分からないと、衝突対策を推論側の後処理でやるのか学習でやるのかが決まらない。**
+# 差し替え版は 1 行 1 ロールアウトの JSONL を `PARC_OBJECT_DISP_JSONL` へ書く。
+# **書き出し先はコンテナの中なので、results のマウントの下に置く**（外から見えるのは
+# `$OUTPUT_DIR/results/object_disp.jsonl`）。
+ROLLOUT_PATCH="$REPOSITORY_ROOT/solution/tools/eval/kit_patches/rollout.py"
+rollout_mount=()
+if [ -f "$ROLLOUT_PATCH" ]; then
+    rollout_mount=(-v "$ROLLOUT_PATCH:/workspace/pipeline/rollout.py:ro"
+                   -e "PARC_OBJECT_DISP_JSONL=/workspace/results/object_disp.jsonl")
+    echo "-- 衝突の内訳を残す: $OUTPUT_DIR/results/object_disp.jsonl"
+fi
+
 # **評価する行を、こちらの CSV に差し替える。**
 # 配布キットは `compe/t2/T2_TASKS.csv` の 8 行を読むだけで、行を選び直す口が無い。
 # **その 8 行は Track1 の摂動（背景・照明）しか含まないので、Track2 の摂動で
@@ -206,6 +221,7 @@ docker run --rm --gpus all --network "$NETWORK" \
     --ulimit core=0 \
     -e "MUJOCO_GL=$MUJOCO_GL" \
     "${scorer_mount[@]}" \
+    "${rollout_mount[@]}" \
     "${tasks_mount[@]}" \
     "${record_environment[@]}" \
     -v "$OUTPUT_DIR/results:/workspace/results" \
