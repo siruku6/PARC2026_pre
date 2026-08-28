@@ -214,10 +214,20 @@ class VGGTFuser(nn.Module):
         fused : Tensor
             `image_embeddings` と同じ形。
         """
-        keys = self.norm_key(self.to_policy_dim(geometry_tokens.to(image_embeddings.dtype)))
-        queries = self.norm_query(image_embeddings)
+        # **π0.5 は dtype が混在している**（vision_tower や layernorm は fp32 のまま、
+        # 本体は bf16）。だから「模型の先頭パラメータの dtype」で決め打ちにすると、
+        # 交差注意の入口で `mat1 and mat2 must have the same dtype` で落ちる
+        # （2026-08-28 に推論側で踏んだ）。**自分の重みの dtype に合わせて計算し、
+        # 最後に呼び出し側の dtype へ戻す。**
+        #
+        # **学習時と推論時で dtype がそろうことは、チェックポイントが保証する**
+        # ——`policy_server.py` の流し込みは `target.data = tensor` なので、
+        # 保存されている dtype がそのまま入る。
+        work_dtype = self.to_policy_dim.weight.dtype
+        keys = self.norm_key(self.to_policy_dim(geometry_tokens.to(work_dtype)))
+        queries = self.norm_query(image_embeddings.to(work_dtype))
         attended, _ = self.cross_attention(queries, keys, keys, need_weights=False)
-        return image_embeddings + self.fusion_gate * attended
+        return image_embeddings + (self.fusion_gate * attended).to(image_embeddings.dtype)
 
 
 def trainable_parameter_names(fuser: VGGTFuser) -> list[str]:

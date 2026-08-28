@@ -143,6 +143,25 @@ work/venv310/bin/python solution/tools/build/vendor_lerobot.py \
 `vendor_lerobot.py` は**置換対象が 1 箇所でなければ例外にする**。
 LeRobot のバージョンが変われば、黙って壊れずにその場で落ちる。
 
+### 0-2-b. VGGT も同梱する（幾何の接ぎ木を入れた重みを出すときだけ）
+
+**幾何の接ぎ木（板 F25・[plan/16](../plan/16_finals_initiative_priority.md) 7 節）を
+入れた重みを提出するときは、VGGT のソースも要る。** `pip install vggt` は
+PyPI に無くて失敗するので、LeRobot と同じく `vendor/` へ置く。
+
+```bash
+pip install --target /tmp/vggt-src "git+https://github.com/facebookresearch/vggt.git"
+python3 solution/tools/build/vendor_vggt.py --source /tmp/vggt-src/vggt
+```
+
+**接ぎ木を入れていない重みでは要らない。** `policy_server.py` は重みの中に
+`geometry_fuser.*` が無ければ VGGT を読まない。
+
+| 確かめること | 打つもの |
+|---|---|
+| 同梱物が揃っているか | `python3 solution/tools/build/vendor_vggt.py --check` |
+| どちらの vggt を読んでいるか | `vggt.models.vggt.__file__` を見る（**`vggt.__file__` は `None` になる**——`__init__.py` を持たない名前空間パッケージである） |
+
 ## 0-3. 重みを置く
 
 **VLM の `model.safetensors` は含めない。** VLM の重みはポリシー側の
