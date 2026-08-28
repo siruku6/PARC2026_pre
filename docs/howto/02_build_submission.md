@@ -602,10 +602,46 @@ git checkout scored-0.05832 -- solution/policy_server.py solution/requirements.t
 
 ---
 
-# zip を Mac へ運ぶ —— **`scp` ではなく HuggingFace 経由**
+# zip を Mac へ運ぶ —— **運ばずに Mac で組むのが第一手**（2026-08-28 に変えた）
+
+**zip を HF に置く道は、HF の容量を食い潰して止まった。**
+`siruku6/parc2026-submission` を「運ぶ通り道」として何度も上書きした結果、
+**HF が古い LFS の版も容量に数えるため、見えている 4 本（29 GB）よりずっと大きく
+なっていた。**無料枠は非公開 100 GB である
+（[Storage limits](https://huggingface.co/docs/hub/storage-limits) 2026-08-28 確認）。
+**リポジトリごと消して 28 GB まで下がった。**
+
+**そもそも zip を運ぶ必要が無い。** `build_submission.py` が集めるのは
+`solution/` の 3 ファイルと `work/artifacts/{model_weights,vendor}` だけで、
+**標準ライブラリしか使わない**（`argparse`・`hashlib`・`re`・`zipfile`・`pathlib`）。
+**重みさえ Mac にあれば、Mac の `python3` で組める。**`venv310` も要らない
+（あれは `vendor_lerobot.py` が使うもので、`vendor/` を作り終えていれば出番は無い）。
+
+| 道 | 9.4 GB が HF を通る回数 | HF に残る容量 |
+|---|---|---|
+| **Mac で組む（第一手）** | **1 回**（重みだけ。これは成果物として上げるものでもある） | **重みのぶんだけ** |
+| GPU マシンで組んで zip を運ぶ | 2 回（重み＋zip） | **重み＋zip。しかも上書きのたびに履歴が積む** |
+
+## Mac で組む
+
+**運ぶのは `vendor/` の 13 MB だけである**（`work/` は git 管理外なので clone では来ない）。
+
+```bash
+# このマシン → Mac（13 MB）
+scp -r work/artifacts/vendor <Mac>:<リポジトリ>/work/artifacts/
+
+# Mac で
+hf download <重みのリポジトリ> --include '<歩数>/*' --local-dir work/artifacts/model_weights_<歩数>
+python3 solution/tools/build/build_submission.py \
+    --weights work/artifacts/model_weights_<歩数>/<歩数> \
+    --output work/submission_<版>.zip
+```
+
+## それでも GPU マシンで組んで運ぶとき
 
 **`scp` は 1.7 MB/s しか出ないので 9.4GB に 1 時間半掛かる。**
-**非公開リポジトリを中継すると 1 分で済む。**
+**非公開リポジトリを中継すると 1 分で済む。ただし置きっぱなしにしない**
+——上げて、Mac で降ろしたら、**その場でリポジトリから消す。**
 
 | やり方 | 9.4GB の実測 |
 |---|---|
