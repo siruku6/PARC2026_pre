@@ -34,6 +34,12 @@
 （`--no-write` で止められる）。`run_final_eval.sh` が評価のあと自動で呼ぶので、
 ふつうは自分で打たなくてもファイルはできている。
 
+## time は歩数である
+
+**5 つの項の名前は運営の式に合わせてあるが、`time` に入れているのは歩数**
+（`avg_steps_to_success`）である。結果 JSON には実時間 `avg_episode_time_sec` もあるが、
+**描画のやり方（egl / osmesa）とマシンで何倍も変わるので実行間で比べられない。**
+
 ## 正規化のしかた
 
 5 指標はすべて「小さいほど良い」ので `ref / (ref + x)` で 0〜1 に写す。
@@ -58,13 +64,27 @@ import csv
 import json
 from pathlib import Path
 
-# Base 12 行の実測値（0828_002049_track2_val72base）。この値のとき補助項は 0.5 になる。
+# **基準値。**`norm(x, ref) = ref / (ref + x)` の `ref` で、**実測がこの値のとき項が
+# ちょうど 0.5 になる**。0〜1 に写すための目盛りの原点であって、目標値ではない。
+# 値は 2026-08-28 の `0828_002049_track2_val72base` の **Base 12 行（摂動なし）の実測値**
+# である。**実行ごとに取り直すと実行間で比べられなくなるので固定値にする。**
 REFERENCE = {
-    "time": 120.3,        # avg_steps_to_success（歩数を time の代わりに使う）
-    "jerk": 3.75,         # avg_cartesian_jerk
-    "sparc": 2.40,        # |sparc|
-    "trajectory": 1.006,  # cartesian_path_length
-    "rotation": 1.333,    # orientation_path_length
+    "time": 120.3,        # 歩
+    "jerk": 3.75,         # m/s^3
+    "sparc": 2.40,        # 無次元（符号を落とした値）
+    "trajectory": 1.006,  # m
+    "rotation": 1.333,    # rad
+}
+
+# **項の名前は運営の式に合わせてあるが、`time` の中身は歩数である。**
+# 結果 JSON には実時間 `avg_episode_time_sec` もあるが、**描画のやり方（egl / osmesa）と
+# マシンで何倍も変わるので実行間で比べられない。**歩数は打ち切りの 300 で頭が揃う。
+SOURCE = {
+    "time": ("avg_steps_to_success", "歩"),
+    "jerk": ("avg_cartesian_jerk", "m/s^3"),
+    "sparc": ("abs(sparc)", "無次元"),
+    "trajectory": ("cartesian_path_length", "m"),
+    "rotation": ("orientation_path_length", "rad"),
 }
 
 # 5 等分。運営の説明が「特定の指標に偏らせないための重み付け」なので、
@@ -86,7 +106,9 @@ MAX_STEPS = 300.0
 def formula_text(weights: dict[str, float]) -> str:
     """点と一緒に書き出す計算式。**点だけを見せない**ための本文である。"""
     terms = " + ".join(f"{w:.2f}·{k}" for k, w in weights.items())
-    refs = "  ".join(f"{k}={v}" for k, v in REFERENCE.items())
+    table = "\n".join(
+        f"| `{k}` | {SOURCE[k][0]} | {SOURCE[k][1]} | {REFERENCE[k]} | {weights[k]:.2f} |"
+        for k in weights)
     return f"""## 計算式
 
 **運営が公開している式**（本選の資料。`docs/reference/17_scoring_formula.md`）
@@ -102,10 +124,23 @@ def formula_text(weights: dict[str, float]) -> str:
     タスクの点  score(task)  = success_rate(task) · smooth(task)
     合計点      Total        = (1/N) · Σ score(task)
 
-    重み    {"  ".join(f"{k}={v:.2f}" for k, v in weights.items())}
-    基準値  {refs}
+**5 つの項の中身・単位・基準値・重み**
 
-**採点側の式と違えている点が 3 つある。どれも手元の JSON の粒度が足りないためである。**
+| 項 | 結果 JSON のどれか | 単位 | 基準値 | 重み |
+|---|---|---|---|---|
+{table}
+
+**基準値（`ref`）は目標値ではない。**`norm(x, ref) = ref / (ref + x)` の分母に入る値で、
+**実測がちょうど基準値のときその項が 0.5 になる**という意味しか持たない。
+0 に近いほど 1 へ、大きいほど 0 へ寄る。頭打ちが無いのでどちらの向きにも余地が残る。
+値は 2026-08-28 の `0828_002049_track2_val72base` の **Base 12 行（摂動なし）の実測値**
+である。**実行ごとに取り直すと実行間で点を比べられなくなるので、固定値にしてある。**
+
+**`time` の中身は歩数である**（項の名前だけ運営の式に合わせてある）。結果 JSON には
+実時間 `avg_episode_time_sec` も入っているが、**描画のやり方（egl / osmesa）とマシンで
+何倍も変わるので実行間で比べられない。**歩数なら打ち切りの {MAX_STEPS:.0f} で頭が揃う。
+
+**採点側と違えている点が 3 つある。どれも手元の JSON の粒度が足りないためである。**
 
 | # | 何を | なぜ |
 |---|---|---|
@@ -114,8 +149,7 @@ def formula_text(weights: dict[str, float]) -> str:
 | 3 | **1 回も成功しなかったタスクの `time` に打ち切りの {MAX_STEPS:.0f} 歩を当てる** | 歩数は成功した回しか JSON に入らない。空欄を「速かった」ことにすると、全部落ちたタスクほど点が高くなる |
 
 **重みは非公開である。**「特定の指標に偏らせないための重み付け」と説明されているので
-5 等分にしてある。**基準値は固定値**で、2026-08-28 の `0828_002049_track2_val72base` の
-Base 12 行の実測値である（実行ごとに取り直すと実行間で比べられなくなる）。
+**偏らせない側に倒して 5 等分**にしてある。`--weights time=0.3,jerk=0.1` で振れる。
 """
 
 
@@ -241,8 +275,8 @@ def main() -> int:
             emit(f"   全部成功したらいくつか（目盛りの確認・予選の実測は 0.48）: {mean_smooth:.4f}")
             emit(f"   衝突率 {mean_collision:.3f}")
             comp_mean = {k: sum(r[1][k] for r in rows) / n for k in weights}
-            emit("   なめらかさの内訳  "
-                  + "  ".join(f"{k} {comp_mean[k]:.3f}" for k in weights))
+            emit("   なめらかさの内訳（0〜1 に写したあとの値。time は歩数）  "
+                 + "  ".join(f"{k} {comp_mean[k]:.3f}" for k in weights))
 
             if args.by_category and labels:
                 groups: dict[str, list] = {}
