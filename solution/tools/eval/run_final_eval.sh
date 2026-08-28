@@ -34,6 +34,7 @@
 #   - work/artifacts/<重み>/**
 # Generates:
 #   - work/final_eval/<日時>_<トラック>_<LABEL>/results/*.json・server.log
+#   - 同じところに score_composite.md（採点側と同じ形の合計点＋その計算式）
 set -euo pipefail
 
 REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -263,3 +264,12 @@ docker logs "$POLICY_HOST" 2>&1 | grep -c "POST /act" \
     | sed 's/^/   合計ステップ数（POST \/act の回数）: /' || true
 echo "   json: $OUTPUT_DIR/results/"
 echo "   成功・衝突・軌道の総距離は json の中にある"
+
+# **採点側と同じ形の合計点を付け直して、実行ディレクトリへ残す。**
+# 配布キットが出す `overall_score` は成功率そのもので、なめらかさが入っていない
+# （docs/reference/17_scoring_formula.md）。**あとから「この点はどの式か」を
+# 引けるように、式も一緒に score_composite.md へ書く。**
+# 失敗しても評価の結果は残っているので、ここでは止めない。
+python3 "$REPOSITORY_ROOT/solution/tools/eval/score_composite.py" \
+    --by-category "$OUTPUT_DIR" \
+    || echo "   合計点を付け直せなかった。あとから score_composite.py を打てばよい"
