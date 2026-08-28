@@ -26,7 +26,7 @@
 
     python3 score_composite.py <実行ディレクトリかJSON> [...]
     python3 score_composite.py --by-category <実行ディレクトリ>
-    python3 score_composite.py --weights time=0.3,jerk=0.1 <...>
+    python3 score_composite.py --weights n_steps=0.3,jerk=0.1 <...>
 
 **実行ディレクトリを渡したときは `<実行ディレクトリ>/score_composite.md` にも書く。**
 標準出力だけだと、あとから「この点はどの式で出したのか」を引けない。
@@ -34,11 +34,14 @@
 （`--no-write` で止められる）。`run_final_eval.sh` が評価のあと自動で呼ぶので、
 ふつうは自分で打たなくてもファイルはできている。
 
-## time は歩数である
+## 運営の `time` を、こちらは `n_steps` と呼ぶ
 
-**5 つの項の名前は運営の式に合わせてあるが、`time` に入れているのは歩数**
-（`avg_steps_to_success`）である。結果 JSON には実時間 `avg_episode_time_sec` もあるが、
-**描画のやり方（egl / osmesa）とマシンで何倍も変わるので実行間で比べられない。**
+**運営の式の第 1 項は `time` という名前だが、中身は歩数である**
+（運営 Q&A No.23。`docs/knowledge/06_step_count_drives_score.md`）。
+**`time` のままだと壁時計と読み違えるので、この道具では `n_steps` と呼ぶ。**
+入れている値は `avg_steps_to_success` である。結果 JSON には実時間
+`avg_episode_time_sec` もあるが、**描画のやり方（egl / osmesa）とマシンで何倍も
+変わるので実行間で比べられない。**
 
 ## 正規化のしかた
 
@@ -69,18 +72,19 @@ from pathlib import Path
 # 値は 2026-08-28 の `0828_002049_track2_val72base` の **Base 12 行（摂動なし）の実測値**
 # である。**実行ごとに取り直すと実行間で比べられなくなるので固定値にする。**
 REFERENCE = {
-    "time": 120.3,        # 歩
+    "n_steps": 120.3,     # 歩
     "jerk": 3.75,         # m/s^3
     "sparc": 2.40,        # 無次元（符号を落とした値）
     "trajectory": 1.006,  # m
     "rotation": 1.333,    # rad
 }
 
-# **項の名前は運営の式に合わせてあるが、`time` の中身は歩数である。**
-# 結果 JSON には実時間 `avg_episode_time_sec` もあるが、**描画のやり方（egl / osmesa）と
-# マシンで何倍も変わるので実行間で比べられない。**歩数は打ち切りの 300 で頭が揃う。
+# **運営の式の第 1 項 `time` を、この道具では `n_steps` と呼ぶ。**
+# 運営の `time` は壁時計ではなく歩数だからである（運営 Q&A No.23）。結果 JSON には
+# 実時間 `avg_episode_time_sec` もあるが、**描画のやり方（egl / osmesa）とマシンで
+# 何倍も変わるので実行間で比べられない。**歩数は打ち切りの 300 で頭が揃う。
 SOURCE = {
-    "time": ("avg_steps_to_success", "歩"),
+    "n_steps": ("avg_steps_to_success", "歩"),
     "jerk": ("avg_cartesian_jerk", "m/s^3"),
     "sparc": ("abs(sparc)", "無次元"),
     "trajectory": ("cartesian_path_length", "m"),
@@ -90,7 +94,7 @@ SOURCE = {
 # 5 等分。運営の説明が「特定の指標に偏らせないための重み付け」なので、
 # **偏らせない側に倒す。**合計は 1 になる。
 DEFAULT_WEIGHTS = {
-    "time": 0.20,
+    "n_steps": 0.20,
     "jerk": 0.20,
     "sparc": 0.20,
     "trajectory": 0.20,
@@ -116,7 +120,8 @@ def formula_text(weights: dict[str, float]) -> str:
     smooth metrics = w1·time + w2·jerk + w3·SPARC + w4·trajectory + w5·rotation
     Total Score    = (1/N) · Σ success_i · (1 - collision penalty_i) · smooth metrics_i
 
-**この道具が実際に計算している式**
+**この道具が実際に計算している式**（第 1 項の呼び名だけ `time` → `n_steps` に変えてある。
+運営の `time` は壁時計ではなく歩数だからである——運営 Q&A No.23）
 
     正規化      norm(x, ref) = ref / (ref + x)        ← ref のとき 0.5
     なめらかさ  smooth(task) = {terms}
@@ -136,7 +141,8 @@ def formula_text(weights: dict[str, float]) -> str:
 値は 2026-08-28 の `0828_002049_track2_val72base` の **Base 12 行（摂動なし）の実測値**
 である。**実行ごとに取り直すと実行間で点を比べられなくなるので、固定値にしてある。**
 
-**`time` の中身は歩数である**（項の名前だけ運営の式に合わせてある）。結果 JSON には
+**`n_steps` が運営の式の `time` にあたる。**運営の `time` は壁時計ではなく
+「エピソード内のシミュレーションステップ数」である（運営 Q&A No.23）。結果 JSON には
 実時間 `avg_episode_time_sec` も入っているが、**描画のやり方（egl / osmesa）とマシンで
 何倍も変わるので実行間で比べられない。**歩数なら打ち切りの {MAX_STEPS:.0f} で頭が揃う。
 
@@ -146,10 +152,10 @@ def formula_text(weights: dict[str, float]) -> str:
 |---|---|---|
 | 1 | **1 rollout ごとではなくタスクごとに平均してから掛ける** | 手元の JSON はタスクごとの平均しか持たない。成功率が 0 でも 1 でもないタスクで、成功した回と落ちた回のなめらかさを区別できない |
 | 2 | **`(1 - collision penalty)` を掛けていない** | 手元の `success` は既に「ゴール到達 かつ 無衝突」である（`pipeline/rollout.py` の `success = bool(done) and not collided`）。重ねて掛けると二重に引く |
-| 3 | **1 回も成功しなかったタスクの `time` に打ち切りの {MAX_STEPS:.0f} 歩を当てる** | 歩数は成功した回しか JSON に入らない。空欄を「速かった」ことにすると、全部落ちたタスクほど点が高くなる |
+| 3 | **1 回も成功しなかったタスクの `n_steps` に打ち切りの {MAX_STEPS:.0f} 歩を当てる** | 歩数は成功した回しか JSON に入らない。空欄を「速かった」ことにすると、全部落ちたタスクほど点が高くなる |
 
 **重みは非公開である。**「特定の指標に偏らせないための重み付け」と説明されているので
-**偏らせない側に倒して 5 等分**にしてある。`--weights time=0.3,jerk=0.1` で振れる。
+**偏らせない側に倒して 5 等分**にしてある。`--weights n_steps=0.3,jerk=0.1` で振れる。
 """
 
 
@@ -163,8 +169,8 @@ def _smaller_is_better(value: float, ref: float) -> float:
 def smooth_components(metrics: dict) -> dict[str, float]:
     """1 タスクぶんの、正規化した 5 指標を返す。成功は入らない（門なので）。"""
     return {
-        "time": _smaller_is_better(metrics.get("avg_steps_to_success", MAX_STEPS),
-                                   REFERENCE["time"]),
+        "n_steps": _smaller_is_better(metrics.get("avg_steps_to_success", MAX_STEPS),
+                                      REFERENCE["n_steps"]),
         "jerk": _smaller_is_better(metrics["avg_cartesian_jerk"], REFERENCE["jerk"]),
         "sparc": _smaller_is_better(abs(metrics["sparc"]), REFERENCE["sparc"]),
         "trajectory": _smaller_is_better(metrics["cartesian_path_length"],
@@ -275,7 +281,7 @@ def main() -> int:
             emit(f"   全部成功したらいくつか（目盛りの確認・予選の実測は 0.48）: {mean_smooth:.4f}")
             emit(f"   衝突率 {mean_collision:.3f}")
             comp_mean = {k: sum(r[1][k] for r in rows) / n for k in weights}
-            emit("   なめらかさの内訳（0〜1 に写したあとの値。time は歩数）  "
+            emit("   なめらかさの内訳（0〜1 に写したあとの値）  "
                  + "  ".join(f"{k} {comp_mean[k]:.3f}" for k in weights))
 
             if args.by_category and labels:
