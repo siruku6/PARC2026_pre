@@ -1,35 +1,48 @@
 #!/usr/bin/env python3
-"""手元の評価結果に、採点側に近い形の合計点を付け直す。
+"""手元の評価結果に、採点側と同じ形の合計点を付け直す。
 
-**なぜ要るか。** 配布された `pipeline/scorer.py:124` は
-`overall_score = float(overall_success)` で、**総合スコアが成功率そのもの**である。
-一方、本選の採点ログ 7 本はどれも 8 エピソードなのに、返ってきた点は
-0.370・0.305・0.136・0.154・0.207・0.035 で **1 つも 0.125 の倍数でない**。
-**採点側は成功率のほかに連続値の項を持っている。**
-`pipeline/total_score.py` の内蔵既定にも `weights` と
-`use_total_score_as_overall` という口があり、採点環境は
-`total_score_config.json` と `normalization_config.json` を秘匿ファイルとして持ち込む
-（`evaluate.py` の `_EVAL_SECRET_PATHS`）。**重みは分からないが、器はこちらにもある。**
+**式は運営が公開している**（本選の資料。`docs/reference/17_scoring_formula.md`）。
 
-**重みは合わせにいかない。順位を変える力があるかどうかを見るための道具である。**
-成功率を主にしたまま、歩数・ジャークの少なさ・滑らかさ・経路の短さを少しだけ足す。
+    smooth metrics = w1*time + w2*jerk + w3*SPARC + w4*trajectory + w5*rotation
+    Total Score    = (1/N) * Σ success_i * (1 - collision penalty_i) * smooth metrics_i
 
-**評価を回し直さなくてよい。** 結果 JSON はタスクごとに指標を持っているので、
+**読み方が 3 つある。**
+
+1. **成功は重み付きの項ではなく、掛け算の門である。**
+   失敗した回、または衝突した回は、**その回の点がまるごと 0 になる。**
+   なめらかさがどれだけ良くても拾えない。
+2. **重み付きの和に入るのは 5 つだけ**——time・jerk・SPARC・trajectory・rotation。
+   重みは非公開だが `w1+...+w5 = 1` で、「特定の指標に偏らせないための重み付け」と
+   説明されている。**だから既定は 5 等分（各 0.2）にした。**
+3. **正規化の式は非公開**だが、各指標を 0〜1 の連続値に写すこと、
+   collision penalty が [0,1] の 2 値であることは公開されている。
+
+**目盛りの合わせどころ。** 予選では**全 rollout が成功しても点は 0.48** だった。
+つまり `smooth metrics` の実力値がその辺りに来る正規化になっている。
+下の基準値はそこに合わせてある（全問成功で 0.49 付近）。
+
+**評価を回し直さなくてよい。** 結果 JSON はタスクごとに 5 指標をすべて持っているので、
 過去の実行にもそのまま当てられる。
 
     python3 score_composite.py <実行ディレクトリかJSON> [...]
-    python3 score_composite.py --by-category <実行ディレクトリ>   # 条件ごとに出す
-    python3 score_composite.py --weights success=0.6,steps=0.2 <...>
+    python3 score_composite.py --by-category <実行ディレクトリ>
+    python3 score_composite.py --weights time=0.3,jerk=0.1 <...>
 
 ## 正規化のしかた
 
-補助の 4 指標は `ref / (ref + x)` で 0〜1 に写す。**基準値 `ref` のとき 0.5 になり、
-0 に近づくほど 1、大きくなるほど 0 に近づく。**頭打ちの処理が要らず、
-どちらの向きにも動く余地が残る。
+5 指標はすべて「小さいほど良い」ので `ref / (ref + x)` で 0〜1 に写す。
+**基準値 `ref` のとき 0.5** になり、頭打ちの処理が要らず、どちらの向きにも余地が残る。
 
 **基準値は 2026-08-28 の `0828_002049_track2_val72base` の Base 12 行の実測値である**
-（摂動なしの素の状態）。基準を実行ごとに取り直すと実行間で点を比べられなくなるので、
-**固定値として置く。**
+（摂動なしの素の状態）。**実行ごとに取り直すと実行間で比べられなくなるので固定値にする。**
+
+## 手元の JSON で式どおりに計算できない点
+
+採点側は **1 rollout ごと**に `success * (1-collision) * smooth` を計算して平均する。
+手元の JSON は**タスクごとの平均**しか持たないので、
+`タスクの点 = success_rate * smooth(タスク)` で近似する。
+**成功率が 0 でも 1 でもないタスクでは、成功した回と落ちた回のなめらかさを
+区別できない**——ここだけは近似である。
 """
 
 from __future__ import annotations
@@ -41,19 +54,21 @@ from pathlib import Path
 
 # Base 12 行の実測値（0828_002049_track2_val72base）。この値のとき補助項は 0.5 になる。
 REFERENCE = {
-    "steps": 120.3,      # avg_steps_to_success
-    "jerk": 3.75,        # avg_cartesian_jerk
-    "sparc": 2.40,       # |sparc|
-    "path": 1.006,       # cartesian_path_length
+    "time": 120.3,        # avg_steps_to_success（歩数を time の代わりに使う）
+    "jerk": 3.75,         # avg_cartesian_jerk
+    "sparc": 2.40,        # |sparc|
+    "trajectory": 1.006,  # cartesian_path_length
+    "rotation": 1.333,    # orientation_path_length
 }
 
-# 成功率を主にしたまま、残りを少しずつ足す。合計 1.0。
+# 5 等分。運営の説明が「特定の指標に偏らせないための重み付け」なので、
+# **偏らせない側に倒す。**合計は 1 になる。
 DEFAULT_WEIGHTS = {
-    "success": 0.70,
-    "steps": 0.12,
-    "jerk": 0.08,
-    "sparc": 0.06,
-    "path": 0.04,
+    "time": 0.20,
+    "jerk": 0.20,
+    "sparc": 0.20,
+    "trajectory": 0.20,
+    "rotation": 0.20,
 }
 
 # 成功したエピソードが 1 本も無いタスクでは、歩数が JSON に入らない。
@@ -69,19 +84,22 @@ def _smaller_is_better(value: float, ref: float) -> float:
     return ref / (ref + value)
 
 
-def task_components(metrics: dict, success_rate: float) -> dict[str, float]:
-    """1 タスクぶんの、正規化した 5 項目を返す。"""
-    steps = metrics.get("avg_steps_to_success", MAX_STEPS)
+def smooth_components(metrics: dict) -> dict[str, float]:
+    """1 タスクぶんの、正規化した 5 指標を返す。成功は入らない（門なので）。"""
     return {
-        "success": success_rate,
-        "steps": _smaller_is_better(steps, REFERENCE["steps"]),
+        "time": _smaller_is_better(metrics.get("avg_steps_to_success", MAX_STEPS),
+                                   REFERENCE["time"]),
         "jerk": _smaller_is_better(metrics["avg_cartesian_jerk"], REFERENCE["jerk"]),
         "sparc": _smaller_is_better(abs(metrics["sparc"]), REFERENCE["sparc"]),
-        "path": _smaller_is_better(metrics["cartesian_path_length"], REFERENCE["path"]),
+        "trajectory": _smaller_is_better(metrics["cartesian_path_length"],
+                                          REFERENCE["trajectory"]),
+        "rotation": _smaller_is_better(metrics["orientation_path_length"],
+                                        REFERENCE["rotation"]),
     }
 
 
-def composite(components: dict[str, float], weights: dict[str, float]) -> float:
+def smooth_metrics(components: dict[str, float], weights: dict[str, float]) -> float:
+    """重み付きの和。運営の式の `smooth metrics` にあたる。"""
     total = sum(weights.values())
     return sum(components[k] * w for k, w in weights.items()) / total
 
@@ -148,35 +166,48 @@ def main() -> int:
             tasks = track["tasks"]
             rows = []
             for task in tasks:
-                comp = task_components(task["metrics"], task["success_rate"])
-                rows.append((task["task_name"], comp, composite(comp, weights),
-                             task["metrics"].get("collision_rate", float("nan"))))
+                comp = smooth_components(task["metrics"])
+                smooth = smooth_metrics(comp, weights)
+                success = task["success_rate"]
+                collision = task["metrics"].get("collision_rate", float("nan"))
+                # 運営の式: success * (1 - collision penalty) * smooth。
+                # **手元の success は既に「ゴール到達 かつ 無衝突」なので、
+                # (1 - collision) を重ねて掛けると二重に引くことになる。**
+                # （`pipeline/rollout.py:234` の `success = bool(done) and not collided`）
+                rows.append((task["task_name"], comp, smooth, success,
+                             success * smooth, collision))
 
-            print(f"== {run_dir.name}  [{track['track']}]  {len(tasks)} タスク")
+            n = len(rows)
+            total = sum(r[4] for r in rows) / n
+            mean_smooth = sum(r[2] for r in rows) / n
+            mean_success = sum(r[3] for r in rows) / n
+            mean_collision = sum(r[5] for r in rows if r[5] == r[5]) / n if n else 0.0
+
+            print(f"== {run_dir.name}  [{track['track']}]  {n} タスク")
             print(f"   配布キットの総合スコア（成功率そのもの） {track['overall_score']:.4f}")
-            mean = {k: sum(r[1][k] for r in rows) / len(rows) for k in weights}
-            overall = composite(mean, weights)
-            print(f"   **合計点 {overall:.4f}**  内訳 "
-                  + "  ".join(f"{k} {mean[k]:.3f}" for k in weights))
-            collisions = [r[3] for r in rows if r[3] == r[3]]
-            if collisions:
-                print(f"   衝突率 {sum(collisions) / len(collisions):.3f}")
+            print(f"   **合計点 {total:.4f}**"
+                  f"   ＝ 成功率 {mean_success:.3f} × なめらかさ {mean_smooth:.3f} 相当")
+            print(f"   全部成功したらいくつか（目盛りの確認・予選の実測は 0.48）: {mean_smooth:.4f}")
+            print(f"   衝突率 {mean_collision:.3f}")
+            comp_mean = {k: sum(r[1][k] for r in rows) / n for k in weights}
+            print("   なめらかさの内訳  "
+                  + "  ".join(f"{k} {comp_mean[k]:.3f}" for k in weights))
 
             if args.by_category and labels:
                 groups: dict[str, list] = {}
-                for name, comp, score, coll in rows:
-                    groups.setdefault(labels.get(name, "?"), []).append((comp, score, coll))
-                print(f"   {'条件':16s}{'合計点':>8s}{'成功':>8s}{'歩数':>8s}{'滑らかさ':>8s}{'衝突率':>8s}")
+                for name, comp, smooth, success, score, coll in rows:
+                    groups.setdefault(labels.get(name, "?"), []).append(
+                        (comp, smooth, success, score, coll))
+                print(f"   {'条件':16s}{'合計点':>8s}{'成功':>8s}{'なめらかさ':>10s}{'衝突率':>8s}")
                 for label in sorted(groups):
                     g = groups[label]
-                    avg = lambda k: sum(c[k] for c, _, _ in g) / len(g)  # noqa: E731
-                    print(f"   {label:16s}{sum(s for _, s, _ in g) / len(g):8.3f}"
-                          f"{avg('success'):8.3f}{avg('steps'):8.3f}{avg('sparc'):8.3f}"
-                          f"{sum(c for _, _, c in g) / len(g):8.3f}")
+                    m = lambda i: sum(x[i] for x in g) / len(g)  # noqa: E731
+                    print(f"   {label:16s}{m(3):8.3f}{m(2):8.3f}{m(1):10.3f}{m(4):8.3f}")
 
             if args.per_task:
-                for name, _, score, coll in sorted(rows, key=lambda r: r[2]):
-                    print(f"   {score:6.3f}  衝突 {coll:4.2f}  {name[:64]}")
+                for name, _, smooth, success, score, coll in sorted(rows, key=lambda r: r[4]):
+                    print(f"   {score:6.3f}  成功 {success:4.2f}  なめらかさ {smooth:5.3f}"
+                          f"  衝突 {coll:4.2f}  {name[:56]}")
             print()
     return 0
 
