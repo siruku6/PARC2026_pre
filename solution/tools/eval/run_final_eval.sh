@@ -128,6 +128,7 @@ done
 echo "-- 方策サーバーを起動する（重みの読み込みに 1〜2 分）"
 docker run -d --name "$POLICY_HOST" --gpus all --network "$NETWORK" \
     -v "$REPOSITORY_ROOT/solution/policy_server.py:/app/policy_server.py:ro" \
+    -v "$REPOSITORY_ROOT/solution/geometry_graft.py:/app/geometry_graft.py:ro" \
     -v "$WEIGHTS:/app/model_weights:ro" \
     -v "$HOME/.cache/huggingface:/hf_home" \
     -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \

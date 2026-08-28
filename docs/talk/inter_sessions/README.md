@@ -62,6 +62,7 @@
 
 | # | 何を | 状態 |
 |---|---|---|
-| [001](001_collision_object_displacement.md) | 衝突と判定されたとき、どの物体がどれだけ動いたかを数える | 依頼中 |
-| [002](002_robot_init_pose_coverage.md) | ロボット初期姿勢の振り方を、作業空間を覆う形に作り直す | 依頼中 |
-| [003](003_blackwell_readiness.md) | **Blackwell で短く試して、効くと分かったものだけ長く回す**段取りを作る | 依頼中 |
+| [001](001_collision_object_displacement.md) | 衝突と判定されたとき、どの物体がどれだけ動いたかを数える | **報告済み** |
+| [002](002_robot_init_pose_coverage.md) | ロボット初期姿勢の振り方を、作業空間を覆う形に作り直す | 進行中 |
+| [003](003_blackwell_readiness.md) | **Blackwell で短く試して、効くと分かったものだけ長く回す**段取りを作る | 保留（Blackwell が今日明日は開かない） |
+| [004](004_runpod_short_full_training.md) | **RunPod で 1,500 歩のフルパラメータ学習を回し、傾きを読む**（$8〜9） | 依頼中 |

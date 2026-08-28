@@ -893,6 +893,67 @@ class MyPolicy(BasePolicy):
         self._instruction = ""
         self._warm_up()
 
+    def _attach_geometry_graft(self, policy, weights):
+        """重みに幾何の接ぎ木が入っていれば、模型側にも同じものを生やす。
+
+        **学習側と推論側で接ぎ木の形が違うと、学習した重みが意味を失う。**
+        形の定義は `geometry_graft.py` の 1 か所だけに置いてあり、学習
+        （`solution/train/experiments/geometry/vggt_fuser.py`）もここも同じものを読む。
+
+        **VGGT の重みはチェックポイントに入っている。** だから Hugging Face へ
+        取りに行かない（`pretrained=False` で骨だけ組む）——採点環境は通信が
+        遮断されている前提である。重みはこのあとの流し込みで埋まる。
+
+        **画像の大きさは重みから読む。** 学習時の値が `image_size_marker` として
+        入っている。入っていない古い重みのときだけ `PARC_GEO_IMAGE_SIZE`（既定 252）を
+        使う。**ここを取り違えると VGGT に入る画像が変わり、特徴がずれる。**
+
+        Parameters
+        ----------
+        policy : PI05Policy
+            まだ重みを流し込んでいない模型。
+        weights : Path
+            `model_weights` ディレクトリ。
+
+        Reads:
+          - <weights>/model.safetensors
+        """
+        import os
+        import sys
+        from pathlib import Path
+
+        from safetensors import safe_open
+
+        with safe_open(weights / "model.safetensors", framework="pt", device="cpu") as reader:
+            keys = list(reader.keys())
+            marker = next((k for k in keys if k.endswith("geometry_fuser.image_size_marker")), None)
+            has_graft = any("geometry_fuser." in k for k in keys)
+            image_size = None
+            if marker is not None:
+                image_size = int(reader.get_tensor(marker).item())
+
+        if not has_graft:
+            return
+
+        if image_size is None:
+            image_size = int(os.environ.get("PARC_GEO_IMAGE_SIZE", "252"))
+            print("[parc] 幾何の接ぎ木: 重みに画像の大きさが入っていないので "
+                  f"{image_size} を使う（学習時の値と一致していることを確かめること）",
+                  flush=True)
+
+        # `geometry_graft.py` は自分と同じ階層に置いてある（提出物にも同梱する）。
+        here = Path(__file__).resolve().parent
+        if str(here) not in sys.path:
+            sys.path.insert(0, str(here))
+        import geometry_graft
+
+        fuser = geometry_graft.attach(
+            policy.model, image_size=image_size, pretrained=False
+        )
+        print(f"[parc] 幾何の接ぎ木を生やした（{image_size}x{image_size}・"
+              f"VGGT は骨だけ組んで重みは流し込む）", flush=True)
+        return fuser
+
     def _build_pi05(self, config, weights):
         """π0.5 のチェックポイントを、**RAM 18GB を要求せずに**読む。
 
@@ -957,6 +1018,13 @@ class MyPolicy(BasePolicy):
                 policy = PI05Policy(config)
         finally:
             torch.set_default_dtype(previous_dtype)
+
+        # **幾何の接ぎ木（板 F25）が入った重みかどうかを、重み自身に聞く。**
+        # 入っていれば、下の「1 テンソルずつ流し込む」処理の前に接ぎ木を生やす
+        # ——生やしておかないと `geometry_fuser.*` が流し込む先を持たず、
+        # **学習した 2,099 万個が捨てられて素の π0.5 として動いてしまう。**
+        # 入っていない重み（今までの版）では何もしない。
+        self._attach_geometry_graft(policy, weights)
 
         parameters = dict(policy.named_parameters())
         targets = {**parameters, **dict(policy.named_buffers())}

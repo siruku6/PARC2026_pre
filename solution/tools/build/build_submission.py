@@ -46,7 +46,10 @@ _DEFAULT_ARTIFACTS = _REPO_ROOT / "work" / "artifacts"
 _DEFAULT_OUTPUT = _REPO_ROOT / "work" / "submission.zip"
 
 # solution/ から取るファイル（zip のルート直下に置く）。
-_SOLUTION_FILES = ("policy_server.py", "requirements.txt")
+# `geometry_graft.py` は幾何の接ぎ木（板 F25）の形の定義である。**学習側と同じ
+# ファイルを同梱する**——形が食い違うと学習した重みが意味を失う。幾何を接いでいない
+# 重みでも `policy_server.py` は読み込まないので、入れておいて害は無い。
+_SOLUTION_FILES = ("policy_server.py", "requirements.txt", "geometry_graft.py")
 
 # work/artifacts/ から取るディレクトリ（名前をそのまま zip 内のパスにする）。
 _ARTIFACT_DIRS = ("model_weights", "vendor")
@@ -249,6 +252,13 @@ def _verify_zip(output: Path, entries: list[tuple[Path, str]]) -> None:
             )
         if not any(name.startswith("vendor/lerobot/") for name in actual):
             raise ValueError("zip に vendor/lerobot/ がありません")
+        # 幾何の接ぎ木が入った重みなら、VGGT のソースも要る（pip では入れられない）。
+        if any(name.startswith("vendor/vggt/") for name in actual):
+            if not any(name == "geometry_graft.py" for name in actual):
+                raise ValueError(
+                    "zip に vendor/vggt/ があるのに geometry_graft.py がありません"
+                    "（接ぎ木の形が無いと VGGT を組めません）"
+                )
 
     print(f"[build] 検証     {len(expected)} エントリ一致、必須構成あり")
 
