@@ -11,6 +11,11 @@
 （1 行 1 ロールアウト）。**評価を回し直さなくてよいが、その JSONL が無い実行には
 使えない**——採点器の JSON には変位の値が残っていないので、後から復元はできない。
 
+**`done` で分けないと表が読めない。** 衝突した回には 2 種類ある——**ゴールに着いた
+のに衝突で落ちた回**と、**そもそも 300 歩で着いていない回**である。後者は衝突が無くても
+失敗なので、**衝突対策で取り戻せる点は前者だけである。**しかも後者は 300 歩ぶん暴れた
+末の変位なので、**混ぜると分布の裾が実態より重く見える。**表 1 は必ず両方を並べて出す。
+
 **距離が 2 通りあるのはキットの都合である。** キットが 1 mm のしきい値と比べて
 `collided` を決めているのは、3 軸の絶対値の和（L1）である。実際に動いた距離
 （L2）ではなく、最大 √3 倍だけ大きく出る。**衝突したかどうかは L1 で決まるので
@@ -168,23 +173,48 @@ def _under_threshold_note(counts: Counter, metric: str) -> str | None:
             "その行を JSONL で直接見ること。")
 
 
+def _median_line(records: list[dict], metric: str) -> str:
+    """中央値・最小・最大を 1 行にする。"""
+    values = sorted(_max_displacement_mm(r, metric) for r in records)
+    if not values:
+        return "—"
+    return (f"中央値 {values[len(values) // 2]:.2f} ／ 最小 {values[0]:.2f} "
+            f"／ 最大 {values[-1]:.2f}")
+
+
 def _print_distribution_table(collided: list[dict], metric: str) -> None:
-    """表 1。衝突した回の最大変位が、どの区切りに何件入るか。"""
-    counts = Counter(_bin_label(_max_displacement_mm(r, metric)) for r in collided)
-    total = len(collided)
-    print(f"\n## 1. 衝突した回の最大変位（{metric.upper()}・{total} 本）\n")
-    print("| 区切り | 件数 | 割合 |")
-    print("|---|---:|---:|")
-    for row in _format_distribution(counts, total):
-        print(row)
-    note = _under_threshold_note(counts, metric)
+    """表 1。衝突した回の最大変位が、どの区切りに何件入るか。
+
+    **`done` で 2 つに分けて並べる。**ゴールに着いたのに衝突で落ちた回だけが、
+    衝突対策で取り戻せる点である。着いていない回は衝突が無くても失敗で、しかも
+    300 歩ぶん暴れた末の変位なので、混ぜると裾が実態より重く見える。
+    """
+    reached = [r for r in collided if r.get("done")]
+    never = [r for r in collided if not r.get("done")]
+    groups = [("全体", collided), ("着いたのに衝突で落ちた", reached),
+              ("着いていない（打ち切り）", never)]
+    counts_all = Counter(_bin_label(_max_displacement_mm(r, metric)) for r in collided)
+
+    print(f"\n## 1. 衝突した回の最大変位（{metric.upper()}・{len(collided)} 本）\n")
+    print("| 区切り | " + " | ".join(f"{name}（{len(rs)} 本）" for name, rs in groups)
+          + " |")
+    print("|---|" + "---:|" * len(groups))
+    labels = [label for _, _, label in BINS_MM]
+    if counts_all.get(UNDER_LABEL):
+        labels.append(UNDER_LABEL)
+    for bin_label in labels:
+        cells = []
+        for _, records in groups:
+            counts = Counter(_bin_label(_max_displacement_mm(r, metric))
+                             for r in records)
+            count, total = counts.get(bin_label, 0), len(records)
+            cells.append(f"{count}（{count / total:.0%}）" if total else "—")
+        print(f"| {bin_label} | " + " | ".join(cells) + " |")
+    print("| **mm** | " + " | ".join(_median_line(rs, metric) for _, rs in groups) + " |")
+
+    note = _under_threshold_note(counts_all, metric)
     if note:
         print(f"\n{note}")
-    if total:
-        values = sorted(_max_displacement_mm(r, metric) for r in collided)
-        median = values[total // 2]
-        print(f"\n中央値 {median:.2f} mm ／ 最小 {values[0]:.2f} mm "
-              f"／ 最大 {values[-1]:.2f} mm")
 
 
 def _print_culprit_table(collided: list[dict], metric: str, top: int) -> None:
@@ -198,14 +228,22 @@ def _print_culprit_table(collided: list[dict], metric: str, top: int) -> None:
         counts[name] += 1
         value_mm = record[METRIC_KEYS[metric]][name] * 1000.0
         worst_by_object[name] = max(worst_by_object.get(name, 0.0), value_mm)
+    reached_counts: Counter = Counter()
+    for record in collided:
+        if not record.get("done"):
+            continue
+        name = _worst_object(record, metric)
+        if name is not None:
+            reached_counts[name] += 1
+
     print(f"\n## 2. どの物体が犯人か（上位 {top}）\n")
-    print("| 物体 | 件数 | 割合 | その物体の最大変位 |")
-    print("|---|---:|---:|---:|")
+    print("| 物体 | 件数 | 割合 | うち着いた | その物体の最大変位 |")
+    print("|---|---:|---:|---:|---:|")
     total = len(collided)
     for name, count in counts.most_common(top):
         print(f"| {name} | {count} | {count / total:.1%} "
-              f"| {worst_by_object[name]:.2f} mm |")
-    print(f"\n物体の種類は {len(counts)} 個。")
+              f"| {reached_counts.get(name, 0)} | {worst_by_object[name]:.2f} mm |")
+    print(f"\n物体の種類は {len(counts)} 個。**「うち着いた」がその物体で失った点である。**")
 
 
 def _print_by_condition_table(
