@@ -19,6 +19,18 @@
 # **環境変数 PARC_OBJECT_DISP_JSONL が書き出し先である。**設定されていなければ
 # 何も書かないので、キットの挙動は元のままになる。
 #
+# **動画の書き出しも直した。** 元の `_write_video` は `imageio.mimwrite` に `fps=` を
+# 渡しているが、**評価用イメージには imageio_ffmpeg が入っていない**（実機で確認：
+# imageio 2.37.4・imageio_ffmpeg なし）。そのため `.mp4` の書き出しが TIFF の実装に
+# 落ち、`TiffWriter.write() got an unexpected keyword argument 'fps'` で失敗して
+# **8 バイトの空 TIFF だけが残っていた。**
+#
+# **イメージには opencv-python-headless 4.11.0 と Pillow 12.3.0 が入っている**
+# （`setup.sh:63-64`）。実機で試したところ **`mp4v` は 30 フレームすべて読み戻せた。**
+# H.264（`avc1`）は encoder が無くて開けない。そこで **cv2 の `mp4v` → Pillow の GIF →
+# PNG の連番**の順に試し、**書けたものを読み戻して確かめてから成功と見なす。**
+# 元の失敗が 8 バイトのファイルを黙って残したのは、書いたあと確かめていなかったからである。
+#
 # 元にした版: b_PARC2026_final @ 2059989 の pipeline/rollout.py
 import json
 import logging
@@ -53,6 +65,117 @@ def _append_object_disp(record: dict) -> None:
             f.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
     except Exception as e:
         logger.warning("object_disp の書き出しに失敗: %s", e)
+
+
+def _upscale(frame: np.ndarray, scale: int) -> np.ndarray:
+    """フレームを整数倍に引き伸ばす。
+
+    **素のフレームは 128×128 の 2 枚並びで 128×256 しかない**（`camera_height` の
+    既定が 128）。腕がどの物へ向かっているかを目で追うには小さいので、既定で 2 倍に
+    する。近傍の複製なので情報は増えないが、再生したときに見やすくなる。
+    """
+    if scale <= 1:
+        return frame
+    return np.repeat(np.repeat(frame, scale, axis=0), scale, axis=1)
+
+
+def _write_mp4_with_opencv(base_path: str, frames: list[np.ndarray], fps: int) -> str:
+    """cv2 の mp4v で mp4 を書き、読み戻せたらそのパスを返す。
+
+    **mp4v（MPEG-4 Part 2）を選ぶ理由は、それだけが使えるからである。**評価用
+    イメージの ffmpeg には H.264 の encoder が入っておらず、`avc1` は
+    `VideoWriter.isOpened()` が False になる。
+
+    Parameters
+    ----------
+    base_path : str
+        拡張子を除いた書き出し先。`.mp4` を足して使う。
+    frames : list[np.ndarray]
+        RGB・uint8 のフレーム。cv2 は BGR を取るので中で入れ替える。
+    fps : int
+        毎秒のフレーム数。
+
+    Returns
+    -------
+    path : str
+        書けた mp4 のパス。
+
+    Raises
+    ------
+    RuntimeError
+        書き出し器が開けなかったか、書いたものを読み戻せなかったとき。
+    """
+    import cv2
+
+    path = base_path + ".mp4"
+    height, width = frames[0].shape[:2]
+    writer = cv2.VideoWriter(
+        path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)
+    )
+    if not writer.isOpened():
+        writer.release()
+        raise RuntimeError("cv2.VideoWriter が mp4v で開けなかった")
+    try:
+        for frame in frames:
+            writer.write(cv2.cvtColor(np.ascontiguousarray(frame), cv2.COLOR_RGB2BGR))
+    finally:
+        writer.release()
+
+    # **書いたものを読み戻して確かめる。**元の不具合は 8 バイトのファイルを黙って
+    # 残していた。書けたと言う前に 1 フレーム読めることを確認する。
+    capture = cv2.VideoCapture(path)
+    readable, _ = capture.read()
+    capture.release()
+    if not readable:
+        raise RuntimeError(f"書いた mp4 を読み戻せなかった（{os.path.getsize(path)} バイト）")
+    return path
+
+
+def _write_gif_with_pillow(base_path: str, frames: list[np.ndarray], fps: int) -> str:
+    """Pillow だけで動く GIF を書く。cv2 が使えなかったときの受け皿である。
+
+    GIF は Pillow の中で符号化が完結し、外部のコーデックに依存しない。**色が 256 色に
+    落ちるが、腕がどこへ向かっているかを見るには足りる。**
+
+    Returns
+    -------
+    path : str
+        書けた gif のパス。
+    """
+    from PIL import Image
+
+    path = base_path + ".gif"
+    images = [Image.fromarray(np.ascontiguousarray(f)) for f in frames]
+    images[0].save(
+        path, save_all=True, append_images=images[1:],
+        duration=max(1, int(1000 / max(1, fps))), loop=0,
+    )
+    with Image.open(path) as check:
+        if getattr(check, "n_frames", 1) < 2:
+            raise RuntimeError("書いた gif が 1 フレームしか持っていない")
+    return path
+
+
+def _write_png_sequence(base_path: str, frames: list[np.ndarray], fps: int) -> str:
+    """PNG の連番をディレクトリへ書く。最後の受け皿である。
+
+    **動画として再生はできないが、順に並べれば動きは追える。**依頼の「後から見られれば
+    形式は問わない」に合わせた最低限の形で、`fps` は使わない。
+
+    Returns
+    -------
+    path : str
+        書けたディレクトリのパス。
+    """
+    from PIL import Image
+
+    directory = base_path + "_png"
+    os.makedirs(directory, exist_ok=True)
+    for index, frame in enumerate(frames):
+        Image.fromarray(np.ascontiguousarray(frame)).save(
+            os.path.join(directory, f"{index:04d}.png")
+        )
+    return directory
 
 
 class PolicyInterface(Protocol):
@@ -329,20 +452,37 @@ class RolloutExecutor:
             pass
 
     def _write_video(self, task_name: str, frames: list[np.ndarray], success: bool) -> None:
+        """再生できる形が 1 つ書けるまで、mp4 → gif → PNG 連番の順に試す。
+
+        **元の実装は imageio の mp4 だけに賭けていて、評価用イメージにその実装が
+        無いことに気づけなかった**（8 バイトの空 TIFF が残っていた）。ここでは
+        書いたものを読み戻して確かめ、失敗したら次の形式へ落ちる。
+        """
         if not frames:
             return
         out_dir = os.environ.get("T3_VIDEO_DIR", "")
         try:
             os.makedirs(out_dir, exist_ok=True)
-            fps = int(os.environ.get("T3_VIDEO_FPS", "20"))
-            tag = "SUCCESS" if success else "FAIL"
-            path = os.path.join(out_dir, f"{task_name}__{tag}.mp4")
-            import imageio.v2 as imageio
-
-            imageio.mimwrite(path, frames, fps=fps, macro_block_size=1)
-            logger.info("動画を保存: %s (%d frames)", path, len(frames))
         except Exception as e:
-            logger.warning("動画保存に失敗: %s", e)
+            logger.warning("動画の置き場を作れなかった: %s", e)
+            return
+
+        fps = int(os.environ.get("T3_VIDEO_FPS", "20"))
+        scale = int(os.environ.get("T3_VIDEO_SCALE", "2"))
+        frames = [_upscale(f, scale) for f in frames]
+        tag = "SUCCESS" if success else "FAIL"
+        base_path = os.path.join(out_dir, f"{task_name}__{tag}")
+
+        for write in (_write_mp4_with_opencv, _write_gif_with_pillow,
+                      _write_png_sequence):
+            try:
+                path = write(base_path, frames, fps)
+            except Exception as e:
+                logger.warning("%s で書けなかった: %s", write.__name__, e)
+                continue
+            logger.info("動画を保存: %s (%d frames)", path, len(frames))
+            return
+        logger.warning("動画をどの形式でも保存できなかった: %s", task_name)
 
     def evaluate_tasks(
         self,

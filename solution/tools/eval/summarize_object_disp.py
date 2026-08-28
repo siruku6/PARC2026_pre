@@ -45,7 +45,9 @@ BINS_MM: list[tuple[float, float, str]] = [
     (50.0, float("inf"), "50 mm 以上"),
 ]
 
-# しきい値ちょうどを下回る値がここへ落ちたときだけ現れる行。
+# しきい値を下回る値がここへ落ちたときだけ現れる行。
+# **L2 の表では当たり前に出る**（L1 が 1 mm を超えても、実距離は下回りうる）。
+# **L1 の表で出たら、しきい値の比較と食い違っているので要調査である。**
 UNDER_LABEL = "1 mm 未満"
 
 METRIC_KEYS: dict[str, str] = {"l1": "max_disp_m", "l2": "max_disp_l2_m"}
@@ -151,8 +153,19 @@ def _format_distribution(counts: Counter, total: int) -> list[str]:
         rows.append(f"| {label} | {count} | {share:.1%} |")
     if counts.get(UNDER_LABEL):
         count = counts[UNDER_LABEL]
-        rows.append(f"| {UNDER_LABEL}（要調査） | {count} | {count / total:.1%} |")
+        rows.append(f"| {UNDER_LABEL} | {count} | {count / total:.1%} |")
     return rows
+
+
+def _under_threshold_note(counts: Counter, metric: str) -> str | None:
+    """「1 mm 未満」の行が出た理由を、L1 と L2 で書き分ける。"""
+    if not counts.get(UNDER_LABEL):
+        return None
+    if metric == "l2":
+        return ("「1 mm 未満」は当たり前に出る。**しきい値と比べられているのは L1 で、"
+                "実距離の L2 はそれを下回りうる**（3 軸に散れば最大 √3 倍の差）。")
+    return ("**「1 mm 未満」が L1 の表に出るのはおかしい。**しきい値の比較と食い違うので、"
+            "その行を JSONL で直接見ること。")
 
 
 def _print_distribution_table(collided: list[dict], metric: str) -> None:
@@ -164,6 +177,9 @@ def _print_distribution_table(collided: list[dict], metric: str) -> None:
     print("|---|---:|---:|")
     for row in _format_distribution(counts, total):
         print(row)
+    note = _under_threshold_note(counts, metric)
+    if note:
+        print(f"\n{note}")
     if total:
         values = sorted(_max_displacement_mm(r, metric) for r in collided)
         median = values[total // 2]
@@ -222,7 +238,7 @@ def _print_by_condition_table(
     print("|---|" + "---:|" * len(conditions))
     labels_to_show = [label for _, _, label in BINS_MM]
     if any(counts_by_condition[c].get(UNDER_LABEL) for c in conditions):
-        labels_to_show.append(UNDER_LABEL)
+        labels_to_show.append(UNDER_LABEL)  # 理由は表 1 の脚注と同じ
     for bin_label in labels_to_show:
         cells = []
         for condition in conditions:
