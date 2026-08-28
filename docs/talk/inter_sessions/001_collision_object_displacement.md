@@ -44,6 +44,20 @@ Total Score = (1/N) * Σ successᵢ * (1 - collision penaltyᵢ) * smooth metric
 そして**摂動を 1 つも掛けていない Base ですら 16.7% が衝突で落ちている。**
 **衝突は摂動への弱さではなく、素の制御の問題だと見えてきた。**
 
+**Track3 でも同じことが起きていて、そちらのほうが極端である。**
+8/28 に 4 タスク × 2 エピソードを回した（`work/final_eval/0828_130103_track3_t3video`）。
+
+| タスク | 成功率 | **衝突率** | **監視される物の数** |
+|---|---|---|---|
+| alphabet soup をトレイから出す | 0.00 | **1.00** | 4 |
+| red mug を左の皿から下ろす | 0.00 | **1.00** | 3 |
+| yellow book を棚から下ろす | 0.00 | **1.00** | 2 |
+| **2 つのマグを皿から下ろす** | 0.00 | **0.00** | **1** |
+
+**支えている物（トレイ・皿・棚）は `obj_of_interest` に入っていて見逃されるが、
+隣に並んでいる物は見逃されない。**唯一衝突していないのが、監視される物が 1 個だけの
+タスクである。**詳しくは [knowledge/17](../../knowledge/17_track3_is_a_1mm_clutter_problem.md)。**
+
 **判断が必要になったら。** この依頼の目的は「後処理で届くのか、学習でしか直らないのか」を
 決めることである。**その目的に照らして、より良い測り方を思いついたら変えてよい。**
 変えた場合は、変えたことと理由を報告に書くこと。
@@ -133,13 +147,36 @@ Total Score = (1/N) * Σ successᵢ * (1 - collision penaltyᵢ) * smooth metric
      solution/tools/eval/run_final_eval.sh track2
    ```
 
-5. **分布を出す。**
+5. **同じ `rollout.py` の `_write_video` を直す。動画がいま撮れていない。**
+   `RECORD=1` で回すと **8 バイトの空ファイル**しかできない。中身は `49 49 2a 00 ...` で、
+   **MP4 ではなく空の TIFF** である。`eval.log` に理由が出ている。
+
+   ```
+   [WARNING] pipeline.rollout: 動画保存に失敗:
+   TiffWriter.write() got an unexpected keyword argument 'fps'
+   ```
+
+   **評価用イメージの imageio に MP4 を書ける実装が入っていない**ため、`.mp4` の書き出しが
+   TIFF の実装に落ちている。**イメージは作り直せない**（このマシンから `docker run` が
+   通らず、会社の RTX6000 でも作り直しは手間）ので、**書き出し側で何とかすること。**
+   PNG の連番でもよい——**後から見られれば形式は問わない。**
+   **どう直したかを報告に 1 行書くこと。**
+
+6. **Track3 でも 1 本回してもらう。** 4 タスク × 2 エピソードで 15 分である。
+
+   ```
+   RECORD=1 TRACK_EPISODES=2 MUJOCO_GL=egl PARC_N_ACTION_STEPS=16 PARC_EMA_ALPHA=0.3 \
+     LABEL=t3disp solution/tools/eval/run_final_eval.sh track3
+   ```
+
+7. **分布を出す。**
 
 ## できあがりの条件
 
 - `object_disp.jsonl` が 216 行あり、うち衝突した回の数が
   `results/server_8000.json` の衝突率 × 216 と一致する
-- 下の 3 つの表が書けている
+- 下の 4 つの表が書けている
+- **動画が再生できる形で残っている**（Track3 の 4 本）
 
 ## 報告の書き方
 
@@ -149,6 +186,8 @@ Total Score = (1/N) * Σ successᵢ * (1 - collision penaltyᵢ) * smooth metric
    `1〜2 mm / 2〜5 mm / 5〜10 mm / 10〜50 mm / 50 mm 以上` の 5 段。件数と割合。
 2. **どの物体が犯人か。** 物体名ごとの件数、上位 10 個。
 3. **条件ごと**（Base / Camera / Robot）に 1 の分布がどう変わるか。
+4. **Track3 の 4 タスクについて、同じ 1 と 2 の表。**
+5. **動画をどう直したか 1 行。**Track3 の 4 本を見て、**腕が正しい物へ向かっているか**だけを 1 行で。
 
 **最後に 1 行だけ、「かすった」寄りか「倒した」寄りかの判定を書く。**
 
