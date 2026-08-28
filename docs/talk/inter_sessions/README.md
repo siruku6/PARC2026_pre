@@ -66,4 +66,5 @@
 | [002](002_robot_init_pose_coverage.md) | ロボット初期姿勢の振り方を、作業空間を覆う形に作り直す | 進行中 |
 | [003](003_blackwell_readiness.md) | **Blackwell で短く試して、効くと分かったものだけ長く回す**段取りを作る | 保留（Blackwell が今日明日は開かない） |
 | [004](004_runpod_short_full_training.md) | **RunPod で 1,500 歩のフルパラメータ学習を回し、傾きを読む**（$8〜9） | 依頼中 |
-| [005](005_blend_and_ema_for_today.md) | **`blend_steps` と `EMA` を測り、今日の提出物を作る**（RTX6000・約 1 時間 40 分） | 依頼中 |
+| [005](005_blend_and_ema_for_today.md) | `blend_steps` と `EMA` を測り、今日の提出物を作る | **blend 4 は悪化。EMA 0.5 の測定が残り** |
+| [006](006_track3_reverse_direction.md) | **Track3 の逆向きタスクに、どう手を付けるかを決めて試作する**（方針の判断が主) | 依頼中 |
