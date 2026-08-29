@@ -64,8 +64,11 @@
 |---|---|---|
 | [001](001_collision_object_displacement.md) | 衝突と判定されたとき、どの物体がどれだけ動いたかを数える | **報告済み** |
 | [002](002_robot_init_pose_coverage.md) | ロボット初期姿勢の振り方を、作業空間を覆う形に作り直す | 進行中 |
-| [003](003_blackwell_readiness.md) | **Blackwell で短く試して、効くと分かったものだけ長く回す**段取りを作る | 保留（Blackwell が今日明日は開かない） |
-| [004](004_runpod_short_full_training.md) | **RunPod で 1,500 歩のフルパラメータ学習を回し、傾きを読む**（$8〜9） | 依頼中 |
-| [005](005_blend_and_ema_for_today.md) | `blend_steps` と `EMA` を測り、今日の提出物を作る | **blend 4 は悪化。EMA 0.5 の測定が残り** |
-| [007](007_rebuild_zips_with_4_2_0_settings.md) | **1,500 歩の zip を 4.2.0 と同じ推論設定で作り直し、版 `5.0.0` を置き換える**（RTX6000・`vlm/` が無くて止まっている） | 依頼中 |
+| [003](003_blackwell_readiness.md) | **Blackwell で短く試して、効くと分かったものだけ長く回す**段取りを作る | **010 へ引き継いだ** |
+| [004](004_runpod_short_full_training.md) | **RunPod で 1,500 歩のフルパラメータ学習を回し、傾きを読む**（$8〜9） | **報告済み**（この重みが 8/29 に Track1 0.492 を出した） |
+| [005](005_blend_and_ema_for_today.md) | `blend_steps` と `EMA` を測り、今日の提出物を作る | **報告済み**（両方とも不採用） |
 | [006](006_track3_reverse_direction.md) | **Track3 の逆向きタスクに、どう手を付けるかを決めて試作する**（方針の判断が主) | 依頼中 |
+| [007](007_rebuild_zips_with_4_2_0_settings.md) | 1,500 歩の zip を 4.2.0 と同じ推論設定で作り直す | **報告済み**（5.0.1 として 3 トラックへ提出済み） |
+| **[008](008_runpod_long_full_training.md)** | **RunPod で、効くと分かった学習を長く回す**（歩数と設定の決定も含む） | **依頼中** |
+| **[009](009_two_submissions_for_tomorrow.md)** | **明日の提出 2 本を作る**（Track1 は `EMA 0.5`、Track2 は 1,000 歩の重み） | **依頼中** |
+| **[010](010_blackwell_investigation_plan.md)** | **Blackwell の調査計画を作る**（明日の午後〜夜・配布データセットの棚卸しを含む） | **依頼中** |
