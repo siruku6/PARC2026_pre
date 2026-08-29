@@ -56,7 +56,7 @@ Docker だけでできて GPU を使わないため、他の作業と同時並�
 | GPU | NVIDIA H100-20C（H100 を 20GB に切り出した vGPU）1 枚、compute capability 9.0、ドライバ 570.133.20 |
 | vCPU | **16**（Xeon Gold 6338） |
 | RAM | 114 GiB |
-| ストレージ | 298 GB（残り 75 GB） |
+| ストレージ | 298 GB（**残り 11 GB**。2026-08-29 実測。`work/train` 71 GB・`work/artifacts` 40 GB・`work/submission_geo12k.zip` 11.9 GB） |
 
 **vCPU は以前 2 だった。**`knowledge/14_quantization_and_eval_bottleneck.md` の
 「評価の 71〜82% は 2 コアでの CPU 描画」という実測は、2 コアだった頃のものである。
@@ -78,7 +78,7 @@ JAIST サーバでは選べない EGL が実際に効くことを確認した。
 | RAM | 47 GiB | **114 GiB** |
 | GPU | Quadro RTX 6000 1 枚・VRAM **24 GB**・cc **7.5**・ドライバ 595.84 | **H100-20C**（vGPU）・VRAM 20 GB・cc 9.0・ドライバ 570.133.20 |
 | GPU の種別 | **`Quadro RTX` / `Pass-Through`**（描画もできる実機） | `NVIDIA Virtual Compute Server` / `VGPU`（計算専用） |
-| ストレージ | **489 GB（残り 455 GB）** | 298 GB（残り 75 GB） |
+| ストレージ | **489 GB（残り 455 GB。2026-08-26 実測）** | 298 GB（**残り 11 GB**。2026-08-29 実測） |
 | OS | Ubuntu 24.04.4 LTS | Ubuntu 22.04.3 LTS |
 | `docker run` | **通る**（ただし `sudo` が要る） | **拒否される**（org の制約。`docker exec` のみ） |
 | `docker run --gpus all` | **通る**（NVIDIA Container Toolkit 1.20.0-1 を 08-26 に導入） | 通る |
