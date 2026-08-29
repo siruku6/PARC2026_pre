@@ -67,7 +67,7 @@
 **Track3 の元タスクは SCENE 名のものに限られる**（運営の検査スクリプト
 `b_PARC2026_final/scripts/check_no_leaks.py` の禁止語
 `(KITCHEN|LIVING_ROOM|STUDY)_SCENE\d+` が「元タスク（順方向 BDDL）の識別子」と書かれている）。
-**手元の LIBERO には SCENE 名のタスクが 120 個ある**——`libero_90` に 90、`libero_10` に 30。
+**手元の LIBERO には SCENE 名のタスクが 100 個ある**——`libero_90` に 90、`libero_10` に 10。**うち学習データに入っているのは 10 個だけである**（8/29 に数えた）。
 **つまり Track3 の母集団は `libero_90` と `libero_10` の中にある。**
 **いま学習に使っている `libero_plus` は 40 タスクで、そこに何が入っているかを数えていない。**
 
@@ -126,7 +126,7 @@
    どれだけ重なるか。**LeRobot 形式なら `meta/tasks.jsonl` にタスク名がある**ので、
    展開せずに名前の集合を突き合わせられる。
 3. **トラックごとにどれを使うべきか。**
-   - **Track3 の元タスクは SCENE 名**（`libero_90` に 90・`libero_10` に 30）。
+   - **Track3 の元タスクは SCENE 名**（`libero_90` に 90・`libero_10` に 10）。
      **`libero_plus` に SCENE 名のタスクが入っているかを数えると、
      Track3 に向けて何を足すべきかが決まる。**
    - Track1・Track2 は摂動（背景・照明・視点・姿勢）が要るので `libero_plus` が中心になるが、

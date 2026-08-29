@@ -562,7 +562,7 @@ motion blur・gaussian blur・zoom blur・fog・glass blur の 5 種で、
 |---|---|
 | どれも「置いてあるものを取って、机の決まった場所に置く」型 | **順方向（机の物をどこかへ置く）の裏返しだから** |
 | ゴールが「机の狭い領域」 | 領域の名前は `..._init_region` ——**その物の元の置き場**。「元に戻す」課題なので当然である |
-| 学習データにこの型が 1 件も無い | **LIBERO は順方向しか持っていない。**`libero_10` と `libero_90` の SCENE 名タスク 120 件を数え直しても、`take ... off` / `out of` / `put it back` に当たるものは 0 件だった |
+| 学習データにこの型が 1 件も無い | **LIBERO は順方向しか持っていない。**`libero_10` と `libero_90` の SCENE 名タスク 100 件を数え直しても、`take ... off` / `out of` / `put it back` に当たるものは 0 件だった |
 
 **手元で回したときの動きも説明が付く**（8/28・[knowledge/17](../knowledge/17_track3_picks_the_wrong_object.md)）。
 **アルファベットスープの課題で、方策はクリームチーズの箱を掴んでトレイへ入れた**
@@ -583,8 +583,10 @@ motion blur・gaussian blur・zoom blur・fog・glass blur の 5 種で、
 | **評価は 4 つの段に分かれる** | `1_配布` / `2_予選` / **`3_Omni`** / **`4_最終`** |
 
 **元タスクが SCENE 名に限られることが、いちばん効く。**
-手元の LIBERO には **SCENE 名のタスクが 120 件（20 シーン）**ある
-（`libero_90` に 90・`libero_10` に 30）。
+手元の LIBERO には **SCENE 名のタスクが 100 件**ある
+（`libero_90` に 90・`libero_10` に 10）。**うち学習データ（`libero_plus` の 40 タスク）に
+入っているのは `libero_10` の 10 個だけで、`libero_90` の 90 個は 1 つも入っていない**
+（8/29 に数えた。[../reference/25_dataset_inventory.md](../reference/25_dataset_inventory.md)）。
 **`libero_spatial` / `object` / `goal` の平たい名前のタスクは元になっていない。**
 
 **採点ログの `タスク用途: 3_Omni` は、毎日の枠が第 3 段であることを示す。
