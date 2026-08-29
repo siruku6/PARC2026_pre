@@ -11,9 +11,9 @@
 
 ```mermaid
 flowchart LR
-    S["solution/<br/>policy_server.py<br/>requirements.txt"] --> Z["work/submission.zip"]
+    S["solution/<br/>policy_server.py<br/>requirements.txt<br/>geometry_graft.py"] --> Z["work/submission.zip"]
     V["work/artifacts/vendor/lerobot/<br/>同梱した LeRobot"] --> Z
-    W["work/artifacts/model_weights/<br/>重み"] --> Z
+    W["work/artifacts/model_weights/<br/>重み（--weights で差し替え可）"] --> Z
     Z --> H["work/submission.sha256"]
 ```
 
@@ -35,8 +35,8 @@ flowchart TD
 
 | | いつ | 所要 |
 |---|---|---|
-| ケース 0 | リポジトリを clone した直後、`work/` を消したとき | 20 分 |
-| **ケース 1** | **`policy_server.py` を変えたとき（いちばん多い）** | **2 分** |
+| ケース 0 | リポジトリを clone した直後、`work/` を消したとき、**別のマシンで初めて組むとき** | **`vendor/` が 3 分。重みを落とす時間は別** |
+| **ケース 1** | **`policy_server.py` を変えたとき（いちばん多い）** | **2 分**（π0.5 の 9.4 GB なら 10〜20 分） |
 | ケース 2 | 学習した重みを載せるとき | 5 分 |
 
 ---
@@ -44,9 +44,10 @@ flowchart TD
 # ケース 1. 作り直すだけ
 
 ```bash
-work/venv310/bin/python solution/tools/build/build_submission.py
+python3 solution/tools/build/build_submission.py
 ```
 
+**venv は要らない**（`build_submission.py` は標準ライブラリだけで動く。ケース 0 の 0-0）。
 これだけである。出力はこうなる。
 
 ```
@@ -107,16 +108,40 @@ rm -rf work/artifacts/model_weights && \
 
 # ケース 0. 土台を作る
 
-`work/artifacts/` が無い状態から始める。**3 つ作れば、あとはケース 1 に合流する。**
+`work/artifacts/` が無い状態から始める。**作るのは `vendor/` だけで、あとは重みを
+どこかに置けばケース 1 に合流する。**
 
-## 0-1. Python 3.10 の venv を作る
+## 0-0. 組めるかどうかは、この 5 つで決まる
+
+**`build_submission.py` が集めるのは `solution/` の 3 ファイルと
+`work/artifacts/{model_weights,vendor}` の 2 つだけである**（`build_submission.py:52`
+の `_SOLUTION_FILES` と `:55` の `_ARTIFACT_DIRS`）。
+**GPU も torch も venv も要らない。標準ライブラリだけで動く**
+（`argparse`・`hashlib`・`re`・`zipfile`・`pathlib`）。
+**だから重みが置いてあるマシンなら、どれでも組める。**
+
+| 要るもの | 何のため | 無いとどうなるか |
+|---|---|---|
+| `solution/policy_server.py`・`requirements.txt`・`geometry_graft.py` | `_SOLUTION_FILES`。3 つとも zip の直下に入る | `必須ファイルがありません` |
+| **`work/artifacts/vendor/lerobot/`**（487 ファイル・13 MB） | 採点環境は Python 3.10 固定だが、LeRobot v0.6.0 は `requires-python >= 3.12` を宣言していて `pip install` できない | `生成物がありません: .../work/artifacts/vendor`（**`--weights` では差し替えられない**） |
+| 重み（`model.safetensors`・`config.json`・`vlm/`） | `--weights` でどのディレクトリを指してもよい。zip の中の名前は `model_weights/` に固定される | `zip に model_weights/... がありません` |
+| 空き 9.4 GB（π0.5。SmolVLA なら 918 MB） | zip 本体 | 途中で切れた zip ができる |
+| `python3` | 上記のとおり標準ライブラリだけ | — |
+
+**`work/artifacts/model_weights/` という置き場は必須ではない。** `--weights` で
+チェックポイントを直に指すなら要らない（`build_submission.py:168-169`）。
+
+## 0-1. Python 3.10 の venv は要らない（構文検証に使うだけ）
+
+**`build_submission.py` と `install_weights.py` はどちらも標準ライブラリだけで動く。**
+venv が要るのは、下の `vendor_lerobot.py` に `--python310` を渡して
+**書き換えた結果が 3.10 で構文として通ることまで検証する**ときだけである。
+採点環境と同じ 3.10.12 に合わせたいなら作る。
 
 ```bash
 export UV_CACHE_DIR="$TMPDIR/uvcache"
 uv venv --python 3.10.12 work/venv310
 ```
-
-採点環境と同じ 3.10.12 に合わせる。
 
 ## 0-2. LeRobot を同梱用に書き換える
 
@@ -136,12 +161,20 @@ with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as tf:
 (dest / root).rename(target)
 "
 
-work/venv310/bin/python solution/tools/build/vendor_lerobot.py \
-    --python310 work/venv310/bin/python
+python3 solution/tools/build/vendor_lerobot.py \
+    --python310 work/venv310/bin/python     # venv が無ければこの行は外す
+
+find work/artifacts/vendor/lerobot -name '*.py' | wc -l    # 487 になること
 ```
 
 `vendor_lerobot.py` は**置換対象が 1 箇所でなければ例外にする**。
 LeRobot のバージョンが変われば、黙って壊れずにその場で落ちる。
+
+**別のマシンで作り直しても同じものになる。** 2026-08-28 に確かめた——
+v0.6.0 の tar を取り直して `vendor_lerobot.py` を走らせ、提出済みの zip 3 本に
+入っている `vendor/lerobot` と `diff -r` した結果、**`__pycache__` 以外の差は 0 で
+487 ファイルが一致した**（`__pycache__` は `_EXCLUDE_PARTS` で zip に入らない）。
+**`scp` で 13 MB を運ぶ必要は無い。**
 
 ### 0-2-b. VGGT も同梱する（幾何の接ぎ木を入れた重みを出すときだけ）
 
@@ -162,30 +195,45 @@ python3 solution/tools/build/vendor_vggt.py --source /tmp/vggt-src/vggt
 | 同梱物が揃っているか | `python3 solution/tools/build/vendor_vggt.py --check` |
 | どちらの vggt を読んでいるか | `vggt.models.vggt.__file__` を見る（**`vggt.__file__` は `None` になる**——`__init__.py` を持たない名前空間パッケージである） |
 
-## 0-3. 重みを置く
+## 0-3. 重みを置く（π0.5 の場合）
 
-**VLM の `model.safetensors` は含めない。** VLM の重みはポリシー側の
-チェックポイントに入っているため、設定とトークナイザだけでよい。
+**`vlm/` には π0.5 のトークナイザが要る。** `policy_server.py` は
+`model_weights/vlm/` からトークナイザを読む。**無いと採点環境で Hub へ取りに行って
+失敗するので、`build_submission.py:248` が zip を書いた後に検証で落とす。**
 
-| 取得元 | revision | 置き場所 |
-|---|---|---|
-| `lerobot/smolvla_libero_plus` | `7bb70aa5bc92b82c9239142775d3a173103567ff` | `work/artifacts/model_weights/` |
-| `HuggingFaceTB/SmolVLM2-500M-Video-Instruct`（設定とトークナイザのみ） | — | `work/artifacts/model_weights/vlm/` |
+**π0.5 のトークナイザは PaliGemma / Gemma 系である。**
+`added_tokens.json`・`special_tokens_map.json`・`tokenizer.json`・
+`tokenizer_config.json` の 4 つ・合わせて 17 MB。
+**VLM の `model.safetensors` は要らない**——VLM の重みはポリシー側の
+チェックポイントに入っている。
+
+**HF に上げた π0.5 のチェックポイントには `vlm/` が同梱してある**
+（`siruku6/pi05_trial1500` の `000500`／`001000`／`001500` など。
+[../reference/19_weights_catalog.md](../reference/19_weights_catalog.md)）。
+**その場合は落として `--weights` で直に指すだけでよい。**
 
 ```bash
-work/venv310/bin/python -c "
-from huggingface_hub import snapshot_download
-snapshot_download('lerobot/smolvla_libero_plus',
-                  revision='7bb70aa5bc92b82c9239142775d3a173103567ff',
-                  local_dir='work/artifacts/model_weights',
-                  ignore_patterns=['eval/*', 'eval/**'])
-snapshot_download('HuggingFaceTB/SmolVLM2-500M-Video-Instruct',
-                  local_dir='work/artifacts/model_weights/vlm',
-                  allow_patterns=['*.json', '*.txt', '*.model', 'tokenizer*'])
-"
+hf download siruku6/pi05_trial1500 --include '001500/*' \
+    --local-dir work/artifacts/trial1500
+
+python3 solution/tools/build/build_submission.py \
+    --weights work/artifacts/trial1500/001500 \
+    --output work/submission_<版>.zip
 ```
 
-`eval/`（評価動画 402 ファイル・25.6 MB）は推論に使わないので除外する。
+**学習が書いたチェックポイントには `vlm/` が付かない。** その場合は
+`vlm/` を持っている重みから `cp` で足す（**`ln -s` は駄目である**——
+zip に実体が入らない）。
+
+```bash
+cp -r work/artifacts/pi05_rp3000/vlm <チェックポイント>/vlm
+```
+
+> **SmolVLA 時代の手順との違い。** 2026-08 の前半までは
+> `lerobot/smolvla_libero_plus@7bb70aa5` を `model_weights/` に置き、
+> `HuggingFaceTB/SmolVLM2-500M-Video-Instruct` のトークナイザを `vlm/` に入れていた。
+> **π0.5 では入れてはならない**——トークナイザが別物になる。
+> SmolVLA を出すときだけ、その 2 つを取り寄せる。
 
 **ここまで来たらケース 1 に合流する。**
 
@@ -602,7 +650,18 @@ git checkout scored-0.05832 -- solution/policy_server.py solution/requirements.t
 
 ---
 
-# zip を Mac へ運ぶ —— **運ばずに Mac で組むのが第一手**（2026-08-28 に変えた）
+# zip を Mac へ運ぶ
+
+> **「Mac で組むのが第一手」は取り消した**（2026-08-28 に書き、8/29 に取り消し）。
+> **Mac は業務用で、置けるものが限られる。**空きは 50〜70 GB あるが、
+> **本当は 100 GB 以上空けておく必要があり、余計なものを探して消す時間で仕事に支障が出た。**
+> だから**提出したらその日のうちに zip を消している。**
+>
+> **π0.5 を Mac で組むと、重み 9.4 GB ＋ zip 9.4 GB で約 19 GB を一時的に置くことになる。**
+> 入るが、望ましくない。**組むのは重みが置いてある GPU マシンで行い、zip だけを Mac へ運ぶ。**
+>
+> **ただし Mac で組む道は HF の容量を 1 バイトも増やさない**（重みは学習の成果物として
+> 既に HF にある）。**HF の枠が尽きたときは、19 GB を一時的に置く方と引き比べる。**
 
 **zip を HF に置く道は、HF の容量を食い潰して止まった。**
 `siruku6/parc2026-submission` を「運ぶ通り道」として何度も上書きした結果、
@@ -617,12 +676,18 @@ git checkout scored-0.05832 -- solution/policy_server.py solution/requirements.t
 **重みさえ Mac にあれば、Mac の `python3` で組める。**`venv310` も要らない
 （あれは `vendor_lerobot.py` が使うもので、`vendor/` を作り終えていれば出番は無い）。
 
-| 道 | 9.4 GB が HF を通る回数 | HF に残る容量 |
-|---|---|---|
-| **Mac で組む（第一手）** | **1 回**（重みだけ。これは成果物として上げるものでもある） | **重みのぶんだけ** |
-| GPU マシンで組んで zip を運ぶ | 2 回（重み＋zip） | **重み＋zip。しかも上書きのたびに履歴が積む** |
+| 道 | Mac に届くバイト | Mac に一時的に置く量 | HF に新しく積む容量 | 掛かる時間 |
+|---|---|---|---|---|
+| **GPU マシンで組み、HF を中継に運ぶ**（既定） | 9.4 GB（zip） | **9.4 GB** | **＋9.4 GB** | 16 分（作り直した zip なら 50 秒） |
+| GPU マシンで組み、`scp` で運ぶ | 9.4 GB（zip） | **9.4 GB** | **0** | **1 時間半**（1.7 MB/s） |
+| Mac で組む | 9.4 GB（重み） | **約 19 GB**（重み＋zip） | **0** | 16 分 ＋ 組む時間 |
 
-## Mac で組む
+**Mac に届くバイト数はどちらも約 9.4 GB で同じである。** 違うのは
+**Mac のディスク**と **HF に新しく積む容量**、それに
+**同じ重みから 2 本目を組むときの費用**（GPU マシンで組むなら毎回 zip を運ぶ。
+Mac で組むなら重みが手元にあるので転送は 0）である。
+
+## Mac で組む（空きが 19 GB 以上あるときだけ）
 
 **運ぶのは `vendor/` の 13 MB だけである**（`work/` は git 管理外なので clone では来ない）。
 
