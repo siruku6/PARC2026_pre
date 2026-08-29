@@ -650,6 +650,293 @@ git checkout scored-0.05832 -- solution/policy_server.py solution/requirements.t
 
 ---
 
+# 同じ学習の別チェックポイントを 1 変数で出す（`trial1500` の 1,000 歩・500 歩）
+
+> **2026-08-29 に書いた。この節だけで zip 2 本が組めて、提出まで終わる。**
+
+**`siruku6/pi05_trial1500` には 1 回の学習の 3 地点が残してある**——`000500` / `001000` /
+`001500`。**どれも `vlm/` を同梱している**（`HfApi().list_repo_files('siruku6/pi05_trial1500')`
+を 8/29 に実行して確認。各ディレクトリに 11 ファイル、うち `vlm/` が 4 ファイル）。
+**3 本を同じ設定で出せば、変わるのは重みだけになる。**
+
+`001500` は **5.0.1** として 8/28 夜に 3 トラックへ出してあり、
+Track1 **0.492**・Track2 **0.233**・Track3 **0.000** が返っている
+（`b_PARC2026_final/outputs/submission_logs/track{1,2,3}/*_5.0.1.txt` の `総合スコア` の行）。
+**この 3 つが比較の基準である。**
+
+**組むのは会社の RTX6000 である**（`eng003sasaki01`。clone は `~/src/PARC2026_pre`）。
+**JAIST サーバでは組めない。**`df -h /` の残りが **11 GB** しかなく、
+重み 9.4 GB ＋ zip 9.4 GB が入らない。RTX6000 は **455 GB** 空いている
+（[../resources/infra_and_docker.md](../resources/infra_and_docker.md) の 1 節）。
+
+## 版番号の決まり —— メジャー番号は重みを指す
+
+**この節の付け方は上の「版の上げ方」の表と同じである**（major は重みが変わったとき、
+minor は挙動が変わる既定値の変更、patch は挙動が変わらない修正）。
+
+| メジャー | 重み |
+|---|---|
+| 4 | `pi05_rp3000`（RunPod 3,000 歩） |
+| 5 | `trial1500` の `001500` |
+| 6 | `trial1500` の `001000` |
+| **7** | **`trial1500` の `000500`** |
+
+**8/29 に組む 2 本はこれである。**どちらも指示文を寄せるしきい値（`_MIN_LEXICAL`）を
+**0.50** にする——**5.0.1 と揃えないと「重みだけの 1 変数」にならない。**
+
+| 版 | 重み | `_MIN_LEXICAL` | `PARC_EMA_ALPHA` |
+|---|---|---|---|
+| **6.1.0** | `trial1500` の `001000` | **0.50** | 0.3 |
+| **7.0.0** | `trial1500` の `000500` | **0.50** | 0.3 |
+
+> **台帳の `6.0.1`（`000500` ＋ しきい値 0.65）は使わない。**未提出のまま 8/29 に zip を消しており、
+> **「メジャー番号は重み」という決まりに反する**（6 は 1,000 歩である）。**500 歩は 7 系に統一する。**
+
+> **`5.0.1` だけ付け方が違う。**しきい値 0.65 → 0.50 は挙動が変わる変更なので、決まりどおりなら
+> `5.1.0` である。**採点ログに `policy_server 5.0.1` と焼かれているので、いまさら直せない。**
+
+> **`ema_alpha` は 0.3 のまま動かさない。**0.3 → 0.5 で動くのは jerk の項だけで
+> 0.478 → 0.508、5 項のうち 1 項・重み 0.2 なので**合計点では +0.006** である。
+> 採点は 8 エピソードで、**成功 1 本が 0.061 動く**（標準偏差 0.075）。
+> **+0.006 は原理的に見えない**——[../reference/26_score_formula_fit.md](../reference/26_score_formula_fit.md) の 8 節。
+
+## どの zip をどのトラックへ出すか
+
+| トラック | 出す zip | 5.0.1 の点 |
+|---|---|---|
+| **Track1**（課題 ID 1007） | **`submission_7.0.0.zip`** | 0.492 |
+| **Track2**（課題 ID 1008） | **`submission_6.1.0.zip`** | 0.233 |
+| **Track3**（課題 ID 1009） | **`submission_7.0.0.zip`**（Track1 と同じ実物） | 0.000 |
+
+**Track3 は最後に回す。**返ってくるのは 0.000 の見込みで、**時間が無ければ飛ばしてよい。**
+（選んだ理由は
+[../talk/inter_sessions/009_two_submissions_for_tomorrow.md](../talk/inter_sessions/009_two_submissions_for_tomorrow.md)
+の「報告」に書いた。）
+
+## 順番 —— 1 本ずつ最後まで通す
+
+**`6.1.0` を提出まで終わらせてから `7.0.0` に移る。**2 本を並行して組むと、
+どちらの zip に何を書き換えたのかが分からなくなる。
+
+```mermaid
+flowchart LR
+    D["1. 重みを降ろす<br/>9.4 GB・15 分"] --> B["2. 組む<br/>15 分"]
+    B --> P["3. 中を書き換える<br/>10 秒"]
+    P --> S["4. sha256 を取り直す<br/>1 分"]
+    S --> M["5. Mac へ運ぶ<br/>HF 経由 16 分"]
+    M --> U["6. 出す"]
+```
+
+以下は `6.1.0`（`001000`）の場合である。**`7.0.0` は `001000` を `000500`・
+`6.1.0` を `7.0.0` に読み替える。**
+
+### 1. 重みを降ろす
+
+```bash
+cd ~/src/PARC2026_pre
+hf download siruku6/pi05_trial1500 --include '001000/*' \
+    --local-dir work/artifacts/trial1500
+```
+
+**確認と、出るはずのもの。**
+
+| 打つもの | 出るはず |
+|---|---|
+| `ls work/artifacts/trial1500/001000` | `config.json model.safetensors policy_postprocessor.json policy_postprocessor_step_0_unnormalizer_processor.safetensors policy_preprocessor.json policy_preprocessor_step_2_normalizer_processor.safetensors train_config.json vlm` |
+| `ls work/artifacts/trial1500/001000/vlm` | `added_tokens.json special_tokens_map.json tokenizer.json tokenizer_config.json` |
+| `du -sh work/artifacts/trial1500/001000` | **`8.8G`**（`model.safetensors` が 9,354,050,752 バイト） |
+
+**`vlm/` が無ければここで止まる。**採点で「モデルロードに失敗」になる（下の「つまずいたとき」）。
+
+### 2. 組む
+
+```bash
+python3 solution/tools/build/build_submission.py \
+    --weights work/artifacts/trial1500/001000 \
+    --output work/submission_6.1.0.zip
+```
+
+**`--weights` に渡したディレクトリが、そのまま zip の `model_weights/` になる。**
+`install_weights.py` は使わない（**9.4 GB の複製を 2 つ作るうえ、`model_weights.bak/` を上書きする**）。
+
+**出るはずのもの。**
+
+```
+[build] 検証     <数百> エントリ一致、必須構成あり
+[build] コード   .../solution
+[build] 生成物   .../work/artifacts
+[build] 重み     .../work/artifacts/trial1500/001000
+[build] 出力     .../work/submission_6.1.0.zip
+[build] <数百> files / 9385 MB
+[build] sha256 <64 桁>
+[build] ハッシュを保存: .../work/submission_6.1.0.sha256
+```
+
+| 見るところ | 合格の線 |
+|---|---|
+| **`[build] 検証` の行** | **出ていること。出ないビルドは使わない** |
+| `MB` | **9,3xx**（重み 9,372 MB ＋ 同梱 LeRobot 13 MB） |
+| `[build] ハッシュを保存` の行 | **この sha256 は捨てる。**次の手で中身を書き換えるので合わなくなる |
+
+### 3. 中を書き換える（組み直さない）
+
+**`build_submission.py` が作る zip では `policy_server.py` が無圧縮（method=0）で入っている。**
+だから**同じ長さの置き換えなら、バイトを差し替えて CRC を直すだけで済む。**
+9.4 GB を組み直す必要は無い。
+
+**まず中を見る。書き換える前に必ず見ること**——どの版のどの設定が入っているかは
+ファイル名からは分からない。
+
+```bash
+python3 solution/tools/build/patch_zip_policy_server.py \
+    work/submission_6.1.0.zip --show
+```
+
+**出るはずのもの**（`solution/policy_server.py` の現在の既定値。8/29 に実行して確認）。
+
+```
+== submission_6.1.0.zip のいま
+    __version__ = "4.6.0"
+    _MIN_LEXICAL = 0.65
+    _MIN_LEXICAL_MARGIN = 0.05
+    _USE_EMBEDDING = False
+    "PARC_NUM_INFERENCE_STEPS", "10"
+    "PARC_N_ACTION_STEPS", "16"
+    "PARC_BLEND_STEPS", "0"
+    "PARC_EMA_ALPHA", "0.3"
+    "PARC_SAMPLES", "1"
+    "PARC_GAIN_TRANSLATION", "1.0"
+    "PARC_GAIN_ROTATION", "1.0"
+    "PARC_SEED", "0"
+    "PARC_NORMALIZE_INSTRUCTION", "1"
+    "PARC_RTC", "0"
+
+--replace が無いので何もしない
+```
+
+**`__version__` の右辺が `4.6.0` であることを、この目で確かめてから次へ進む。**
+違っていたら下の分岐へ。
+
+**書き換える。**
+
+```bash
+python3 solution/tools/build/patch_zip_policy_server.py \
+    work/submission_6.1.0.zip \
+    --replace '_MIN_LEXICAL = 0.65' '_MIN_LEXICAL = 0.50' \
+    --replace '__version__ = "4.6.0"' '__version__ = "6.1.0"' \
+    --in-place
+```
+
+**出るはずのもの。**
+
+```
+== submission_6.1.0.zip のいま
+    （上と同じ 14 行）
+
+置き換え 2 件。CRC xxxxxxxx → yyyyyyyy
+== submission_6.1.0.zip の書き換え後
+    __version__ = "6.1.0"
+    _MIN_LEXICAL = 0.50
+    （残り 12 行は同じ）
+
+書き換える前の sha256: <64 桁>
+書き換えた後の sha256: <64 桁>
+zipfile で読み直して一致。項目数 <数百>
+```
+
+| 見るところ | 合格の線 |
+|---|---|
+| **`zipfile で読み直して一致` の行** | **出ていること。**道具は `zipfile.testzip()` まで通してから言う。**出ないものは出さない** |
+| `書き換え後` の `__version__` | **`6.1.0`**（`7.0.0` のときは `7.0.0`） |
+| `書き換え後` の `_MIN_LEXICAL` | **`0.50`** |
+| `"PARC_EMA_ALPHA"` | **`0.3` のまま**（動かさない） |
+
+> **`--in-place` を付けない限り 1 バイトも書かない。**不安なら先に付けずに実行して、
+> 印字だけ見てから付け直す。
+>
+> **道具は置き換えの左辺が zip の中に 1 か所だけあることを確かめる。**
+> 0 か所でも 2 か所でも止まる。
+
+### 4. sha256 を取り直す
+
+**`build_submission.py` が書いた `work/submission_6.1.0.sha256` は書き換える前の値である。**
+**必ず取り直す。**
+
+```bash
+sha256sum work/submission_6.1.0.zip | tee work/submission_6.1.0.sha256
+```
+
+**この値を控える。**Mac で降ろしたあとに突き合わせる相手である。
+
+### 5. Mac へ運ぶ
+
+**`scp` は 1.7 MB/s しか出ないので 9.4 GB に 1 時間半掛かる。HF の非公開リポジトリを
+中継すると 16 分である**（作り直した zip なら 50 秒。Xet が同じ切れ端を送らない）。
+背景は下の「zip を Mac へ運ぶ」にある。
+
+```bash
+# RTX6000 側
+.venv/bin/hf auth whoami        # user=siruku6 が出ること
+.venv/bin/hf upload siruku6/parc2026-submission \
+    work/submission_6.1.0.zip submission_6.1.0.zip \
+    --repo-type model --commit-message "6.1.0 trial1500/001000 lexical 0.50"
+```
+
+```bash
+# Mac 側
+hf download siruku6/parc2026-submission submission_6.1.0.zip \
+    --repo-type model --local-dir ~/Downloads/parc2026
+shasum -a 256 ~/Downloads/parc2026/submission_6.1.0.zip   # 手順 4 の値と一致すること
+```
+
+> **Mac の空きは 50〜70 GB しかない。**zip 2 本で 18.8 GB を占める。
+> **提出したその日のうちに Mac から消す**（`rm ~/Downloads/parc2026/submission_*.zip`）。
+> **HF 側も、Mac で降ろしたその場で消す**——古い LFS の版も容量に数えられるため、
+> 置きっぱなしにすると無料枠 100 GB を食い潰す。
+
+### 6. 出す
+
+Omnicampus にアップロードする。**課題 ID は Track1 が 1007・Track2 が 1008・Track3 が 1009**
+（[../talk/260825_briefing.md](../talk/260825_briefing.md) の「提出のしくみ」）。
+どの zip をどのトラックへ出すかは上の表のとおりである。
+
+**採点は 10〜20 分で返る。**返ってきたら**採点ログを保存し**、
+`b_PARC2026_final/outputs/submission_logs/track<N>/` へ置く。
+
+```bash
+grep -n '総合スコア' <保存した採点ログ>
+grep -n '^\[parc\] policy_server' <保存した採点ログ>   # 出した版と設定を突き合わせる
+```
+
+**`[parc] policy_server 6.1.0 ... ema_alpha=0.3` と出ていれば、狙った zip が動いている。**
+
+## 分岐 —— 想定どおりでなかったとき
+
+| 何が起きたか | どう見分けるか | どうするか |
+|---|---|---|
+| **`policy_server.py` が無圧縮でなかった** | `--show` が `policy_server.py が無圧縮ではない（method=8）。この道具は使えないので build_submission.py で組み直すこと` で止まる | **リポジトリを一時的に書き換えて組み直す。**`solution/policy_server.py` の `_MIN_LEXICAL` と `__version__` を直接書き換えて `build_submission.py` を走らせ、**終わったら `git checkout solution/policy_server.py` で戻す。**戻したことを `git status --short` で確かめる |
+| **`vendor/` が無い** | `build_submission.py` が `生成物がありません` で落ちる。`ls work/artifacts/vendor/lerobot` が空 | **ケース 0 の 0-2 を実行する**（LeRobot v0.6.0 のソースを取って `vendor_lerobot.py`。13 MB・3 分） |
+| **`__version__` の左辺が `4.6.0` でない** | `--show` の 1 行目が違う値を出す | **`--replace` の左辺を `--show` が出した実際の値に書き換える。**`4.6.0` は 8/29 時点の `solution/policy_server.py` の値であって、将来も同じとは限らない |
+| **`_MIN_LEXICAL` が既に `0.50`** | `--show` に `_MIN_LEXICAL = 0.50` が出る | **その `--replace` を 1 行落とす。**左辺が 0 か所だと道具が止まる |
+| **長さが違う置き換えを書いた** | `長さが違う置き換えは通せない: N → M` で止まる | **桁数を合わせる**（`0.5` ではなく `0.50`、`6.1` ではなく `6.1.0`）。合わせられないなら組み直す |
+| **左辺が 2 か所ある** | `... が 2 箇所ある（1 箇所でないと危ない）` で止まる | 組み直す側へ切り替える（1 行目の分岐と同じ） |
+| **Mac で sha256 が合わない** | `shasum -a 256` が手順 4 の値と違う | **途中で切れている。**降ろし直す。**合わないものを出さない** |
+
+## 終わったら確かめる
+
+```bash
+cd ~/src/PARC2026_pre
+git status --short                                   # 何も出ないこと
+grep -n '^_MIN_LEXICAL = ' solution/policy_server.py # 0.65 のままであること
+grep -n 'PARC_EMA_ALPHA' solution/policy_server.py   # 既定 "0.3" のままであること
+```
+
+**リポジトリの `solution/policy_server.py` は 0.65・EMA 0.3 のまま残す。**
+0.65 は 8/27 のバグ修正で入れたもので（Track3 の 1 文が意味の逆に書き換わっていた）、
+**しきい値の違いは別の 1 変数として後日測る。**
+
+---
+
 # zip を Mac へ運ぶ
 
 > **「Mac で組むのが第一手」は取り消した**（2026-08-28 に書き、8/29 に取り消し）。
@@ -774,11 +1061,12 @@ Omnicampus に `work/submission.zip` をアップロードする。
 
 | 制約 | 値 |
 |---|---|
-| 提出回数 | **1 日 1 回**。採点が完了した時点で消費される |
-| エラーで失敗したとき | **枠は消費されない**（運営 Q&A No.18） |
-| サーバー起動 | 120 秒以内（実測 38 秒） |
+| 提出回数 | **各トラック 1 日 1 回**（1 人あたり計 3 回/日）。**アップロードが完了した時点で消費される** |
+| エラーで失敗したとき | **本選では枠を消費する**（[../talk/260825_briefing.md](../talk/260825_briefing.md) の「提出のしくみ」）。予選の Q&A No.18 は「消費されない」だったが、本選の資料で変わった |
+| 枠の繰り越し | **できない。**使わなかったその日の枠は消える |
+| サーバー起動 | **1200 秒以内**（本選。予選は 120 秒）。**π0.5 の実測 21 秒**（`.../track1/260829_pi0.5_5.0.1.txt:16` の `サーバー起動確認 (21秒)`） |
 | `/act` 1 回 | 10 秒以内（実測 0.85 秒） |
-| トラック全体 | 1 時間以内（実測 147.6 秒） |
+| トラック全体 | 1 時間以内（**π0.5 の実測 118.8 秒**。同じログの `合計時間`） |
 
 **出す前に、ローカル評価で成功率を確かめておくこと。** 手順は
 [03_gpu_eval.md](03_gpu_eval.md)（GPU マシン）か
@@ -800,8 +1088,10 @@ Omnicampus に `work/submission.zip` をアップロードする。
 > **「手元で差が無いから出さない」という判断はしてはいけない。**
 
 **スコアが返ってきたら、ハッシュと一緒に
-[../strategy/05_実測結果.md](../strategy/05_実測結果.md) へ記録する。**
+[../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) へ記録する。**
 どの zip が何点だったかを後から辿れなくなると、比較ができなくなる。
+**採点ログそのものは `b_PARC2026_final/outputs/submission_logs/track<N>/` へ置く**——
+`outputs/` は git で追跡しているので、点の一次資料はこちらである。
 
 ---
 
