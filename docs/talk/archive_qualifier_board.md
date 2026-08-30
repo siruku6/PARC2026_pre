@@ -348,9 +348,12 @@
 データを共有するため）。`make_validation_suite.py` の `--exclude` と
 **同じ CSV** を読ませる。
 
-**申し送りは [handoff_validation_set.md](handoff_validation_set.md) に書いた。**
-別セッションが `compare_with_production.py` と `docs/howto/04_proxy_eval.md` を
-書いているので、**このファイルには触らせない。**
+**申し送りは 8/12 に別セッションへ渡し、受け取られた**（`handoff_validation_set.md` は
+役目を終えたので 8/31 に消した）。**答えは「タスク単位で外すのは採らない」だった**
+——理由は [../reference/13_holdout_episodes.md](../reference/13_holdout_episodes.md) の
+「タスク単位で外すのは採らなかった」と「出発点の重みは全タスクを見ている（直せない）」にある。
+**`libero_plus_id` を抜くだけでは足りないことは
+[../howto/04_proxy_eval.md](../howto/04_proxy_eval.md) が引き継いでいる。**
 
 ### 39. 指示文の正規化 — 私 / **実装した（8/13・版 3.5.0）**
 

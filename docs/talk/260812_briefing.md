@@ -175,11 +175,13 @@ n=1 は**1 ステップごとが境界**になる。逆に k が長すぎる（k
 
 ### 申し送りは書いた
 
-検証集合を作り直している別セッション向けに
-[handoff_validation_set.md](handoff_validation_set.md) を置いた。要点は
+検証集合を作り直している別セッション向けに申し送りを置いた（`handoff_validation_set.md`。
+渡し終えたので 8/31 に消した）。要点は
 **「件数を減らすのは正しいが、それだけでは直らない。タスク（指示文）単位で
 学習と検証を分ける必要がある」**である。`libero_plus_id` で 84 件を外すだけでは
 足りない（摂動版は元タスクの実演データを共有するため）。
+**この提案は検討のうえ採らなかった**——[../reference/13_holdout_episodes.md](../reference/13_holdout_episodes.md)
+の「タスク単位で外すのは採らなかった」。
 
 ---
 
@@ -452,7 +454,7 @@ weak3x のままである。
 | 知りたいこと | ファイル |
 |---|---|
 | **いま何をするか** | `docs/talk/open_items.md` |
-| **検証集合の作り直しへの申し送り** | `docs/talk/handoff_validation_set.md` |
+| **検証集合を学習と分けるか（8/12 の申し送りの答え）** | `docs/reference/13_holdout_episodes.md` |
 | 測った数字すべて | `docs/strategy/05_実測結果.md` |
 | 本番の採点ログ | `outputs/prod_eval_results/` |
 | 評価の回し方 | `docs/solution/COLAB_EVAL.md` |

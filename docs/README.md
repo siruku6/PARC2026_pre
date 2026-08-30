@@ -23,7 +23,7 @@
 
 | パス | 中身 |
 |---|---|
-| [talk/](talk/) | いま抱えているものと、その優先順位。**まずここ** |
+| [talk/](talk/) | いま抱えているものと、その優先順位。**まずここ。**ただし**一時ファイルの置き場なので、他のディレクトリの文書からここを指してはいけない**（[talk/README.md](talk/README.md)。指したくなったら情報を `howto/`・`knowledge/`・`reference/` へ移す） |
 | [howto/](howto/) | 手順書。上から順にやれば終わる形で書いてある。**何度も使うものだけを置く。**1 回だけの回・1 回だけの設定は [plan/](plan/) へ、踏んだ事故と回避策は [knowledge/](knowledge/) へ |
 | [solution/](solution/) | 提出物と Colab の説明。コード本体は `../solution/` |
 | [strategy/](strategy/) | 何を狙うか、なぜそうするか。判断の材料 |

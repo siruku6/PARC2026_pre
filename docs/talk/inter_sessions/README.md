@@ -18,7 +18,19 @@
 ```
 
 状態は **依頼中 → 着手 → 報告済み → 閉じた** の 4 つだけ。
-**閉じたものは消さずに残す**——同じことを二度依頼しないための記録である。
+
+**閉じたら消す**（2026-08-31 に「消さずに残す」から変えた）。**ここは一時ファイルの置き場である。**
+残す価値のあるものは 1 つずつ行き先が決まっているので、**消す前にそちらへ移す。**
+
+| 報告に入っていたもの | 移す先 |
+|---|---|
+| 採否の理由・測った値 | `reference/19_weights_catalog.md` |
+| 2 回以上打つ手順 | `howto/` に節を作る（1 行で済むものは板の「打つもの」列） |
+| 分かったこと・踏んだ穴 | `knowledge/` |
+| 追わないと決めたこと | `talk/open_items.md` の「決めた — 蒸し返さない」 |
+
+**移し終わったら、他のファイルからこのディレクトリを指しているリンクを消す。**
+`grep -rn inter_sessions docs/` で全部出る。
 
 ## 依頼を書くときの決まり
 
@@ -62,13 +74,20 @@
 
 | # | 何を | 状態 |
 |---|---|---|
-| [001](001_collision_object_displacement.md) | 衝突と判定されたとき、どの物体がどれだけ動いたかを数える | **報告済み** |
 | [002](002_robot_init_pose_coverage.md) | ロボット初期姿勢の振り方を、作業空間を覆う形に作り直す | 進行中 |
-| [003](003_blackwell_readiness.md) | **Blackwell で短く試して、効くと分かったものだけ長く回す**段取りを作る | **010 へ引き継いだ** |
-| [004](004_runpod_short_full_training.md) | **RunPod で 1,500 歩のフルパラメータ学習を回し、傾きを読む**（$8〜9） | **報告済み**（この重みが 8/29 に Track1 0.492 を出した） |
-| [005](005_blend_and_ema_for_today.md) | `blend_steps` と `EMA` を測り、今日の提出物を作る | **報告済み**（両方とも不採用） |
-| [006](006_track3_reverse_direction.md) | **Track3 の逆向きタスクに、どう手を付けるかを決めて試作する**（方針の判断が主) | 依頼中 |
-| [007](007_rebuild_zips_with_4_2_0_settings.md) | 1,500 歩の zip を 4.2.0 と同じ推論設定で作り直す | **報告済み**（5.0.1 として 3 トラックへ提出済み） |
-| **[008](008_runpod_long_full_training.md)** | **RunPod で、効くと分かった学習を長く回す**（歩数と設定の決定も含む） | **依頼中** |
-| **[009](009_two_submissions_for_tomorrow.md)** | **明日の提出 2 本を作る**（Track1 は `EMA 0.5`、Track2 は 1,000 歩の重み） | **依頼中** |
-| **[010](010_blackwell_investigation_plan.md)** | **Blackwell の調査計画を作る**（明日の午後〜夜・配布データセットの棚卸しを含む） | **依頼中** |
+| **[006](006_track3_reverse_direction.md)** | **Track3 の逆向きタスクを試作する**（**方針は 8/30 に決まった**——広く覆う・初日に時間反転と scripted の両方を 1 タスクで試す） | **依頼中**（板 `F27`） |
+| **[008](008_runpod_long_full_training.md)** | **RunPod で、効くと分かった学習を長く回す** | **報告済み**（成果物は `howto/06` の 14 節。**回すのはユーザで、まだ回していない**——板 `F44`） |
+| [010](010_blackwell_investigation_plan.md) | Blackwell の調査計画を作る | **報告済み**（`howto/14` を全面的に書き直した。実行は 011 へ） |
+| **[011](011_blackwell_long_training.md)** | **Blackwell に入って、長いフルパラメータ学習を始める**（接続・学習の回し方・1 歩あたりの秒数の実測を含む） | **依頼中**（板 `F11`） |
+| **[012](012_dataset_overlap_inventory.md)** | **配布データセットの棚卸し**（何と何が重なっているのかを数える。011 の学習が走り出したら着手） | **依頼中**（板 `F11`） |
+
+**8/31 に 6 本消した**（001・003・004・005・007・009）。**中身の行き先はこうである。**
+
+| 消した # | 何だったか | 中身はどこにある |
+|---|---|---|
+| 001 | 衝突したときどの物体がどれだけ動いたか | 216 本の分布と犯人の物体は [reference/18](../../reference/18_failure_breakdown.md) 7 節。動画が書けていなかった件は [knowledge/12](../../knowledge/12_workbench_accidents.md) ③ |
+| 003 | Blackwell の段取り | **一度も着手していない。**010 が引き継いだ |
+| 004 | RunPod 1,500 歩 | [reference/19](../../reference/19_weights_catalog.md)（一次資料は HF `siruku6/pi05_trial1500` の `pi05_trial1500.log`）。踏んだ穴 7 件は [knowledge/13](../../knowledge/13_runpod_operations.md) ⑥⑦⑧・[howto/06](../../howto/06_runpod_pi05.md) 5.2 |
+| 005 | `blend_steps` と `EMA` | 板の「決めた」の 8/28・8/29 の行。次に触る候補は [plan/19](../../plan/19_smoothness_beyond_postprocessing.md) 8 節 |
+| 007 | zip を組み直す | 板 `F42` と [howto/02](../../howto/02_build_submission.md) のケース 0 |
+| 009 | 8/29 の提出 3 本 | 版番号の決まり（5=`001500`・6=`001000`・7=`000500`）は [howto/02](../../howto/02_build_submission.md) と [reference/19](../../reference/19_weights_catalog.md) |

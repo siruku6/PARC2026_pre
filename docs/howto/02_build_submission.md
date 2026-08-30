@@ -709,9 +709,9 @@ minor は挙動が変わる既定値の変更、patch は挙動が変わらな�
 | **Track3**（課題 ID 1009） | **`submission_7.0.0.zip`**（Track1 と同じ実物） | 0.000 |
 
 **Track3 は最後に回す。**返ってくるのは 0.000 の見込みで、**時間が無ければ飛ばしてよい。**
-（選んだ理由は
-[../talk/inter_sessions/009_two_submissions_for_tomorrow.md](../talk/inter_sessions/009_two_submissions_for_tomorrow.md)
-の「報告」に書いた。）
+（**Track2 に 1,000 歩を当てたのは、そこだけが重みの差を映しているからである**——
+Track1 は 8/8 から天井に当たっており、`001500` の 0.492 も `rp3000` の 0.370 から
+1 段上がったところで止まっている。板 `F37`）
 
 ## 順番 —— 1 本ずつ最後まで通す
 

@@ -36,7 +36,31 @@ shutil.move(str(temporary), str(path))
 **どこにも「disk full」とは出ない。**「途中で切れたログ」と「消えたコンテナ」から
 推測するしかなかった。
 
-## ③ 評価とビルドを同時に走らせない
+## ③ 動画を書いたつもりで、8 バイトの空の TIFF が残っていた
+
+**`imageio.mimwrite("....mp4", ...)` が MP4 ではなく TIFF を書こうとしていた。**
+評価用イメージに **`imageio_ffmpeg` が入っていない**ため MP4 の実装が見つからず、
+TIFF の実装に落ちる。TIFF は `fps` を知らないので
+`TiffWriter.write() got an unexpected keyword argument 'fps'` で落ち、**8 バイトのファイルだけが残る。**
+
+**イメージの中で動画に使えるものを実機で数えた**（`docker start parc2026_verify` で
+既存のコンテナを起こし、`docker exec` で入った）。
+
+| 実装 | ある／ない | 動画を書けるか |
+|---|---|---|
+| `imageio` 2.37.4 | ある | **MP4 は書けない**（`imageio_ffmpeg` が無い） |
+| `imageio_ffmpeg` | **無い** | — |
+| `cv2` 4.11.0（`opencv-python-headless`） | ある | **`mp4v` は書けた。**`avc1`（H.264）は encoder が無く `isOpened()` が False |
+| `PIL` 12.3.0 | ある | GIF が書ける（外部のコーデックに依存しない） |
+
+**黙って通った理由は、書いたあとに読み戻していなかったことである。**
+`solution/tools/eval/kit_patches/rollout.py` の `_write_video` は、
+**mp4 なら `cv2.VideoCapture` で 1 フレーム読み、GIF なら `n_frames` を見て、
+確かめられたものだけを成功と見なす**（駄目なら GIF → PNG 連番へ落ちる）。
+フレームは 128×256（front と wrist の並び）で、**素のままでは腕の行き先を目で追うには小さい**ので
+`T3_VIDEO_SCALE`（既定 2）で拡大する。
+
+## ④ 評価とビルドを同時に走らせない
 
 この機械は **`nproc` が 2** である。9.4 GB の zip を圧縮しながら評価も回すと、
 **load average が 5.5 まで上がり、どちらも遅くなり、ディスクを食い合う。**

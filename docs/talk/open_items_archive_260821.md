@@ -22,7 +22,7 @@
 
 **いまの立ち位置**: 予選は 42 位・0.48464 で終わった。**本選 Track2 は 8/24 開始**で、
 出題は「ロボットや物体の位置や視点を変更。ノイズや摂動を付与」。
-**今日の状態は [260821_today.md](260821_today.md) にある。**
+**8/21 の状態を書いた `260821_today.md` は 8/31 に消した**（本選が始まって役目が終わったため）。
 
 ---
 
@@ -35,7 +35,23 @@
 | **3** | **8/24 キックオフの聞き取り表を作る**（K1・K2・**K3**） | 私 | 8/23 まで |
 | 4 | **探査 40 行の成績を読んで、Tier 1／Tier 2 の的を絞る** | 私＋あなた | **1 の結果が出たら。ここが全部の入口** |
 
-**起動コマンドは [260821_today.md](260821_today.md) の 1 節にある**（`tmux new -d -s tonight …`）。
+**そのとき打った起動コマンド**（**8/21 の記録である。いま打つものではない**）。
+2 本ともスクリプトは残っている。
+
+```bash
+cd /home/ubuntu/lab/PARC2026_pre
+tmux new -d -s tonight 'bash work/gpu_eval/tonight_0821.sh 2>&1 | tee -a work/gpu_eval/tonight_0821.log'
+tmux new -d -s noise   'bash work/scripted/sweep_action_noise.sh 2>&1 | tee -a work/scripted/sweep_action_noise.log'
+```
+
+`tonight_0821.sh` は Track2 探査 40 行（4.2.0 相当に固定）→ 量子化の評価の回収 6 本（C0〜C5）を
+直列に流す。**回収の直前に `vlm/` を配る処理が入っている**——学習が書き出すチェックポイントに
+`vlm/` は入らず、無いと評価が 5 秒で落ちるためである。翌朝の集計はこうだった。
+
+```bash
+D=$(ls -dt work/gpu_eval/*track2_probe*/ | head -1)
+python3 solution/tools/eval/summarize_gpu_eval.py --output-dir "$D" --csv "$D/VAL_TASKS.csv"
+```
 
 ---
 

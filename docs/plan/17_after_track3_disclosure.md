@@ -291,6 +291,6 @@ EMA 0.5 だけで衝突 8 本）。**打ち消し合って率が動かなかっ�
 | Track3 の開示 | `docs/materials/notifications/260828_1512_track3_contents.md` |
 | 生成機構・小トラック・ファミリー・評価段 | `b_PARC2026_final/scripts/check_no_leaks.py`（運営が残すと明言したファイル） |
 | Track3 の 4 タスクの目標条件 | `b_PARC2026_final/compe/t3/assets/bddl_files/libero_t3/*.bddl` |
-| 衝突の変位 | [inter_sessions/001](../talk/inter_sessions/001_collision_object_displacement.md) |
+| 衝突の変位（216 本の分布・犯人の物体） | [reference/18](../reference/18_failure_breakdown.md) 7 節 |
 | 初期姿勢の効き方 | [inter_sessions/002](../talk/inter_sessions/002_robot_init_pose_coverage.md) |
 | 手元の合計点の出し方 | `solution/tools/eval/score_composite.py` |
