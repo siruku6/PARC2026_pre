@@ -1028,6 +1028,30 @@ shasum -a 256 work/submission_<版>.zip | tee work/submission_<版>.sha256
 **`vendor/` を作り直しても提出済みの zip と同一になる**ので、
 `scp -r work/artifacts/vendor <Mac>:<リポジトリ>/work/artifacts/` で運んでもよい（13 MB）。
 
+### 組む前に `policy_server.py` を直さず、組んだあとに zip の中を書き換えるのはなぜか
+
+**`patch_zip_policy_server.py` は「zip が既にあって、組み直すと 9.4 GB 掛かる」ときのための
+道具である。**版 5.0.1 がまさにその場面だった——Mac にあった 5.0.0 の zip の 12 バイトだけを
+書き換えて作った。**組むところから始めるなら、先にリポジトリの `policy_server.py` を
+直してから組んでもよい。出来上がるバイトは同じである**（道具がしているのは
+`text.replace(src, dst, 1)` で、`build_submission.py` はファイルをそのまま格納する）。
+
+| | 良いところ | 気をつけること |
+|---|---|---|
+| **組んだあとに zip を書き換える**（既定） | **リポジトリを汚さない。**書き換え前後の設定を印字し、`zipfile` で読み直して `testzip()` まで通す | 手順が 1 つ増える |
+| 組む前に `policy_server.py` を直す | 手順が 1 つ減る | **戻し忘れるとリポジトリの 0.65 が消える**（Track3 のバグ修正。[knowledge/15](../knowledge/15_instruction_normalizer_inverted_a_task.md)）。**macOS の `sed -i` は `sed -i ''` と空文字が要る** |
+
+先に直す道を採るなら、**組んだ直後に必ず戻す。**
+
+```bash
+sed -i '' 's/_MIN_LEXICAL = 0.65/_MIN_LEXICAL = 0.50/' solution/policy_server.py
+sed -i '' 's/__version__ = "4.6.0"/__version__ = "<版>"/' solution/policy_server.py
+git diff --stat solution/policy_server.py          # 2 行だけ変わっていること
+# ここで build_submission.py を打つ
+git checkout solution/policy_server.py
+grep -n '^_MIN_LEXICAL = ' solution/policy_server.py   # 0.65 に戻っていること
+```
+
 ## それでも GPU マシンで組んで運ぶとき
 
 **`scp` は 1.7 MB/s しか出ないので 9.4GB に 1 時間半掛かる。**
