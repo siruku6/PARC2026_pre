@@ -974,20 +974,59 @@ grep -n 'PARC_EMA_ALPHA' solution/policy_server.py   # 既定 "0.3" のままで
 **同じ重みから 2 本目を組むときの費用**（GPU マシンで組むなら毎回 zip を運ぶ。
 Mac で組むなら重みが手元にあるので転送は 0）である。
 
-## Mac で組む（空きが 19 GB 以上あるときだけ）
+## Mac で組む —— **今日じゅうに出したいときはこれが最短**（20〜25 分）
 
-**運ぶのは `vendor/` の 13 MB だけである**（`work/` は git 管理外なので clone では来ない）。
+**zip を運ばずに済む唯一の道である。**9.4 GB が回線を流れるのは
+**重みを降ろす 1 回だけ**で、それがそのまま提出する台に着く。
+GPU マシンで組むと、重みを降ろす回と zip を運ぶ回で 2 回流れる。
+
+**要るのは空き 19 GB である**（重み 9.4 GB ＋ zip 9.4 GB）。**出したらその日のうちに両方消す。**
+
+**律速は重みのダウンロード（9.4 GB で約 16 分）なので、先に始めて裏で `vendor/` を作る。**
 
 ```bash
-# このマシン → Mac（13 MB）
-scp -r work/artifacts/vendor <Mac>:<リポジトリ>/work/artifacts/
+# ── ターミナル 1（先に打つ。約 16 分）
+cd <Mac のリポジトリ> && git pull
+hf download siruku6/pi05_trial1500 --include '<歩数>/*' \
+    --local-dir work/artifacts/trial1500
 
-# Mac で
-hf download <重みのリポジトリ> --include '<歩数>/*' --local-dir work/artifacts/model_weights_<歩数>
+# ── ターミナル 2（裏で。約 3 分。`work/artifacts/vendor/lerobot` が既にあれば飛ばす）
+cd <Mac のリポジトリ>
+python3 -c "
+import io, tarfile, urllib.request, pathlib, shutil
+url = 'https://codeload.github.com/huggingface/lerobot/tar.gz/refs/tags/v0.6.0'
+data = urllib.request.urlopen(url, timeout=300).read()
+dest = pathlib.Path('work'); target = dest / 'lerobot-src'
+if target.exists(): shutil.rmtree(target)
+with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as tf:
+    root = tf.getnames()[0].split('/')[0]; tf.extractall(dest)
+(dest / root).rename(target)
+"
+python3 solution/tools/build/vendor_lerobot.py
+find work/artifacts/vendor/lerobot -name '*.py' | wc -l    # 487 になること
+
+# ── 降り終わったら組む（数分）
 python3 solution/tools/build/build_submission.py \
-    --weights work/artifacts/model_weights_<歩数>/<歩数> \
+    --weights work/artifacts/trial1500/<歩数> \
     --output work/submission_<版>.zip
+
+# ── 中の 2 行を書き換えて sha256 を取り直す（数秒）
+python3 solution/tools/build/patch_zip_policy_server.py work/submission_<版>.zip \
+    --replace '_MIN_LEXICAL = 0.65' '_MIN_LEXICAL = 0.50' \
+    --replace '__version__ = "4.6.0"' '__version__ = "<版>"' \
+    --in-place
+rm -f work/submission_<版>.sha256
+shasum -a 256 work/submission_<版>.zip | tee work/submission_<版>.sha256
 ```
+
+**`hf download` は `hf_xet` が入っていると速い。**入っていなければ
+`pip install "huggingface_hub[hf_xet]"`。
+
+**`<版>` は `"4.6.0"` と桁数が同じ 5 文字にする**（`6.1.0` など）。
+桁数が違うと `patch_zip_policy_server.py` がその場で止まる。
+
+**`vendor/` を作り直しても提出済みの zip と同一になる**ので、
+`scp -r work/artifacts/vendor <Mac>:<リポジトリ>/work/artifacts/` で運んでもよい（13 MB）。
 
 ## それでも GPU マシンで組んで運ぶとき
 
