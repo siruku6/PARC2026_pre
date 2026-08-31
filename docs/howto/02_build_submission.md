@@ -650,19 +650,31 @@ git checkout scored-0.05832 -- solution/policy_server.py solution/requirements.t
 
 ---
 
-# 同じ学習の別チェックポイントを 1 変数で出す（`trial1500` の 1,000 歩・500 歩）
+# 同じ学習の別チェックポイントを 1 変数で出す（梯子）
 
-> **2026-08-29 に書いた。この節だけで zip 2 本が組めて、提出まで終わる。**
+> **2026-08-29 に書いて、9/1 に `ladder2500` の 4 点を足した。この節だけで zip が組めて、提出まで終わる。**
 
-**`siruku6/pi05_trial1500` には 1 回の学習の 3 地点が残してある**——`000500` / `001000` /
-`001500`。**どれも `vlm/` を同梱している**（`HfApi().list_repo_files('siruku6/pi05_trial1500')`
-を 8/29 に実行して確認。各ディレクトリに 11 ファイル、うち `vlm/` が 4 ファイル）。
-**3 本を同じ設定で出せば、変わるのは重みだけになる。**
+**`siruku6/pi05_trial1500` には、続いた 2 回の学習の地点が残してある。**
+
+| 置き場 | 地点 | `rp3000` からの累計 |
+|---|---|---|
+| リポジトリの直下 | `001000` / `001500` | 1,000 / 1,500 |
+| **`ladder2500/`** | **`001000` / `001500` / `002000` / `002500`** | **2,500 / 3,000 / 3,500 / 4,000** |
+
+**どれも `vlm/` を同梱している**（`HfApi().list_repo_files('siruku6/pi05_trial1500')` で確認。
+各ディレクトリに 11 ファイル、うち `vlm/` が 4 ファイル）。**`vlm/` が無いと採点が 5 秒で落ちる。**
+**同じ設定で出せば、変わるのは重みだけになる。**
 
 `001500` は **5.0.1** として 8/28 夜に 3 トラックへ出してあり、
 Track1 **0.492**・Track2 **0.233**・Track3 **0.000** が返っている
 （`b_PARC2026_final/outputs/submission_logs/track{1,2,3}/*_5.0.1.txt` の `総合スコア` の行）。
 **この 3 つが比較の基準である。**
+
+> **`ladder2500/001000` は組まない。****`--init-from` は学習の状態を読まないので、
+> 新しい実行は毎回 warmup 1,000 歩から引き直される**（`train_pi05.py` の `_resolve_init_from`
+> の説明。`--resume` だけが前回の `train_config.json` を読む）。**だからあの点は
+> 全速に直すと 5.0.1 の +50% にしかならない**——[../reference/19_weights_catalog.md](../reference/19_weights_catalog.md)
+> の「歩数を足しても学習量は足し算にならない」。
 
 **組むのは会社の RTX6000 である**（`eng003sasaki01`。clone は `~/src/PARC2026_pre`）。
 **JAIST サーバでは組めない。**`df -h /` の残りが **11 GB** しかなく、
@@ -674,23 +686,37 @@ Track1 **0.492**・Track2 **0.233**・Track3 **0.000** が返っている
 **この節の付け方は上の「版の上げ方」の表と同じである**（major は重みが変わったとき、
 minor は挙動が変わる既定値の変更、patch は挙動が変わらない修正）。
 
-| メジャー | 重み |
-|---|---|
-| 4 | `pi05_rp3000`（RunPod 3,000 歩） |
-| 5 | `trial1500` の `001500` |
-| 6 | `trial1500` の `001000` |
-| **7** | **`trial1500` の `000500`** |
+| メジャー | 重み | 累計の歩数 |
+|---|---|---|
+| 4 | `pi05_rp3000`（RunPod 3,000 歩） | — |
+| 5 | `trial1500` の `001500` | 1,500 |
+| 6 | `trial1500` の `001000` | 1,000 |
+| ~~7~~ | ~~`trial1500` の `000500`~~ | **出さないと決めた（8/30）** |
+| **8** | **`ladder2500` の `002500`** | **4,000** |
+| **9** | **`ladder2500` の `002000`** | **3,500** |
+| **10** | **`ladder2500` の `001500`** | **3,000** |
+| **11** | **`ladder2500` の `001000`** | **2,500**（**組まない**。上の warmup の話） |
 
-**8/29 に組む 2 本はこれである。**どちらも指示文を寄せるしきい値（`_MIN_LEXICAL`）を
-**0.50** にする——**5.0.1 と揃えないと「重みだけの 1 変数」にならない。**
+**歩数の多い順に若い番号を振ってある。**5・6・7 と同じ向きで、**その順に出す。**
 
-| 版 | 重み | `_MIN_LEXICAL` | `PARC_EMA_ALPHA` |
-|---|---|---|---|
-| **6.1.0** | `trial1500` の `001000` | **0.50** | 0.3 |
-| **7.0.0** | `trial1500` の `000500` | **0.50** | 0.3 |
+> **`10.0.0` と `11.0.0` は、zip の中の書き換えでは付けられない。**
+> **`__version__ = "4.6.0"` を長さを変えずに置き換える手なので、版は 5 文字でないと通らない**
+> （下の「つまずいたとき」の `長さが違う置き換えは通せない`）。**6 文字の版を出すときは、
+> 組む前に `solution/policy_server.py` の `__version__` を直す**——重みが変われば zip は
+> どうせ組み直すので、余分な手間は無い。**8.0.0 と 9.0.0 は 5 文字なので、この話に当たらない。**
+
+**どの版でも、指示文を寄せるしきい値（`_MIN_LEXICAL`）は 0.50 にする**
+——**5.0.1 と揃えないと「重みだけの 1 変数」にならない。**`PARC_EMA_ALPHA` は 0.3 のままである。
+
+| 版 | 重み | `_MIN_LEXICAL` | `PARC_EMA_ALPHA` | いつ |
+|---|---|---|---|---|
+| **6.1.0** | `trial1500` の `001000` | **0.50** | 0.3 | 8/30 に提出済み（0.397 / 0.223） |
+| **8.0.0** | **`ladder2500` の `002500`** | **0.50** | 0.3 | **9/1 に組む 1 本目** |
+| **9.0.0** | **`ladder2500` の `002000`** | **0.50** | 0.3 | **8.0.0 の点を見てから**（`open_items.md` の判断 9） |
 
 > **台帳の `6.0.1`（`000500` ＋ しきい値 0.65）は使わない。**未提出のまま 8/29 に zip を消しており、
-> **「メジャー番号は重み」という決まりに反する**（6 は 1,000 歩である）。**500 歩は 7 系に統一する。**
+> **「メジャー番号は重み」という決まりに反する**（6 は 1,000 歩である）。**500 歩は 7 系に統一した——
+> そしてその 7.0.0 も出さないと決めた**（`001000` が `001500` に負けたので、下向きの梯子に意味が無くなった）。
 
 > **`5.0.1` だけ付け方が違う。**しきい値 0.65 → 0.50 は挙動が変わる変更なので、決まりどおりなら
 > `5.1.0` である。**採点ログに `policy_server 5.0.1` と焼かれているので、いまさら直せない。**
@@ -702,20 +728,28 @@ minor は挙動が変わる既定値の変更、patch は挙動が変わらな�
 
 ## どの zip をどのトラックへ出すか
 
+**【9/1 に書き換えた】同じ実物を Track1 と Track2 の両方へ出す。**
+
 | トラック | 出す zip | 5.0.1 の点 |
 |---|---|---|
-| **Track1**（課題 ID 1007） | **`submission_7.0.0.zip`** | 0.492 |
-| **Track2**（課題 ID 1008） | **`submission_6.1.0.zip`** | 0.233 |
-| **Track3**（課題 ID 1009） | **`submission_7.0.0.zip`**（Track1 と同じ実物） | 0.000 |
+| **Track1**（課題 ID 1007） | **`submission_8.0.0.zip`** | 0.492 |
+| **Track2**（課題 ID 1008） | **`submission_8.0.0.zip`**（Track1 と同じ実物） | 0.233 |
+| **Track3**（課題 ID 1009） | **別の実物**——**Track3 だけはしきい値を 0.99 にする**（`open_items.md` の `F59`） | 0.000 |
 
-**Track3 は最後に回す。**返ってくるのは 0.000 の見込みで、**時間が無ければ飛ばしてよい。**
-（**Track2 に 1,000 歩を当てたのは、そこだけが重みの差を映しているからである**——
-Track1 は 8/8 から天井に当たっており、`001500` の 0.492 も `rp3000` の 0.370 から
-1 段上がったところで止まっている。`open_items.md` の `F37`）
+**片方に当てる案は 8/31 に捨てた。**
+8/30 に重みの差を映したのは **Track1（−0.095）で、Track2 は −0.010 と読めなかった**
+——**「Track2 だけが重みの差を映す」は外れた**（`open_items.md` の `F37`）。
+**横断の一致が、8 エピソードの雑音（1 本で 0.125）に勝つ唯一の手である**
+（[../plan/20_submission_strategy_to_0917.md](../plan/20_submission_strategy_to_0917.md) 3 節の原則 1）。
+
+**Track3 は最後に回す。**梯子の重みでは 0.000 の見込みで、**時間が無ければ飛ばしてよい。**
+**ただし Track3 に出すなら、しきい値を 0.50 のままにしない**——
+**0.50 は Track3 の 4 課題のうち 1 つの指示文を逆向きに書き換えてしまう**
+（似ている度 0.607 で誤って寄る。[../plan/20_submission_strategy_to_0917.md](../plan/20_submission_strategy_to_0917.md) 4.3.1 節）。
 
 ## 順番 —— 1 本ずつ最後まで通す
 
-**`6.1.0` を提出まで終わらせてから `7.0.0` に移る。**2 本を並行して組むと、
+**1 本を提出まで終わらせてから次に移る。**2 本を並行して組むと、
 どちらの zip に何を書き換えたのかが分からなくなる。
 
 ```mermaid
@@ -727,24 +761,31 @@ flowchart LR
     M --> U["6. 出す"]
 ```
 
-以下は `6.1.0`（`001000`）の場合である。**`7.0.0` は `001000` を `000500`・
-`6.1.0` を `7.0.0` に読み替える。**
+以下は **8.0.0（`ladder2500/002500`）**の場合である。**別の点を出すときは、
+`--include` に渡す道と版番号の 2 か所を読み替える。**
+
+| 版 | `--include` に渡す道 | zip の名前 |
+|---|---|---|
+| **8.0.0** | **`'ladder2500/002500/*'`** | `submission_8.0.0.zip` |
+| 9.0.0 | `'ladder2500/002000/*'` | `submission_9.0.0.zip` |
+| 6.1.0（8/30 に済み） | `'001000/*'` | `submission_6.1.0.zip` |
 
 ### 1. 重みを降ろす
 
 ```bash
 cd ~/src/PARC2026_pre
-hf download siruku6/pi05_trial1500 --include '001000/*' \
+hf download siruku6/pi05_trial1500 --include 'ladder2500/002500/*' \
     --local-dir work/artifacts/trial1500
 ```
 
-**確認と、出るはずのもの。**
+**確認と、出るはずのもの**（`001000` を出すときは道の `ladder2500/002500` を読み替える）。
 
 | 打つもの | 出るはず |
 |---|---|
-| `ls work/artifacts/trial1500/001000` | `config.json model.safetensors policy_postprocessor.json policy_postprocessor_step_0_unnormalizer_processor.safetensors policy_preprocessor.json policy_preprocessor_step_2_normalizer_processor.safetensors train_config.json vlm` |
-| `ls work/artifacts/trial1500/001000/vlm` | `added_tokens.json special_tokens_map.json tokenizer.json tokenizer_config.json` |
-| `du -sh work/artifacts/trial1500/001000` | **`8.8G`**（`model.safetensors` が 9,354,050,752 バイト） |
+| `ls work/artifacts/trial1500/ladder2500/002500` | `config.json model.safetensors policy_postprocessor.json policy_postprocessor_step_0_unnormalizer_processor.safetensors policy_preprocessor.json policy_preprocessor_step_2_normalizer_processor.safetensors train_config.json vlm` |
+| `ls work/artifacts/trial1500/ladder2500/002500/vlm` | `added_tokens.json special_tokens_map.json tokenizer.json tokenizer_config.json` |
+| `du -sh work/artifacts/trial1500/ladder2500/002500` | **`8.8G`**（`model.safetensors` が 9,354,050,752 バイト） |
+| `sha256sum work/artifacts/trial1500/ladder2500/002500/model.safetensors` | **`cea403c9…` で始まる**（HF の LFS のダイジェストと一致する。降ろし損ねの検出。**他の 3 点は [../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) の「一覧」にある**） |
 
 **`vlm/` が無ければここで止まる。**採点で「モデルロードに失敗」になる（下の「つまずいたとき」）。
 
@@ -752,8 +793,8 @@ hf download siruku6/pi05_trial1500 --include '001000/*' \
 
 ```bash
 python3 solution/tools/build/build_submission.py \
-    --weights work/artifacts/trial1500/001000 \
-    --output work/submission_6.1.0.zip
+    --weights work/artifacts/trial1500/ladder2500/002500 \
+    --output work/submission_8.0.0.zip
 ```
 
 **`--weights` に渡したディレクトリが、そのまま zip の `model_weights/` になる。**
@@ -765,11 +806,11 @@ python3 solution/tools/build/build_submission.py \
 [build] 検証     <数百> エントリ一致、必須構成あり
 [build] コード   .../solution
 [build] 生成物   .../work/artifacts
-[build] 重み     .../work/artifacts/trial1500/001000
-[build] 出力     .../work/submission_6.1.0.zip
+[build] 重み     .../work/artifacts/trial1500/ladder2500/002500
+[build] 出力     .../work/submission_8.0.0.zip
 [build] <数百> files / 9385 MB
 [build] sha256 <64 桁>
-[build] ハッシュを保存: .../work/submission_6.1.0.sha256
+[build] ハッシュを保存: .../work/submission_8.0.0.sha256
 ```
 
 | 見るところ | 合格の線 |
@@ -789,13 +830,13 @@ python3 solution/tools/build/build_submission.py \
 
 ```bash
 python3 solution/tools/build/patch_zip_policy_server.py \
-    work/submission_6.1.0.zip --show
+    work/submission_8.0.0.zip --show
 ```
 
 **出るはずのもの**（`solution/policy_server.py` の現在の既定値。8/29 に実行して確認）。
 
 ```
-== submission_6.1.0.zip のいま
+== submission_8.0.0.zip のいま
     __version__ = "4.6.0"
     _MIN_LEXICAL = 0.65
     _MIN_LEXICAL_MARGIN = 0.05
@@ -821,21 +862,21 @@ python3 solution/tools/build/patch_zip_policy_server.py \
 
 ```bash
 python3 solution/tools/build/patch_zip_policy_server.py \
-    work/submission_6.1.0.zip \
+    work/submission_8.0.0.zip \
     --replace '_MIN_LEXICAL = 0.65' '_MIN_LEXICAL = 0.50' \
-    --replace '__version__ = "4.6.0"' '__version__ = "6.1.0"' \
+    --replace '__version__ = "4.6.0"' '__version__ = "8.0.0"' \
     --in-place
 ```
 
 **出るはずのもの。**
 
 ```
-== submission_6.1.0.zip のいま
+== submission_8.0.0.zip のいま
     （上と同じ 14 行）
 
 置き換え 2 件。CRC xxxxxxxx → yyyyyyyy
-== submission_6.1.0.zip の書き換え後
-    __version__ = "6.1.0"
+== submission_8.0.0.zip の書き換え後
+    __version__ = "8.0.0"
     _MIN_LEXICAL = 0.50
     （残り 12 行は同じ）
 
@@ -847,7 +888,7 @@ zipfile で読み直して一致。項目数 <数百>
 | 見るところ | 合格の線 |
 |---|---|
 | **`zipfile で読み直して一致` の行** | **出ていること。**道具は `zipfile.testzip()` まで通してから言う。**出ないものは出さない** |
-| `書き換え後` の `__version__` | **`6.1.0`**（`7.0.0` のときは `7.0.0`） |
+| `書き換え後` の `__version__` | **`8.0.0`**（`9.0.0` のときは `9.0.0`） |
 | `書き換え後` の `_MIN_LEXICAL` | **`0.50`** |
 | `"PARC_EMA_ALPHA"` | **`0.3` のまま**（動かさない） |
 
@@ -859,11 +900,11 @@ zipfile で読み直して一致。項目数 <数百>
 
 ### 4. sha256 を取り直す
 
-**`build_submission.py` が書いた `work/submission_6.1.0.sha256` は書き換える前の値である。**
+**`build_submission.py` が書いた `work/submission_8.0.0.sha256` は書き換える前の値である。**
 **必ず取り直す。**
 
 ```bash
-sha256sum work/submission_6.1.0.zip | tee work/submission_6.1.0.sha256
+sha256sum work/submission_8.0.0.zip | tee work/submission_8.0.0.sha256
 ```
 
 **この値を控える。**Mac で降ろしたあとに突き合わせる相手である。
@@ -878,15 +919,15 @@ sha256sum work/submission_6.1.0.zip | tee work/submission_6.1.0.sha256
 # RTX6000 側
 .venv/bin/hf auth whoami        # user=siruku6 が出ること
 .venv/bin/hf upload siruku6/parc2026-submission \
-    work/submission_6.1.0.zip submission_6.1.0.zip \
-    --repo-type model --commit-message "6.1.0 trial1500/001000 lexical 0.50"
+    work/submission_8.0.0.zip submission_8.0.0.zip \
+    --repo-type model --commit-message "8.0.0 ladder2500/002500 lexical 0.50"
 ```
 
 ```bash
 # Mac 側
-hf download siruku6/parc2026-submission submission_6.1.0.zip \
+hf download siruku6/parc2026-submission submission_8.0.0.zip \
     --repo-type model --local-dir ~/Downloads/parc2026
-shasum -a 256 ~/Downloads/parc2026/submission_6.1.0.zip   # 手順 4 の値と一致すること
+shasum -a 256 ~/Downloads/parc2026/submission_8.0.0.zip   # 手順 4 の値と一致すること
 ```
 
 > **Mac の空きは 50〜70 GB しかない。**zip 2 本で 18.8 GB を占める。
@@ -908,7 +949,7 @@ grep -n '総合スコア' <保存した採点ログ>
 grep -n '^\[parc\] policy_server' <保存した採点ログ>   # 出した版と設定を突き合わせる
 ```
 
-**`[parc] policy_server 6.1.0 ... ema_alpha=0.3` と出ていれば、狙った zip が動いている。**
+**`[parc] policy_server 8.0.0 ... ema_alpha=0.3` と出ていれば、狙った zip が動いている。**
 
 ## 分岐 —— 想定どおりでなかったとき
 
