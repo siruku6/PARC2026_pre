@@ -59,7 +59,8 @@ python3 solution/tools/eval/score_composite.py work/final_eval/<実行>
 ## 気をつけること
 
 - **`run_final_eval.sh` は `docker run` なので Claude の Bash からは拒否される。**
-  ユーザに貼って渡す（[howto/12](../../../docs/howto/12_bring_eval_to_rtx6000.md)）。
+  ユーザに貼って渡す（会社の RTX6000 で回すときの注意は
+  [howto/03](../../../docs/howto/03_gpu_eval.md) の「会社の RTX6000 では EGL が効く」）。
 - **同じ CSV で回した実行どうしでないと対にできない。**行が違うと
   「同じ名前のタスクが 1 つも無い」で止まる。
 - **評価は 1 本 64 分（72 行 216 本・RTX6000）。**2 台で同時に回すと描画で食い合う。

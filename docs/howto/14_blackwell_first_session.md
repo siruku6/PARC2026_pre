@@ -862,4 +862,4 @@ for f in HfApi().repo_info('siruku6/pi05_ctrl1500', repo_type='model').siblings:
 | 流した学習・重み・版・出した点 | [../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) |
 | 手元の 72 行が重みの判定に使えない理由 | [../knowledge/18_local_eval_missed_the_gain.md](../knowledge/18_local_eval_missed_the_gain.md) |
 | RunPod で同じ学習を回す手順 | [06_runpod_pi05.md](06_runpod_pi05.md) |
-| 会社の RTX6000 へ評価環境を持ち込む | [12_bring_eval_to_rtx6000.md](12_bring_eval_to_rtx6000.md) |
+| 会社の RTX6000 で評価を回すとき | [03_gpu_eval.md](03_gpu_eval.md) の「会社の RTX6000 では EGL が効く」 |

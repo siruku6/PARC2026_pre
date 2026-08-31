@@ -24,4 +24,4 @@
 | 見た目の振れ幅 | [08_appearance_spread.md](08_appearance_spread.md) |
 | 失敗の内訳 | [18_failure_breakdown.md](18_failure_breakdown.md) |
 | weak3x を π0.5 に使うか | [16_weak3x_for_pi05.md](16_weak3x_for_pi05.md) |
-| レポートに書く値 | [03_report_values.md](03_report_values.md) |
+| レポートに書く値 | 重み・版・点は [19_weights_catalog.md](19_weights_catalog.md)、ライセンスは [../knowledge/04_licenses.md](../knowledge/04_licenses.md)、必須欄は [../knowledge/01_report_requirements.md](../knowledge/01_report_requirements.md) |

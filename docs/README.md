@@ -12,7 +12,7 @@
 | **これから作るものの設計** | [plan/](plan/) |
 | **提出物のしくみ** | [solution/README.md](solution/README.md) |
 | **次のコンペに持ち越すこと** | [talk/lessons_learned.md](talk/lessons_learned.md) |
-| **レポートに書く値** | [reference/03_report_values.md](reference/03_report_values.md) |
+| **レポートの必須欄と締切** | [knowledge/01_report_requirements.md](knowledge/01_report_requirements.md)（**書く値そのものは実験台帳とライセンスの 2 つから引く**——下の [reference/19](reference/19_weights_catalog.md)・[knowledge/04](knowledge/04_licenses.md)） |
 | **流した学習・重み・版・出した点（実験台帳）** | **[reference/19_weights_catalog.md](reference/19_weights_catalog.md)** |
 | **今使える計算資源・docker image は何か** | **[resources/infra_and_docker.md](resources/infra_and_docker.md)** |
 | **HF にどのモデルが置いてあるか・ローカルの重みに控えがあるか** | **[resources/huggingface.md](resources/huggingface.md)** |
@@ -46,7 +46,6 @@
 | **[howto/08_hf_transfer_troubleshooting.md](howto/08_hf_transfer_troubleshooting.md)** | **借りた GPU マシンから重みを運ぶとき。`hf upload` が 403 で止まったら** |
 | **[howto/09_free_disk_space.md](howto/09_free_disk_space.md)** | **`df` の空きが減ってきたとき。消してよいものの判定と、「消したのに空かない」3 つの罠** |
 | **[howto/10_rebuild_machine.md](howto/10_rebuild_machine.md)** | **マシンを作り替えてディスクが消えるとき。持ち出す 1 本のスクリプト・秘密の 4 件・常駐コンテナの起動コマンド** |
-| **[howto/12_bring_eval_to_rtx6000.md](howto/12_bring_eval_to_rtx6000.md)** | **会社の RTX6000 で本選の自己評価を回すとき。EGL が効くのでここが評価の主力になる。持ち込む 4 つ（評価イメージ・方策イメージ・重み・コード）と、`docker` が sudo を要るときの回避** |
 | **[knowledge/16_docker_group_needs_session_restart.md](knowledge/16_docker_group_needs_session_restart.md)** | **`usermod -aG docker` を入れたのに `permission denied` が続くとき。`id -nG` での切り分けと、VS Code の Remote-SSH で必要になる操作** |
 | **[plan/15_runpod_fullparam_with_augment.md](plan/15_runpod_fullparam_with_augment.md)** | **RunPod でフルパラメータ ＋ 画像拡張を回す 1 回分の設計。**歩数と費用の表・立ち上がりの確認 3 点・何と比べられるか |
 | **[howto/14_blackwell_first_session.md](howto/14_blackwell_first_session.md)** | **配布 GPU 環境（Blackwell サーバ）に初めて入るとき。60 時間の減り方・下見・配布データの数え方・止め方。自分の Docker は持ち込めない** |

@@ -4,7 +4,7 @@
 数字と用語の説明はすべて本文に書き写した。**移動中に読んで、最後の「決めてほしいこと」に
 答えを付けて戻ってきていただければ、そのまま作業に入れる。**
 
-前の版は `docs/talk/260812_briefing.md`（予選期間中のもの）である。**予選は終わり、
+**予選は終わり、
 本選1 が 8/24 に始まった。この文書はそこから先の話である。**
 
 ---
@@ -1109,5 +1109,4 @@ ModuleNotFoundError: No module named 'msgpack'
 | どの重みがどのスコアを出したか | `reference/19_weights_catalog.md` |
 | 失敗を 4 つの型に割った内訳 | `reference/18_failure_breakdown.md` |
 | 採点の点数の作り | `reference/17_scoring_formula.md` |
-| 予選期間中のまとめ（前の版） | `talk/260812_briefing.md` |
 | 本選の規則そのもの | `materials/PARC2026開発コンペティション_本選.pdf` |

@@ -121,7 +121,8 @@
 > **【8/12・結果】weak3x を本番に出したら 0.144。H1 が確定した。**
 > lora20k（0.016）の崩壊は重みのずれ自体ではなく滑らかさ・空回りの劣化で、
 > 手本の選び方を直したら本番でも消えた。**②③ が本番と向きが一致するという前提は
-> 生きている。** 詳細は [260812_briefing.md](260812_briefing.md) の 5-2 節。
+> 生きている。** 点の並びは [../knowledge/05_score_history.md](../knowledge/05_score_history.md)、
+> 8 本のステップ数は [../strategy/06_scripted_demos.md](../strategy/06_scripted_demos.md)。
 
 > **【8/12 追記】3 条件は「学習済みタスクで測った値」である。**
 > ②③ が本番と向きが一致したのは事実だが、**母集団が学習に使ったタスクなので、
@@ -463,7 +464,9 @@ python3 solution/tools/suite/instruction_targets.py --emit python   # 貼る形�
 **失ったのは成功 1 本だけ**である。1〜4 本目は 3 種類の重みすべてで
 300 ステップに張り付いているので、**実質 4 本で 1 本の差＝優劣は判定できない。**
 
-数字とステップ数の並びは [260812_briefing.md](260812_briefing.md) の 2〜3 節にある。
+8 本のステップ数の並びは [../strategy/06_scripted_demos.md](../strategy/06_scripted_demos.md)（5 版ぶん）と
+[../howto/04_proxy_eval.md](../howto/04_proxy_eval.md)、「実質 4 本で 1 本の差」の読み方は
+[../plan/04_training_targets.md](../plan/04_training_targets.md) にある。
 
 > **λ=0.15 を組み直す道は残っているが、優先度は低い。**
 > 素へ寄せるほど点は戻るが、**それは改善ではなく素へ近づけているだけ**である。
@@ -573,7 +576,7 @@ H1 が確定し、8/14 の土台は weak3x で決まった（項目 38・3 条�
 
 ### 16. レポートの必須項目を埋める — 私＋あなた
 
-値は [03_report_values.md](../reference/03_report_values.md) に集約済み。**モデルの説明は済んだ**（項目 32。[reference/09](../reference/09_model_explained.md) の末尾にそのまま貼れる 4 段落がある）。**残りは 1 つ ——最終提出に載せる重みの設定**（回が決まってから。17-2）。**回 A を流したら `…/pretrained_model/train_config.json` を 1 つ控える**（マージ出力に入らない）。詳細は notes の 16。
+値は [reference/19](../reference/19_weights_catalog.md)（版・重み・点）と [knowledge/04](../knowledge/04_licenses.md)（ライセンス）にある。**モデルの説明は済んだ**（項目 32。[reference/09](../reference/09_model_explained.md) の末尾にそのまま貼れる 4 段落がある）。**残りは 1 つ ——最終提出に載せる重みの設定**（回が決まってから。17-2）。**回 A を流したら `…/pretrained_model/train_config.json` を 1 つ控える**（マージ出力に入らない）。詳細は notes の 16。
 
 ### ~~32. モデルの仕組みを説明する文章を作る~~ — **済み（8/12・別セッション）。16 に貼れる形まで来た**
 

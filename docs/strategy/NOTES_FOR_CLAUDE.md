@@ -419,7 +419,7 @@ Branch **`submission/v1-base-weights`** at `b234fea`. Working tree clean.
 | Backup tag | `backup/before-tidy-20260811` → `27de31b` (pre-squash tip) |
 | `submission/v2-tuned-weights` | **Fully merged in** (`87e0dfc`, two parents). Obsolete as a working branch |
 | `github/gpu/v2-snapshot` | The GPU server's rebased v2 (3 commits). **Fully absorbed** — `28b9eb6` cherry-picked as `b234fea`; the other two were content-identical to `f2eae39`/`e4edc39`. Safe to delete on the remote |
-| `docs/reference/03_chunk_params.md` | Renamed to **`07_`** (collided with `03_report_values.md`) |
+| `docs/reference/03_chunk_params.md` | Renamed to **`07_`** (collided with `03_report_values.md`, itself deleted on 8/31) |
 
 **The GPU server must `git pull` before any training run.** Its `train.py` defaults were the old
 ones (batch 8 / lr 3e-4 / 200 episodes) that produced the 8.8× regression.
