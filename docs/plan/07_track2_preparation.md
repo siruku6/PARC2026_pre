@@ -621,7 +621,7 @@ Track2 の実際に採点で使われるタスクがどの 4 カテゴリであ�
 
 | 事実 | 出典 |
 |---|---|
-| Track1/2/3 の区分と Track2 の文言 | `docs/PARC2026開発コンペティション_予選.pdf` p8 |
+| Track1/2/3 の区分と Track2 の文言 | `docs/materials/PARC2026開発コンペティション_予選.pdf` p8 |
 | LIBERO-plus の 7 カテゴリ・件数・実装 | `LIBERO-plus` 原典（README・`libero/libero/envs/env_wrapper.py`・`libero/libero/envs/problems/libero_tabletop_manipulation.py`・`libero/libero/envs/robots/new_init.py`・`libero/libero/benchmark/task_classification.json`） |
 | Track1 が 7 カテゴリ全部ではないこと | 運営 Q&A No.21（[05_perturbation_categories.md](../reference/05_perturbation_categories.md)） |
 | LIBERO-plus 論文の実験結果・mix-SFT の効果・後続研究 3 件 | arXiv:2510.13626／2511.18960／2511.18810／2511.15605（researcher エージェントが HTML 版を複数回取得。数値の食い違いは本文に明記） |
@@ -629,6 +629,6 @@ Track2 の実際に採点で使われるタスクがどの 4 カテゴリであ�
 | scripted policy が閉ループであること | `solution/tools/scripted_demo/scripted_demo.py` の `follow()` 実装 |
 | 学習データが拡張を使っていないこと | `work/artifacts/model_weights.bak/train_config.json`（[02_appearance_and_data.md](02_appearance_and_data.md)で既確認） |
 | `make_task_suite.py` が任意のカテゴリで検証スイートを作れること | `solution/tools/suite/make_task_suite.py` の `--categories` 引数を実行して確認 |
-| 講義第6回・第7回の知見 | `docs/第6回 講義資料.pdf`／`docs/第7回 講義資料part1.pdf` |
+| 講義第6回・第7回の知見 | `docs/materials/第6回 講義資料.pdf`／`docs/materials/第7回 講義資料part1.pdf` |
 | Tier 0（ノイズ注入で復帰データを作る）の発想と注意点 | DART（Laskey+ 2017, arXiv:1703.09327）・SIRIUS（Liu+ 2022, arXiv:2211.08416）・Ross+ 2011（arXiv:1011.0686）。詳細と確認度は [08_training_data_creation_cautions.md](08_training_data_creation_cautions.md) 3 節 |
-| 検証データの分割・ログ規律・混合比・前処理一致などの実務要件 | 講義第6回 p39-p60・`docs/qiita_OpenVLA-OFT+.md`。詳細は [08_training_data_creation_cautions.md](08_training_data_creation_cautions.md) 1・2 節 |
+| 検証データの分割・ログ規律・混合比・前処理一致などの実務要件 | 講義第6回 p39-p60・`docs/materials/qiita_OpenVLA-OFT+.md`。詳細は [08_training_data_creation_cautions.md](08_training_data_creation_cautions.md) 1・2 節 |

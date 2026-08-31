@@ -23,6 +23,7 @@
 
 | パス | 中身 |
 |---|---|
+| [materials/](materials/) | **外部から取得した資料の現物。**ルールの PDF・運営 Q&A の CSV・運営の告知・講義資料。**一次資料はここを見る**（[knowledge/11_primary_sources.md](knowledge/11_primary_sources.md)）。**ここのファイルは書き換えない** |
 | [talk/](talk/) | いま抱えているものと、その優先順位。**まずここ。**ただし**一時ファイルの置き場なので、他のディレクトリの文書からここを指してはいけない**（[talk/README.md](talk/README.md)。指したくなったら情報を `howto/`・`knowledge/`・`reference/` へ移す） |
 | [howto/](howto/) | 手順書。上から順にやれば終わる形で書いてある。**何度も使うものだけを置く。**1 回だけの回・1 回だけの設定は [plan/](plan/) へ、踏んだ事故と回避策は [knowledge/](knowledge/) へ |
 | [solution/](solution/) | 提出物と Colab の説明。コード本体は `../solution/` |

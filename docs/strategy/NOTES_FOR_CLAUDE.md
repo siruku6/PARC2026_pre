@@ -27,7 +27,7 @@ minus the private task set and minus the scoring weights.
 | [validate_submission.py](../../validate_submission.py) | Pre-submission checker (static + smoke test) |
 | [examples/](../../examples/) | Colab notebook: SmolVLA LoRA fine-tune on LIBERO-plus Spatial |
 | [setup.sh](../../setup.sh) | Builds the local venv, clones LIBERO-plus + LIBERO, patches, fetches assets |
-| [docs/PARC2026開発コンペティション_予選.pdf](../PARC2026開発コンペティション_予選.pdf) | Official participant guide (23 pages, Japanese) |
+| [docs/materials/PARC2026開発コンペティション_予選.pdf](../materials/PARC2026開発コンペティション_予選.pdf) | Official participant guide (23 pages, Japanese) |
 
 The PDF classifies as **TEXT-FIRST** (`pua_ratio=0.0`, no rotation, 1-up). Extract it with
 `pdf_text.js` from the `pdf-reading` skill; no rendering needed.

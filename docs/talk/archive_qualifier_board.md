@@ -640,7 +640,7 @@ rm -rf work/artifacts/model_weights_lora20k.bak  # GPU マシンで。900 MB
 | 1 | **0.080** | **3/8** |
 
 > **n=1 の悪化は講義資料が機構まで説明している**
-> （`docs/第7回 講義資料part1.pdf` p.10）——「**k が短すぎる（k=2）**／
+> （`docs/materials/第7回 講義資料part1.pdf` p.10）——「**k が短すぎる（k=2）**／
 > チャンク境界のたびに分布から**別のモードをサンプルしうる** →
 > **mode-jumping・jerky な動き**」。**n=1 は1 ステップごとが境界になる。**
 > 逆に長すぎると open-loop 区間が伸びて応答性が落ちる。

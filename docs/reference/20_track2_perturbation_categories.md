@@ -419,7 +419,7 @@ Robot の効き方は「Base が安定して速いタスクを 300 に張り付�
 
 | 事実 | 出典 |
 |---|---|
-| Track2 の文言・4 カテゴリへの対応づけが推測であること | `docs/PARC2026開発コンペティション_予選.pdf` p8、[07 §1.1](../plan/07_track2_preparation.md#11-track2-の位置視点ノイズとは何か) |
+| Track2 の文言・4 カテゴリへの対応づけが推測であること | `docs/materials/PARC2026開発コンペティション_予選.pdf` p8、[07 §1.1](../plan/07_track2_preparation.md#11-track2-の位置視点ノイズとは何か) |
 | 4 カテゴリの件数・接尾辞・難易度分布 | `work/LIBERO-plus/libero/libero/benchmark/task_classification.json`（revision `4976dc3`）を実際に数えた |
 | 各カテゴリの実装詳細 | `LIBERO-plus/libero/libero/envs/env_wrapper.py`・`libero_tabletop_manipulation.py`・`robots/new_init.py` |
 | Sensor Noise が「毎フレーム・agentview のみ・後処理」であること | `env_wrapper.py:207-233`（`_noise_N` の解析）・`285-309`（`step()`）・`311-348`（`reset()`） |
