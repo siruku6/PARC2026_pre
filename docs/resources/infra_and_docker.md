@@ -40,8 +40,11 @@ Docker だけでできて GPU を使わないため、他の作業と同時並�
 | RunPod | **RunPod** | ○（フルパラメータ） | — | — | A100/H100 80GB | 無し（秒単位の従量課金） |
 | ローカル Mac（colima） | **Mac マシン** | — | — | ○ | 不要 | 無し |
 
-※ 会社の RTX6000 は GPU を Docker から使えるところまで済んでいるが、**イメージも重みもまだ
-置いていない**ので、実際に流すには持ち込みが要る。
+※ 会社の RTX6000 には**重みと同梱ソースが揃っていて、提出 zip をここで組める**
+（2026-08-29 に `work/artifacts/vendor/lerobot` 487 ファイルを作り、9,378 MB の zip を組んだ）。
+`work/artifacts/` にあるのは `model_weights`・`pi05_rp3000`・`trial1500`・`vendor`。
+**`model_weights.new` は 8/29 に `install_weights.py` が `vlm/` で落ちたときの組み立て途中の
+残骸なので消してよい**（`_build_staging` が作る作業用ディレクトリ）。
 
 ※ ユーザとの会話の中では、認識を一致させるために「呼称」列の名称でインフラを呼ぶこととする。
 
@@ -78,7 +81,7 @@ JAIST サーバでは選べない EGL が実際に効くことを確認した。
 | RAM | 47 GiB | **114 GiB** |
 | GPU | Quadro RTX 6000 1 枚・VRAM **24 GB**・cc **7.5**・ドライバ 595.84 | **H100-20C**（vGPU）・VRAM 20 GB・cc 9.0・ドライバ 570.133.20 |
 | GPU の種別 | **`Quadro RTX` / `Pass-Through`**（描画もできる実機） | `NVIDIA Virtual Compute Server` / `VGPU`（計算専用） |
-| ストレージ | **489 GB（残り 455 GB。2026-08-26 実測）** | 298 GB（**残り 11 GB**。2026-08-29 実測） |
+| ストレージ | **489 GB（残り 297 GB・使用 37%。2026-08-31 実測）** | 298 GB（**残り 11 GB**。2026-08-31 実測） |
 | OS | Ubuntu 24.04.4 LTS | Ubuntu 22.04.3 LTS |
 | `docker run` | **通る**（ただし `sudo` が要る） | **拒否される**（org の制約。`docker exec` のみ） |
 | `docker run --gpus all` | **通る**（NVIDIA Container Toolkit 1.20.0-1 を 08-26 に導入） | 通る |
@@ -113,7 +116,8 @@ cc 7.5 なので fp8（cc 8.9 以上が要件）は使えず、bf16 もネイテ
 
 **本選の評価イメージ `parc2026-final` はビルド済みである**（配布リポジトリを clone して
 `docker build` で作った。本選の `setup.sh` は LIBERO-plus・LIBERO・アセットのコミットを
-固定しているので、どこでビルドしても採点環境と同じ版になる）。**重みはまだ置いていない。**
+固定しているので、どこでビルドしても採点環境と同じ版になる）。**重みも 8/29 に置いた**
+（`work/artifacts/trial1500` の `001500`。`vlm/` 同梱）。
 
 ### Blackwell サーバは本選 1 で 60 時間、ディスクはほとんどが一時領域
 

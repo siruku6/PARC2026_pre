@@ -102,26 +102,44 @@
 ## 3. ローカルにある重みのうち、控えがあるのは π0.5 の 2 本だけ
 
 **π0.5 の重み 2 本は HF に同じ中身があり、手元から消えても取り直せる。量子化スイープの
-4 本と `weak_undertrained` はどこにも控えが無い。**
+4 本と `weak_undertrained`、幾何の接ぎ木の 2 本はどこにも控えが無い。**
 
 | ローカルのパス | 容量 | 同じ中身がある場所 |
 |---|---|---|
 | `work/artifacts/pi05_rp3000` | 8.8 GB | HF `siruku6/pi05_full_runpod`（sha256 `0c5d542e…`）。ローカルでは `work/train/pi05_full_runpod/003000` と同じ実体 |
 | `work/artifacts/model_weights_pi05_024000` | 8.8 GB | HF `siruku6/pi05_stage1_24000`（sha256 `d46bffcf…`）。ローカルでは `work/train/pi05_full_local/checkpoints/024000/pretrained_model` と同じ実体 |
+| `work/artifacts/pi05_geo12k` | 12 GB | **どこにも無い。**幾何の接ぎ木 12,000 歩。ローカルでは `work/train/geo_vggt_v2/checkpoints/012000/pretrained_model` と同じ実体（inode `23704624`） |
+| `work/artifacts/pi05_geo6k` | 12 GB | **どこにも無い。**同じ学習の 6,000 歩。`work/train/geo_vggt_v2/checkpoints/006000/pretrained_model` と同じ実体（inode `810838694`） |
 | `work/train/pi05_quant_c0`・`c3`・`c3_compile` の 016000 | 各 11 GB | **どこにも無い。**作り直すには 16,000 ステップの再学習（C3＋compile で 3 時間 02 分。`work/train/pi05_quant_c3_compile.log` の最終行） |
 | `work/train/pi05_quant_weak_undertrained` の 000500 | 11 GB | **どこにも無い**（500 ステップなので作り直しは短い） |
 | `~/.cache/huggingface/hub/models--lerobot--pi05_libero_base` | 14 GB | 上流 `lerobot/pi05_libero_base` rev `a217bfd3`。学習・評価のたびに要る |
 | `~/.cache/huggingface/lerobot` | 15 GB | 上流 `lerobot/libero_plus`（学習データ本体）。取り直しは遅い |
 
-**上の 2 本は `work/artifacts/` と `work/train/` が同じ実体を指しているので、片方だけ消しても
-1 バイトも空かない。** 消してよいかの判定と、消しても空かないときの見方は
+**`work/artifacts/` の 4 本は `work/train/` と同じ実体（ハードリンク）なので、片方だけ消しても
+1 バイトも空かない。**
+
+**`du` を 1 回の呼び出しで 2 つ並べると、後ろの数字が嘘になる。**`du` は同じ inode を
+1 回しか数えないので、**先に来た側に容量が全部乗る。**
+
+```
+$ du -sh work/train work/artifacts     # ← 後ろの artifacts が 81 MB に見える
+111G  work/train
+81M   work/artifacts
+$ du -sh work/artifacts; du -sh work/train   # ← 別々に呼べば正しい
+40G   work/artifacts
+111G  work/train
+```
+
+**2026-08-31 にこれを「重みが消えた」と読み違えた。**空き容量（`df` の 11 GB）は
+どちらの読み方でも変わらないので、**迷ったら `df` を見る。** 消してよいかの判定と、消しても空かないときの見方は
 [../howto/09_free_disk_space.md](../howto/09_free_disk_space.md) にある。
 
 ## 確認したい仮定
 
-- HF アカウントの容量上限に対して今どれだけ余裕があるかは確認していません。上限に近いと、
-  新しい zip を上げる前に古いものを消す必要が出ます。
-- `parc2026-submission` の git 履歴が実際に何 GB を消費しているかは、API から測れていません
-  （今の版の 29.05 GB しか分かりません）。
+- **見えているファイルの合計と、HF が数えている容量が食い違っています。**`repo_info` の
+  ファイルサイズを足すと **57.7 GB**（2026-08-29 に私が測った）ですが、板の判断 3 番には
+  **67.03 GB / 100 GB・空き 33 GB**（同じ 8/29・別の測り方）とあります。**厳しい側の
+  67.03 GB で判断してください。**差の 9.3 GB が何なのか（履歴か、モデル以外のリポジトリか）は
+  まだ切り分けていません。
 - 消えた `siruku6/parc2026-archive` を今も参照しているコードや手順書が残っていないかは
   未確認です。
