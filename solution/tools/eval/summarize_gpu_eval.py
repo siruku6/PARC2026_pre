@@ -163,7 +163,7 @@ def _parse_args() -> argparse.Namespace:
                         metavar="CATEGORY",
                         help="**この摂動カテゴリだけで集計し直す。**"
                              '例: --only-categories "Light Conditions" "Background Textures"'
-                             "（出題の見込みに近い 24 件だけで比べるときに使う）")
+                             "（採点に出る見込みに近い 24 件だけで比べるときに使う）")
     return parser.parse_args()
 
 
@@ -287,7 +287,7 @@ def _filter_by_categories(
 ) -> list[dict]:
     """指定した摂動カテゴリの回だけを残す。指定が無ければそのまま返す。
 
-    **84 件の平均は本番より低く出る。** 出題の見込みに近いのは
+    **84 件の平均は本番より低く出る。** 採点に出る見込みに近いのは
     `Light Conditions` と `Background Textures` の 24 件で、そこだけなら 0.708
     だった（`docs/strategy/05_実測結果.md`）。**判定はその 24 件で行う**ため、
     集計全体を絞れる口を用意する。

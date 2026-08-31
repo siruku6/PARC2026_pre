@@ -46,7 +46,7 @@ _DEFAULT_ARTIFACTS = _REPO_ROOT / "work" / "artifacts"
 _DEFAULT_OUTPUT = _REPO_ROOT / "work" / "submission.zip"
 
 # solution/ から取るファイル（zip のルート直下に置く）。
-# `geometry_graft.py` は幾何の接ぎ木（板 F25）の形の定義である。**学習側と同じ
+# `geometry_graft.py` は幾何の接ぎ木（`open_items.md` の F25）の形の定義である。**学習側と同じ
 # ファイルを同梱する**——形が食い違うと学習した重みが意味を失う。幾何を接いでいない
 # 重みでも `policy_server.py` は読み込まないので、入れておいて害は無い。
 _SOLUTION_FILES = ("policy_server.py", "requirements.txt", "geometry_graft.py")

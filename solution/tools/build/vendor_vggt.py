@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""VGGT のソースを提出物へ同梱する（幾何の接ぎ木・板 F25）。
+"""VGGT のソースを提出物へ同梱する（幾何の接ぎ木・`open_items.md` の F25）。
 
 **なぜ同梱するのか。** 採点環境で `pip install` できるとは限らず、VGGT は PyPI にも
 無い（`pip install vggt` は「No matching distribution found」になる。2026-08-28 に確認）。

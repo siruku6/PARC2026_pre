@@ -70,7 +70,7 @@ PY
 **外部の集計と 1 件も違わなかった**（2,218 / 22.1% / 1,142 / 613 / 463 / 40 /
 545〜563）。**この母集団の定義は信頼して使える。**
 
-> **ただし「候補」である。** 本番の出題は非公開で、運営は「元タスクが
+> **ただし「候補」である。** 本番の採点に出るタスクは非公開で、運営は「元タスクが
 > `lerobot/libero_plus` の 40 タスクの範囲内か」には回答していない（Q&A No.21）。
 
 ## 接尾辞は末尾で見る — 含むかどうかで見ると 23 件ずれる
@@ -169,8 +169,10 @@ python3 solution/tools/eval/make_validation_suite.py \
 手元の 84 件では平均 3.44・最多 7・0 個は 1 件だった（`_add_` の摂動が
 物体を増やすため、候補 2,218 件の最多 5 個より多くなる）。
 
+> **fixture** = コンロ・棚・引き出しのように、シーンに据え置かれた物（LIBERO のコードの呼び名）。**掴んで運ぶ対象の物体とは別で、自由関節を持たない。**
+>
 > **採点が見ているものと厳密には一致しない。** ハーネスは観測の `*_pos` という
-> 鍵を数えるので、bddl の物体名とはずれる（什器も含まれる）。**目安である。**
+> 鍵を数えるので、bddl の物体名とはずれる（fixture も含まれる）。**目安である。**
 
 ## 画像拡張は、評価側の明るさの幅を覆えていない
 
@@ -222,7 +224,7 @@ sed -n '/^class ImageTransformsConfig/,/^def make_transform/p' \
 |---|---|
 | 摂動カテゴリと件数、難易度 | `work/LIBERO-plus/libero/libero/benchmark/task_classification.json`（revision `4976dc3`） |
 | variant の物体と操作対象 | 同 `bddl_files/<suite>/<variant 名>.bddl` を 2,218 件読んだ |
-| 出題は 7 カテゴリ全部ではない | Q&A CSV No.21（西浦） |
+| 採点に出るタスクは 7 カテゴリ全部ではない | Q&A CSV No.21（西浦） |
 | 成功判定に衝突が入ること | [pipeline/rollout.py](../../pipeline/rollout.py) |
 | 画像拡張の既定値 | `work/lerobot-src/src/lerobot/transforms/transforms.py` の `ImageTransformsConfig` |
 | 学習データの明るさの幅 | [01_retrain.md](../howto/01_retrain.md)（`train.py` が起動時に出す 2 行） |

@@ -20,7 +20,7 @@
 | 数え上げた事実（データセットの中身・摂動の種類） | `reference/` |
 | 追う／追わないの結論 | `talk/open_items.md` の「決めた — 蒸し返さない」 |
 
-**`talk/` の中どうしのリンクは張ってよい**（板 → `open_items_notes.md` など）。
+**`talk/` の中どうしのリンクは張ってよい**（`open_items.md` → `open_items_notes.md` など）。
 消すときに同じディレクトリの中だけを見れば済むからである。
 
 ## 消すときにやること
@@ -38,10 +38,10 @@
 
 | ファイル | 何のためのものか | 消す目安 |
 |---|---|---|
-| [open_items.md](open_items.md) | **本選 1 の板。**候補と「決めた — 蒸し返さない」 | 本選が終わるまで残す |
-| [open_items_notes.md](open_items_notes.md) | 板の各行の根拠と経緯 | 同上 |
-| [open_items_archive_260821.md](open_items_archive_260821.md) | Track2 準備期（8/21〜8/26）の板の退避先 | 番号で指されているので残す |
-| [archive_qualifier_board.md](archive_qualifier_board.md) | 予選の板の退避先 | 同上 |
+| [open_items.md](open_items.md) | **本選 1 の `open_items.md`。**候補と「決めた — 蒸し返さない」 | 本選が終わるまで残す |
+| [open_items_notes.md](open_items_notes.md) | `open_items.md` の各行の根拠と経緯 | 同上 |
+| [open_items_archive_260821.md](open_items_archive_260821.md) | Track2 準備期（8/21〜8/26）の `open_items.md` の退避先 | 番号で指されているので残す |
+| [archive_qualifier_board.md](archive_qualifier_board.md) | 予選の `open_items.md` の退避先 | 同上 |
 | [lessons_learned.md](lessons_learned.md) | 次のコンペへ持ち越すもの | **成果物である。**コンペ後も残す |
 | [260810_briefing.md](260810_briefing.md)・[260812_briefing.md](260812_briefing.md)・[260825_briefing.md](260825_briefing.md) | その日の全体像（印刷して読む用） | 次の briefing が出たら消せる |
 | [260826_training_run.md](260826_training_run.md) | 8/26 の学習 2 本の手順と条件 | 結果が `reference/19` に入れば消せる |

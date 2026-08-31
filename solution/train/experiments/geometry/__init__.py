@@ -1,4 +1,4 @@
-"""幾何の接ぎ木（板 F25）を学習へ差し込むための、train_pi05.py 側の窓口。
+"""幾何の接ぎ木（`open_items.md` の F25）を学習へ差し込むための、train_pi05.py 側の窓口。
 
 **このパッケージの外から見える形は `experiments.quantization` と同じである**
 ——`add_arguments` / `selected` / `validate` / `set_environment` / `command_head` /
@@ -23,7 +23,7 @@ _PATCH = 14
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     """train_pi05.py の引数に、幾何の接ぎ木のつまみを足す。"""
-    group = parser.add_argument_group("幾何の接ぎ木（実験・板 F25）")
+    group = parser.add_argument_group("幾何の接ぎ木（実験・`open_items.md` の F25）")
     group.add_argument(
         "--geometry-fuse",
         choices=("none", "vggt"),
@@ -35,7 +35,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--geometry-model",
         default="facebook/VGGT-1B",
         help="VGGT の重み。既定は門の無い非商用版。提出物に入れる段では商用可の "
-             "facebook/VGGT-1B-Commercial に差し替える（板 F26）",
+             "facebook/VGGT-1B-Commercial に差し替える（`open_items.md` の F26）",
     )
     group.add_argument(
         "--geometry-image-size",

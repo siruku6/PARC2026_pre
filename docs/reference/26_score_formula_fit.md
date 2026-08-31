@@ -32,7 +32,7 @@ smooth metrics = w1·time + w2·jerk + w3·SPARC + w4·trajectory + w5·rotation
 Total Score    = (1/N) · Σ successᵢ · (1 − collision penaltyᵢ) · smooth metricsᵢ
 ```
 
-`time` は壁時計ではなくシミュレーションの歩数である（運営 Q&A No.23）。N は 8。
+`time` はかかった時間ではなくシミュレーションの歩数である（運営 Q&A No.23）。N は 8。
 
 ---
 

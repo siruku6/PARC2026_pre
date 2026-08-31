@@ -1,4 +1,4 @@
-"""幾何の特徴を π0.5 に接ぐ（板 F25）。Evo-0（arXiv 2507.00416）の形をなぞる。
+"""幾何の特徴を π0.5 に接ぐ（`open_items.md` の F25）。Evo-0（arXiv 2507.00416）の形をなぞる。
 
 **このファイルは学習と推論の両方から使う。** 学習側は
 `solution/train/experiments/geometry/vggt_fuser.py` が、推論側は
@@ -87,7 +87,7 @@ class VGGTFuser(nn.Module):
         π0.5 の画像トークンの幅（PaliGemma の width）。
     model_id : str
         VGGT の重み。既定は門の無い `facebook/VGGT-1B`。提出物に入れる段で
-        商用可の `facebook/VGGT-1B-Commercial` に差し替える（板 F26）。
+        商用可の `facebook/VGGT-1B-Commercial` に差し替える（`open_items.md` の F26）。
     image_size : int
         VGGT へ渡す 1 辺。**14 の倍数でなければ VGGT が落ちる。**
     num_heads : int

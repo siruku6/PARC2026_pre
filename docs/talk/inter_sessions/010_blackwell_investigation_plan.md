@@ -43,9 +43,9 @@
 | 事実 | 出典 |
 |---|---|
 | **Blackwell は NVIDIA RTX PRO 6000 Blackwell 1 台。**製品仕様の VRAM は 96 GB（**実機で未確認**） | [../../howto/14_blackwell_first_session.md](../../howto/14_blackwell_first_session.md) |
-| **`docker` は使えない。**自分のイメージを持ち込む道は資料 v1.1 で閉じた | 板の「決めた」8/26 |
+| **`docker` は使えない。**自分のイメージを持ち込む道は資料 v1.1 で閉じた | `open_items.md` の「決めた」8/26 |
 | **π0.5 の学習は batch 64 で 49.37 GB**（A100 80GB での実測）。96 GB なら入るはずだが**未確認** | [../../reference/19_weights_catalog.md](../../reference/19_weights_catalog.md) |
-| **評価の壁時計はほぼ CPU の描画である。**方策は 18〜29% で、残りは `osmesa` の software rendering。**`egl` が使えるかと CPU の数が効く** | [../../knowledge/14_quantization_and_eval_bottleneck.md](../../knowledge/14_quantization_and_eval_bottleneck.md) |
+| **評価にかかった時間はほぼ CPU の描画である。**方策は 18〜29% で、残りは `osmesa` の software rendering。**`egl` が使えるかと CPU の数が効く** | [../../knowledge/14_quantization_and_eval_bottleneck.md](../../knowledge/14_quantization_and_eval_bottleneck.md) |
 | **`compile_model=true` はチェックポイントに焼き付き、評価サーバの起動に 1,177.9 秒かかる。**必ず false | 同 |
 | **本選では `~/dataset/` に複数のデータセットが tar で配られている** | 下の表 |
 
@@ -155,7 +155,7 @@
 
 2. **調査項目を洗い出す。**上の種に足す形で。
    **各項目に「これが分かると何が決まるか」を 1 行付けること。**
-   **それが書けない項目は落とす**（板の決まりと同じ）。
+   **それが書けない項目は落とす**（`open_items.md` の決まりと同じ）。
 
 3. **時間割にする。**午後・夕方・夜の 3 つ。
    **夜に置くものは、切れても壊れない形にする**（`nohup`／`tmux`、途中結果を書き出す）。

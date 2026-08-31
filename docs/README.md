@@ -4,7 +4,7 @@
 
 | 探しているもの | 行き先 |
 |---|---|
-| **今なにをやるべきか（候補の板）** | **[talk/open_items.md](talk/open_items.md)** ── 1 行ごとに「何が決まるか・誰が・資源・所要・前提・打つもの」を持つ。**アイデアを思いついたらここへ足す** |
+| **今なにをやるべきか（候補の `open_items.md`）** | **[talk/open_items.md](talk/open_items.md)** ── 1 行ごとに「何が決まるか・誰が・資源・所要・前提・打つもの」を持つ。**アイデアを思いついたらここへ足す** |
 | **手を動かす手順** | [howto/](howto/) |
 | **測った数字** | [strategy/05_実測結果.md](strategy/05_実測結果.md) |
 | **次にどこを直して学習するか** | **[plan/04_training_targets.md](plan/04_training_targets.md)** |
@@ -27,7 +27,7 @@
 | [howto/](howto/) | 手順書。上から順にやれば終わる形で書いてある。**何度も使うものだけを置く。**1 回だけの回・1 回だけの設定は [plan/](plan/) へ、踏んだ事故と回避策は [knowledge/](knowledge/) へ |
 | [solution/](solution/) | 提出物と Colab の説明。コード本体は `../solution/` |
 | [strategy/](strategy/) | 何を狙うか、なぜそうするか。判断の材料 |
-| [reference/](reference/) | 調べて分かった事実（モデル・評価データ・出題元のデータ・設定の意味） |
+| [reference/](reference/) | 調べて分かった事実（モデル・評価データ・採点のタスクの母集団・設定の意味） |
 | [resources/](resources/) | **今使える** 計算資源・ディスク・メモリ・docker image・HF 上のモデルの一覧。状態が変わるたびに上書きする（履歴は残さない）。**手順や Tips は書かない**（[resources/README.md](resources/README.md) の線引き） |
 | [plan/](plan/) | **1 つずつの手の設計。** 何を測り、出た数字で何を決めるか |
 | [outputs/submission_logs/](../outputs/submission_logs/) | 本番採点の生ログ。**トラックごとに `<日付>_<版>.txt`**（本選は `b_PARC2026_final/outputs/submission_logs/`） |
@@ -36,8 +36,8 @@
 
 | ファイル | いつ |
 |---|---|
-| **[talk/open_items.md](talk/open_items.md)** | **作業を始めるとき、次の手に迷ったとき。本選 1 の板**（8/27 に作り直した。それ以前は [talk/open_items_archive_260821.md](talk/open_items_archive_260821.md)） |
-| [talk/archive_qualifier_board.md](talk/archive_qualifier_board.md) | **予選の板の退避先。**他の文書が「`open_items.md` の 29」のように**番号で指しているものはここにある** |
+| **[talk/open_items.md](talk/open_items.md)** | **作業を始めるとき、次の手に迷ったとき。本選 1 の `open_items.md`**（8/27 に作り直した。それ以前は [talk/open_items_archive_260821.md](talk/open_items_archive_260821.md)） |
+| [talk/archive_qualifier_board.md](talk/archive_qualifier_board.md) | **予選の `open_items.md` の退避先。**他の文書が「`open_items.md` の 29」のように**番号で指しているものはここにある** |
 | [talk/lessons_learned.md](talk/lessons_learned.md) | コンペが終わったあと。**次の 3 日の組み立て方**まで書いてある |
 | [howto/01_retrain.md](howto/01_retrain.md) | 追加学習を回すとき |
 | [howto/02_build_submission.md](howto/02_build_submission.md) | zip を作って出すとき |
@@ -58,7 +58,7 @@
 | **[plan/07_track2_preparation.md](plan/07_track2_preparation.md)** | **本選 Track2 に手をつけるとき。摂動 4 カテゴリの中身・関連研究・対策・推奨アクションが 1 枚にある。まず 2.0 節（方針改訂）と 3 節（推奨アクション）** |
 | **[plan/08_training_data_creation_cautions.md](plan/08_training_data_creation_cautions.md)** | **学習用デモを作る前。成功例だけでは復帰を学べない等、データ作成の落とし穴。07 の方針改訂の根拠** |
 | **[reference/19_weights_catalog.md](reference/19_weights_catalog.md)** | **学習を流したあと、点が返ってきたあと、`pi05/full_local_024000` のような名前を見たとき。流した学習・重み・版ごとの設定・本選のトラック別の点が 1 ファイルに並ぶ** |
-| [reference/04_track1_population.md](reference/04_track1_population.md) | 出題元のデータを確かめるとき |
+| [reference/04_track1_population.md](reference/04_track1_population.md) | 採点のタスクの母集団を確かめるとき |
 | **[reference/05_perturbation_categories.md](reference/05_perturbation_categories.md)** | **摂動 7 カテゴリの中身と、どれが出るか（運営回答の原文つき）** |
 | **[reference/06_training_data_composition.md](reference/06_training_data_composition.md)** | **学習データ 14,347 本の中身。摂動カテゴリで絞れるかの判定** |
 | [reference/07_chunk_params.md](reference/07_chunk_params.md) | 学習後に変えてよい設定はどれか（`n_action_steps` と `chunk_size`） |

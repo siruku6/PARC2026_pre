@@ -38,7 +38,7 @@
 
 **運営の式の第 1 項は `time` という名前だが、中身は歩数である**
 （運営 Q&A No.23。`docs/knowledge/06_step_count_drives_score.md`）。
-**`time` のままだと壁時計と読み違えるので、この道具では `n_steps` と呼ぶ。**
+**`time` のままだと かかった時間 と読み違えるので、この道具では `n_steps` と呼ぶ。**
 入れている値は `avg_steps_to_success` である。結果 JSON には実時間
 `avg_episode_time_sec` もあるが、**描画のやり方（egl / osmesa）とマシンで何倍も
 変わるので実行間で比べられない。**
@@ -80,7 +80,7 @@ REFERENCE = {
 }
 
 # **運営の式の第 1 項 `time` を、この道具では `n_steps` と呼ぶ。**
-# 運営の `time` は壁時計ではなく歩数だからである（運営 Q&A No.23）。結果 JSON には
+# 運営の `time` は かかった時間 ではなく歩数だからである（運営 Q&A No.23）。結果 JSON には
 # 実時間 `avg_episode_time_sec` もあるが、**描画のやり方（egl / osmesa）とマシンで
 # 何倍も変わるので実行間で比べられない。**歩数は打ち切りの 300 で頭が揃う。
 SOURCE = {
@@ -121,7 +121,7 @@ def formula_text(weights: dict[str, float]) -> str:
     Total Score    = (1/N) · Σ success_i · (1 - collision penalty_i) · smooth metrics_i
 
 **この道具が実際に計算している式**（第 1 項の呼び名だけ `time` → `n_steps` に変えてある。
-運営の `time` は壁時計ではなく歩数だからである——運営 Q&A No.23）
+運営の `time` は かかった時間 ではなく歩数だからである——運営 Q&A No.23）
 
     正規化      norm(x, ref) = ref / (ref + x)        ← ref のとき 0.5
     なめらかさ  smooth(task) = {terms}
@@ -141,7 +141,7 @@ def formula_text(weights: dict[str, float]) -> str:
 値は 2026-08-28 の `0828_002049_track2_val72base` の **Base 12 行（摂動なし）の実測値**
 である。**実行ごとに取り直すと実行間で点を比べられなくなるので、固定値にしてある。**
 
-**`n_steps` が運営の式の `time` にあたる。**運営の `time` は壁時計ではなく
+**`n_steps` が運営の式の `time` にあたる。**運営の `time` は かかった時間 ではなく
 「エピソード内のシミュレーションステップ数」である（運営 Q&A No.23）。結果 JSON には
 実時間 `avg_episode_time_sec` も入っているが、**描画のやり方（egl / osmesa）とマシンで
 何倍も変わるので実行間で比べられない。**歩数なら打ち切りの {MAX_STEPS:.0f} で頭が揃う。

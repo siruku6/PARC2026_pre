@@ -1,27 +1,27 @@
-# 【退避】まだ手つかずのもの — 板（本選 Track2 準備期・2026-08-21〜08-26）
+# 【退避】まだ手つかずのもの — `open_items.md`（本選 Track2 準備期・2026-08-21〜08-26）
 
-**これは 2026-08-27 に本選 1 用の板へ作り直したときの、それ以前の板そのものである。**
-**いま動いている板は [open_items.md](open_items.md) である。**この文書は
+**これは 2026-08-27 に本選 1 用の `open_items.md` へ作り直したときの、それ以前の `open_items.md` そのものである。**
+**いま動いている `open_items.md` は [open_items.md](open_items.md) である。**この文書は
 「あのとき何を開いたままにしていたか」を引くためだけに残してある。
 
 ---
 
 ## （以下、2026-08-21 に作った当時の内容）
 
-# まだ手つかずのもの — 板（本選 Track2）
+# まだ手つかずのもの — `open_items.md`（本選 Track2）
 
-**いま何をするかだけを持つ板である。** 2026-08-21 に作り直した。
+**いま何をするかだけを持つ `open_items.md` である。** 2026-08-21 に作り直した。
 **予選のぶんは [archive_qualifier_board.md](archive_qualifier_board.md) へ退避した**（32,078 文字）。
 他の文書が「`open_items.md` の 29」のように**番号で指しているものは、すべてそちらにある。**
 
-> **この板を小さく保つ。** 測定値・理由・閉じた項目の詳細は
+> **この `open_items.md` を小さく保つ。** 測定値・理由・閉じた項目の詳細は
 > [open_items_notes.md](open_items_notes.md)（予選のときの根拠置き場）と
 > [../plan/07_track2_preparation.md](../plan/07_track2_preparation.md)（Track2 の基準にする文書）に置く。
-> **複数行の手順は [../howto/](../howto/) に節を作り、板からは節の番号で指す。**
-> 板に書いてよいのは 1 行で終わるコマンドだけである。
+> **複数行の手順は [../howto/](../howto/) に節を作り、`open_items.md` からは節の番号で指す。**
+> `open_items.md` に書いてよいのは 1 行で終わるコマンドだけである。
 
 **いまの立ち位置**: 予選は 42 位・0.48464 で終わった。**本選 Track2 は 8/24 開始**で、
-出題は「ロボットや物体の位置や視点を変更。ノイズや摂動を付与」。
+採点に出るタスクは「ロボットや物体の位置や視点を変更。ノイズや摂動を付与」。
 **8/21 の状態を書いた `260821_today.md` は 8/31 に消した**（本選が始まって役目が終わったため）。
 
 ---
@@ -59,7 +59,7 @@ python3 solution/tools/eval/summarize_gpu_eval.py --output-dir "$D" --csv "$D/VA
 
 **Track2 の 7 項目の進み具合は
 [../plan/07_track2_preparation.md](../plan/07_track2_preparation.md) の 3.0 節が基準にする文書である。**
-ここには板として動かすものだけ置く。
+ここには `open_items.md` として動かすものだけ置く。
 
 | # | やること | 状態 |
 |---|---|---|
@@ -78,11 +78,11 @@ python3 solution/tools/eval/summarize_gpu_eval.py --output-dir "$D" --csv "$D/VA
 
 | # | 聞くこと |
 |---|---|
-| **K1** | **出題は本当に Camera Viewpoints・Robot Initial States・Objects Layout・Sensor Noise の 4 カテゴリか。**難易度と元タスクの範囲は？ |
+| **K1** | **採点に出るタスクは本当に Camera Viewpoints・Robot Initial States・Objects Layout・Sensor Noise の 4 カテゴリか。**難易度と元タスクの範囲は？ |
 | ~~**K2**~~ | ~~計算資源~~ **解決（2026-08-22）。RTX PRO 6000 Blackwell は提供される。** 安くなるのは Tier 1（作り直し＝シミュレーション実行）と学習の回転。**Tier 2 のボトルネックは scripted policy を書く人手なので変わらない** |
 | ~~**K3**~~ | ~~打ち切りは予選と同じ 300 ステップか~~ **運営に聞かず、最初の提出の採点ログで確かめる**（2026-08-22 の判断）。`grep -c "POST /act"` を `/reset` ごとに割れば 1 本ごとの歩数が出る。**ちょうど上限の値が現れればそれが上限である**（予選で 300 を特定したのと同じ読み方、knowledge/06） |
 
-### 予選の板から引き継いだもの — **どれも要確認。中身は archive にある**
+### 予選の `open_items.md` から引き継いだもの — **どれも要確認。中身は archive にある**
 
 **予選が終わったので前提が変わっている。拾い直すときは archive の該当番号を読むこと。**
 

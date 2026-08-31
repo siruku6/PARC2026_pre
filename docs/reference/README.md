@@ -13,7 +13,7 @@
 | 採点環境の構成と制限 | [02_evaluation_data.md](02_evaluation_data.md) |
 | 採点式 | [17_scoring_formula.md](17_scoring_formula.md) |
 | **本番は 8 エピソードで決まる** | [22_production_scale.md](22_production_scale.md) |
-| 出題元のデータ（Track1 の母集団） | [04_track1_population.md](04_track1_population.md) |
+| 採点のタスクの母集団（Track1 の母集団） | [04_track1_population.md](04_track1_population.md) |
 | 学習データ 14,347 本の中身 | [06_training_data_composition.md](06_training_data_composition.md) |
 | 学習の条件と、次にどこを直すか | [11_training_schedule.md](11_training_schedule.md) |
 | LoRA をどこに当てるか | [12_lora_targets.md](12_lora_targets.md) |
