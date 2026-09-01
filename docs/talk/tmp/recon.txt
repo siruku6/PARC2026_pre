@@ -1,0 +1,58 @@
+### GPU
+Mon Aug 31 06:08:22 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 595.91.07              Driver Version: 595.91.07      CUDA Version: 13.2     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA RTX PRO 6000 Blac...    On  |   00000000:2F:00.0 Off |                    0 |
+| N/A   32C    P8             33W /  600W |       0MiB /  97887MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+### GPU(要約)
+name, memory.total [MiB], memory.used [MiB], compute_cap, driver_version
+NVIDIA RTX PRO 6000 Blackwell Server Edition, 97887 MiB, 0 MiB, 12.0, 595.91.07
+### 他に誰か使っているか
+pid, used_gpu_memory [MiB]
+### CPU/RAM
+16
+               total        used        free      shared  buff/cache   available
+Mem:             124           6           9           0         108         117
+### disk
+Filesystem                      Size  Used Avail Use% Mounted on
+/dev/loop4                       40G   20M   40G   1% /home/sirukufarios
+/dev/loop5                       98G   24K   98G   1% /opt/dlami/nvme/data/sirukufarios
+/dev/mapper/vg.01-lv_ephemeral  1.7T  1.2G  1.7T   1% /opt/dlami/nvme
+/dev/root                       194G  130G   65G  67% /
+### python
+Python 3.10.12
+/opt/jupyter/bin/python
+/opt/jupyter/bin/pip
+### pip の入り先
+/home/sirukufarios/.local
+user site 有効: False
+### 主要ライブラリ
+numpy                     2.2.6
+torch                     2.11.0+cu128
+torchaudio                2.11.0+cu128
+torchvision               0.26.0+cu128
+### ffmpeg
+ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021 the FFmpeg developers
+### root になれるか
+uid=0(root) gid=0(root) groups=0(root)
+### 永続化の道具
+/usr/local/bin/parc-home-sync
+/usr/bin/tmux
+/usr/bin/nohup
+/opt/jupyter/bin/hf
+/opt/jupyter/bin/huggingface-cli
