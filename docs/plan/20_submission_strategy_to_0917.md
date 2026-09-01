@@ -403,5 +403,5 @@ Track1 で 1 本増やしても **+0.020** である（Track1 の 1 本は 0.061
 | **最終提出枠の規定 7 つ**（6 節） | **`docs/materials/PARC2026開発コンペティション_本選_v1.1.pdf`** の「本選 1/2/3 最終評価用提出フォームについて」1/2・2/2 |
 | **6.1.0 の採点と、エピソードごとの歩数**（2.1・2.2 節） | `b_PARC2026_final/outputs/submission_logs/track{1,2}/260830_pi0.5_6.1.0.txt`。**読み出しは `python3 solution/tools/analysis/parse_grading_log.py <基準のログ> <比べるログ>`** |
 | **Track3 の首位 0.09603** | 8/31 にユーザがリーダーボードを見た |
-| **5.1.0（`infer` 20）の採点と、エピソードごとの歩数** | `b_PARC2026_final/outputs/submission_logs/track1/260831_pi0.5_5.1.0.txt` と `track2/260831_pi0.5_5.1.0_.txt`。読み出しは上と同じ `parse_grading_log.py` |
+| **5.1.0（`infer` 20）の採点と、エピソードごとの歩数** | `b_PARC2026_final/outputs/submission_logs/track1/260831_pi0.5_5.1.0.txt` と `track2/260831_pi0.5_5.1.0.txt`。読み出しは上と同じ `parse_grading_log.py` |
 | **`ladder2500` の 4 点と、その設定** | HF `siruku6/pi05_trial1500` の `ladder2500/{001000,001500,002000,002500}`。**設定の突き合わせは各点の `train_config.json`**（[../reference/19_weights_catalog.md](../reference/19_weights_catalog.md)「8/31 の `pi05_ladder2500`」） |

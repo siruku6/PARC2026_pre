@@ -136,6 +136,10 @@ python3 -c "import json;r=[json.loads(l) for l in open('work/final_eval/0828_224
 
 **歩数は 13 本すべて数え直し、既に読み取られていた表と一致した。**
 
+> **点の正本は [19_weights_catalog.md](19_weights_catalog.md)（実験台帳）である。**
+> **下の表は 13 行が並んでいないと 5 節の「点は成功本数でほぼ説明が付く」を示せないので、
+> 分析の作業データとしてここに残してある。**食い違ったときは台帳を採る。
+
 ```
 awk '/POST \/reset/{if(n!="")printf "%s ",n; n=0} /POST \/act/{n++} END{print n}' <ログ>
 ```

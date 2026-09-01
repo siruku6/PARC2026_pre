@@ -1225,7 +1225,7 @@ Track3 は 8 本すべてが 300 歩だった（4.2.0 も 4.6.0 も）。
 ```bash
 python3 solution/tools/analysis/parse_grading_log.py \
     b_PARC2026_final/outputs/submission_logs/track2/260829_pi0.5_5.0.1.txt \
-    b_PARC2026_final/outputs/submission_logs/track2/260831_pi0.5_5.1.0_.txt
+    b_PARC2026_final/outputs/submission_logs/track2/260831_pi0.5_5.1.0.txt
 ```
 
 | ep | Track1 `infer 10` | Track1 `infer 20` | Track2 `infer 10` | Track2 `infer 20` |
