@@ -19,7 +19,7 @@ Pod の作り方・batch の探り方・チェックポイントの間引き・�
 | 画像拡張 | 無し | **`--camera-viewpoint-augment`（8 種のうち最大 4 種を毎回）** |
 | batch | 64 | **64（同じ。128 は 75.77GB で落ちた）** |
 | 学習率 | 5e-6 → 2.5e-6 | **5e-6 → 2.5e-6（同じ）** |
-| 出た点 | 予選 **0.485**・本選 Track1 0.370 | ？ |
+| 出た点 | 予選の最終提出と本選 8/24 の 3 トラック（[../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) の「8/24 の 4.2.0」） | ？ |
 
 **なぜ画像拡張を RunPod でやるのか。** 手元の H100-20C（20 GB）では画像側を学習できない。
 `train_expert_only=true` は PaliGemma 全体（画像側を含む）を凍結する実装であり
