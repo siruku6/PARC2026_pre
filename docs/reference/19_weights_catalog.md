@@ -1172,8 +1172,8 @@ gain=(1.0,1.0)  seed=0  rtc=off  normalize=on  quant_serve=off` で一致して�
 
 ```bash
 python3 solution/tools/analysis/parse_grading_log.py \
-    b_PARC2026_final/outputs/submission_logs/track1/260829_pi0.5_5.0.1.txt \
-    b_PARC2026_final/outputs/submission_logs/track1/260830_pi0.5_6.1.0.txt
+    ../b_PARC2026_final/outputs/submission_logs/track1/260829_pi0.5_5.0.1.txt \
+    ../b_PARC2026_final/outputs/submission_logs/track1/260830_pi0.5_6.1.0.txt
 ```
 
 | ep | Track1 `001500` | Track1 `001000` | Track2 `001500` | Track2 `001000` |
@@ -1224,8 +1224,8 @@ Track3 は 8 本すべてが 300 歩だった（4.2.0 も 4.6.0 も）。
 
 ```bash
 python3 solution/tools/analysis/parse_grading_log.py \
-    b_PARC2026_final/outputs/submission_logs/track2/260829_pi0.5_5.0.1.txt \
-    b_PARC2026_final/outputs/submission_logs/track2/260831_pi0.5_5.1.0.txt
+    ../b_PARC2026_final/outputs/submission_logs/track2/260829_pi0.5_5.0.1.txt \
+    ../b_PARC2026_final/outputs/submission_logs/track2/260831_pi0.5_5.1.0.txt
 ```
 
 | ep | Track1 `infer 10` | Track1 `infer 20` | Track2 `infer 10` | Track2 `infer 20` |
