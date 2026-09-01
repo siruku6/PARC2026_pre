@@ -466,3 +466,5 @@ python3 solution/tools/analysis/parse_grading_log.py \
 - **`count_score_mentions.py` の `SCORES` に 9/1 の 8.0.0・5.2.0 が入っていない。**採点が返ったら足す必要がある（`solution/tools/analysis/count_score_mentions.py` の辞書に 1 行）。
 - **`reference/26` の 4 節は「本選 13 本」で、9/1 の 3 本を含んでいない。**採点が返ったら 16 本になる。
 - **1 版 1 コミットは 4.7.0 と 4.8.0 だけ 1 つにまとめた**（同じ表・同じ行を共有していて、分けると片方の差分が読めなくなるため）。
+- **台帳の `parse_grading_log.py` の呼び方を直した**（`2512e5d`）。6.1.0 と 5.1.0 の節が `../` の無いパスと、実在しないログ名（`260831_pi0.5_5.1.0_.txt`）を書いていた。**7 つの節すべてでパスの実在を確かめた。**
+- **`docs/talk/tmp/` を追跡から外した**（`8640f0f`）。`git add docs` で誤って入ったので `.gitignore` に足した。
