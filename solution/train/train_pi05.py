@@ -146,7 +146,7 @@ from train import (  # noqa: E402
 
 # 量子化候補（C1〜C3）の窓口。**このファイルは import して呼ぶだけで、
 # 何をどう低精度にするかは一切持たない**（experiments/quantization/__init__.py）。
-from experiments import geometry, quantization  # noqa: E402
+from experiments import camera_dropout, geometry, quantization  # noqa: E402
 
 _BASE_MODEL_REPO = "lerobot/pi05_libero_base"
 _BASE_MODEL_REVISION = "a217bfd3b14673cf2ce597e69997ab21866438dd"
@@ -236,6 +236,7 @@ def _parse_args() -> argparse.Namespace:
                         choices=("bfloat16", "float32"))
     quantization.add_arguments(parser)
     geometry.add_arguments(parser)
+    camera_dropout.add_arguments(parser)
     parser.add_argument("--camera-viewpoint-augment", action="store_true",
                         help="Tier 1（Camera Viewpoints 対策）の安価な近似。LeRobot の "
                              "image_transforms を有効化し、既定 6 種に加えて crop+zoom "
@@ -322,10 +323,17 @@ def _command_head(args: argparse.Namespace) -> list[str]:
     量子化と幾何の接ぎ木は、どちらも「候補を import してから lerobot-train の
     main() を呼ぶ」ラッパーを使う。同時には選べないので、両方が選ばれていたら
     `geometry.validate` が先に止める（この関数に届く時点で片方以下である）。
+
+    **場面カメラを潰す工夫は、この 2 つとは組み合わせられる。**自分のラッパーを
+    返すのは、他のどちらも選ばれていないときだけである——選ばれているときは
+    **そちらのラッパーが同じパッチを import する**（各ラッパーの docstring）。
+    どのラッパーでも読むのは同じ環境変数なので、伝え方は 1 つで済む。
     """
     if geometry.selected(args):
         return geometry.command_head(args)
-    return quantization.command_head(args)
+    if quantization.selected(args):
+        return quantization.command_head(args)
+    return camera_dropout.command_head(args)
 
 
 def _build_command(
@@ -370,6 +378,7 @@ def _build_command(
         command.append(f"--dataset.episodes=[{','.join(map(str, episode_indices))}]")
     command += quantization.extra_arguments(args)
     command += geometry.extra_arguments(args)
+    command += camera_dropout.extra_arguments(args)
     if args.camera_viewpoint_augment:
         command += [
             "--dataset.image_transforms.enable=true",
@@ -478,6 +487,8 @@ def main() -> None:
     quantization.validate(args)
     geometry.set_environment(args)
     geometry.validate(args)
+    camera_dropout.set_environment(args)
+    camera_dropout.validate(args)
 
     output_dir: Path = (args.output_root / args.run_name).resolve()
 
@@ -558,7 +569,8 @@ def main() -> None:
             f"freeze_vision_encoder={args.freeze_vision_encoder}、"
             f"train_expert_only={args.train_expert_only}、"
             f"dtype={args.dtype}、grad_ckpt={args.gradient_checkpointing}、"
-            f"{quantization.describe(args)}、{geometry.describe(args)}）"
+            f"{quantization.describe(args)}、{geometry.describe(args)}、"
+            f"{camera_dropout.describe(args)}）"
         )
         if args.smoke_test:
             print("[train_pi05] **smoke test** — 20 ステップで OOM しないか・"

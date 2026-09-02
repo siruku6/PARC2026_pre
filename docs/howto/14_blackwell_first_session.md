@@ -752,6 +752,87 @@ for f in HfApi().repo_info('siruku6/pi05_ctrl1500', repo_type='model').siblings:
 
 ---
 
+## 場面カメラを確率で潰して 1 本回す（**9/2 の夜に足した**）
+
+**これが `open_items.md` の `F50`①・賭け A である。**狙いは Track2 の
+`Camera Viewpoints`（1,599 件・15.9%）——**机を写す固定カメラの視点をずらされる摂動**で、
+手首のカメラは腕について動くのでずれない。**学習中に場面カメラを確率で真っ黒にすると、
+手首のカメラだけで進める癖が付く。**
+
+**設定では書けないので、コードを足した**（`solution/train/experiments/camera_dropout/`）。
+同梱の LeRobot は画像の変換を**カメラの列ごとに呼ぶが、どの列かを変換関数に渡さない**
+（`lerobot/datasets/dataset_reader.py` の `get_item`）。
+
+| | |
+|---|---|
+| 新しい引数 | **`--scene-camera-dropout P`**（既定 0.0＝何もしない）・`--scene-camera-key KEY`（既定 `observation.images.front`） |
+| 潰し方 | **その列を 0 で埋める。**π0.5 は画像を `img*2-1` で [-1,1] に写し、足りないカメラを `-1` で埋めるので、**0 を渡すと正規化後にその埋め草と一致する**（`modeling_pi05.py` 1207〜1211 行） |
+| **マスクは 1 のまま** | **π0.5 の「カメラが無い」（mask 0）は真似しない。****採点では場面カメラは必ず在って、視点だけがずれる**——つまり mask は 1 である。学習で mask 0 を使うと「0 なら無視」を覚えるが、**採点でそのマスクが立たないので発火しない** |
+| 手首のカメラ | **触らない**（試験で確かめている） |
+| lerobot-train への引数 | **1 つも増えない。**潰すのは DataLoader の中である |
+
+### 打つ 1 行（8.0.0 との 1 変数）
+
+```bash
+. ~/env_pi05.sh
+cd "$CODE_DIR"
+
+NW=$(python -c "import os;print(min(os.cpu_count()//2, 16))")
+nohup python train_pi05.py --run-name pi05_camdrop2500 \
+    --init-from /opt/dlami/nvme/weights/trial1500/001500 \
+    --steps 2500 --batch-size 64 --num-workers "$NW" \
+    --learning-rate 5e-6 --save-freq 500 \
+    --freeze-vision-encoder false --train-expert-only false \
+    --camera-viewpoint-augment --scene-camera-dropout 0.5 \
+    > $OUTPUT_ROOT/pi05_camdrop2500.nohup 2>&1 &
+echo "PID $!"
+```
+
+**最後の `--scene-camera-dropout 0.5` 以外は、8.0.0 を作った学習と 1 文字も違わない**
+（`work/train/pi05_ladder2500.log` の 8 行目の `lerobot-train` の行と突き合わせた。
+batch 64・学習率 5e-6・種 42・`save_freq` 500・`gradient_checkpointing=true`・bfloat16・
+`empty_cameras=1`・`n_action_steps=10`・データ `lerobot/libero_plus` rev `f3f49f42`・
+カメラ拡張は 8 種から最大 4 つ）。**だから 1 変数である。**
+
+> **`--camera-viewpoint-augment` は付ける。**8.0.0 が付けているので、
+> 外すと変数が 2 つになる。**この 2 つは別のものである**——拡張は
+> **両方のカメラ**に色や歪みをかけ、潰すほうは**場面カメラだけ**を消す。
+
+**確率 0.5 を選んだ理由と、失うもの。**modality dropout の慣例値で、
+**手首だけで進む癖を付けるには半分は要る**という見立てである。
+**失うのは、場面カメラを使った学習量が半分になること**——Track1 のように視点がずれない
+トラックでは下がりうる。**0.3 なら安全側だが、効きが 1 本ぶんの幅（Track1 0.061・
+Track2 0.039）に埋もれる恐れがある。**引数なので next の 1 本で振り直せる。
+
+### 始めた直後に確かめる 2 行（**黙って効かないのを防ぐ**）
+
+```bash
+grep -m1 num_learnable_params $OUTPUT_ROOT/pi05_camdrop2500.log   # 4143404816
+grep -m2 "\[camera_dropout\]" $OUTPUT_ROOT/pi05_camdrop2500.log
+```
+
+**2 行目が 1 つも出なければ、潰す処理は動いていない**——その場で止めて直すこと。
+出るのは読み込みの worker ごとに 1 行で、こういう形である::
+
+    [camera_dropout] worker0: observation.images.front を確率 0.5 で潰す（画像の列は [...]）
+
+**列の名前が合わなければ、学習は始まらずにその場で止まる**（在る列の名前と直し方を出す）。
+**20,000 コマごとに実測の割合も出る**ので、0.5 に寄っていることを後から確かめられる::
+
+    [camera_dropout] 20000 コマ中 10043 コマを潰した（実測 0.502・指定 0.5）
+
+### 手元で試験を走らせる（1 行・6 秒）
+
+```bash
+bash solution/tools/train/run_camera_dropout_test.sh
+```
+
+**常駐コンテナ `quant_train` の本物の torch 2.11 と lerobot 0.6.0 で 11 件走る**
+（`tests/test_camera_dropout.py`）。**この機械の venv には torch も lerobot も
+入っていないので、`pytest tests/` を直接打つと skip になる。**
+
+---
+
 ## 2 回目以降のセッション —— 60 時間は「12 時間 × 5 回」である
 
 **これが分かると何が決まるか: 1 本の長い学習は取れない。梯子を何段に割るか。**

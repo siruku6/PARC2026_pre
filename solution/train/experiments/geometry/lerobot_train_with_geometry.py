@@ -17,6 +17,13 @@ if os.environ.get("GEO_FUSE_MODE") == "vggt":
     # 副作用: PI05Pytorch.embed_prefix を、幾何を混ぜる版に差し替える
     import experiments.geometry.vggt_fuser  # noqa: F401
 
+# **ラッパーは 1 つしか選べないので、場面カメラを潰すパッチはここでも当てる。**
+# CAMERA_DROPOUT_PROB が無いか 0 なら apply() は何もしない
+# （experiments/camera_dropout/camera_dropout_patch.py）。
+from experiments.camera_dropout import camera_dropout_patch
+
+camera_dropout_patch.apply()
+
 from lerobot.scripts.lerobot_train import main  # noqa: E402
 
 if __name__ == "__main__":
