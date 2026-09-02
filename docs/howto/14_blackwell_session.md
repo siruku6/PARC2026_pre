@@ -27,7 +27,7 @@
 | [B 学習を始める](#b-学習を始める90-分) | nohup で始め、保存のたびに HF へ上げる |
 | [C 放置する](#c-放置する) | 監視セルが待機による自動停止を防ぎ、終わったら止める |
 | [翌朝](#翌朝-15-分) | 上がった重みを数え、提出の順番を決める |
-| **[場面カメラを潰して 1 本](#場面カメラを確率で潰して-1-本回す9-2-の夜に足した)** | **いま回すのはこれである**（`open_items.md` の `F50`①） |
+| **[場面カメラを潰して 1 本](#場面カメラを確率で潰して-1-本回す92-の夜に足した)** | **いま回すのはこれである**（`open_items.md` の `F50`①） |
 | [2 回目以降のセッション](#2-回目以降のセッション--60-時間は12-時間--5-回である) | **60 時間は連続していない。**12 時間 × 最大 5 回で、境目ごとに払うものがある |
 | [想定と違ったとき](#想定と違ったときの分岐一覧) | batch・HF の空き・待機による停止の 3 つ |
 | [落とし穴](#落とし穴踏むと-1-日が消えるもの) | 過去に実際に踏んだもの |
@@ -94,7 +94,7 @@ ls /opt/dlami/nvme/weights/trial1500/001500/vlm | wc -l   # 4（無いと評価�
 |---|---|---|
 | **`trial1500/001500`（既定）** | 上のとおり | **対照が 8.0.0 になる**（同じ出発点・同じ 2,500 歩で測れている） |
 | `ladder2500/002500`（＝累計 4,000 歩・8.0.0 の重み） | `--include 'ladder2500/002500/*'` に変える | ここからさらに延ばす場合。**ただし 9/2 に「歩数では決まらない」が確定したので、いまは選ばない** |
-| `rp3000`（＝`pi05_full_runpod`・9.37 GB） | `hf download siruku6/pi05_full_runpod --local-dir /opt/dlami/nvme/weights/rp3000` | カメラ拡張なしの 1,500 歩から始める場合 |
+| `rp3000`（＝`pi05_full_runpod`・9.37 GB） | `hf download siruku6/pi05_full_runpod --local-dir /opt/dlami/nvme/weights/rp3000` | **いまは選ばない。**カメラ拡張を付けずに始める場合の出発点で、**その対照は 9/2 に取り下げた**（`open_items.md` の判断 5） |
 
 > **`Error: Model '…' not found.` は名前の間違いではない。認証していないだけである。**
 > `pi05_full_runpod`・`pi05_trial1500`・`pi05_code` は**3 つとも非公開**で、
@@ -233,22 +233,27 @@ CALC
 
 ## B 学習を始める（90 分）
 
-**何を回すか。`pi05_trial1500` と 1 つだけ違う走りである。**
+**何を回すか。8.0.0 を作った学習と 1 つだけ違う走りである。**
 
-| | `pi05_trial1500`（8/28・RunPod） | **今夜（Blackwell）** |
+| | 8.0.0（`ladder2500/002500`・8/31） | **今回** |
 |---|---|---|
-| 出発点 | `rp3000` | 同じ |
-| ステップ数 | 1,500 | 同じ |
+| 出発点 | `trial1500/001500` | 同じ |
+| ステップ数 | 2,500 | 同じ |
 | batch | 64 | 同じ |
 | 学習率 | 5e-6 | 同じ |
 | 種 | 42 | 同じ |
 | 画像側 | 開けた | 同じ |
-| **カメラ拡張** | **あり** | **なし** |
+| **カメラ拡張**（`--camera-viewpoint-augment`） | **あり** | **あり（揃える）** |
+| **場面カメラを確率で潰す** | **なし** | **`--scene-camera-dropout 0.5`** |
 
-**変えるのはここだけである。**8/29 に採点側で両トラックとも上がった
-（[../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) の「8/29 の 5.0.1」）のは
-「画像側を開けたフルパラメータ学習」と「カメラ拡張」の
-**どちらなのかが切り分けられていない。**この 1 本でそれが決まる。
+**変えるのは最後の 1 行だけである。**理由と設計は
+[場面カメラを確率で潰して 1 本回す](#場面カメラを確率で潰して-1-本回す92-の夜に足した)節にある。
+
+> **【9/3 に直した】この節には 8/31 の別の計画が残っていた**——**`--camera-viewpoint-augment`
+> を外して「拡張のありなし」を測る対照の 1 本**である。**その計画は 9/2 に取り下げた**
+> （`open_items.md` の判断 5。**拡張は Track2 の 4 分類のうち `Camera Viewpoints` だけに
+> 当たるので、「届く」と「質」のどちらに効いたのかを分けられない**）。
+> **だから拡張は付けたまま揃え、変数は「場面カメラを潰すか否か」の 1 つだけにする。**
 
 **loss では比べられない。**カメラ拡張が入ると画像がゆがむので loss の水準そのものが
 上がる（`19_weights_catalog.md`）。**比べられるのは採点側の点だけである。**
@@ -277,7 +282,8 @@ PY
 ```
 
 **8/29 にこのマシンから数えた時点で合計 67.03 GB、空きは約 33 GB だった。**
-**要るのは `pretrained_model` 3 つ ＝ 26.4 GB である。**
+**2,500 歩・`--save-freq 500` なら `pretrained_model` は 5 個（44 GB）できるが、空きに入らない。**
+**上げるのは 1,000 歩ごと・最新のいくつかだけである**（A7 の最後）。
 
 | 空き | どうするか |
 |---|---|
@@ -292,18 +298,26 @@ cd "$CODE_DIR"          # NPP は A3 で ldconfig に登録済み。LD_LIBRARY_P
 
 NW=$(python -c "import os;print(min(os.cpu_count()//2, 16))")
 nohup python train_pi05.py --run-name pi05_camdrop2500 \
-    --init-from /opt/dlami/nvme/weights/rp3000 \
-    --steps 1500 --batch-size 64 --num-workers "$NW" \
+    --init-from /opt/dlami/nvme/weights/trial1500/001500 \
+    --steps 2500 --batch-size 64 --num-workers "$NW" \
     --learning-rate 5e-6 --save-freq 500 \
     --freeze-vision-encoder false --train-expert-only false \
+    --camera-viewpoint-augment --scene-camera-dropout 0.5 \
     > $OUTPUT_ROOT/pi05_camdrop2500.nohup 2>&1 &
 echo "PID $!"
 ```
 
-**`--camera-viewpoint-augment` を付けないこと。**これが今回の変数である。
+**`--camera-viewpoint-augment` は付けること。**8.0.0 が付けているので、
+**外すと変数が 2 つになる。**（**9/3 まで、ここには「付けないこと」と書いてあった。
+それは 9/2 に取り下げた 8/31 の計画の残りである**——上の B の導入を見ること。）
+
+**`--scene-camera-dropout 0.5` が今回の変数である。**これを付けるには
+**`~/pi05_code` を 1 度取り直しておく必要がある**（上の「学習コードを降ろす」）。
+**取り直していないと、argparse が「知らない引数」として弾いてその場で止まる。**
 
 **`--learning-rate 5e-6` を省かないこと。**省くと頂点 2.5e-5 に戻り、
-`rp3000` が 2.5e-6 で終わっているぶんの **10 倍**から再スタートする。
+**出発点の学習が 5e-6 の頂点から下り切ったところで終わっているのに、その 5 倍から
+再スタートする。**
 **`--init-from` は `pretrained_model` しか読まないので、学習率の刻みは引き継がれない**
 （`load_training_state` が読む `training_state/` は `--resume` のときだけ使われる。
 `lerobot/scripts/lerobot_train.py` の 385〜389 行と
@@ -316,17 +330,19 @@ echo "PID $!"
 
 ```bash
 grep -m1 num_learnable_params /opt/dlami/nvme/out/pi05_camdrop2500.log
+grep -m2 "\[camera_dropout\]" /opt/dlami/nvme/out/pi05_camdrop2500.log
 tail -5 /opt/dlami/nvme/out/pi05_camdrop2500.log
 # 出発点の設定に torch.compile が入っていないこと（B2 を流す前に見てもよい）
 python3 -c "
-import json; print('compile_model =',
-    json.load(open('/opt/dlami/nvme/weights/rp3000/config.json'))['compile_model'])"
+import json; print('compile_model =', json.load(open(
+    '/opt/dlami/nvme/weights/trial1500/001500/config.json'))['compile_model'])"
 ```
 
 | 見るもの | 期待値 | 違ったら |
 |---|---|---|
 | `num_learnable_params` | **4143404816** | **693422112 ならその場で止める。**行動側しか学習していない |
-| `compile_model` | **False**（8/29 にこのマシンで `rp3000/config.json` を読んだ。`train_pi05.py` はこの値を上書きしない） | **True なら止める。**チェックポイントに焼き付き、評価サーバの起動に 1,177.9 秒かかって落ちる |
+| **`[camera_dropout]` の行** | **読み込みの worker ごとに 1 行出る** | **1 つも出なければ潰す処理が動いていない。**その場で止める（読み方は下の「始めた直後に確かめる 2 行」） |
+| `compile_model` | **False**（**9/3 に HF の `pi05_trial1500` の `001500/config.json` を降ろして読んだ。**`train_pi05.py` はこの値を上書きしない。`rp3000` も 8/29 に False を確認済み） | **True なら止める。**チェックポイントに焼き付き、評価サーバの起動に 1,177.9 秒かかって落ちる |
 | `tail` の最後の行 | `step:20 smpl:1K ... loss:... updt_s:... mem_gb:...` | 例外が出ていれば A3 の環境に戻る |
 
 ### B4 チェックポイントを HF へ上げるループを始める（10 分）
@@ -370,9 +386,93 @@ echo "PID $!"
 
 **学習が終わってからもう一巡してから抜けるので、最後の 001500 も上がる。**
 
+**`train_config.json` はこのループで一緒に上がる。**上げているのが
+`pretrained_model` ディレクトリまるごとだからである。**中身の在り処はこうなる。**
+
+| | 場所 |
+|---|---|
+| 機械の上 | `$OUTPUT_ROOT/pi05_camdrop2500/checkpoints/<歩数>/pretrained_model/train_config.json` |
+| **HF** | **`<歩数>/train_config.json`**（`pretrained_model/` の階層は落ちる） |
+
+**`pretrained_model/` の外には書かれない**（LeRobot v0.6.0 の
+`configs/train.py` 280 行が `save_directory`＝`pretrained_model` に書く。
+階層は `common/train_utils.py` 107〜121 行の図のとおり）。
+**上の 2 行は 8/31 の `ladder2500` の実物で確かめた**——
+HF の `pi05_trial1500` に `ladder2500/002500/train_config.json` が在る。
+
+> **1 つだけ注意。**階層が落ちるので、**HF から LeRobot の `--resume` で直に続けることはできない**
+> （`configs/train.py` 329 行は Hub 上の `<歩数>/pretrained_model/train_config.json` を探す）。
+> **`--init-from` は落ちた形のままで読めるので、いつもの続け方には影響しない。**
+> **そして `train_config.json` は設定しか持たない**——**loss の推移は B4b のログにしか無い。**
+
+### B4b 学習ログを `$HOME` と HF へ写すループを始める（3 分）
+
+**これが分かると何が決まるか: loss の推移が後から読めるか。**
+**`$OUTPUT_ROOT`（`/opt/dlami/nvme/out`）はセッション終了で消える。**
+**そしてログは、やり直しでは作れない唯一のものである**——
+チェックポイントの `train_config.json` は設定を持つが、**loss の推移は持たない。**
+**9/1 に `ladder2500` の「loss は 2,000 歩かけて −2.2%」を判定できたのは、
+ログを機械が消える前に降ろしてあったからである**（`open_items.md` の `F61`）。
+
+**置き先は 2 か所にする。**
+
+| 置き先 | 残り方 | 落ちる筋 |
+|---|---|---|
+| **`$HOME/train_logs/`** | **セッションをまたいで残る**（自動保存の対象） | **`~/data`・`~/.cache`・`~/dataset` に置くと消える**——あの 3 つは一時領域への symlink である |
+| **HF の `pi05_camdrop2500`** | **どの機械からでも降ろせる** | 認証が切れていると黙って失敗する（だから `$HOME` 側を先に写す） |
+
+```bash
+cat > ~/sync_log.sh <<'EOF'
+#!/usr/bin/env bash
+# 学習ログを $HOME と HF へ写す。1 分ごとに $HOME、10 分ごとに HF。
+set -u
+RUN=pi05_camdrop2500
+SRC=/opt/dlami/nvme/out
+DST=$HOME/train_logs          # symlink でない $HOME の実体に置く（~/data は消える）
+REPO=siruku6/pi05_camdrop2500
+mkdir -p "$DST"
+copy() {
+  for f in "$RUN.log" "$RUN.nohup"; do
+    [ -f "$SRC/$f" ] && cp "$SRC/$f" "$DST/$f"
+  done
+}
+push() {
+  if hf upload "$REPO" "$DST/$RUN.log" "logs/$RUN.log" --repo-type model >/dev/null 2>&1; then
+    echo "$(date -Iseconds) HF へ上げた"
+  else
+    echo "$(date -Iseconds) HF は失敗（~/train_logs への写しは済んでいる）"
+  fi
+}
+i=0
+while pgrep -f "train_pi05.py --run-name $RUN" >/dev/null; do
+  copy
+  i=$((i + 1))
+  [ $((i % 10)) -eq 0 ] && push
+  sleep 60
+done
+copy; push                      # 学習が終わったあと、最後に 1 回
+echo "$(date -Iseconds) ログの写しを終える"
+EOF
+chmod +x ~/sync_log.sh
+export PATH="$HOME/.local/bin:$PATH"
+nohup ~/sync_log.sh > ~/sync_log.nohup 2>&1 &
+echo "PID $!"
+```
+
+**1 分後に 2 行で確かめる。**
+
+```bash
+sleep 65; ls -la ~/train_logs/
+tail -3 ~/sync_log.nohup
+```
+
+**`~/train_logs/` に 2 つ並べば、最悪の全損は防げている。**
+**10 分たっても `HF へ上げた` が出ないときは、`hf auth whoami` を打ち直す**
+（`~/.cache` が消える領域なので、トークンはセッションごとに入れ直している）。
+
 ### B5 最初の 500 ステップが HF に載るまで見届ける（40 分）
 
-**ここまでが在席である。**500 ステップは 10.24 秒/step なら 85 分後に出る。
+**ここまでが在席である。**500 ステップは **6.85 秒/step なら 57 分後**に出る（8/31 の実測）。
 **待ちきれないときは、60 歩だけ回した `pretrained_model` を先に 1 回上げて、
 上げの道が通ることだけ確かめてから消す。**
 
@@ -435,9 +535,9 @@ if url and tok and user:
 
 **やることは無い。**下が同時に走っている。
 
-| 走っているもの | 終わる時刻（例・10.24 秒/step） | 落ちたときに残るもの |
+| 走っているもの | 終わる時刻 | 落ちたときに残るもの |
 |---|---|---|
-| 学習（1,500 ステップ） | 19:50 | `checkpoints/` に出来たところまで |
+| 学習（2,500 ステップ・6.85 秒/step なら **4 時間 48 分**） | 起動 ＋ 約 5 時間半 | `checkpoints/` に出来たところまで |
 | 上げるループ | 20:20 | **HF に上がったところまで**（これだけが本当に残る） |
 | 監視セル | 20:20 → Stop Server | — |
 
@@ -454,6 +554,17 @@ from huggingface_hub import HfApi
 for f in HfApi().repo_info('siruku6/pi05_camdrop2500', repo_type='model').siblings:
     print(f.rfilename)"
 ```
+
+**ログも一緒に降ろす。**`logs/` に上がっている（B4b）。
+
+```bash
+hf download siruku6/pi05_camdrop2500 --include 'logs/*' \
+    --local-dir work/train/pi05_camdrop2500
+```
+
+**上がっていなければ、`$HOME` のほうに残っている**（`~/train_logs/`）。
+**次のセッションで開いたときに、まずそれを降ろすこと**——`$HOME` は残るが、
+**同じ名前で次の走りを回すと上書きされる。**
 
 | 上がっていたもの | 次の 1 手 |
 |---|---|
@@ -487,32 +598,19 @@ for f in HfApi().repo_info('siruku6/pi05_camdrop2500', repo_type='model').siblin
 | 手首のカメラ | **触らない**（試験で確かめている） |
 | lerobot-train への引数 | **1 つも増えない。**潰すのは DataLoader の中である |
 
-### 打つ 1 行（8.0.0 との 1 変数）
+### なぜ 1 変数なのか（打つのは [B2](#b2-学習を-nohup-で始める10-分) である）
 
-```bash
-. ~/env_pi05.sh
-cd "$CODE_DIR"
+**コマンドは B2 に 1 つだけ置いてある。**ここにも書くと、片方が必ず古くなる。
 
-NW=$(python -c "import os;print(min(os.cpu_count()//2, 16))")
-nohup python train_pi05.py --run-name pi05_camdrop2500 \
-    --init-from /opt/dlami/nvme/weights/trial1500/001500 \
-    --steps 2500 --batch-size 64 --num-workers "$NW" \
-    --learning-rate 5e-6 --save-freq 500 \
-    --freeze-vision-encoder false --train-expert-only false \
-    --camera-viewpoint-augment --scene-camera-dropout 0.5 \
-    > $OUTPUT_ROOT/pi05_camdrop2500.nohup 2>&1 &
-echo "PID $!"
-```
-
-**最後の `--scene-camera-dropout 0.5` 以外は、8.0.0 を作った学習と 1 文字も違わない**
+**`--scene-camera-dropout 0.5` 以外は、8.0.0 を作った学習と 1 文字も違わない**
 （`work/train/pi05_ladder2500.log` の 8 行目の `lerobot-train` の行と突き合わせた。
 batch 64・学習率 5e-6・種 42・`save_freq` 500・`gradient_checkpointing=true`・bfloat16・
 `empty_cameras=1`・`n_action_steps=10`・データ `lerobot/libero_plus` rev `f3f49f42`・
 カメラ拡張は 8 種から最大 4 つ）。**だから 1 変数である。**
 
-> **`--camera-viewpoint-augment` は付ける。**8.0.0 が付けているので、
-> 外すと変数が 2 つになる。**この 2 つは別のものである**——拡張は
+> **拡張と、潰すことは別のものである。**拡張（`--camera-viewpoint-augment`）は
 > **両方のカメラ**に色や歪みをかけ、潰すほうは**場面カメラだけ**を消す。
+> **だから拡張は 8.0.0 と揃えて付けたままにし、外さない**——外すと変数が 2 つになる。
 
 **確率 0.5 を選んだ理由と、失うもの。**modality dropout の慣例値で、
 **手首だけで進む癖を付けるには半分は要る**という見立てである。
@@ -617,6 +715,99 @@ bash solution/tools/train/run_camera_dropout_test.sh
 上がっている中でいちばん大きいステップ数を渡し、**残りのステップ数だけ回す。**
 **学習率は 5e-6 のまま**（刻みは引き継がれないので、続きではなく新しい走りになる）。
 
+### 分岐 4 打ち間違えて回し始めた —— 途中で止めて打ち直す
+
+**9/3 に実際に起きた**（`--camera-viewpoint-augment` を付けずに回し始めた）。
+**順番を守ること。**下の 1 が最後になると、**セッションそのものが落ちる。**
+
+#### 1. 監視セル（B6）を先に止める（**これを飛ばさない**）
+
+**Notebook の停止（■ / Interrupt Kernel）で止める。**
+
+**理由。**B6 のセルは `train_pi05.py` が消えたのを見ると、
+上げ残しを待ってから**自分でサーバへ `DELETE` を投げる。**
+**学習を先に殺すと、その場でセッションが終わって 12 時間の枠を返せなくなる。**
+
+#### 2. 上げるループを止め、HF に何が上がったかを見る
+
+```bash
+pkill -f upload_ckpt.sh
+cat ~/upload_ckpt.log
+```
+
+**上がっていたら、その分は消す。**打ち間違えた走りの重みなので、
+**残すと `pi05_camdrop2500` の中で正しい走りのものと区別できなくなる。**
+
+```bash
+python3 - <<'PY'
+from huggingface_hub import HfApi
+api = HfApi()
+for f in api.repo_info("siruku6/pi05_camdrop2500", repo_type="model").siblings:
+    print(f.rfilename)
+# 消すときだけ下を有効にする（パスは上の出力から選ぶ）
+# api.delete_folder("000500", repo_id="siruku6/pi05_camdrop2500", repo_type="model")
+PY
+```
+
+#### 3. 子の側から落とす（**親だけ殺すと GPU が空かない**）
+
+**`train_pi05.py` は学習の本体を別のプロセスとして起こす**
+（`subprocess.Popen`。`train_pi05.py` の 467 行）。
+**だから `pkill -f train_pi05.py` だけでは、子が VRAM を握ったまま残る。**
+
+> **【9/3 に踏んだ】子の名前は走りによって違う。**
+> **`--scene-camera-dropout` を付けると、子は `lerobot-train` ではなく
+> `lerobot_train_with_camera_dropout.py` になる**（`experiments/camera_dropout/__init__.py`
+> 111 行の `command_head` が `["python", <そのパス>]` を返す。量子化なら
+> `lerobot_train_with_quant.py`、幾何なら `lerobot_train_with_geometry.py`）。
+> **`pgrep -af 'train_pi05.py|lerobot-train'` は下線の側に当たらないので、
+> 親だけ見えて「落ちた」と誤読する**——**9/3 にこれで VRAM が 60,871 MiB 残った。**
+
+**当たっているかを名前で判定しない。GPU に聞く。**
+
+```bash
+# 誰が VRAM を握っているかを PID で出す（これが唯一の答えである）
+nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv
+pgrep -af 'train_pi05|lerobot[-_]train'      # 下線もハイフンも拾う形
+```
+
+```bash
+pkill -f 'lerobot[-_]train'                   # 子（ラッパーでも lerobot-train でも当たる）
+pkill -f train_pi05.py                        # 親
+sleep 5
+nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv
+nvidia-smi --query-gpu=memory.used --format=csv   # 数百 MiB まで戻ること
+```
+
+**それでも残っていたら、上の PID を直接落とす**（`kill -9 <PID>`）。
+**`nvidia-smi` に PID が 1 つも出ないのに VRAM が減らないときだけ、数十秒待つ。**
+
+#### 4. 出力とログを片付ける（**片付けないと打ち直せない／ログが混ざる**）
+
+```bash
+. ~/env_pi05.sh
+rm -rf $OUTPUT_ROOT/pi05_camdrop2500
+mv $OUTPUT_ROOT/pi05_camdrop2500.log $OUTPUT_ROOT/pi05_camdrop2500_noaug_aborted.log
+```
+
+| 片付けるもの | 片付けないとどうなるか |
+|---|---|
+| **出力先のディレクトリ** | **打ち直した瞬間に終わる**——`train_pi05.py` の 497〜501 行が `出力先が既にある` で `SystemExit` する（LeRobot v0.6.0 も同じ理由で落ちる） |
+| **ログ** | **ログは追記で開かれる**（`log_file = log_path.open("ab")`・511 行）。**混ざると B3 の `grep -m1 num_learnable_params` が打ち間違えた走りの行を拾う** |
+
+**消さずに残す道もある。**`--run-name` を変えれば両方そのまま残るが、
+**HF の上げ先も B6 のセルの `LOG` も名前を持っているので、3 か所直すことになる。**
+**打ち間違えた走りに用は無いので、消すほうが速い。**
+
+#### 5. 使った時間は戻らない。**歩数を決め直す**
+
+**60 時間からも、このセッションの 12 時間からも、回した分は引かれている。**
+**A7 をもう一度流して `--steps` を決め直すこと**——
+**2,500 歩は 4 時間 48 分あるので、締切に入らないことがある。**
+
+そのうえで [B2](#b2-学習を-nohup-で始める10-分) を打ち、
+**B3 で `[camera_dropout]` の行が出ることまで確かめる。**
+
 ---
 
 ## 落とし穴（踏むと 1 日が消えるもの）
@@ -627,9 +818,11 @@ bash solution/tools/train/run_camera_dropout_test.sh
 | **認証していないと非公開リポジトリが `not found` に見える** | `~/.hf_token` を置く（A3）。**名前の間違いではない** |
 | **Notebook のセルが `/bin/sh` で動くことがある** | `source` が無い。**`.` で読む**（8/31 に踏んだ） |
 | **`df` が答えない共有ストレージがある** | 使用量は `du -sh`、枠は画面で見る |
+| **学習ログを `$OUTPUT_ROOT` にしか置かない** | **セッション終了で消える。****loss の推移はチェックポイントに残らないので、やり直しでは作れない。**B4b のループで `$HOME/train_logs/` と HF の 2 か所へ写す（**`~/data` は symlink で消えるので置き先にしない**） |
 | **ディスクが埋まると書いている途中のファイルが壊れる** | 書く前に空きを見る。**`policy_server.py` を実際に 0 バイトにした** |
 | **`--learning-rate` を省くと 10 倍から再スタートする** | 必ず `5e-6` を書く |
 | **`--camera-viewpoint-augment` を惰性で外す** | **いまは付ける。**8.0.0 が付けているので、外すと変数が 2 つになる（下の「場面カメラ」節） |
+| **打ち間違えて回し始めた** | **[分岐 4](#分岐-4-打ち間違えて回し始めた--途中で止めて打ち直す)。****監視セル（B6）を先に止めること**——学習を先に殺すと、B6 が自分でサーバを止めてセッションが終わる |
 | **`train_pi05.py` は成功しても終了コード 120 を返す** | 8/31 の 60 歩で実測。`[train_pi05] === 終了（終了コード 0）===` を出したあと、`_Tee.flush` が閉じた stdout を flush しようとして `ValueError` になり、python が 120 で終わる。**`&&` で後続を繋がないこと。**判定は**ログの `終了（終了コード 0）` の行と、成果物の `du -sh` で行う** |
 
 ---
