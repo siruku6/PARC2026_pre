@@ -2,6 +2,21 @@
 
 **何のための文書か:** 本選で配布された6つのデータセットのタスク構成を調べ、Track1・Track2・Track3 それぞれにどのデータセットを使うべきかを決める根拠を示す。
 
+## 項目一覧
+
+| 節 | 中身 |
+|---|---|
+| [調査結果の要約](#調査結果の要約) | 8/25・8/31・**9/2** の 3 回ぶんの結論 |
+| 1 | `Sylvest/libero_plus` の 40 タスクの内訳 |
+| 2 | **LIBERO の SCENE 名タスクは 100 個**（Track3 の母集団） |
+| 3 | 配布された 6 つのデータセットの構成 |
+| 4 | **データセット間の重複**（`libero_plus` は標準スイート 4 つを完全に含む） |
+| 5 | **トラックごとに使うべきデータセット**（**9/2 に書き換えた。配布 tar 1 つで足りる**） |
+| 6 | 追加の観点（`no_noops`・エピソード長・`libero_90` の 73・Track2 の非公開セット） |
+| 7 | **公開版の `meta/` を落として数え直した**（8/31。形式・大きさ・指示文と場面の重なり） |
+| **8** | **配布 tar `libero_combined_20hz` の中身**（**9/2。`total_tasks` は 111・乗り換えで踏む穴・`splits` は無視してよい**） |
+| 数え方 | 打ったコマンド |
+
 ## 調査結果の要約
 
 - **`Sylvest/libero_plus`（現在の学習データ）の 40 タスク中、10 個が SCENE 名タスク（libero_10 由来）**
@@ -13,8 +28,18 @@
 
 - **`libero_90` の「73 タスク」は指示文を重複を除いて数えた数で、90 個の bddl のうち 89 個が入っている**（欠けは 1 個だけ）
 - **IPEC-COMMUNITY の 5 スイートは LeRobot v2.1、`lerobot/libero_plus` だけ v3.0**
-- **`lerobot/libero_combined_20hz` は Hugging Face に無い。**配布された tar からしか中身を読めない
+- **`lerobot/libero_combined_20hz` は Hugging Face に無い。**配布された tar からしか中身を読めない（**9/2 に読んだ。8 節**）
 - **配布の `dataset_IPEC-COMMUNITY.zip`（5.11 GB）は、公開版 5 スイートの合計 5.32 GB とほぼ同じ大きさである**
+
+**2026-09-02 に配布 tar の `meta/info.json` を読んで分かったこと**（8 節）:
+
+- **`libero_combined_20hz` の `total_tasks` は 111 である。****中身は `libero_plus` ＋ `libero_90` ＋ `libero_10` ＋ `libero_spatial` ＋ `libero_object`** で、エピソード 19,533・コマ 3,028,708 が 5 つの足し算と 1 件も違わない（**`libero_goal` だけ入っていない**）
+- **これに乗り換えると、Track3 の母集団 100 場面のうち 99 場面が順方向で学習に入る**（いまは 10 場面だけ）。**課題名は 40 → 111、エピソードは 1.36 倍になる**
+- **`v3.0` である。**いま学習に使っている `lerobot/libero_plus` と同じ形式なので、**変換が要らない**（標準スイートを単体で足すなら `v2.1` の変換が要る）
+- **配布 GPU 環境の `~/dataset/lerobot/` に読み出し専用で置かれている。**`~/data` へ展開して使う——**21 GB をどこかへ転送する必要が無い**
+- **ただし「これを足せば Track3 が動く」の根拠は弱い。****配布ベースラインはこのデータで学習されていて、それでも Track3 は 0.000 である**（8.3 節）
+- **`info.json` の `"splits": {"train": "0:432"}` は無視してよい。**同梱の LeRobot でも `solution/train/` でも、`splits` は書かれるだけでエピソードの選択には 1 度も読まれない（8.4 節）
+- **乗り換えには 3 か所の書き換えが要る。**`_DATASET_REPO`・`_DATASET_REVISION`・`--dataset-root` で、**`--dataset-root` を忘れると足した 5,186 本が 1 本も選ばれないまま、エラーも出ずに学習が走る**（8.2 節）
 
 ---
 
@@ -137,11 +162,24 @@ ls -1 /home/ubuntu/lab/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/li
 
 ## 5. トラックごとに使うべきデータセット
 
-| トラック | 中身 | 使うべきデータセット | 根拠 |
-|---|---|---|---|
-| **Track1** | 学習済みタスク・背景と照明が変わる | `libero_plus` + 標準スイート 4 つ | エピソード数を増やす（摂動への頑健性）。タスクの種類は増えない |
-| **Track2** | 学習済みタスク・視点・姿勢・配置・雑音が変わる | `libero_plus` + 標準スイート 4 つ + **`libero_90`** | エピソード数 + タスクの種類を両方増やす。difficulty_level（task_classification.json）から非公開セットが引かれる |
-| **Track3** | 既存タスクの逆向き（SCENE 名に限られる） | **`libero_10` + `libero_90`** | Track3 の母集団は SCENE 名タスク（100 個）。spatial・object・goal は使えない |
+> **【9/2 に書き換えた】3 行とも「配布の `libero_combined_20hz` 1 つ」で足りる。**
+> **あれは `libero_plus` ＋ `libero_90` ＋ `libero_10` ＋ `libero_spatial` ＋ `libero_object` である**（8 節）。
+> **下の表の「使うべきデータセット」は、そのどれもがあの 1 つに収まっている**
+> ——**唯一入っていないのは `libero_goal`（428 本・10 課題）で、
+> あれは SCENE 名タスクではないので Track3 には使えず、Track1・Track2 では
+> 「エピソードを増やす」ぶんにしか効かない。**
+>
+> **だから「自分で混ぜる」という選択肢は、9/2 以降は考えなくてよい。**
+
+| トラック | 中身 | 使うべきデータセット | **配布 tar 1 つで足りるか** | 根拠 |
+|---|---|---|---|---|
+| **Track1** | 学習済みタスク・背景と照明が変わる | `libero_plus` + 標準スイート 4 つ | **足りる**（`libero_goal` の 428 本だけ欠ける） | エピソード数を増やす（摂動への頑健性）。タスクの種類は増えない |
+| **Track2** | 学習済みタスク・視点・姿勢・配置・雑音が変わる | `libero_plus` + 標準スイート 4 つ + **`libero_90`** | **足りる**（同上） | エピソード数 + タスクの種類を両方増やす。difficulty_level（task_classification.json）から非公開セットが引かれる |
+| **Track3** | 既存タスクの逆向き（SCENE 名に限られる） | **`libero_10` + `libero_90`** | **足りる。**母集団 100 場面のうち **99 場面**が入る（7.5 節。欠けは `LIVING_ROOM_SCENE2` の 1 個） | Track3 の母集団は SCENE 名タスク（100 個）。spatial・object・goal は使えない |
+
+**ただし Track3 については、これで届くという意味ではない。**
+**配布ベースラインはこの 99 場面を見て学習していて、それでも Track3 は 0.000 である**（8.3 節）。
+**「順方向の場面を見る」ことと「逆向きに物を選べる」ことは別である。**
 
 **Track3 の根拠（詳細）:**
 
@@ -196,6 +234,7 @@ Track2 の配布物（`task_classification.json`）には difficulty_level が 1
 
 **`lerobot/libero_combined_20hz` は Hugging Face に無い**（`RepositoryNotFoundError`）。
 **あれの中身は、配布された tar からしか読めない。**
+**→ 9/2 に配布物から読んだ。8 節にある。**
 
 **ここから 1 つ決まる。****配布環境（消える機械）から丸ごと運び出す価値があるのは
 `libero_combined_20hz.tar` だけである。**標準スイート 5 つと LIBERO-plus は
@@ -456,9 +495,21 @@ print(f"libero_90: {len(libero_90_base)} tasks")
 **エピソードもコマも 1 件も違わない。****`libero_goal`（428 本・52,042 コマ・10 課題）だけが入っていない。**
 
 **課題名は 143 の単純な足し算に対して 111 なので、32 個が重複している。**
-`libero_plus` の 40 課題は標準スイート由来の言い方を含むので、
-`libero_10`・`libero_spatial`・`libero_object` の 30 課題はそこと重なる。
-**残る 2 個の重なりがどこかは、`meta/tasks` を読まないと分からない。**
+**この 32 は、4 節と 7.3 節で 8/25〜8/31 に数えた重なりとぴったり合う。**
+
+| 重なり | 数 | 出典 |
+|---|---|---|
+| `libero_10` ⊂ `libero_plus` | 10 | 4 節（`libero_plus` は 4 つの標準スイートを完全に含む） |
+| `libero_spatial` ⊂ `libero_plus` | 10 | 同 |
+| `libero_object` ⊂ `libero_plus` | 10 | 同 |
+| `libero_plus` と `libero_90` の指示文の重なり | **2** | 7.3 節 |
+| **合計** | **32** | **143 − 32 = 111。配布 tar の `total_tasks` と一致する** |
+
+**`libero_10` と `libero_90` の重なり 1 件（7.3 節）は、この 32 の中に入っている**
+——**`libero_10` の課題はすでに `libero_plus` の重複として数えているからである。**
+
+**つまり課題名の側でも、8.1 節の組み合わせが正しいことが裏づいた。**
+**エピソード数・コマ数・課題名の 3 つが独立に一致している。**
 
 **いま学習に使っているのは `libero_plus` の 40 課題だけである。**
 **だから配布 tar に乗り換えると、課題名が 40 → 111 に増える**（**新しく増えるのは 71 個**）。
@@ -474,6 +525,32 @@ print(f"libero_90: {len(libero_90_base)} tasks")
 **そして運ぶ手間も要らない。**配布 GPU 環境（Blackwell サーバ）の `~/dataset/lerobot/` に
 **読み出し専用で置かれている**（`~/data` へ展開してから使う。`resources/infra_and_docker.md`）。
 **21 GB をどこかへ転送する必要が無い。**
+
+#### 乗り換えるときに踏む穴 —— 2 か所とも直さないと、黙って古いデータで学習が走る
+
+**`train_pi05.py` の定数 2 行を直すだけでは足りない。`--dataset-root` も要る。**
+**逆に `--dataset-root` だけでも足りない。両方である。**
+
+| 直すもの | 場所 | 忘れるとどうなるか |
+|---|---|---|
+| **`_DATASET_REPO = "lerobot/libero_plus"`** | `train_pi05.py:153`（`--dataset.repo_id` として渡る。349 行目） | **`lerobot-train` が受け取る名前が `libero_plus` のままになる** |
+| **`_DATASET_REVISION`** | `train_pi05.py:154`（`--dataset.revision` として渡る。350 行目） | 同上 |
+| **`--dataset-root` を展開先へ向ける** | `train_pi05.py:214`（`--dataset.root` として渡る。351〜352 行目） | **エピソード番号の選び方が Hub から取った `libero_plus` の 14,347 本になり、足した 5,186 本が 1 本も選ばれないまま学習が始まる。****エラーにならないので気付けない** |
+
+**3 つ目は `train.py` の `_resolve_dataset_root`（733 行目）の説明にそのまま書かれている**
+——**「混ぜたデータセットを渡されたら Hub へ取りに行かない。取りに行くと
+`lerobot/libero_plus` の 14,347 本ぶんの番号が返り、足した分が 1 本も選ばれないまま
+学習が始まる（エラーにならないので気付けない）」。**
+
+**番号選びが読むのは `meta/episodes/*.parquet` であって、`info.json` の `splits` ではない**
+（`_select_without_holdout` → `_load_episode_metadata`。840 行目）。
+
+**確認したい仮定。****`--dataset.root` を配布 tar の展開先へ向けたまま
+`--dataset.repo_id` を `libero_plus` のままにしたときに、`lerobot-train` が
+どう振る舞うかは確かめていない**（`root` が優先されて動くのか、`revision` の
+食い違いで落ちるのか）。**だから乗り換える 1 本目は、必ず数歩だけ回して
+`[train]` が出す `--dataset.episodes` の長さを見る**——
+**14,347 本ぶんなら失敗、19,533 本ぶんに近ければ成功である。**
 
 ### 8.3 ただし「`libero_90` を足せば Track3 が動く」の根拠は、むしろ弱くなった
 
@@ -500,7 +577,7 @@ print(f"libero_90: {len(libero_90_base)} tasks")
 **432 は `libero_spatial` のエピソード数で、全体の 19,533 と合っていない。**
 **これを読んで学習が 432 本だけになる心配は無い。**
 
-**同梱している LeRobot（`work/lerobot-src`）を全部見たところ、
+**同梱している LeRobot（`work/lerobot-src`）と `solution/train/` を全部見たところ、
 `splits` は書き込まれるだけで、エピソードの選択には 1 度も読まれていない。**
 
 | 場所 | 何をしているか |
@@ -509,9 +586,12 @@ print(f"libero_90: {len(libero_90_base)} tasks")
 | `datasets/aggregate.py:718` | 束ねた合計で**書く** |
 | `datasets/dataset_tools.py:938`・`1889` | **書く** |
 | `datasets/dataset_tools.py:1107-1109` | 元の値を**写す** |
+| `datasets/dataset_tools.py:1108-1109` | **読む唯一の箇所。**ただし「元の値を写す」ためで（`# Preserve original splits if available`）、**エピソードは選んでいない** |
 | `scripts/lerobot_edit_dataset.py` | **データセットを分割する別の道具**の引数。学習では通らない |
+| **`solution/train/`** | **1 件も出てこない**（`grep -rn splits solution/train/` が空） |
 
-**読んでいる箇所は 1 つも無い。**
+**エピソードを選ぶために読んでいる箇所は 1 つも無い。**
+**選び方は `meta/episodes/*.parquet` を読む**（`train.py:840` の `_select_without_holdout`）。
 
 ### 8.5 引き直すコマンド
 
