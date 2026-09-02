@@ -23,5 +23,6 @@
 | 摂動のカテゴリ（3 本の分担は [20](20_track2_perturbation_categories.md) の冒頭） | [05](05_perturbation_categories.md)・[20](20_track2_perturbation_categories.md)・[21](21_weakness_map.md) |
 | 見た目の振れ幅 | [08_appearance_spread.md](08_appearance_spread.md) |
 | 失敗の内訳 | [18_failure_breakdown.md](18_failure_breakdown.md) |
+| **Track3 の中身（配布 4 件・目標条件・母集団の作り）** | **[28_track3_contents.md](28_track3_contents.md)** |
 | weak3x を π0.5 に使うか | [16_weak3x_for_pi05.md](16_weak3x_for_pi05.md) |
 | レポートに書く値 | 重み・版・点は [19_weights_catalog.md](19_weights_catalog.md)、ライセンスは [../knowledge/04_licenses.md](../knowledge/04_licenses.md)、必須欄は [../knowledge/01_report_requirements.md](../knowledge/01_report_requirements.md) |

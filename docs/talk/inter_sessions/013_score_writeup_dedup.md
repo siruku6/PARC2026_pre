@@ -468,3 +468,4 @@ python3 solution/tools/analysis/parse_grading_log.py \
 - **1 版 1 コミットは 4.7.0 と 4.8.0 だけ 1 つにまとめた**（同じ表・同じ行を共有していて、分けると片方の差分が読めなくなるため）。
 - **台帳の `parse_grading_log.py` の呼び方を直した**（`2512e5d`）。6.1.0 と 5.1.0 の節が `../` の無いパスと、実在しないログ名（`260831_pi0.5_5.1.0_.txt`）を書いていた。**7 つの節すべてでパスの実在を確かめた。**
 - **`docs/talk/tmp/` を追跡から外した**（`8640f0f`）。`git add docs` で誤って入ったので `.gitignore` に足した。
+- **9/2 にこの 5 ファイルを消した**（`talk/260825_briefing.md`・`talk/260831_today.md`・`talk/handoff_pi05_stage2.md`・`talk/handoff_training_targets.md`・`talk/open_items_archive_260821.md`）。**上の「残した」に挙げた日ごとの `talk/` はもう無い。**

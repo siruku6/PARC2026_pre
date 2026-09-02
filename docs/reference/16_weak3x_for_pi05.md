@@ -109,10 +109,17 @@ weak3xの元々の根拠は「引ける回数が足りないのであって、�
 組み合わせると、**実データのmokaが消えて手作業の分だけが残る**という形になる。
 それを狙っているなら問題ないが、**気づかずにそうなるのは避けたい。**
 
-## 4. `--max-demo-steps`だけを渡すと落ちる(未修正のバグ)
+## 4. `--max-demo-steps`だけを渡すと落ちていた(**2026-08-13 に直した**)
 
-**`--emphasize-tasks`を付けずに`--max-demo-steps 300`だけを渡すと
-`ZeroDivisionError`で止まる。** `train.py`の`_select_emphasized_episodes`が
+**いまは通る。**`solution/train/train.py:453` の `if wanted:` が入っており、
+**強調が空なら間引かない（`keep_ratio = 1.0`）**ようになっている。
+**直した本体を呼んで確かめた**（2026-08-13）——`--max-demo-steps 300` だけで
+**13,946 本 / 2,096,321 フレーム**、苦手 3 タスクも付けた従来どおりの呼び方では
+**4,609 本 / 699,411 フレーム**（SmolVLA の記録と同じ＝壊していない）。
+
+**以下は、何が起きていたかの記録である。**
+`--emphasize-tasks`を付けずに`--max-demo-steps 300`だけを渡すと
+`ZeroDivisionError`で止まっていた。`train.py`の`_select_emphasized_episodes`が
 
 ```python
 share_now = weak_frames / (weak_frames + strong_frames)   # 強調が空なら 0.0
@@ -125,14 +132,14 @@ keep_ratio = weak_frames * (1.0 - share_target) / (share_target * strong_frames)
 `train.py`側にも同じバグがあり、**pi05固有ではない**(SmolVLAでも
 `--max-demo-steps`を単独で使ったことが無かった)。
 
-直すなら、`keep_ratio`の計算の前に「強調が空なら間引かない」を1つ足す
-2〜3行で済む。
+**直したのは`keep_ratio`の計算の前に「強調が空なら間引かない」を足す2〜3行である**
+（`train.py:453`。`train.py`が本体なので**SmolVLA 側にも同じ直しが効く**）。
 
 ```python
-if not wanted:
-    keep_ratio = 1.0
-else:
+if wanted:
     keep_ratio = min(weak_frames * (1.0 - share_target) / (share_target * strong_frames), 1.0)
+else:
+    keep_ratio = 1.0
 ```
 
 ## 5. まだ確認していないこと

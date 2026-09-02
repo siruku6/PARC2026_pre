@@ -38,7 +38,7 @@
 
 | ファイル | いつ |
 |---|---|
-| **[talk/open_items.md](talk/open_items.md)** | **作業を始めるとき、次の手に迷ったとき。本選 1 の `open_items.md`**（8/27 に作り直した。それ以前は [talk/open_items_archive_260821.md](talk/open_items_archive_260821.md)） |
+| **[talk/open_items.md](talk/open_items.md)** | **作業を始めるとき、次の手に迷ったとき。本選 1 の `open_items.md`**（8/27 に作り直した。それ以前（8/21〜8/26）のぶんは消した） |
 | [talk/archive_qualifier_board.md](talk/archive_qualifier_board.md) | **予選の `open_items.md` の退避先。**他の文書が「`open_items.md` の 29」のように**番号で指しているものはここにある** |
 | [talk/lessons_learned.md](talk/lessons_learned.md) | コンペが終わったあと。**次の 3 日の組み立て方**まで書いてある |
 | [howto/01_retrain.md](howto/01_retrain.md) | 追加学習を回すとき |

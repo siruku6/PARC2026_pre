@@ -90,6 +90,17 @@ JAIST サーバでは選べない EGL が実際に効くことを確認した。
 （JAIST サーバは 75 GB）、(c) **JAIST サーバと並行して回せる 2 台目である**。
 GPU の計算力（cc 9.0 対 7.5）と RAM では JAIST サーバが上。
 
+**学習に使わない理由は cc 7.5 そのものである。**Turing 世代は **bf16 の演算ユニットを
+持たない**ので、いまの学習設定（`dtype=bfloat16`）を回すには fp16 か fp32 に変えるしかない
+——**fp32 はメモリが倍になって 24 GB では厳しく、fp16 は行動を少しずつ整える学習で
+不安定になりうる。**注意機構の速い実装（flash-attention 2）も Ampere 以降が要件なので、
+そこも遅い経路に落ちる。**だからこの台は評価と zip の組み立てに使い、学習は置かない。**
+
+```bash
+# 1 行で確かめられる
+python3 -c "import torch; print(torch.cuda.get_device_capability(), torch.cuda.is_bf16_supported())"
+```
+
 **EGL が効くことが一番大きい。**JAIST サーバの vGPU は OpenGL に対応しないため
 `MUJOCO_GL=osmesa`（CPU 描画）しか選べない。同じ描画スクリプト（240×320 を 50 枚）で測ると
 次の差がある。

@@ -82,7 +82,7 @@ gated repo のエラーで止まる。
     # 段を分けた学習の 2 段目（全データで馴染ませた重みを、苦手タスクを厚くした
     # データで仕上げる）。**--learning-rate を必ず明示すること** —— 既定のままだと
     # 前の段が 2.5e-6 で終わっている 10 倍から焚き直す。
-    # 詳しくは docs/talk/handoff_pi05_stage2.md
+    # 詳しくは docs/howto/07_train_pi05_local.md の「段2を始めるときの注意 4 つ」
     python train_pi05.py --run-name pi05_weak3x_stage2 \
         --init-from /out/pi05_full_local/checkpoints/024000/pretrained_model \
         --steps 6000 --batch-size 16 --learning-rate 5e-6 --max-demo-steps 300 \
@@ -216,7 +216,7 @@ def _parse_args() -> argparse.Namespace:
                         help="初期重みに HF の pi05_libero_base ではなく、"
                              "前の学習の checkpoints/<ステップ数>/pretrained_model を使う"
                              "（段を分けた学習の 2 段目。"
-                             "docs/talk/handoff_pi05_stage2.md）")
+                             "docs/howto/07_train_pi05_local.md）")
     parser.add_argument("--save-freq", type=int, default=500)
     parser.add_argument("--num-workers", type=int, default=2)
     parser.add_argument("--learning-rate", type=float, default=2.5e-5,

@@ -398,7 +398,7 @@ jerk の項は 0.437 / 0.478 / 0.508 と看板どおり動くのに、**合計�
 
 | 知りたいこと | ファイル |
 |---|---|
-| 本選のルールの原文（日程・枠・計算資源・禁止事項） | [../talk/260825_briefing.md](../talk/260825_briefing.md) 3 節 |
+| 本選のルールの原文（日程・枠・計算資源・禁止事項） | [../materials/PARC2026開発コンペティション_本選_v1.1.pdf](../materials/PARC2026開発コンペティション_本選_v1.1.pdf) |
 | 採点式と、非公開なのはどこか | [../reference/17_scoring_formula.md](../reference/17_scoring_formula.md) |
 | 本選の提出と点（1 行 1 提出） | [../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) の「本選の提出と点」 |
 | Track3 の中身と逆向きの構造 | [17_after_track3_disclosure.md](17_after_track3_disclosure.md) |

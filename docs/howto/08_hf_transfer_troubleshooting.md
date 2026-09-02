@@ -142,6 +142,47 @@ hf download <ユーザー名>/<既にあるリポジトリ名> \
     --local-dir work/train/pi05_full_runpod_dl
 ```
 
+### なぜ案 B が要るのか —— fineGrained トークンには「作る」権限が存在しない(8/31 に確定)
+
+**案 B が要る場面は「特定のリポジトリだけ書けるトークンのとき」に限らない。**
+**`fineGrained` 型のトークンには、そもそも「リポジトリを作る」項目が無い。**
+設定画面の `User permissions` の `Repositories` に並ぶのは 4 つだけで
+(`Read contents of your repos` / `View access requests for your gated repos` /
+`Read contents of public gated repos you can access` / **`Write contents/settings of your repos`**)、
+**`Create repositories` という項目は存在しない**(`Create` は `Webhooks` の項目にしか出てこない)。
+
+| したいこと | fineGrained トークンで | 対処 |
+|---|---|---|
+| **既にあるリポジトリへ書く** | **通る**(`repo.write` を持っている) | **案 B で済ませる** |
+| **新しいリポジトリを作る** | **通らない** | ブラウザで作る、または **classic の Write トークン**を作る |
+
+**そして `hf upload`(CLI)は、送る前に必ず「作る」API を叩く。**
+**だからリポジトリが既にあっても 403 で止まる。**Python の `upload_folder` は作らないので通る。
+
+### どの種類の資格情報で動いているかを 1 行で見る
+
+**同じアカウントでも、機械ごとに種類が違う。**値は出さずに種類だけ出る。
+
+```bash
+python3 -c "
+from huggingface_hub import HfApi
+w = HfApi().whoami()
+print({k: v for k, v in w.items() if k in ('name', 'type', 'auth')})"
+```
+
+| 出たもの | 意味 |
+|---|---|
+| `auth: {'type': 'oauth', 'expiresAt': ...}` | **ブラウザでログインしたセッション。本人の権限をそのまま持つので作れる。**ただし `expiresAt` で切れる |
+| `auth: {'type': 'access_token', 'accessToken': {'role': 'fineGrained', ...}}` | **作れない**(上の表)。**期限は無い** |
+| `role: read` | 読み取り専用。書き込みも通らない |
+
+> **誰も見ていない機械には、期限が切れる資格情報を置かない。**
+> OAuth のセッションは期限で切れ、**切れた瞬間に静かに 403 になる**ので、
+> 夜間に上げ続ける機械では朝に何も残っていないことになる。
+> **アクセストークン(期限なし)を `~/.hf_token` に置く方が、無人の機械では安全である。**
+> **借り物のクラウド機に置くなら、アカウント全権の classic Write ではなく
+> fineGrained(読み＋書き・作成なし)に寄せる。**
+
 ## そのまま運ぶときの手順
 
 詰まりが解けたあとの、素の運び方である。

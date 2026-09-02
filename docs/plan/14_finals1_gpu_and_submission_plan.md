@@ -59,7 +59,9 @@ GPU の使い方と提出の順番を決める記録である。** この文書�
 | 指標 | 成功率／ジャーク・SPARC・**手先の回転の総量**／**歩数・軌道の総距離**／衝突判定 |
 | **本選スコア** | **トラックごとの Total Score の合計。提出しなかったトラックは 0 点** |
 | 衝突判定 | 操作対象（`:obj_of_interest`）以外の全物体について、初期位置からの変位（xyz の絶対値の和）の**最大値が 1 mm を超えたら失敗** |
-| 進出人数 | 本選1 → 本選2 で 200 人 → 100 人 |
+| 進出人数 | 本選1 → 本選2 で **200 人 → 100 人**、本選2 → 本選3 で **100 人 → 50 人** |
+| **この先の日程** | **本選2 は 9/28〜10/22、本選3 は 10/28〜11/24**（配布 GPU は 75 時間・120 時間） |
+| レポート | **本選3 に出た人だけ。**11/16 23:59 まで・PDF 2 ページ以内（予選の必須欄は [../knowledge/01_report_requirements.md](../knowledge/01_report_requirements.md)） |
 
 **運営が明示的に許可したもの**（PDF の「よくいただいたご質問と回答」）。
 
@@ -98,35 +100,11 @@ GPU の使い方と提出の順番を決める記録である。** この文書�
 | Track2 | **+0.10 ほど** | **ベースラインに 0.011 負けている。**打ち切りが 3 件ある |
 | **Track3** | **0.000 → 0.1 で +0.1** | **成功 1 件が必要。いまは 8 件すべてが 300 歩で打ち切られている** |
 
-**さらに Track3 だけは、example の課題ファイルが配布されている。** Track1・Track2 は
-CSV でタスク名を指定する形だが、Track3 は `.bddl`（課題の定義ファイル）と初期状態
-ファイルが `compe/t3/assets/` に実物で入っている。**手元で採点と同じものを走らせられる
-のは Track3 だけである**（本番の採点は非公開タスクを含む別のタスクセットだが、
-example がここまで具体的なトラックは他に無い）。
-
-配布されている 4 件は次のとおりで、**どれも「置いてあるものを取って、テーブルの
-決まった場所に置く」型である。**
-
-| example タスク |
-|---|
-| take the alphabet soup out of the tray and place it on the table |
-| take the red mug off the left plate and put it on the table |
-| take the two mugs off the plates and place them on the table |
-| take the yellow book off the shelf and put it on the table |
-
-**課題ファイルを読むと、ゴールは「テーブルの狭い領域に置くこと」である。**
-`take_the_yellow_book_off_the_shelf_...` のゴールは
-`(On yellow_book_2 study_table_yellow_book_left_init_region)` で、その領域の広さは
-15 cm 角ほど（`:ranges` が `-0.125 -0.325 0.025 -0.175`）である。**指示文も課題
-ファイルの中では長い** ── 「take the yellow book off the top of the shelf and put it
-back on the table on the left」であり、ファイル名より詳しい。
-
-**`:obj_of_interest` に棚（`wooden_two_layer_shelf_1`）も入っている。** つまり
-**棚を動かしても 1 mm の衝突判定では失格にならない。**
-
-**学習データの側にこの型は無い。** 手元の LIBERO の `libero_90`（91 タスク）を
-数えたが、「◯◯を取ってテーブルに置く」型のタスク名は 1 件も無い。**指示もゴールも
-モデルにとって未知である。**
+**さらに Track3 だけは、example の課題ファイルが `compe/t3/assets/` に実物で入っている**
+——**手元で採点と同じものを走らせられるのは Track3 だけである。**
+**配布された 4 件・その目標条件・運営が 8/28 に開示した「逆向きのタスク」という中身は
+[../reference/28_track3_contents.md](../reference/28_track3_contents.md) にある。**
+**この文書に要るのは、そこから決まる打つ手だけである。**
 
 **打つ手は 2 つあり、どちらも Track3 の中身を先に見ないと選べない。**
 
