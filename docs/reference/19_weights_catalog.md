@@ -1508,6 +1508,13 @@ for m in api.list_models(author='siruku6'):
 print(f'{t/2**30:8.2f} GiB  合計')"
 
 # 落とさずにチェックポイントの中身が別物かを確かめる（LFS のダイジェスト）
+#
+# **9/2 に、この値が落としたファイルの中身と一致することを初めて端から端まで確かめた。**
+# HF の LFS が返す `ladder2500/001500` のダイジェストは `87d89a05…` で、
+# Mac に落としてから `sha256sum` を打った値も
+# `87d89a055f166377bf201e6f72ffeef206cc6b2d28fa7511daed2f3375308436` だった。
+# **だから「落とす前に別物かを確かめる」用途で、この値をそのまま信じてよい**
+# ——9.4 GB を落とさずに済む。
 .venv/bin/python -c "
 from huggingface_hub import HfApi
 p = [f'ladder2500/{s}/model.safetensors' for s in ('001000','001500','002000','002500')]
