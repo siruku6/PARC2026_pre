@@ -3,7 +3,7 @@
 > **状態: 依頼中** ／ 受け側: 未定 ／ 更新: 2026-08-31
 >
 > **[010](010_blackwell_investigation_plan.md) が作った手順書
-> [../../howto/14_blackwell_first_session.md](../../howto/14_blackwell_first_session.md) を実行する依頼である。**
+> [../../howto/14_blackwell_session.md](../../howto/14_blackwell_session.md) を実行する依頼である。**
 > **010 は「計画を作る」依頼だった。これは「その計画を実行する」依頼である。**
 
 ## 背景（先に読んでほしい）
@@ -60,7 +60,7 @@
 **3 つを、この順で。**
 
 1. **Blackwell に入り、接続のしかた・学習の回し方・1 歩あたりの秒数を実測する**
-   （[howto/14](../../howto/14_blackwell_first_session.md) の午後 A）。
+   （[howto/14](../../howto/14_blackwell_session.md) の午後 A）。
 2. **その日のうちに長いフルパラメータ学習を始め、放置できる状態にする**（同 夕方 B・夜 C）。
 3. **学習が走り出したら、配布データセットの棚卸しに入る**——
    **これは [012](012_dataset_overlap_inventory.md) に分けて書いた。そちらを読むこと。**
@@ -126,7 +126,7 @@
 
 ## やること
 
-**手順そのものは [howto/14](../../howto/14_blackwell_first_session.md) にある。
+**手順そのものは [howto/14](../../howto/14_blackwell_session.md) にある。
 ここでは順番と、止まったときの判断だけを書く。**
 
 1. **入って、外へ出られるかを最初に確かめる**（`howto/14` 午後 A・A0〜A2）。

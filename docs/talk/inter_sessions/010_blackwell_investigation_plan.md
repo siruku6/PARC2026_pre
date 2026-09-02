@@ -42,7 +42,7 @@
 
 | 事実 | 出典 |
 |---|---|
-| **Blackwell は NVIDIA RTX PRO 6000 Blackwell 1 台。**製品仕様の VRAM は 96 GB（**実機で未確認**） | [../../howto/14_blackwell_first_session.md](../../howto/14_blackwell_first_session.md) |
+| **Blackwell は NVIDIA RTX PRO 6000 Blackwell 1 台。**製品仕様の VRAM は 96 GB（**実機で未確認**） | [../../howto/14_blackwell_session.md](../../howto/14_blackwell_session.md) |
 | **`docker` は使えない。**自分のイメージを持ち込む道は資料 v1.1 で閉じた | `open_items.md` の「決めた」8/26 |
 | **π0.5 の学習は batch 64 で 49.37 GB**（A100 80GB での実測）。96 GB なら入るはずだが**未確認** | [../../reference/19_weights_catalog.md](../../reference/19_weights_catalog.md) |
 | **評価にかかった時間はほぼ CPU の描画である。**方策は 18〜29% で、残りは `osmesa` の software rendering。**`egl` が使えるかと CPU の数が効く** | [../../knowledge/14_quantization_and_eval_bottleneck.md](../../knowledge/14_quantization_and_eval_bottleneck.md) |
@@ -77,7 +77,7 @@
 
 **明日（8/30）の午後〜夕方〜夜に、ユーザが順に打っていけるだけの調査計画を作ってほしい。**
 
-成果物は **1 つのファイル**である——`docs/howto/14_blackwell_first_session.md` を
+成果物は **1 つのファイル**である——`docs/howto/14_blackwell_session.md` を
 **書き足して現状に合わせるか、それでは収まらないなら `docs/howto/` に節を足す。**
 **新しい計画文書を別に作らないこと**（同じことが 2 か所に書かれると必ず片方が古くなる）。
 
@@ -148,7 +148,7 @@
 
 ## やること
 
-1. **[../../howto/14_blackwell_first_session.md](../../howto/14_blackwell_first_session.md) と
+1. **[../../howto/14_blackwell_session.md](../../howto/14_blackwell_session.md) と
    [003](003_blackwell_readiness.md) を読む。**
    **14 は「最初の 1 セッション」の下見手順、003 は「短く試して効いたものだけ長く回す」段取りである。**
    **どちらもまだ実行されていない。**
@@ -230,7 +230,7 @@
 
 ### 1. どこに書いたか
 
-**[../../howto/14_blackwell_first_session.md](../../howto/14_blackwell_first_session.md) を全面的に書き直した。**
+**[../../howto/14_blackwell_session.md](../../howto/14_blackwell_session.md) を全面的に書き直した。**
 新しい文書は作っていない。節は次のとおり。
 
 | 節 | 中身 |

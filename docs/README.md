@@ -15,6 +15,7 @@
 | **レポートの必須欄と締切** | [knowledge/01_report_requirements.md](knowledge/01_report_requirements.md)（**書く値そのものは実験台帳とライセンスの 2 つから引く**——下の [reference/19](reference/19_weights_catalog.md)・[knowledge/04](knowledge/04_licenses.md)） |
 | **流した学習・重み・版・出した点（実験台帳）** | **[reference/19_weights_catalog.md](reference/19_weights_catalog.md)** |
 | **今使える計算資源・docker image は何か** | **[resources/infra_and_docker.md](resources/infra_and_docker.md)** |
+| **Blackwell で測った速さ・容量・パスの実体・踏んだ罠** | **[reference/27_blackwell_environment.md](reference/27_blackwell_environment.md)**（**手順は [howto/14_blackwell_session.md](howto/14_blackwell_session.md)**。値はこの 1 つだけが持つ） |
 | **HF にどのモデルが置いてあるか・ローカルの重みに控えがあるか** | **[resources/huggingface.md](resources/huggingface.md)** |
 | **ディスクを空けたい** | **[howto/09_free_disk_space.md](howto/09_free_disk_space.md)** |
 | **このマシンを作り替える／作り替えた** | **[howto/10_rebuild_machine.md](howto/10_rebuild_machine.md)** |
@@ -49,7 +50,7 @@
 | **[howto/10_rebuild_machine.md](howto/10_rebuild_machine.md)** | **マシンを作り替えてディスクが消えるとき。持ち出す 1 本のスクリプト・秘密の 4 件・常駐コンテナの起動コマンド** |
 | **[knowledge/16_docker_group_needs_session_restart.md](knowledge/16_docker_group_needs_session_restart.md)** | **`usermod -aG docker` を入れたのに `permission denied` が続くとき。`id -nG` での切り分けと、VS Code の Remote-SSH で必要になる操作** |
 | **[plan/15_runpod_fullparam_with_augment.md](plan/15_runpod_fullparam_with_augment.md)** | **RunPod でフルパラメータ ＋ 画像拡張を回す 1 回分の設計。**歩数と費用の表・立ち上がりの確認 3 点・何と比べられるか |
-| **[howto/14_blackwell_first_session.md](howto/14_blackwell_first_session.md)** | **配布 GPU 環境（Blackwell サーバ）に初めて入るとき。60 時間の減り方・下見・配布データの数え方・止め方。自分の Docker は持ち込めない** |
+| **[howto/14_blackwell_session.md](howto/14_blackwell_session.md)** | **配布 GPU 環境（Blackwell サーバ）に初めて入るとき。60 時間の減り方・下見・配布データの数え方・止め方。自分の Docker は持ち込めない** |
 | **[howto/11_colab_eval.md](howto/11_colab_eval.md)** | **評価を回すとき（Colab。8 ファイルを上げてセルを 5 つ。π0.5 も回せる。T4 で動くかは未確認）** |
 | [strategy/05_実測結果.md](strategy/05_実測結果.md) | 判断する前。数字はすべてここ |
 | **[strategy/06_scripted_demos.md](strategy/06_scripted_demos.md)** | **手本が 300 ステップに収まらないタスクを扱うとき。scripted policy で手本を自分で作る** |
