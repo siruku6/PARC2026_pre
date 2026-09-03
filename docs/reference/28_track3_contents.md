@@ -13,6 +13,7 @@ Track3 だけである**——ただし本番の採点は非公開タスクを�
 | 1 | 配布された 4 件と、その目標条件 |
 | 2 | **運営の開示（8/28）—— Track3 は「逆向きのタスク」である** |
 | 3 | **混入した検査スクリプトから読める母集団の作り** |
+| 4 | **トークナイザは Track3 のボトルネックではない**（9/3 に測った） |
 
 ## 1. 配布された 4 件と、その目標条件
 
@@ -80,3 +81,45 @@ Track3 だけである**——ただし本番の採点は非公開タスクを�
 
 **採点ログの `タスク用途: 3_Omni` は、毎日の枠が第 3 段であることを示している。
 最終評価は `4_最終` で別の集合である。**——**毎日の点をそのまま最終成績と読まないこと。**
+
+## 4. トークナイザは Track3 のボトルネックではない（**9/3 に測った**）
+
+**結論。トークナイザは学習しない。学習してはいけない。そして Track3 の 4 文は
+いま在るトークナイザで 1 文字も取りこぼしていない。**
+
+**測ったもの**（`quant_train` の中で `model_weights/vlm` を `AutoTokenizer` に読ませた）。
+
+| 文 | トークン数 | `<unk>` |
+|---|---|---|
+| `take the alphabet soup out of the tray …` | 14 | **0** |
+| `take the red mug off the left plate …` | 14 | **0** |
+| `take the two mugs off the plates …` | 13 | **0** |
+| `take the yellow book off the top of the shelf …` | 20 | **0** |
+| （比較）学習側の `pick up the alphabet soup and place it in the basket` | 11 | 0 |
+
+**鍵になる語句も、普通の単語のまま分かれている。**
+`off the shelf` → `off` / `▁the` / `▁shelf`、`out of the tray` → `out` / `▁of` / `▁the` / `▁tray`、
+`alphabet soup` → `alphabet` / `▁soup`。**語彙は 257,152 語で、Track3 に出てくるのは
+すべて普通の英単語である。**
+
+**学習してはいけない理由が 2 つある。**
+
+| 理由 | 中身 |
+|---|---|
+| **ID の割り当てが変わると、事前学習した埋め込みが全部無効になる** | **`embed_tokens.weight` は行番号がトークン ID である。**実物の形が `[257152, 2048]` で、**行数が語彙数とぴったり一致する**（`pi05_rp3000/model.safetensors` のヘッダを読んだ。キーは `model.paligemma_with_expert.paligemma.model.language_model.embed_tokens.weight`）。語彙を作り直すと語と行の対応が崩れるので、**埋め込みを一から学び直すことになる** |
+| **推論時に読むのは同梱した `vlm/` である** | `policy_server.py` の 763 行が `tokenizer_processor` の `tokenizer_name` に `<重み>/vlm` を渡す。**学習時と 1 バイトでも違うと、同じ文が違う ID になる** |
+
+**言語側の重みは、すでに学習している。**`--freeze-vision-encoder false --train-expert-only false`
+なので、`_set_requires_grad`（**429〜437 行**）は**何も凍結しない**
+（行は学習に使っている lerobot 0.6.0 の実体で数えた——
+`/opt/lerobot/src/lerobot/policies/pi05/modeling_pi05.py`。常駐コンテナ `quant_train` の中にある）
+——PaliGemma（画像側 ＋ Gemma の言語側 ＋ `embed_tokens`）と action expert の全部が対象である。
+**学習ログの `num_learnable_params=4143404816` がそれで、行動側だけなら 693,422,112 になる。**
+
+> **だから Track3 で足りていないのは「言語の学習量」ではない。**
+> **足りていないのは 2 つである。**①**その言い方をほぼ見ていない**
+> ——学習データの指示文 2,066 種のうち `take … off / out of` は **1 件**だけである
+> （`open_items.md` の `F72`）。②**似た物の中から選べていない**
+> ——9/3 の測定で腕が対象外の物を 10〜50 cm 運んでいた
+> （[../knowledge/17_track3_picks_the_wrong_object.md](../knowledge/17_track3_picks_the_wrong_object.md)）。
+> **どちらもデータの問題で、トークナイザの問題ではない。**
