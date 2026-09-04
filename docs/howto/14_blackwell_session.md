@@ -679,8 +679,20 @@ Track3 の 4 タスクは**4 つとも `libero_90` の場面から作られて�
 | タスク | 40 | **111** |
 | 版・fps・カメラ | v3.0・20 Hz・front と wrist | **同じ**（変換は要らない） |
 
-**変えるのはデータだけである。**出発点・歩数・batch・学習率・カメラ拡張は、
-**比べる相手（8.0.0 か 12.0.0）と同じにする。**
+**変えるのはデータだけである。****比べる相手は 5.0.1（Track1 0.492・Track2 0.233）**——
+**こちらが持っている中で Track1 が最高の重みである。**
+だから**出発点は `rp3000`、歩数は 1,500** にし、batch・学習率・カメラ拡張も 5.0.1 に揃える。
+
+> **【9/4 に決めた】`trial1500/001500` から足す案はやめた。**
+> **`rp3000` を 0 歩として点を並べ直すと、Track1 は +1,500 歩が頂点で、その先は下りである**
+> （+0 が 0.370・**+1,500 が 0.492**・+3,000 が 0.478・+4,000 が 0.475）。
+> **`trial1500/001500` から足すと、下っている区間の上に積むことになり、
+> データを替えた効果と混ざる。**
+> **あわせて `--init-from` は学習率の刻みを引き継がない**ので、続きを足すたびに
+> 頂点 5e-6 からの立ち上がりを踏み直す。**`rp3000` から始めれば、その山が 1 つ減る。**
+> **1,500 歩なら 2 時間 51 分で、2,500 歩の案より約 2 時間短い。**
+> 読みは [../reference/19_weights_catalog.md](../reference/19_weights_catalog.md)
+> の「【9/4】出発点そのもの（`rp3000`）を 0 歩として並べ直した」。
 
 ### 打つ前に —— 「毎セッション打つ 3 つ」に、データの展開が 1 つ増える
 
@@ -691,6 +703,16 @@ Track3 の 4 タスクは**4 つとも `libero_90` の場面から作られて�
 . ~/env_pi05.sh
 hf download siruku6/pi05_code --local-dir ~/pi05_code
 ```
+
+#### 出発点の重みは `rp3000` である（**いつもの `trial1500/001500` ではない**）
+
+```sh
+hf download siruku6/pi05_full_runpod --local-dir /opt/dlami/nvme/weights/rp3000
+du -sh /opt/dlami/nvme/weights/rp3000
+ls /opt/dlami/nvme/weights/rp3000/vlm | wc -l    # 4
+```
+
+**`vlm/` が同梱されているので、あとで zip を組むときの `cp -r` は要らない。**
 
 #### 配布 tar を展開する（**このセッションで 1 回。消える領域に置く**）
 
@@ -716,7 +738,7 @@ print(i['total_episodes'], i['total_frames'], i['total_tasks'], i['fps'])"
 
 **この 4 つの数が違ったら、そこで止めること。**別の tar である。
 
-### 打つ 1 行（8.0.0 との 1 変数）
+### 打つ 1 行（5.0.1 との 1 変数）
 
 ```bash
 . ~/env_pi05.sh
@@ -725,9 +747,9 @@ DATA=/opt/dlami/nvme/data/libero_combined_20hz
 
 NW=$(python -c "import os;print(min(os.cpu_count()//2, 16))")
 nohup python train_pi05.py --run-name pi05_all111 \
-    --init-from /opt/dlami/nvme/weights/trial1500/001500 \
+    --init-from /opt/dlami/nvme/weights/rp3000 \
     --dataset-repo lerobot/libero_combined_20hz --dataset-root "$DATA" \
-    --steps 2500 --batch-size 64 --num-workers "$NW" \
+    --steps 1500 --batch-size 64 --num-workers "$NW" \
     --learning-rate 5e-6 --save-freq 500 \
     --freeze-vision-encoder false --train-expert-only false \
     --camera-viewpoint-augment \
@@ -735,7 +757,8 @@ nohup python train_pi05.py --run-name pi05_all111 \
 echo "PID $!"
 ```
 
-**`--dataset-repo` と `--dataset-root` の 2 つ以外は、8.0.0 を作った学習と 1 文字も違わない。**
+**`--dataset-repo` と `--dataset-root` の 2 つ以外は、5.0.1 を作った学習と 1 文字も違わない**
+（`rp3000` から 1,500 歩・batch 64・学習率 5e-6・カメラ拡張あり・画像側を開ける）。
 
 > **`lerobot/libero_combined_20hz` は Hugging Face に無いが、それで構わない。**
 > **`--dataset-root` を渡すと、LeRobot は Hub を 1 度も見ない**——`datasets/dataset_metadata.py` の `LeRobotDatasetMetadata.__init__` は
@@ -743,11 +766,8 @@ echo "PID $!"
 > **だから名前は札にすぎず、実体は展開したディレクトリである。**
 > **版（`--dataset.revision`）は付けない**——`train_pi05.py` が、既定のデータのときだけ既定の版を付けるようにしてある。
 
-> **12.0.0（場面カメラを潰した重み）が 8.0.0 に勝っていたときは、2 か所替える。**
-> **`--init-from` を `/opt/dlami/nvme/weights/camdrop2500/002500` にし、
-> `--scene-camera-dropout 0.5` を足す。****そうすると相手が 12.0.0 になり、
-> やはりデータだけの 1 変数になる。**
-> **どちらにするかは、9/4 に返る点で決まる**（[../talk/260904_briefing.md](../talk/260904_briefing.md) 5 節）。
+> **場面カメラを潰す指定（`--scene-camera-dropout`）は付けない。**
+> **9/4 に 12.0.0 が 8.0.0 に両トラックとも負けたので、その道は打ち切った。**
 
 ### 始めた直後に確かめる 3 行（**ここが要である**）
 
@@ -760,7 +780,7 @@ grep -m1 '学習開始' $OUTPUT_ROOT/pi05_all111.log
 | 見るもの | 期待値 | 違ったら |
 |---|---|---|
 | `num_learnable_params` | **4143404816** | 693422112 ならその場で止める（行動側しか学習していない） |
-| **`dataset.num_episodes`** | **19533** | **14347 なら乗り換えていない。****その場で止める**——気付かないと 4 時間 48 分を古いデータで使う |
+| **`dataset.num_episodes`** | **19533** | **14347 なら乗り換えていない。****その場で止める**——気付かないと 2 時間 51 分を古いデータで使う |
 | `学習開始（…）` の行の末尾 | **`データ lerobot/libero_combined_20hz（/opt/dlami/nvme/data/…）`** | データの名前と置き場が出る（9/4 に足した） |
 
 **`--dataset-root` を忘れたときは、`train_pi05.py` がデータを読む前に止める**
@@ -773,7 +793,7 @@ grep -m1 '学習開始' $OUTPUT_ROOT/pi05_all111.log
 |---|---|
 | **Track1・Track2 が下がりうる** | **1 タスクあたりの学習量が 40 → 111 に薄まる。**だから**3 トラックとも出して確かめる**——8.0.0 と 12.0.0 が基準になるので、下がればすぐ分かる |
 | 正規化の統計が変わる | データが変われば `MEAN_STD` の統計も変わる。**チェックポイントの中に一緒に入るので、zip を組み直せばそれで足りる** |
-| 1 エポックの意味 | コマ数が 2,238,036 → 3,028,708 なので、同じ 2,500 歩でも**見る回数の割合は 3/4 に減る** |
+| 1 エポックの意味 | コマ数が 2,238,036 → 3,028,708 なので、同じ 1,500 歩でも**見る回数の割合は 3/4 に減る**（1,500 歩 × batch 64 ＝ 96,000 コマ＝ 0.032 エポック） |
 | 展開先が消える | `/opt/dlami/nvme` はセッション終了で消える。**毎セッション展開し直す**（`~/dataset` の tar は消えない） |
 
 ### 手元で試験を走らせる（1 行）
