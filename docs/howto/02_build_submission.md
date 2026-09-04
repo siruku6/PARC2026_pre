@@ -12,6 +12,8 @@
 | 予選期（0.1.0〜4.4.0）の zip の sha256 | [../reference/archive/16_qualifier_submission_zips.md](../reference/archive/16_qualifier_submission_zips.md) |
 | 踏んだ事故と回避策 | [../knowledge/](../knowledge/) |
 
+**提出のたびに要る値は 4 つだけである**——**版番号・重みの HF リポジトリ・歩数・どのトラックへ出すか。****この 4 つはそのつどチャットで渡す**（[「zip を 1 本組んで出す」](#zip-を-1-本組んで出す)の `<版>`・`<重み>` に入れる）。
+
 追加学習した重みを使う場合は、先に
 [01_retrain.md](01_retrain.md) を終えて `merged_model/` を用意しておく。
 
@@ -460,329 +462,51 @@ shasum -a 256 work/submission_<版>.zip     # Linux では sha256sum
 [../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) の
 「本選の提出と点」にある。****課題 ID は Track1 が 1007・Track2 が 1008・Track3 が 1009 である。**
 
-### 設定を 1 つだけ変えた zip を、既にある zip から 10 分で作る
-
-> **しきい値（`_MIN_LEXICAL`）を振るためには、もうこれを使わない**
-> （3 通り出して 3 回とも 0 / 8 だった。
-> [../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) の「9/1 の 5.2.0」）。
-> **残してあるのは「文字数が変わらない設定を 1 つだけ振る」ときの手順としてである**
-> ——`PARC_EMA_ALPHA` や `PARC_NUM_INFERENCE_STEPS` でも同じ形で使える。
-
-**重みを降ろさず、組み直さない。**`0.50` → `0.99` と版番号はどちらも文字数が変わらないので、
-**zip の中身をその場で書き換えられる。**
-
-**打つのは、書き換えたい zip が置いてある機械である**（どこに何があるかは
-[../resources/infra_and_docker.md](../resources/infra_and_docker.md)）。
-**下のコマンドの `cd` は、その機械での置き場に読み替える。**
-
-```bash
-cd ~/lab/PARC2026_pre   # Mac では zip を置いたディレクトリ
-
-# ① まず中を見る（書き換える前に必ず打つ）
-python3 solution/tools/build/patch_zip_policy_server.py work/submission_8.0.0.zip --show
-
-# ② 元を残したまま書き換える
-#    この道具は zip をその場で書き換えるだけで、別名では出せない
-#    （`--in-place` が無いと「書いていない」と言って何もしない）。だから先に cp する
-cp work/submission_8.0.0.zip work/submission_8.1.0.zip
-python3 solution/tools/build/patch_zip_policy_server.py work/submission_8.1.0.zip --in-place \
-    --replace '_MIN_LEXICAL = 0.50' '_MIN_LEXICAL = 0.99' \
-    --replace '__version__ = "8.0.0"' '__version__ = "8.1.0"'
-
-# ③ sha256 を取り直す（書き換えたので、組んだときの値とは違う）
-sha256sum work/submission_8.1.0.zip | tee work/submission_8.1.0.sha256
-```
-
-| 確かめること | 期待する値 |
-|---|---|
-| `--show` の `_MIN_LEXICAL` | **書き換え前 `0.50` → 書き換え後 `0.99`** |
-| `--show` の `__version__` | **書き換え前 `8.0.0` → 書き換え後 `8.1.0`** |
-| 採点ログの `[parc]` 行 | **`policy_server 8.1.0`**（違ったら別の zip を出している） |
-
-> **手順 ① の `--show` を飛ばさない。**
-> **どの版のどの設定が入っているかは、zip の中を見るまで分からない**（ファイル名は当てにならない）。
-> **違っていたら `--replace` の左側をその値に読み替える**——**この道具は左側が 1 箇所に無いと
-> `が 0 箇所ある` と言って止まる**ので、間違ったまま書き換わることはない。
-
-> **`長さが違う置き換えは通せない` が出たら、置き換える前後の文字数が違う。**
-> `0.50` と `0.99` は 4 文字ずつ、`8.0.0` と `8.1.0` は 5 文字ずつなので、この 2 つでは出ない。
-> **6 文字の版（`10.0.0`）はこの手では付けられない**（上の「版番号の決まり」の囲み）。
-
-## 順番 —— 1 本ずつ最後まで通す
+## zip を 1 本組んで出す
 
 **1 本を提出まで終わらせてから次に移る。**2 本を並行して組むと、
 どちらの zip に何を書き換えたのかが分からなくなる。
 
+### 始める前に、3 つだけ決める
+
+**道は 1 本である。変わるのはこの 3 つだけで、それぞれ手順の 1 か所に効く。**
+
+| 分かれ道 | 見分け方 | どこが変わるか |
+|---|---|---|
+| **① どこで組むか** | **重みが Mac にあるか**。無ければ「重みが置いてある機械」で組む | **Mac で組めば手順 5（運ぶ）が消える。**9.4 GB が流れるのは重みを降ろす 1 回だけになる |
+| **② 版が 5 文字か 6 文字か** | `8.0.0` は 5 文字、`12.0.0` は 6 文字 | **手順 3 で、組む前に直すか（6 文字）・組んだ後に zip を書き換えるか（5 文字）** |
+| **③ 重みに `vlm/` があるか** | `ls <重み>/vlm \| wc -l` が **4** なら在る、**0** なら無い | **無ければ手順 2 が要る。**学習が書いたチェックポイントには入っていない |
+
+> **版番号と重みの道は、提出のたびにチャットで渡す。**
+> **この手順書には書かない**——書くと次の提出で必ず古くなる。
+> いま何を出すかは [../talk/open_items.md](../talk/open_items.md) にある。
+
 ```mermaid
 flowchart LR
-    D["1. 重みを降ろす<br/>9.4 GB・15 分"] --> B["2. 組む<br/>15 分"]
-    B --> P["3. 中を書き換える<br/>10 秒"]
-    P --> S["4. sha256 を取り直す<br/>1 分"]
-    S --> M["5. Mac へ運ぶ<br/>HF 経由 16 分"]
-    M --> U["6. 出す"]
+    W["1. 重みを用意する<br/>9.4 GB・16 分"] --> V["2. vlm/ を足す<br/>③のときだけ・数秒"]
+    V --> B["3. 版を入れて組む<br/>数分"]
+    B --> S["4. sha256 を確かめる"]
+    S --> M["5. Mac へ運ぶ<br/>①のときだけ・16 分"]
+    M --> U["6. 出す<br/>1 本 20 分"]
+    U --> R["7. 片付けて記録する"]
 ```
 
-**読み替えるのは 2 か所である**——`--include` に渡す重みの道と、版番号。
-**どの版がどの重みかは
-[../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) の
-「版番号だけから引きたいとき」にある。**
+**要るのは空き 19 GB である**（重み 9.4 GB ＋ zip 9.4 GB）。**出したその日のうちに両方消す。**
+**足りなければ [09_free_disk_space.md](09_free_disk_space.md)。**
 
-> **版が 6 文字（`10.0.0` 以上）なら、手順 3（zip の中の書き換え）は使えない。**
-> **代わりに手順 1 の前に `solution/policy_server.py` の 2 行を直す**
-> ——`__version__ = "4.6.0"`（176 行）と `_MIN_LEXICAL = 0.65` → `0.50`（324 行）。
-> **後者を忘れると「重みだけの 1 変数」が壊れる**（5.0.1 以降は全部 0.50 で組んである）。
-> **組んだ直後に `git checkout solution/policy_server.py` で戻す。**
+### 1. 重みを用意する（律速。約 16 分）
 
-### 1. 重みを降ろす
+**降ろすのと `vendor/` を作るのは同時に進む。**先に降ろし始める。
 
 ```bash
-cd ~/src/PARC2026_pre
-hf download siruku6/pi05_trial1500 --include 'ladder2500/002500/*' \
-    --local-dir work/artifacts/trial1500
-```
-
-**確認と、出るはずのもの**（`001000` を出すときは道の `ladder2500/002500` を読み替える）。
-
-| 打つもの | 出るはず |
-|---|---|
-| `ls work/artifacts/trial1500/ladder2500/002500` | `config.json model.safetensors policy_postprocessor.json policy_postprocessor_step_0_unnormalizer_processor.safetensors policy_preprocessor.json policy_preprocessor_step_2_normalizer_processor.safetensors train_config.json vlm` |
-| `ls work/artifacts/trial1500/ladder2500/002500/vlm` | `added_tokens.json special_tokens_map.json tokenizer.json tokenizer_config.json` |
-| `du -sh work/artifacts/trial1500/ladder2500/002500` | **`8.8G`**（`model.safetensors` が 9,354,050,752 バイト） |
-| `sha256sum work/artifacts/trial1500/ladder2500/002500/model.safetensors` | **`cea403c9…` で始まる**（HF の LFS のダイジェストと一致する。降ろし損ねの検出。**他の 3 点は [../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) の「一覧」にある**） |
-
-**`vlm/` が無ければここで止まる。**採点で「モデルロードに失敗」になる（下の「つまずいたとき」）。
-
-### 2. 組む
-
-```bash
-python3 solution/tools/build/build_submission.py \
-    --weights work/artifacts/trial1500/ladder2500/002500 \
-    --output work/submission_8.0.0.zip
-```
-
-**`--weights` に渡したディレクトリが、そのまま zip の `model_weights/` になる。**
-`install_weights.py` は使わない（**9.4 GB の複製を 2 つ作るうえ、`model_weights.bak/` を上書きする**）。
-
-**出るはずのもの。**
-
-```
-[build] 検証     <数百> エントリ一致、必須構成あり
-[build] コード   .../solution
-[build] 生成物   .../work/artifacts
-[build] 重み     .../work/artifacts/trial1500/ladder2500/002500
-[build] 出力     .../work/submission_8.0.0.zip
-[build] <数百> files / 9385 MB
-[build] sha256 <64 桁>
-[build] ハッシュを保存: .../work/submission_8.0.0.sha256
-```
-
-| 見るところ | 合格の線 |
-|---|---|
-| **`[build] 検証` の行** | **出ていること。出ないビルドは使わない** |
-| `MB` | **9,3xx**（重み 9,372 MB ＋ 同梱 LeRobot 13 MB） |
-| `[build] ハッシュを保存` の行 | **この sha256 は捨てる。**次の手で中身を書き換えるので合わなくなる |
-
-### 3. 中を書き換える（組み直さない）
-
-**`build_submission.py` が作る zip では `policy_server.py` が無圧縮（method=0）で入っている。**
-だから**同じ長さの置き換えなら、バイトを差し替えて CRC を直すだけで済む。**
-9.4 GB を組み直す必要は無い。
-
-**まず中を見る。書き換える前に必ず見ること**——どの版のどの設定が入っているかは
-ファイル名からは分からない。
-
-```bash
-python3 solution/tools/build/patch_zip_policy_server.py \
-    work/submission_8.0.0.zip --show
-```
-
-**出るはずのもの**（`solution/policy_server.py` の現在の既定値。8/29 に実行して確認）。
-
-```
-== submission_8.0.0.zip のいま
-    __version__ = "4.6.0"
-    _MIN_LEXICAL = 0.65
-    _MIN_LEXICAL_MARGIN = 0.05
-    _USE_EMBEDDING = False
-    "PARC_NUM_INFERENCE_STEPS", "10"
-    "PARC_N_ACTION_STEPS", "16"
-    "PARC_BLEND_STEPS", "0"
-    "PARC_EMA_ALPHA", "0.3"
-    "PARC_SAMPLES", "1"
-    "PARC_GAIN_TRANSLATION", "1.0"
-    "PARC_GAIN_ROTATION", "1.0"
-    "PARC_SEED", "0"
-    "PARC_NORMALIZE_INSTRUCTION", "1"
-    "PARC_RTC", "0"
-
---replace が無いので何もしない
-```
-
-**`__version__` の右辺が `4.6.0` であることを、この目で確かめてから次へ進む。**
-違っていたら下の分岐へ。
-
-**書き換える。**
-
-```bash
-python3 solution/tools/build/patch_zip_policy_server.py \
-    work/submission_8.0.0.zip \
-    --replace '_MIN_LEXICAL = 0.65' '_MIN_LEXICAL = 0.50' \
-    --replace '__version__ = "4.6.0"' '__version__ = "8.0.0"' \
-    --in-place
-```
-
-**出るはずのもの。**
-
-```
-== submission_8.0.0.zip のいま
-    （上と同じ 14 行）
-
-置き換え 2 件。CRC xxxxxxxx → yyyyyyyy
-== submission_8.0.0.zip の書き換え後
-    __version__ = "8.0.0"
-    _MIN_LEXICAL = 0.50
-    （残り 12 行は同じ）
-
-書き換える前の sha256: <64 桁>
-書き換えた後の sha256: <64 桁>
-zipfile で読み直して一致。項目数 <数百>
-```
-
-| 見るところ | 合格の線 |
-|---|---|
-| **`zipfile で読み直して一致` の行** | **出ていること。**道具は `zipfile.testzip()` まで通してから言う。**出ないものは出さない** |
-| `書き換え後` の `__version__` | **`8.0.0`**（`9.0.0` のときは `9.0.0`） |
-| `書き換え後` の `_MIN_LEXICAL` | **`0.50`** |
-| `"PARC_EMA_ALPHA"` | **`0.3` のまま**（動かさない） |
-
-> **`--in-place` を付けない限り 1 バイトも書かない。**不安なら先に付けずに実行して、
-> 印字だけ見てから付け直す。
->
-> **道具は置き換えの左辺が zip の中に 1 か所だけあることを確かめる。**
-> 0 か所でも 2 か所でも止まる。
-
-### 4. sha256 を取り直す
-
-**`build_submission.py` が書いた `work/submission_8.0.0.sha256` は書き換える前の値である。**
-**必ず取り直す。**
-
-```bash
-sha256sum work/submission_8.0.0.zip | tee work/submission_8.0.0.sha256
-```
-
-**この値を控える。**Mac で降ろしたあとに突き合わせる相手である。
-
-### 5. Mac へ運ぶ
-
-**`scp` は 1.7 MB/s しか出ないので 9.4 GB に 1 時間半掛かる。HF の非公開リポジトリを
-中継すると 16 分である**（作り直した zip なら 50 秒。Xet が同じ切れ端を送らない）。
-背景は下の「zip を Mac へ運ぶ」にある。
-
-```bash
-# RTX6000 側
-.venv/bin/hf auth whoami        # user=siruku6 が出ること
-.venv/bin/hf upload siruku6/parc2026-submission \
-    work/submission_8.0.0.zip submission_8.0.0.zip \
-    --repo-type model --commit-message "8.0.0 ladder2500/002500 lexical 0.50"
+# ── ターミナル 1（先に打つ）
+cd <リポジトリ> && git pull
+hf download <HF のリポジトリ> --include '<歩数>/*' --local-dir work/artifacts/<置き場>
 ```
 
 ```bash
-# Mac 側
-hf download siruku6/parc2026-submission submission_8.0.0.zip \
-    --repo-type model --local-dir ~/Downloads/parc2026
-shasum -a 256 ~/Downloads/parc2026/submission_8.0.0.zip   # 手順 4 の値と一致すること
-```
-
-> **Mac の空きは 50〜70 GB しかない。**zip 2 本で 18.8 GB を占める。
-> **提出したその日のうちに Mac から消す**（`rm ~/Downloads/parc2026/submission_*.zip`）。
-> **HF 側も、Mac で降ろしたその場で消す**——古い LFS の版も容量に数えられるため、
-> 置きっぱなしにすると無料枠 100 GB を食い潰す。
-
-### 6. 出す
-
-Omnicampus にアップロードする。**課題 ID は Track1 が 1007・Track2 が 1008・Track3 が 1009**
-（[../plan/14_finals1_gpu_and_submission_plan.md](../plan/14_finals1_gpu_and_submission_plan.md) の「いまどこにいるか」のルール表）。
-どの zip をどのトラックへ出すかは上の表のとおりである。
-
-**Mac の回線からは 9.4 GB で 1 本 20 分である。3 本なら 1 時間。**
-**アップロードが完了した時点で枠を消費するので、0 時の 1 時間前を過ぎたら次の日に回す**
-（越えると翌日の回数が消える。本選資料 v1.1 p.30）。**放っておける待ちなので、
-この 20 分の間に次の zip を組める。**
-
-**採点は 10〜20 分で返る。**返ってきたら**採点ログを保存し**、
-`b_PARC2026_final/outputs/submission_logs/track<N>/` へ置く。
-
-```bash
-grep -n '総合スコア' <保存した採点ログ>
-grep -n '^\[parc\] policy_server' <保存した採点ログ>   # 出した版と設定を突き合わせる
-```
-
-**`[parc] policy_server 8.0.0 ... ema_alpha=0.3` と出ていれば、狙った zip が動いている。**
-
-## 分岐 —— 想定どおりでなかったとき
-
-| 何が起きたか | どう見分けるか | どうするか |
-|---|---|---|
-| **`policy_server.py` が無圧縮でなかった** | `--show` が `policy_server.py が無圧縮ではない（method=8）。この道具は使えないので build_submission.py で組み直すこと` で止まる | **リポジトリを一時的に書き換えて組み直す。**`solution/policy_server.py` の `_MIN_LEXICAL` と `__version__` を直接書き換えて `build_submission.py` を走らせ、**終わったら `git checkout solution/policy_server.py` で戻す。**戻したことを `git status --short` で確かめる |
-| **`vendor/` が無い** | `build_submission.py` が `生成物がありません` で落ちる。`ls work/artifacts/vendor/lerobot` が空 | **ケース 0 の 0-2 を実行する**（LeRobot v0.6.0 のソースを取って `vendor_lerobot.py`。13 MB・3 分） |
-| **`__version__` の左辺が `4.6.0` でない** | `--show` の 1 行目が違う値を出す | **`--replace` の左辺を `--show` が出した実際の値に書き換える。**`4.6.0` は 8/29 時点の `solution/policy_server.py` の値であって、将来も同じとは限らない |
-| **`_MIN_LEXICAL` が既に `0.50`** | `--show` に `_MIN_LEXICAL = 0.50` が出る | **その `--replace` を 1 行落とす。**左辺が 0 か所だと道具が止まる |
-| **長さが違う置き換えを書いた** | `長さが違う置き換えは通せない: N → M` で止まる | **桁数を合わせる**（`0.5` ではなく `0.50`、`6.1` ではなく `6.1.0`）。合わせられないなら組み直す |
-| **左辺が 2 か所ある** | `... が 2 箇所ある（1 箇所でないと危ない）` で止まる | 組み直す側へ切り替える（1 行目の分岐と同じ） |
-| **Mac で sha256 が合わない** | `shasum -a 256` が手順 4 の値と違う | **途中で切れている。**降ろし直す。**合わないものを出さない** |
-
-## 終わったら確かめる
-
-```bash
-cd ~/src/PARC2026_pre
-git status --short                                   # 何も出ないこと
-grep -n '^_MIN_LEXICAL = ' solution/policy_server.py # 0.65 のままであること
-grep -n 'PARC_EMA_ALPHA' solution/policy_server.py   # 既定 "0.3" のままであること
-```
-
-**リポジトリの `solution/policy_server.py` は 0.65・EMA 0.3 のまま残す**
-（0.65 の由来は
-[../knowledge/15_instruction_normalizer_inverted_a_task.md](../knowledge/15_instruction_normalizer_inverted_a_task.md)）。
-
----
-
-# zip を Mac へ運ぶ
-
-**そもそも zip を運ぶ必要が無い。** `build_submission.py` が集めるのは
-`solution/` の 3 ファイルと `work/artifacts/{model_weights,vendor}` だけで、
-**標準ライブラリしか使わない**（`argparse`・`hashlib`・`re`・`zipfile`・`pathlib`）。
-**重みさえ Mac にあれば、Mac の `python3` で組める。**`venv310` も要らない
-（あれは `vendor_lerobot.py` が使うもので、`vendor/` を作り終えていれば出番は無い）。
-
-| 道 | Mac に届くバイト | Mac に一時的に置く量 | HF に新しく積む容量 | 掛かる時間 |
-|---|---|---|---|---|
-| **GPU マシンで組み、HF を中継に運ぶ**（既定） | 9.4 GB（zip） | **9.4 GB** | **＋9.4 GB** | 16 分（作り直した zip なら 50 秒） |
-| GPU マシンで組み、`scp` で運ぶ | 9.4 GB（zip） | **9.4 GB** | **0** | **1 時間半**（1.7 MB/s） |
-| Mac で組む | 9.4 GB（重み） | **約 19 GB**（重み＋zip） | **0** | 16 分 ＋ 組む時間 |
-
-**Mac に届くバイト数はどちらも約 9.4 GB で同じである。** 違うのは
-**Mac のディスク**と **HF に新しく積む容量**、それに
-**同じ重みから 2 本目を組むときの費用**（GPU マシンで組むなら毎回 zip を運ぶ。
-Mac で組むなら重みが手元にあるので転送は 0）である。
-
-## Mac で組む —— **今日じゅうに出したいときはこれが最短**（20〜25 分）
-
-**zip を運ばずに済む唯一の道である。**9.4 GB が回線を流れるのは
-**重みを降ろす 1 回だけ**で、それがそのまま提出する台に着く。
-GPU マシンで組むと、重みを降ろす回と zip を運ぶ回で 2 回流れる。
-
-**要るのは空き 19 GB である**（重み 9.4 GB ＋ zip 9.4 GB）。**出したらその日のうちに両方消す。**
-
-**律速は重みのダウンロード（9.4 GB で約 16 分）なので、先に始めて裏で `vendor/` を作る。**
-
-```bash
-# ── ターミナル 1（先に打つ。約 16 分）
-cd <Mac のリポジトリ> && git pull
-hf download siruku6/pi05_trial1500 --include '<歩数>/*' \
-    --local-dir work/artifacts/trial1500
-
 # ── ターミナル 2（裏で。約 3 分。`work/artifacts/vendor/lerobot` が既にあれば飛ばす）
-cd <Mac のリポジトリ>
+cd <リポジトリ>
 python3 -c "
 import io, tarfile, urllib.request, pathlib, shutil
 url = 'https://codeload.github.com/huggingface/lerobot/tar.gz/refs/tags/v0.6.0'
@@ -795,213 +519,265 @@ with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as tf:
 "
 python3 solution/tools/build/vendor_lerobot.py
 find work/artifacts/vendor/lerobot -name '*.py' | wc -l    # 487 になること
-
-# ── 降り終わったら組む（数分）
-python3 solution/tools/build/build_submission.py \
-    --weights work/artifacts/trial1500/<歩数> \
-    --output work/submission_<版>.zip
-
-# ── 中の 2 行を書き換えて sha256 を取り直す（数秒）
-python3 solution/tools/build/patch_zip_policy_server.py work/submission_<版>.zip \
-    --replace '_MIN_LEXICAL = 0.65' '_MIN_LEXICAL = 0.50' \
-    --replace '__version__ = "4.6.0"' '__version__ = "<版>"' \
-    --in-place
-rm -f work/submission_<版>.sha256
-shasum -a 256 work/submission_<版>.zip | tee work/submission_<版>.sha256
 ```
+
+**降り終わったら 3 つ確かめる。**
+
+| 打つもの | 出るはず |
+|---|---|
+| `ls <重み>` | `config.json model.safetensors policy_postprocessor.json policy_postprocessor_step_0_unnormalizer_processor.safetensors policy_preprocessor.json policy_preprocessor_step_2_normalizer_processor.safetensors train_config.json`（＋ `vlm` があれば手順 2 は不要） |
+| `du -sh <重み>` | **`8.8G`**（`model.safetensors` が 9,354,050,752 バイト） |
+| `shasum -a 256 <重み>/model.safetensors` | **HF の LFS のダイジェストと一致すること**（降ろし損ねの検出。各点の値は [../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) の「一覧」） |
 
 **`hf download` は `hf_xet` が入っていると速い。**入っていなければ
 `pip install "huggingface_hub[hf_xet]"`。
+**非公開リポジトリは `hf auth whoami` が通っていないと `not found` に見える。**
 
-**`<版>` は `"4.6.0"` と桁数が同じ 5 文字にする**（`6.1.0` など）。
-桁数が違うと `patch_zip_policy_server.py` がその場で止まる。
+### 2. `vlm/` を足す（**③ のときだけ**・17 MB・数秒）
 
-**`vendor/` を作り直しても提出済みの zip と同一になる**ので、
-`scp -r work/artifacts/vendor <Mac>:<リポジトリ>/work/artifacts/` で運んでもよい（13 MB）。
-
-### 例: 12.0.0（`camdrop2500` の `002500`）を組む
-
-**なぜこれを出すのか・相手はどれかは
-[../talk/open_items.md](../talk/open_items.md) の `F76` にある。**
-
-**組む台は Mac である。****この lab のマシンでは組めない**——
-**空きが 11 GB しか無く、要るのは 19 GB である**（重み 9.4 GB ＋ zip 9.4 GB）。
-
-| 前提 | 確かめ方 | 満たしていないとき |
-|---|---|---|
-| **Mac の空きが 19 GB 以上** | `df -h .` | 出したその日に前の zip と重みを消す（[09_free_disk_space.md](09_free_disk_space.md)） |
-| リポジトリが最新 | `cd <Mac のリポジトリ> && git pull` | **`002500` の重みは HF にあるので、リポジトリには入っていない** |
-| **HF に入れている** | `hf auth whoami` で名前が出る | `pi05_camdrop2500` は**非公開**なので、未認証だと `not found` に見える |
-
-**版は `12.0.0` である**（メジャー番号は重みを指す。4・5・6・8・9・10・11 が埋まっている）。
-**6 文字なので、zip の中の 12 バイト書き換えでは付けられない。**
-**だから組む前に `solution/policy_server.py` の 2 行を直し、組んだ直後に戻す**
-（10.0.0 と同じ道。理由は下の節）。
+**`policy_server.py` は `model_weights/vlm/` からトークナイザを読む。**
+**無いと採点環境で Hub へ取りに行って失敗するので、`build_submission.py:248` が
+zip を書いた後に検証で落とす。**
 
 ```bash
-# ── ターミナル 1（先に打つ。約 16 分。律速はこれ）
-cd <Mac のリポジトリ> && git pull
-source work/venv310/bin/activate
-hf download siruku6/pi05_camdrop2500 --include '002500/*' \
-    --local-dir work/artifacts/camdrop2500
-
-# ── ターミナル 2（裏で。約 3 分。`work/artifacts/vendor/lerobot` が既にあれば飛ばす）
-#    上の「Mac で組む」の vendor を作る 2 つのコマンドをそのまま打つ
-```
-
-```bash
-# ── 1. vlm/ を足す（17 MB・数秒）。**学習が書いたチェックポイントには入っていない**
 hf download siruku6/pi05_full_runpod --include 'vlm/*' \
     --local-dir work/artifacts/pi05_rp3000        # 公開なので認証は要らない
-cp -R work/artifacts/pi05_rp3000/vlm work/artifacts/camdrop2500/002500/vlm
-ls work/artifacts/camdrop2500/002500/vlm | wc -l  # 4 になること（`ln -s` は駄目）
-
-# ── 2. 2 行を直して組む（数分）
-sed -i '' 's/_MIN_LEXICAL = 0.65/_MIN_LEXICAL = 0.50/' solution/policy_server.py
-sed -i '' 's/__version__ = "4.6.0"/__version__ = "12.0.0"/' solution/policy_server.py
-git diff --stat solution/policy_server.py         # 2 行だけ変わっていること
-python3 solution/tools/build/build_submission.py \
-    --weights work/artifacts/camdrop2500/002500 \
-    --output work/submission_12.0.0.zip
-
-# ── 3. 直したのを戻す（**忘れるとリポジトリの 0.65 が消える**）
-git checkout solution/policy_server.py
-grep -n '^_MIN_LEXICAL = \|^__version__' solution/policy_server.py   # 0.65 と 4.6.0 に戻ること
-
-# ── 4. sha256（**取り直しは要らない**。組む前に直したので、build が書いた値がそのまま最終である）
-shasum -a 256 work/submission_12.0.0.zip
+cp -R work/artifacts/pi05_rp3000/vlm <重み>/vlm
+ls <重み>/vlm | wc -l                             # 4 になること
 ```
 
-**出す前に見るのは 3 つである。**
+> **`ln -s` は駄目である**——zip に実体が入らない。
+> **π0.5 のトークナイザは Gemma 系である。**SmolVLA の SmolVLM のものを入れてはならない（別物になる）。
 
-| 見るもの | 期待値 | 違ったら |
-|---|---|---|
-| `[build] 検証` の行 | **`541 エントリ一致、必須構成あり`** | エントリ数が違えば `vendor/` が古い。**作り直す** |
-| zip の大きさ | **9,3xx MB**（重み 9,372 MB ＋ 同梱 LeRobot 13 MB） | 小さければ重みが入っていない |
-| `vlm/` のファイル数 | **4** | 0 なら `build_submission.py` の 248 行が zip を書いた後に落とす |
+### 3. 版を入れて組む（数分）
 
-**どのトラックへ出すかは [../talk/open_items.md](../talk/open_items.md) にある。**
+**② で分かれる。****どちらの道でも出来上がるバイトは同じである**
+（下の「なぜ 2 つの道があるのか」）。
 
-**終わったら、sha256 と大きさを
-[../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) の
-「本選の提出と点」に 1 行足す。**採点が返ったら同じ行に点を書く。
-
-### 組む前に `policy_server.py` を直さず、組んだあとに zip の中を書き換えるのはなぜか
-
-**`patch_zip_policy_server.py` は「zip が既にあって、組み直すと 9.4 GB 掛かる」ときのための
-道具である。****組むところから始めるなら、先にリポジトリの `policy_server.py` を
-直してから組んでもよい。出来上がるバイトは同じである**（道具がしているのは
-`text.replace(src, dst, 1)` で、`build_submission.py` はファイルをそのまま格納する）。
-
-| | 良いところ | 気をつけること |
-|---|---|---|
-| **組んだあとに zip を書き換える**（既定） | **リポジトリを汚さない。**書き換え前後の設定を印字し、`zipfile` で読み直して `testzip()` まで通す | 手順が 1 つ増える |
-| 組む前に `policy_server.py` を直す | 手順が 1 つ減る | **戻し忘れるとリポジトリの 0.65 が消える**（Track3 のバグ修正。[knowledge/15](../knowledge/15_instruction_normalizer_inverted_a_task.md)）。**macOS の `sed -i` は `sed -i ''` と空文字が要る** |
-
-先に直す道を採るなら、**組んだ直後に必ず戻す。**
+**道 A —— 版が 6 文字（`10.0.0` 以上）。組む前に直して、組んだ直後に戻す。**
 
 ```bash
 sed -i '' 's/_MIN_LEXICAL = 0.65/_MIN_LEXICAL = 0.50/' solution/policy_server.py
 sed -i '' 's/__version__ = "4.6.0"/__version__ = "<版>"/' solution/policy_server.py
 git diff --stat solution/policy_server.py          # 2 行だけ変わっていること
-# ここで build_submission.py を打つ
+
+python3 solution/tools/build/build_submission.py \
+    --weights <重み> --output work/submission_<版>.zip
+
 git checkout solution/policy_server.py
-grep -n '^_MIN_LEXICAL = ' solution/policy_server.py   # 0.65 に戻っていること
+grep -n '^_MIN_LEXICAL = \|^__version__' solution/policy_server.py   # 0.65 と 4.6.0 に戻ること
 ```
 
-## それでも GPU マシンで組んで運ぶとき
+**道 B —— 版が 5 文字。組んでから zip の中の 2 行を書き換える。**
 
-**`scp` は 1.7 MB/s しか出ないので 9.4GB に 1 時間半掛かる。**
-**非公開リポジトリを中継すると 1 分で済む。ただし置きっぱなしにしない**
-——上げて、Mac で降ろしたら、**その場でリポジトリから消す。**
+```bash
+python3 solution/tools/build/build_submission.py \
+    --weights <重み> --output work/submission_<版>.zip
 
-| やり方 | 9.4GB の実測 |
+python3 solution/tools/build/patch_zip_policy_server.py work/submission_<版>.zip \
+    --replace '_MIN_LEXICAL = 0.65' '_MIN_LEXICAL = 0.50' \
+    --replace '__version__ = "4.6.0"' '__version__ = "<版>"' \
+    --in-place
+```
+
+- **`sed -i` は macOS では `sed -i ''` と空文字が要る。**
+- **`_MIN_LEXICAL` を 0.50 にするのを忘れない**——5.0.1 以降は全部 0.50 で組んであり、
+  忘れると「重みだけの 1 変数」が壊れる。
+- **`--weights` に渡したディレクトリが、そのまま zip の `model_weights/` になる。**
+  `install_weights.py` は使わない（**9.4 GB の複製を 2 つ作るうえ、`model_weights.bak/` を上書きする**）。
+
+**出るはずのもの。**
+
+```
+[build] 検証     <数百> エントリ一致、必須構成あり
+[build] コード   .../solution
+[build] 生成物   .../work/artifacts
+[build] 重み     .../<重み>
+[build] 出力     .../work/submission_<版>.zip
+[build] <数百> files / 9378 MB
+[build] sha256 <64 桁>
+[build] ハッシュを保存: .../work/submission_<版>.sha256
+```
+
+| 見るもの | 合格の線 | 違ったら |
+|---|---|---|
+| **`[build] 検証` の行** | **出ていること** | **出ないビルドは使わない。**`git pull` してやり直す |
+| エントリ数 | **541**（π0.5・`vendor/` が v0.6.0 のとき） | 違えば `vendor/` が古い。手順 1 のターミナル 2 を打ち直す |
+| `MB` | **9,3xx**（重み 9,372 MB ＋ 同梱 LeRobot 13 MB） | 小さければ重みが入っていない |
+| `vlm/` のファイル数 | **4** | 0 なら `build_submission.py:248` が落とす。手順 2 へ |
+
+### 4. sha256 を確かめる
+
+| どちらの道を採ったか | sha256 |
 |---|---|
-| `scp` | **1 時間半**（1.7 MB/s） |
-| HF 経由・初回 | **16 分** |
-| **HF 経由・作り直した zip** | **50 秒** |
-
-**作り直した zip が速いのは、送る前に中身を細かく切って、既に置いてある zip と
-同じ切れ端を送らないためである**（Xet。`hf_xet` が入っていると自動で効く）。
-`policy_server.py` を 1 行変えただけの zip なら、実際に送るのは数十 MB で済む。
-
-> **このリポジトリは非公開のままにする。** 中身は π0.5 の重み
-> （PaliGemma / gemma 由来）と提出コードである。**公開してはいけない。**
-
-## GPU マシン側（送る）
+| **道 A（組む前に直した）** | **`build_submission.py` が書いた値がそのまま最終である。取り直しは要らない** |
+| **道 B（zip を書き換えた）** | **必ず取り直す**——`work/submission_<版>.sha256` は書き換える前の値である |
 
 ```bash
-cd ~/lab/PARC2026_pre
-
-# 入っていなければ  .venv/bin/pip install "huggingface_hub[hf_xet]"
-.venv/bin/hf auth whoami        # user=siruku6 が出ることを確かめる
-
-.venv/bin/hf upload siruku6/parc2026-submission \
-    work/submission_<版>.zip \
-    submission_<版>.zip \
-    --repo-type model \
-    --commit-message "<版> <重み> (sha256 <頭 8 桁>)"
+shasum -a 256 work/submission_<版>.zip | tee work/submission_<版>.sha256   # Linux では sha256sum
 ```
 
-**引数は「ローカルの場所」「リポジトリ内での名前」の順である。**
-順番を取り違えると変な階層に入る。**コミットメッセージに sha256 の頭 8 桁を
-入れておく**と、後からどの zip がどれか分かる。
+**この値を控える。**手順 5 で運ぶなら、降ろした先で突き合わせる相手である。
 
-送れたかを確かめる。**「サイズが手元と一致すること」まで見る。**
+### 5. Mac へ運ぶ（**① で別の機械で組んだときだけ**・約 16 分）
+
+**`scp` は 1.7 MB/s しか出ないので 9.4 GB に 1 時間半掛かる。**
+**HF の非公開リポジトリを中継すると 16 分**（作り直した zip なら 50 秒。
+Xet が同じ切れ端を送らない）。**置きっぱなしにしない**——
+上げて、Mac で降ろしたら、**その場でリポジトリから消す。**
 
 ```bash
-python3 -c "
-from huggingface_hub import HfApi
-for f in HfApi().list_repo_tree('siruku6/parc2026-submission', recursive=True):
-    if f.path.endswith('.zip'):
-        print(f'{f.path:34s} {getattr(f,\"size\",0):>13,}')
-"
-stat -c '%n %s' work/submission_<版>.zip
+# ── 組んだ機械（送る）。引数は「ローカルの場所」「リポジトリ内での名前」の順である
+hf auth whoami        # user=siruku6 が出ること
+hf upload siruku6/parc2026-submission \
+    work/submission_<版>.zip submission_<版>.zip \
+    --repo-type model --commit-message "<版> <重み> (sha256 <頭 8 桁>)"
 ```
 
-## Mac 側（受け取る）
-
 ```bash
+# ── Mac（受け取る）。**必ずハッシュを突き合わせる**——途中で切れても途中まで残る
 hf download siruku6/parc2026-submission submission_<版>.zip \
     --repo-type model --local-dir ~/Downloads/parc2026
-
-# **必ずハッシュを突き合わせる。** 途中で切れても途中まで残るため
-shasum -a 256 ~/Downloads/parc2026/submission_<版>.zip
-# 送る側で取った sha256 と一致すること
+shasum -a 256 ~/Downloads/parc2026/submission_<版>.zip   # 手順 4 の値と一致すること
 ```
 
-**`hf` が無ければ** `pip install "huggingface_hub[cli,hf_xet]"`。
-**初回はログインが要る**（`hf auth login`。読み取り権限のトークンでよい）。
+> **合わないものを出さない。**降ろし直す。
+> **このリポジトリは非公開のままにする**（中身は π0.5 の重みと提出コードである）。
+> **HF は古い LFS の版も容量に数える**ので、降ろしたその場で消す
+> （[../knowledge/12_workbench_accidents.md](../knowledge/12_workbench_accidents.md)）。
 
----
+### 6. 出す
 
-# 提出する
-
-Omnicampus に `work/submission.zip` をアップロードする。
+Omnicampus にアップロードする。**課題 ID は Track1 が 1007・Track2 が 1008・Track3 が 1009**
+（[../plan/14_finals1_gpu_and_submission_plan.md](../plan/14_finals1_gpu_and_submission_plan.md)
+の「いまどこにいるか」のルール表）。**どのトラックへ出すかは
+[../talk/open_items.md](../talk/open_items.md) にある。**
 
 | 制約 | 値 |
 |---|---|
 | 提出回数 | **各トラック 1 日 1 回**（1 人あたり計 3 回/日）。**アップロードが完了した時点で消費される**——**だから日付が変わる前後の提出は、次の日の枠を食う可能性がある**と本選資料に明記されている |
-| エラーで失敗したとき | **本選では枠を消費する**（[../plan/14_finals1_gpu_and_submission_plan.md](../plan/14_finals1_gpu_and_submission_plan.md) の「いまどこにいるか」のルール表）。予選の Q&A No.18 は「消費されない」だったが、本選の資料で変わった |
+| エラーで失敗したとき | **本選では枠を消費する**（同じルール表）。予選の Q&A No.18 は「消費されない」だったが、本選の資料で変わった |
 | 枠の繰り越し | **できない。**使わなかったその日の枠は消える |
-| サーバー起動 | **1200 秒以内**（本選。予選は 120 秒）。**π0.5 の実測 21 秒**（`.../track1/260829_pi0.5_5.0.1.txt:16` の `サーバー起動確認 (21秒)`） |
+| **1 本の所要** | **Mac の回線から 9.4 GB で 20 分。3 本なら 1 時間。****放っておける待ちなので、この間に次の zip を組める** |
+| サーバー起動 | **1200 秒以内**（本選。予選は 120 秒）。**π0.5 の実測 21 秒** |
 | `/act` 1 回 | 10 秒以内（実測 0.85 秒） |
-| トラック全体 | 1 時間以内（**π0.5 の実測 118.8 秒**。同じログの `合計時間`） |
+| トラック全体 | 1 時間以内（**π0.5 の実測 118.8 秒**） |
 
-**出す前に、ローカル評価で成功率を確かめておくこと。** 手順は
-[03_gpu_eval.md](03_gpu_eval.md)（GPU マシン）か
-[11_colab_eval.md](11_colab_eval.md)（Colab）にある。
+**採点は 10〜20 分で返る。**返ってきたら**採点ログを保存し**、
+`b_PARC2026_final/outputs/submission_logs/track<N>/` へ置く。
 
-> **ただし「手元で差が無いから出さない」と判断してはいけない。**
+```bash
+grep -n '総合スコア' <保存した採点ログ>
+grep -n '^\[parc\] policy_server' <保存した採点ログ>   # 出した版と設定を突き合わせる
+```
+
+**`[parc] policy_server <版> ... ema_alpha=0.3` と出ていれば、狙った zip が動いている。**
+
+> **出す前に、ローカル評価で成功率を確かめておくこと**（[03_gpu_eval.md](03_gpu_eval.md) か
+> [11_colab_eval.md](11_colab_eval.md)）。**ただし「手元で差が無いから出さない」と判断してはいけない。**
 > 手元で測れるのは成功率までで、**滑らかさとステップ数が何点ぶんかは枠を使わないと分からない**
 > （[../knowledge/07_local_eval_cannot_rank.md](../knowledge/07_local_eval_cannot_rank.md)・
 > [../knowledge/18_local_eval_missed_the_gain.md](../knowledge/18_local_eval_missed_the_gain.md)）。
 
-**スコアが返ってきたら、ハッシュと一緒に
-[../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) へ記録する。**
-どの zip が何点だったかを後から辿れなくなると、比較ができなくなる。
-**採点ログそのものは `b_PARC2026_final/outputs/submission_logs/track<N>/` へ置く**——
-`outputs/` は git で追跡しているので、点の一次資料はこちらである。
+### 7. 片付けて記録する
+
+```bash
+git status --short                                   # 何も出ないこと
+grep -n '^_MIN_LEXICAL = ' solution/policy_server.py # 0.65 のままであること
+grep -n 'PARC_EMA_ALPHA' solution/policy_server.py   # 既定 "0.3" のままであること
+rm -f work/submission_<版>.zip                       # その日のうちに。重みも消す
+```
+
+**リポジトリの `solution/policy_server.py` は 0.65・EMA 0.3 のまま残す**
+（0.65 の由来は
+[../knowledge/15_instruction_normalizer_inverted_a_task.md](../knowledge/15_instruction_normalizer_inverted_a_task.md)）。
+
+**版・重み・sha256・大きさを
+[../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) に 1 行足す。**
+採点が返ったら同じ行に点を書く。**採点ログそのものは
+`b_PARC2026_final/outputs/submission_logs/track<N>/` へ置く**
+——`outputs/` は git で追跡しているので、点の一次資料はこちらである。
+
+---
+
+## 道具と分かれ道
+
+### `patch_zip_policy_server.py` の使い方（道 B の中身）
+
+**`build_submission.py` が作る zip では `policy_server.py` が無圧縮（method=0）で入っている。**
+だから**同じ長さの置き換えなら、バイトを差し替えて CRC を直すだけで済む。**
+9.4 GB を組み直す必要は無い。**既にある zip から設定を 1 つだけ振るときにも使える**
+（`PARC_EMA_ALPHA`・`PARC_NUM_INFERENCE_STEPS` など、文字数が変わらないもの）。
+
+```bash
+# ① まず中を見る（書き換える前に必ず打つ）
+python3 solution/tools/build/patch_zip_policy_server.py work/submission_<版>.zip --show
+
+# ② 元を残したまま書き換える
+#    この道具は zip をその場で書き換えるだけで、別名では出せない
+#    （`--in-place` が無いと「書いていない」と言って何もしない）。だから先に cp する
+cp work/submission_<元の版>.zip work/submission_<新しい版>.zip
+python3 solution/tools/build/patch_zip_policy_server.py work/submission_<新しい版>.zip --in-place \
+    --replace '_MIN_LEXICAL = 0.50' '_MIN_LEXICAL = 0.99' \
+    --replace '__version__ = "<元の版>"' '__version__ = "<新しい版>"'
+```
+
+> **手順 ① の `--show` を飛ばさない。**
+> **どの版のどの設定が入っているかは、zip の中を見るまで分からない**（ファイル名は当てにならない）。
+> **`--in-place` を付けない限り 1 バイトも書かない。**
+> **道具は置き換えの左辺が zip の中に 1 か所だけあることを確かめる。**0 か所でも 2 か所でも止まる。
+
+| 確かめること | 期待する値 |
+|---|---|
+| `--show` の `__version__` | **書き換え前は組んだときの値 → 書き換え後は狙った版** |
+| `--show` の `_MIN_LEXICAL` | **`0.50`** |
+| `"PARC_EMA_ALPHA"` | **`0.3` のまま**（動かさない） |
+| 採点ログの `[parc]` 行 | **`policy_server <版>`**（違ったら別の zip を出している） |
+
+> **しきい値（`_MIN_LEXICAL`）を振るためにこれを使うのは、もうやめた**
+> （3 通り出して 3 回とも 0 / 8 だった。
+> [../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) の「9/1 の 5.2.0」）。
+
+### なぜ 2 つの道があるのか
+
+**出来上がるバイトは同じである**（道具がしているのは `text.replace(src, dst, 1)` で、
+`build_submission.py` はファイルをそのまま格納する）。**選ぶ理由は 2 つだけである。**
+
+| | 良いところ | 気をつけること |
+|---|---|---|
+| **道 A（組む前に直す）** | 手順が 1 つ減る。**6 文字の版はこれしかない** | **戻し忘れるとリポジトリの 0.65 が消える。****`git checkout` を必ず打つ** |
+| **道 B（組んだ後に zip を書き換える）** | **リポジトリを汚さない。**書き換え前後の設定を印字し、`zipfile` で読み直して `testzip()` まで通す。**既にある zip から 10 分で作れる** | **長さが変わる置き換えは通らない**（6 文字の版は不可）。sha256 を取り直す |
+
+### zip をどう運ぶか（3 つの道の比べ）
+
+**そもそも zip を運ぶ必要が無い。** `build_submission.py` が集めるのは
+`solution/` の 3 ファイルと `work/artifacts/{model_weights,vendor}` だけで、
+**標準ライブラリしか使わない。****重みさえ Mac にあれば、Mac の `python3` で組める。**
+`venv310` も要らない（あれは `vendor_lerobot.py` が使うもので、`vendor/` を作り終えていれば出番は無い）。
+
+| 道 | Mac に届くバイト | Mac に一時的に置く量 | HF に新しく積む容量 | 掛かる時間 |
+|---|---|---|---|---|
+| **Mac で組む**（①で Mac を選ぶ） | 9.4 GB（重み） | **約 19 GB**（重み＋zip） | **0** | 16 分 ＋ 組む時間 |
+| 別の機械で組み、HF を中継に運ぶ | 9.4 GB（zip） | **9.4 GB** | **＋9.4 GB** | 16 分（作り直した zip なら 50 秒） |
+| 別の機械で組み、`scp` で運ぶ | 9.4 GB（zip） | **9.4 GB** | **0** | **1 時間半**（1.7 MB/s） |
+
+**Mac に届くバイト数はどれも約 9.4 GB で同じである。**違うのは
+**Mac のディスク**と **HF に新しく積む容量**、それに
+**同じ重みから 2 本目を組むときの費用**（別の機械で組むなら毎回 zip を運ぶ。
+Mac で組むなら重みが手元にあるので転送は 0）である。
+
+### 分かれ道 —— 想定どおりでなかったとき
+
+| 何が起きたか | どう見分けるか | どうするか |
+|---|---|---|
+| **`policy_server.py` が無圧縮でなかった** | `--show` が `policy_server.py が無圧縮ではない（method=8）。この道具は使えないので build_submission.py で組み直すこと` で止まる | **道 A へ切り替える**（組む前に直して組み直す） |
+| **`vendor/` が無い** | `build_submission.py` が `生成物がありません` で落ちる。`ls work/artifacts/vendor/lerobot` が空 | **手順 1 のターミナル 2 を打つ**（13 MB・3 分） |
+| **`__version__` の左辺が `4.6.0` でない** | `--show` の 1 行目が違う値を出す | **`--replace` の左辺を `--show` が出した実際の値に書き換える。**`4.6.0` はいまの `solution/policy_server.py` の値であって、将来も同じとは限らない |
+| **`_MIN_LEXICAL` が既に `0.50`** | `--show` に `_MIN_LEXICAL = 0.50` が出る | **その `--replace` を 1 行落とす。**左辺が 0 か所だと道具が止まる |
+| **長さが違う置き換えを書いた** | `長さが違う置き換えは通せない: N → M` で止まる | **桁数を合わせる**（`0.5` ではなく `0.50`）。合わせられないなら道 A |
+| **左辺が 2 か所ある** | `... が 2 箇所ある（1 箇所でないと危ない）` で止まる | 道 A へ切り替える |
+| **Mac で sha256 が合わない** | `shasum -a 256` が手順 4 の値と違う | **途中で切れている。**降ろし直す。**合わないものを出さない** |
+
 
 ---
 
