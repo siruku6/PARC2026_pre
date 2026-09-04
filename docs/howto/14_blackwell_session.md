@@ -737,6 +737,12 @@ echo "PID $!"
 
 **`--dataset-repo` と `--dataset-root` の 2 つ以外は、8.0.0 を作った学習と 1 文字も違わない。**
 
+> **`lerobot/libero_combined_20hz` は Hugging Face に無いが、それで構わない。**
+> **`--dataset-root` を渡すと、LeRobot は Hub を 1 度も見ない**——`datasets/dataset_metadata.py` の `LeRobotDatasetMetadata.__init__` は
+> **渡された root をそのまま使い、そこにメタデータが無かったときだけ Hub へ落ちる**（`except FileNotFoundError` の枝）。
+> **だから名前は札にすぎず、実体は展開したディレクトリである。**
+> **版（`--dataset.revision`）は付けない**——`train_pi05.py` が、既定のデータのときだけ既定の版を付けるようにしてある。
+
 > **12.0.0（場面カメラを潰した重み）が 8.0.0 に勝っていたときは、2 か所替える。**
 > **`--init-from` を `/opt/dlami/nvme/weights/camdrop2500/002500` にし、
 > `--scene-camera-dropout 0.5` を足す。****そうすると相手が 12.0.0 になり、
