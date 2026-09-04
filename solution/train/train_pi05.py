@@ -135,7 +135,6 @@ from huggingface_hub.utils import GatedRepoError, HfHubHTTPError
 # 同じディレクトリに置くこと（Dockerfile が両方を /workspace へ COPY する）。
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from train import (  # noqa: E402
-    _download_metadata,
     _find_resume_checkpoint,
     _load_holdout,
     _resolve_dataset_root,
@@ -212,6 +211,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--max-demo-steps", type=int, default=0)
     parser.add_argument("--holdout-tasks", type=Path, default=None, metavar="CSV")
     parser.add_argument("--dataset-root", type=Path, default=None, metavar="DIR")
+    parser.add_argument("--dataset-repo", type=str, default=_DATASET_REPO,
+                        metavar="REPO_ID",
+                        help="学習データの名前。既定は lerobot/libero_plus。"
+                             "配布の libero_combined_20hz へ乗り換えるときに使う"
+                             "（そのときは --dataset-root も必ず渡すこと）")
+    parser.add_argument("--dataset-revision", type=str, default=None,
+                        metavar="SHA",
+                        help="学習データの版。省くと、既定のデータのときだけ"
+                             "既定の版が付く（別のデータには付けない）")
     parser.add_argument("--init-from", type=Path, default=None, metavar="DIR",
                         help="初期重みに HF の pi05_libero_base ではなく、"
                              "前の学習の checkpoints/<ステップ数>/pretrained_model を使う"
@@ -336,6 +344,42 @@ def _command_head(args: argparse.Namespace) -> list[str]:
     return camera_dropout.command_head(args)
 
 
+def _dataset_revision(args: argparse.Namespace) -> str | None:
+    """学習データの版を決める。**別のデータには既定の版を付けない。**
+
+    `_DATASET_REVISION` は `lerobot/libero_plus` のコミットである。
+    **配布の `libero_combined_20hz` へ向けたままこれを渡すと、
+    「そんな版は無い」で落ちるか、悪くすると別物を取りに行く。**
+
+    Returns
+    -------
+    revision : str | None
+        `--dataset.revision` に渡す値。**None なら引数ごと付けない。**
+    """
+    if args.dataset_revision is not None:
+        return args.dataset_revision
+    if args.dataset_repo == _DATASET_REPO:
+        return _DATASET_REVISION
+    return None
+
+
+def _check_dataset_choice(args: argparse.Namespace) -> None:
+    """データを乗り換えるときに、**置き場所も一緒に替えたか**を確かめる。
+
+    **`--dataset-repo` だけ替えて `--dataset-root` を忘れると、
+    エピソード番号の選び方が Hub から取った `lerobot/libero_plus` の
+    14,347 本のままになる。**足したぶんが 1 本も選ばれないまま学習が始まり、
+    **エラーは出ない**（`train.py` の `_resolve_dataset_root` の注意書きと同じ穴）。
+    """
+    if args.dataset_repo != _DATASET_REPO and args.dataset_root is None:
+        raise SystemExit(
+            f"[train_pi05] --dataset-repo を {args.dataset_repo!r} にするなら、"
+            "--dataset-root も渡すこと。\n"
+            "    渡さないと、番号選びが Hub の lerobot/libero_plus を読み、"
+            "足したエピソードが 1 本も選ばれない（エラーは出ない）。"
+        )
+
+
 def _build_command(
     args: argparse.Namespace, base_model: Path,
     episode_indices: list[int] | None, output_dir: Path,
@@ -354,8 +398,9 @@ def _build_command(
         "--policy.device=cuda",
         "--policy.push_to_hub=false",
         f"--policy.optimizer_lr={args.learning_rate}",
-        f"--dataset.repo_id={_DATASET_REPO}",
-        f"--dataset.revision={_DATASET_REVISION}",
+        f"--dataset.repo_id={args.dataset_repo}",
+        *([f"--dataset.revision={_dataset_revision(args)}"]
+          if _dataset_revision(args) is not None else []),
         *([f"--dataset.root={args.dataset_root.expanduser().resolve()}"]
           if args.dataset_root is not None else []),
         f"--dataset.video_backend=torchcodec",
@@ -489,6 +534,7 @@ def main() -> None:
     geometry.validate(args)
     camera_dropout.set_environment(args)
     camera_dropout.validate(args)
+    _check_dataset_choice(args)
 
     output_dir: Path = (args.output_root / args.run_name).resolve()
 
@@ -548,7 +594,11 @@ def main() -> None:
             episode_indices = None
             print("[train_pi05] 全エピソードを使う")
         elif args.episodes_per_task <= 0 and not selects_by_task:
-            dataset_root = _download_metadata()
+            # **`--dataset-root` を渡されていたらそちらを読む。** ここで
+            # `_download_metadata()` を直に呼ぶと、データを乗り換えていても
+            # `lerobot/libero_plus` のメタデータを読んでしまう
+            # （`--dataset-root` が無いときの中身は今までと同じである）。
+            dataset_root = _resolve_dataset_root(args.dataset_root)
             episode_indices = _select_without_holdout(dataset_root, holdout)
         else:
             dataset_root = _resolve_dataset_root(args.dataset_root)
@@ -570,7 +620,9 @@ def main() -> None:
             f"train_expert_only={args.train_expert_only}、"
             f"dtype={args.dtype}、grad_ckpt={args.gradient_checkpointing}、"
             f"{quantization.describe(args)}、{geometry.describe(args)}、"
-            f"{camera_dropout.describe(args)}）"
+            f"{camera_dropout.describe(args)}、"
+            f"データ {args.dataset_repo}"
+            f"{'（' + str(args.dataset_root) + '）' if args.dataset_root else ''}）"
         )
         if args.smoke_test:
             print("[train_pi05] **smoke test** — 20 ステップで OOM しないか・"

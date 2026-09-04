@@ -28,6 +28,7 @@
 | [C 放置する](#c-放置する) | 監視セルが待機による自動停止を防ぎ、終わったら止める |
 | [翌朝](#翌朝-15-分) | 上がった重みを数え、提出の順番を決める |
 | **[場面カメラを潰して 1 本](#場面カメラを確率で潰して-1-本回す92-の夜に足した)** | **いま回すのはこれである**（`open_items.md` の `F50`①） |
+| **[111 タスクのデータで 1 本](#配布の-111-タスクのデータで-1-本回す94-に足したf48)** | **次に回すのはこれである**（`open_items.md` の `F48`）。**データの展開が 1 つ増える** |
 | [2 回目以降のセッション](#2-回目以降のセッション--60-時間は12-時間--5-回である) | **60 時間は連続していない。**12 時間 × 最大 5 回で、境目ごとに払うものがある |
 | [想定と違ったとき](#想定と違ったときの分岐一覧) | batch・HF の空き・待機による停止の 3 つ |
 | [落とし穴](#落とし穴踏むと-1-日が消えるもの) | 過去に実際に踏んだもの |
@@ -653,12 +654,132 @@ grep -m2 "\[camera_dropout\]" $OUTPUT_ROOT/pi05_camdrop2500.log
 ### 手元で試験を走らせる（1 行・6 秒）
 
 ```bash
-bash solution/tools/train/run_camera_dropout_test.sh
+bash solution/tools/train/run_train_tests.sh
 ```
 
 **常駐コンテナ `quant_train` の本物の torch 2.11 と lerobot 0.6.0 で 11 件走る**
 （`tests/test_camera_dropout.py`）。**この機械の venv には torch も lerobot も
 入っていないので、`pytest tests/` を直接打つと skip になる。**
+
+---
+
+## 配布の 111 タスクのデータで 1 本回す（**9/4 に足した。`F48`**）
+
+**これが `open_items.md` の `F48` である。****狙いは Track3 である。**
+Track3 の 4 タスクは**4 つとも `libero_90` の場面から作られていて、
+そこに出る棚・トレイ・黄色い本は、いまの学習データ（`lerobot/libero_plus` の 40 タスク）に
+1 件も無い**（[../knowledge/17_track3_picks_the_wrong_object.md](../knowledge/17_track3_picks_the_wrong_object.md)）。
+**配布 tar `libero_combined_20hz` には `libero_90` の 90 件が入っている。**
+
+| | いまのデータ | **配布 tar** |
+|---|---|---|
+| 名前 | `lerobot/libero_plus` | **`libero_combined_20hz`**（HF には無い。**配布物の tar だけ**） |
+| エピソード | 14,347 | **19,533** |
+| コマ | 2,238,036 | **3,028,708** |
+| タスク | 40 | **111** |
+| 版・fps・カメラ | v3.0・20 Hz・front と wrist | **同じ**（変換は要らない） |
+
+**変えるのはデータだけである。**出発点・歩数・batch・学習率・カメラ拡張は、
+**比べる相手（8.0.0 か 12.0.0）と同じにする。**
+
+### 打つ前に —— 「毎セッション打つ 3 つ」に、データの展開が 1 つ増える
+
+**コードの取り直しは必須である**（**9/4 に `--dataset-repo` を足したので、
+取り直さないと「知らない引数」で止まる**）。
+
+```sh
+. ~/env_pi05.sh
+hf download siruku6/pi05_code --local-dir ~/pi05_code
+```
+
+#### 配布 tar を展開する（**このセッションで 1 回。消える領域に置く**）
+
+```sh
+. ~/env_pi05.sh
+ls -la ~/dataset/lerobot/                       # tar の名前と大きさを見る
+tar -tf ~/dataset/lerobot/libero_combined_20hz.tar | head -3   # 中の階層を見る
+```
+
+**`libero_combined_20hz/meta/...` のように 1 段でくるまれていれば `--strip-components=1`
+を付ける。`meta/...` から始まっていれば付けない。**上の 3 行で決めること。
+
+```sh
+DATA=/opt/dlami/nvme/data/libero_combined_20hz
+mkdir -p "$DATA"
+time tar -xf ~/dataset/lerobot/libero_combined_20hz.tar -C "$DATA" --strip-components=1
+ls "$DATA"                                      # meta / data / videos が並ぶこと
+python3 -c "
+import json; i = json.load(open('$DATA/meta/info.json'))
+print(i['total_episodes'], i['total_frames'], i['total_tasks'], i['fps'])"
+# 19533 3028708 111 20 と出ること
+```
+
+**この 4 つの数が違ったら、そこで止めること。**別の tar である。
+
+### 打つ 1 行（8.0.0 との 1 変数）
+
+```bash
+. ~/env_pi05.sh
+cd "$CODE_DIR"
+DATA=/opt/dlami/nvme/data/libero_combined_20hz
+
+NW=$(python -c "import os;print(min(os.cpu_count()//2, 16))")
+nohup python train_pi05.py --run-name pi05_all111 \
+    --init-from /opt/dlami/nvme/weights/trial1500/001500 \
+    --dataset-repo lerobot/libero_combined_20hz --dataset-root "$DATA" \
+    --steps 2500 --batch-size 64 --num-workers "$NW" \
+    --learning-rate 5e-6 --save-freq 500 \
+    --freeze-vision-encoder false --train-expert-only false \
+    --camera-viewpoint-augment \
+    > $OUTPUT_ROOT/pi05_all111.nohup 2>&1 &
+echo "PID $!"
+```
+
+**`--dataset-repo` と `--dataset-root` の 2 つ以外は、8.0.0 を作った学習と 1 文字も違わない。**
+
+> **12.0.0（場面カメラを潰した重み）が 8.0.0 に勝っていたときは、2 か所替える。**
+> **`--init-from` を `/opt/dlami/nvme/weights/camdrop2500/002500` にし、
+> `--scene-camera-dropout 0.5` を足す。****そうすると相手が 12.0.0 になり、
+> やはりデータだけの 1 変数になる。**
+> **どちらにするかは、9/4 に返る点で決まる**（[../talk/260904_briefing.md](../talk/260904_briefing.md) 5 節）。
+
+### 始めた直後に確かめる 3 行（**ここが要である**）
+
+```bash
+grep -m1 num_learnable_params $OUTPUT_ROOT/pi05_all111.log
+grep -m1 'dataset.num_episodes' $OUTPUT_ROOT/pi05_all111.log
+grep -m1 '学習開始' $OUTPUT_ROOT/pi05_all111.log
+```
+
+| 見るもの | 期待値 | 違ったら |
+|---|---|---|
+| `num_learnable_params` | **4143404816** | 693422112 ならその場で止める（行動側しか学習していない） |
+| **`dataset.num_episodes`** | **19533** | **14347 なら乗り換えていない。****その場で止める**——気付かないと 4 時間 48 分を古いデータで使う |
+| `学習開始（…）` の行の末尾 | **`データ lerobot/libero_combined_20hz（/opt/dlami/nvme/data/…）`** | データの名前と置き場が出る（9/4 に足した） |
+
+**`--dataset-root` を忘れたときは、`train_pi05.py` がデータを読む前に止める**
+（9/4 に検査を足した。**止めないと、番号選びが Hub の 14,347 本を読み、
+足した 5,186 本が 1 本も選ばれないまま学習が走る**）。
+
+### この 1 本で気にすること
+
+| 気にすること | 中身 |
+|---|---|
+| **Track1・Track2 が下がりうる** | **1 タスクあたりの学習量が 40 → 111 に薄まる。**だから**3 トラックとも出して確かめる**——8.0.0 と 12.0.0 が基準になるので、下がればすぐ分かる |
+| 正規化の統計が変わる | データが変われば `MEAN_STD` の統計も変わる。**チェックポイントの中に一緒に入るので、zip を組み直せばそれで足りる** |
+| 1 エポックの意味 | コマ数が 2,238,036 → 3,028,708 なので、同じ 2,500 歩でも**見る回数の割合は 3/4 に減る** |
+| 展開先が消える | `/opt/dlami/nvme` はセッション終了で消える。**毎セッション展開し直す**（`~/dataset` の tar は消えない） |
+
+### 手元で試験を走らせる（1 行）
+
+```bash
+bash solution/tools/train/run_train_tests.sh
+```
+
+**常駐コンテナ `quant_train` の本物の torch 2.11 と lerobot 0.6.0 で 17 件走る**
+（`tests/test_camera_dropout.py` 11 件・`tests/test_dataset_choice.py` 6 件）。
+**乗り換えの 6 件は、①渡さなければ 1 文字も変わらない ②別のデータに
+`lerobot/libero_plus` の版を付けない ③`--dataset-root` を忘れたら止まる、を見ている。**
 
 ---
 

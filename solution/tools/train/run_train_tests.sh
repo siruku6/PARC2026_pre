@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tests/test_camera_dropout.py を、常駐コンテナ quant_train の本物の torch と
+# solution/train/ の単体試験を、常駐コンテナ quant_train の本物の torch と
 # lerobot で走らせる。
 #
 # **なぜスクリプトが要るのか。** quant_train が見えているのは
@@ -8,7 +8,7 @@
 # 写す必要がある——**2 回以上打つものなので 1 行にした**（`.claude/CLAUDE.md`）。
 #
 # 使い方（リポジトリ直下で）:
-#     bash solution/tools/train/run_camera_dropout_test.sh
+#     bash solution/tools/train/run_train_tests.sh
 #
 # この機械の venv には torch も lerobot も入っていないため、
 # `pytest tests/test_camera_dropout.py` を直接打つと全部 skip になる。
@@ -30,7 +30,7 @@ fi
 python3 -c "import shutil, sys; shutil.rmtree(sys.argv[1], ignore_errors=True)" "$STAGE"
 mkdir -p "$STAGE/tests"
 cp -r "$ROOT/solution" "$STAGE/solution"
-cp "$ROOT/tests/test_camera_dropout.py" "$STAGE/tests/"
+cp "$ROOT"/tests/test_camera_dropout.py "$ROOT"/tests/test_dataset_choice.py "$STAGE/tests/"
 
 # **pytest はイメージに入っていない。**入れても `docker commit` しない限り
 # コンテナを作り直した時点で消えるので、無ければそのつど入れる。
@@ -40,4 +40,4 @@ if ! docker exec "$CONTAINER" python -m pytest --version >/dev/null 2>&1; then
 fi
 
 docker exec -w /out/_camera_dropout_check "$CONTAINER" \
-    python -m pytest tests/test_camera_dropout.py -v
+    python -m pytest tests/test_camera_dropout.py tests/test_dataset_choice.py -v

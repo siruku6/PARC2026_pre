@@ -2,7 +2,7 @@
 
 **打つのは 1 行である**（本物の torch と lerobot が要るので、常駐コンテナで動かす）::
 
-    bash solution/tools/train/run_camera_dropout_test.sh
+    bash solution/tools/train/run_train_tests.sh
 
 **この機械の venv には torch も lerobot も入っていないので、そのまま
 `pytest tests/` を打つと全部 skip になる**（それが分かるように理由を出してある）。
