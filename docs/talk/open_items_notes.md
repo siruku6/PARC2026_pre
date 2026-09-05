@@ -33,7 +33,7 @@
 
 | # | 誰が | 何を使う・所要 | 前提 | 打つもの |
 |---|---|---|---|---|
-| **F48** | 私（設定）＋あなた（起動） | Blackwell・学習 2,000 歩＝3 時間 48 分 | **満たした**（9/4 に道具立てまで済んだ） | [../howto/14_blackwell_session.md](../howto/14_blackwell_session.md)「配布の 111 タスクのデータで 1 本回す」 |
+| **F48** | 私（設定）＋あなた（組んで出す） | **学習は済んだ。**残りは zip 1 本＝**Mac で 40 分**（この機械は空きが 11 GB しかなく、要る 19 GB に足りない） | **満たした**（HF `siruku6/pi05_all111` に 4 個） | [../howto/02_build_submission.md](../howto/02_build_submission.md)「zip を 1 本組んで出す」。**渡す 3 つ**——**①Mac で組む ②版は `13.0.0`（6 文字なので道 A）③`vlm/` は無いので足す。****重みは `siruku6/pi05_all111` の `002000`**（**濃さを 5.0.1 と揃えた点**。歩数を揃えた `001500` は次の日の枠に取っておく）。**3 トラックとも出す**（1007・1008・1009） |
 | **F27** | 別セッション | RTX6000 1 日 | 無し。**Blackwell を使わないので `F48` と並行できる** | [inter_sessions/006](inter_sessions/006_track3_reverse_direction.md) |
 | **F75** | あなた | RTX6000・1〜2 時間（parquet の読み出しだけなので Blackwell と並行できる） | `~/dataset/lerobot/` に `libero_combined_20hz` があること | [inter_sessions/014](inter_sessions/014_verify_raw_states_for_time_reversal.md) |
 | **F79** | 私 | GPU 不要・半日 | ユーザの判断 | HF の原典カードとファイル一覧を見る／手元で 1 回起動する |
