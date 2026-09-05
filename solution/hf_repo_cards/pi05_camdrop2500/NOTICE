@@ -1,0 +1,32 @@
+NOTICE — siruku6/pi05_camdrop2500
+
+Gemma is provided under and subject to the Gemma Terms of Use found at
+ai.google.dev/gemma/terms
+
+These weights are a Model Derivative of Gemma: they were produced by fine-tuning
+lerobot/pi05_libero_base, a pi0.5 policy whose vision-language backbone is
+PaliGemma / Gemma. Distribution and use of these weights are subject to the Gemma
+Terms of Use and to the Gemma Prohibited Use Policy
+(ai.google.dev/gemma/prohibited_use_policy). Anyone who redistributes these
+weights, or a further derivative of them, must pass on the Gemma Terms of Use and
+this notice.
+
+Third-party components
+----------------------
+
+Base model
+  lerobot/pi05_libero_base
+  revision a217bfd3b14673cf2ce597e69997ab21866438dd
+  License: Gemma Terms of Use (model card metadata: license: gemma)
+
+Training data
+  lerobot/libero_plus — LeRobot-format redistribution of LIBERO-plus
+  LIBERO-plus, original distribution: Sylvest/LIBERO-plus
+    License: MIT (stated in the original Hugging Face dataset card)
+  LIBERO, on which LIBERO-plus is built:
+    https://github.com/Lifelong-Robot-Learning/LIBERO
+    License: MIT — Copyright (c) 2023 Lifelong Robot Learning
+
+Training code
+  LeRobot v0.6.0 — https://github.com/huggingface/lerobot
+  License: Apache License 2.0

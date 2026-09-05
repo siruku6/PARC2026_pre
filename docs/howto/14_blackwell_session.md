@@ -359,7 +359,12 @@ cat > ~/upload_ckpt.sh <<'EOF'
 set -u
 OUT=/opt/dlami/nvme/out/pi05_camdrop2500
 REPO=siruku6/pi05_camdrop2500
-mkdir -p ~/uploaded
+# 上げ終えた印は「走りごと」に分ける。~/uploaded/<歩数> という置き方だと、
+# 前のセッションの別の走りが置いた 000500 を、新しい走りの 000500 だと思って飛ばす（9/5 に踏んだ）。
+MARK=~/uploaded/$(basename "$OUT")
+mkdir -p "$MARK"
+echo "$(date -Iseconds) 印の置き場 $MARK（既にある印: $(ls "$MARK" 2>/dev/null | tr '\n' ' '))" \
+    >> ~/upload_ckpt.log
 while true; do
   for d in "$OUT"/checkpoints/*/pretrained_model; do
     [ -d "$d" ] || continue
@@ -367,13 +372,13 @@ while true; do
     # これを拾うと HF に「last」という歩数のふりをした複製が 1 個できる（9/3 に踏んだ）。
     [ -L "${d%/pretrained_model}" ] && continue
     step=$(basename "$(dirname "$d")")
-    [ -f ~/uploaded/"$step" ] && continue
+    [ -f "$MARK/$step" ] && continue
     # 書き終える前に上げないよう、30 秒間サイズが変わらないことを確かめる
     a=$(du -sb "$d" | cut -f1); sleep 30; b=$(du -sb "$d" | cut -f1)
     [ "$a" = "$b" ] || continue
     # timeout: 1 個 9.35 GB なので正常なら 15 分。1 時間で諦めて次の巡へ回す。
     if timeout 3600 hf upload "$REPO" "$d" "$step" --repo-type model; then
-      date -Iseconds > ~/uploaded/"$step"
+      date -Iseconds > "$MARK/$step"
       echo "$(date -Iseconds) 上げた $step" >> ~/upload_ckpt.log
       rm -rf "$(dirname "$d")/training_state"   # 16 GB。上げないので消して空きを戻す
     else
@@ -723,11 +728,14 @@ ls -la ~/dataset/lerobot/                       # tar の名前と大きさを�
 tar -tf ~/dataset/lerobot/libero_combined_20hz.tar | head -3   # 中の階層を見る
 ```
 
-**`libero_combined_20hz/meta/...` のように 1 段でくるまれていれば `--strip-components=1`
-を付ける。`meta/...` から始まっていれば付けない。**上の 3 行で決めること。
+**1 段でくるまれている。**9/5 に `tar -tf` の先頭 3 行が
+`libero_combined_20hz/` → `libero_combined_20hz/data/` → `.../data/chunk-000/` だと確かめた。
+**だから `--strip-components=1` を付ける**——付けないと中身が
+`$DATA/libero_combined_20hz/meta` の 1 段下に入り、`--dataset-root` が空振りする。
 
 ```sh
 DATA=/opt/dlami/nvme/data/libero_combined_20hz
+df -h /opt/dlami/nvme                           # 空きが 20 GiB 以上あること（tar が 19.6 GiB）
 mkdir -p "$DATA"
 time tar -xf ~/dataset/lerobot/libero_combined_20hz.tar -C "$DATA" --strip-components=1
 ls "$DATA"                                      # meta / data / videos が並ぶこと
@@ -787,6 +795,26 @@ grep -m1 '学習開始' $OUTPUT_ROOT/pi05_all111.log
 **`--dataset-root` を忘れたときは、`train_pi05.py` がデータを読む前に止める**
 （9/4 に検査を足した。**止めないと、番号選びが Hub の 14,347 本を読み、
 足した 5,186 本が 1 本も選ばれないまま学習が走る**）。
+
+### 始めたあとも B の節を打つ（**名前を差し替えるだけ**）
+
+**`B4`（上げるループ）は要る。****`/opt/dlami/nvme` はセッション終了で消えるので、
+HF に上がっていないチェックポイントは存在しないのと同じである。**
+**上の「打つ 1 行」は学習を始めるところまでしか書いていない。**
+
+| 節 | この 1 本で書き換えるところ |
+|---|---|
+| [B1 上げ先を用意する](#b1-上げ先を用意する10-分) | `create_repo` の名前を **`siruku6/pi05_all111`** に。**同じ script が非公開の空きを数える** |
+| [B4 上げるループ](#b4-チェックポイントを-hf-へ上げるループを始める10-分) | **3 か所**——`OUT=/opt/dlami/nvme/out/pi05_all111`・`REPO=siruku6/pi05_all111`・`pgrep -f` の `--run-name pi05_all111` |
+| [B4b ログを写すループ](#b4b-学習ログを-home-と-hf-へ写すループを始める3-分) | **2 か所**——`RUN=pi05_all111`・`REPO=siruku6/pi05_all111` |
+| [B5](#b5-最初の-500-ステップが-hf-に載るまで見届ける40-分)・[B6](#b6-監視セルを実行状態のまま残して離席する5-分) | 書き換えなし。**B6 を飛ばすと 1 時間の待機で学習ごと止まる** |
+
+**HF の空きはこの 1 本に足りる（9/5 に数え直した）。**
+**非公開の枠 100 GB のうち非公開だけで 46.87 GB＝空きは 53.13 GB** で、
+**2,000 歩・`--save-freq 500` が出す 4 個 × 9.35 GB ＝ 37.4 GB が入る。**
+**9/3 の空き 6.36 GB から戻ったのは、`siruku6/pi05_camdrop2500`（46.77 GB）が公開に移ったからである**
+——**公開のぶんは枠を食わない**（[分岐 2](#分岐-2-hf-の空きが-27-gb-に足りない)）。
+**数え直す 1 行は [08_hf_transfer_troubleshooting.md](08_hf_transfer_troubleshooting.md) の最後の節にある。**
 
 ### この 1 本で気にすること
 
@@ -873,12 +901,15 @@ bash solution/tools/train/run_train_tests.sh
 > ②**「500 歩ごとに全部上げると入らない」は今回は外れだった**——5 個入った。
 > **次に足りなくなったら、消す相手は非公開の 3 つの中から選ぶ。**
 
-**非公開の枠は 100 GB で、9/3 の時点で非公開だけで 93.64 GB 使っている（空き 6.36 GB）。**
+**【9/5 に数え直した】非公開だけで 46.87 GB＝空きは 53.13 GB である。****`pi05_camdrop2500`（46.77 GB）を公開に移したぶんがそのまま戻った。**
+
+**非公開の枠は 100 GB で、9/3 の時点で非公開だけで 93.64 GB 使っていた（空き 6.36 GB）。**
 **RunPod 側（依頼 008）も同じ枠へ上げているので、夕方には減っている可能性がある。**
 
 | 手 | 戻る量 | 決めるのは |
 |---|---|---|
 | ~~`siruku6/pi05_stage1_24000` を消す~~ | **0 GB。公開なので枠を食っていない**（9/3 に分かった） | — |
+| **非公開のリポジトリを公開へ移す** | **そのリポジトリの全量。**消さずに戻る（`pi05_camdrop2500` の 46.77 GB を 9/5 にこれで戻した）。**手順は [08_hf_transfer_troubleshooting.md](08_hf_transfer_troubleshooting.md) の最後の節** | 親の判断（**公開してよい中身かを先に見る**） |
 | `siruku6/parc2026-submission` の古い版を消して履歴を潰す（`super_squash_history`） | 8/29 に 76.4 → 57.7 GB になった実績あり | 親の判断 |
 | **上げるのを `001500` だけにする** | 要るのが 8.8 GB で済む | **その場で決めてよい。**比較の要は `001500` である |
 
@@ -983,6 +1014,30 @@ mv $OUTPUT_ROOT/pi05_camdrop2500.log $OUTPUT_ROOT/pi05_camdrop2500_noaug_aborted
 
 そのうえで [B2](#b2-学習を-nohup-で始める10-分) を打ち、
 **B3 で `[camera_dropout]` の行が出ることまで確かめる。**
+
+### 分岐 6 上げるループが「見回り」だけを書いて上げない
+
+**9/5 に踏んだ。**`~/upload_ckpt.log` に `見回り 2 個` が 1 分ごとに並ぶだけで、
+`上げた 000500` が出ない。**失敗の行も出ない**——飛ばされているので、何も起きていない。
+
+**見分け方は行の間隔である。**`sleep 30` を通っていれば行は 90 秒あく。
+**60 秒ちょうどで並んでいるなら、`du` の手前で `continue` している。**
+
+| 飛ばす枝 | 確かめ方 |
+|---|---|
+| **`[ -f "$MARK/$step" ]`（上げた印が既にある）** | `ls -la ~/uploaded ~/uploaded/*/` 。**前の走りが置いた `000500` がここに残る**（印を走りごとに分ける前の script は `~/uploaded/000500` に直接置いていた） |
+| `[ -L "${d%/pretrained_model}" ]`（symlink） | 飛ばして正しいのは `checkpoints/last` の 1 個だけである |
+| `[ -d "$d" ]`（`pretrained_model` が無い） | `ls "$OUT"/checkpoints/*/` |
+
+**直し方**（印が残っていた場合。**いま走っている走りは 1 個も上げていないので、消して困るものは無い**）。
+
+```sh
+ls -la ~/uploaded                 # 日付を見る。前のセッションのものなら消す
+rm -f ~/uploaded/0*               # 走りごとの MARK ディレクトリは消さない
+```
+
+**次の見回り（最長 60 秒後）で拾い、`上げた 000500` が出る。**
+**ループを止めて入れ直す必要は無い。**
 
 ### 分岐 5 HF に `000500` しか上がっていない（**9/3 に実際に起きた**）
 
@@ -1196,6 +1251,7 @@ hf upload-large-folder siruku6/pi05_camdrop2500 ~/up --repo-type=model
 | **`df` が答えない共有ストレージがある** | 使用量は `du -sh`、枠は画面で見る |
 | **学習ログを `$OUTPUT_ROOT` にしか置かない** | **セッション終了で消える。****loss の推移はチェックポイントに残らないので、やり直しでは作れない。**B4b のループで `$HOME/train_logs/` と HF の 2 か所へ写す（**`~/data` は symlink で消えるので置き先にしない**） |
 | **ディスクが埋まると書いている途中のファイルが壊れる** | 書く前に空きを見る。**`policy_server.py` を実際に 0 バイトにした** |
+| **前のセッションの「上げた印」が残っていて、上げるループが黙って飛ばす** | **9/5 に踏んだ。**`~/uploaded/000500` は 9/3 の `camdrop2500` が置いたものである。**印は走りごとに分ける**（上の B4 の `MARK`）。**症状は [分岐 6](#分岐-6-上げるループが見回りだけを書いて上げない)** |
 | **`--learning-rate` を省くと 10 倍から再スタートする** | 必ず `5e-6` を書く |
 | **`--camera-viewpoint-augment` を惰性で外す** | **いまは付ける。**8.0.0 が付けているので、外すと変数が 2 つになる（下の「場面カメラ」節） |
 | **打ち間違えて回し始めた** | **[分岐 4](#分岐-4-打ち間違えて回し始めた--途中で止めて打ち直す)。****監視セル（B6）を先に止めること**——学習を先に殺すと、B6 が自分でサーバを止めてセッションが終わる |

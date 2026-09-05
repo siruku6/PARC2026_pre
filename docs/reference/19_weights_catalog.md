@@ -69,8 +69,11 @@ git の外（`work/train/*.log`）にあり、消さない。
 | **`pi05_trial1500`** | **8/28** | RunPod A100 80GB | `work/artifacts/pi05_rp3000` | **1,500** | **64** | 5e-6 → 2.5e-6 | **全部**（4.14B。`num_learnable_params=4143404816` を開始 2 分後のログで確認） | **4 時間 16 分 05 秒** | **手元に無い。**HF `pi05_trial1500` の `pi05_trial1500.log` | HF `pi05_trial1500` の `000500` / `001000` / `001500`（**`vlm/` 同梱**） |
 | **`geo_vggt_v2`** | **8/28** | JAIST H100-20C | `pi05_libero_base` rev `a217bfd3` | **12,000** | **8** | 2.5e-5 → 2.5e-6 | action expert ＋ **VGGT の幾何の特徴を足し込む層**（`geometry_graft.py`・重みの `geometry_fuser.*`） | **3 時間 11 分 24 秒**（08:24:02 → 11:35:26・終了コード 0） | `geo_vggt_v2.log`（**その前に `geo_vggt_12k` を 6,167 歩で落としている**・終了コード -15） | `work/train/geo_vggt_v2/checkpoints/006000` / `012000`（＝ `work/artifacts/pi05_geo6k` / `pi05_geo12k`。**同じ実体**） |
 | **`pi05_ladder2500`** | **8/31** | **Blackwell**（RTX PRO 6000 Blackwell Server Edition・95.0 GB） | **HF `pi05_trial1500` の `001500`** | **2,500** | **64** | 5e-6（**warmup 1,000 歩から引き直し**。下の「歩数を足しても学習量は足し算にならない」） | **全部**（4.14B。`freeze_vision_encoder=false`・`train_expert_only=false`・`grad_ckpt=true`） | **4 時間 48 分 23 秒**（11:46:52 → 16:35:15・終了コード 0）。**6.85 秒/step** | `work/train/pi05_ladder2500.log`（HF `pi05_trial1500` の `ladder2500/pi05_ladder2500.log` にも上げた） | HF `pi05_trial1500` の `ladder2500/001000` / `001500` / `002000` / `002500`（**`vlm/` 同梱**） |
+| **`pi05_all111`** | **9/5** | **Blackwell**（RTX PRO 6000 Blackwell Server Edition・95.0 GB） | **HF `pi05_full_runpod`**（＝`rp3000`） | **2,000** | **64** | 5e-6 → 2.5e-6 | **全部**（4.14B） | **3 時間 48 分 59 秒**（6.81〜6.87 秒/step・`mem_gb` 49.40） | HF `pi05_all111` の `logs/pi05_all111.log` | **HF `siruku6/pi05_all111` の `000500`・`001000`・`001500`・`002000` の 4 個**（各 9,354,050,752 B）。**データだけが違う 1 本**——`libero_combined_20hz`（111 課題・19,533 本・3,028,708 コマ） |
 
-データはどの π0.5 の実行も `lerobot/libero_plus` rev `f3f49f42`（14,347 本）である。
+データは **`pi05_all111` を除いて**どの π0.5 の実行も `lerobot/libero_plus` rev `f3f49f42`（14,347 本）である。
+**`pi05_all111`（9/5）だけが配布 tar の `libero_combined_20hz`**（111 課題・19,533 本）で、
+**loss の水準はこの 1 本だけ他と比べられない**（学習の終わりで 0.309。40 課題の走りは 0.23〜0.25）。
 SmolVLA 期は本数を絞った回がある（`lora20k` は 200 本、`weak3x_20000` は 4,609 本）。
 
 **8/26 の 2 本は、カメラ視点の拡張を入れるかどうかだけが違う。**他は 1 つも変えていない。
