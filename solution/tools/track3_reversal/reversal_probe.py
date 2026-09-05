@@ -212,7 +212,12 @@ def replay(env, init_state, actions, max_steps=None):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dataset-root", required=True, help="tar 展開先（LeRobot v3.0）")
+    ap.add_argument(
+        "--dataset-root",
+        default="",
+        help="tar 展開先（LeRobot v3.0）。--actions-npz を渡す場合、"
+        "画像内では data/ を読まないので空でよい（/data をマウントしなくてもよい）。",
+    )
     ap.add_argument("--task-index", type=int, default=92)
     ap.add_argument(
         "--task-92-episodes",
@@ -224,6 +229,13 @@ def main():
     ap.add_argument("--t3-dddl", required=True)
     ap.add_argument("--t3-inits", required=True)
     ap.add_argument("--out", default="/out")
+    ap.add_argument(
+        "--actions-npz",
+        default="",
+        help="ホスト側で action 列を抽出した npz (host_extract_actions.py が作る)。"
+        "指定すると画像内で pyarrow が不要になる。"
+        "キー: actions_<ep> (T,7) と length_<ep>。",
+    )
     ap.add_argument(
         "--gripper-mode",
         choices=["keep", "invert"],
@@ -243,6 +255,11 @@ def main():
     # 1) 候補エピソードの決定
     if args.task_92_episodes.strip():
         ep_ids = [int(x) for x in args.task_92_episodes.split(",") if x.strip()]
+    elif args.actions_npz:
+        z = np.load(args.actions_npz)
+        ep_ids = sorted(
+            int(k.split("_")[1]) for k in z.files if k.startswith("actions_")
+        )
     else:
         eps = []
         meta_dir = os.path.join(args.dataset_root, "meta", "episodes", "chunk-000")
@@ -276,7 +293,12 @@ def main():
         rec = {"episode_index": ep}
         print(f"=== episode {ep} ===", flush=True)
 
-        data = load_episode_actions(args.dataset_root, ep, args.task_index)
+        if args.actions_npz:
+            z = np.load(args.actions_npz)
+            actions = z[f"actions_{ep}"].astype(np.float32)
+            data = {"actions": actions, "length": int(z[f"length_{ep}"])}
+        else:
+            data = load_episode_actions(args.dataset_root, ep, args.task_index)
         actions = data["actions"]
         rec["n_actions"] = len(actions)
         print(f"  actions: {actions.shape}", flush=True)
