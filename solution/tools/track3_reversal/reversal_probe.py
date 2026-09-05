@@ -47,26 +47,105 @@ def load_pruned_init(path: str):
 # 反転 action の生成
 # --------------------------------------------------------------------------
 
+def decode_gripper(actions: np.ndarray, states: np.ndarray | None = None) -> np.ndarray:
+    """`action[6]` を robosuite の規約（-1=開く / +1=閉じる）へ直す。
+
+    **`libero_combined_20hz` は gripper の符号化が 2 種類混ざっている。**
+    実測（全 19,533 本を走査）:
+
+      - エピソード 0〜5047（4,827 本）: `action[6] ∈ {0, 1}` で **1=開く・0=閉じる**
+      - エピソード 5186〜19532（14,347 本）: `action[6] ∈ {-1, +1}` で
+        **-1=開く・+1=閉じる**（robosuite そのまま）
+
+    指の開き幅（`observation.state[6] - state[7]`）と突き合わせて確かめた。
+    例（ep 4061・0/1 系）: f0-52 は `+1` で幅 0.078（開いている）、f53-132 は `0` で
+    幅 0.024 まで閉じ、f133 以降 `+1` で 0.079 へ開く。
+    例（ep 5195・±1 系）: f0 は `-1` で幅 0.078、f34 で `+1` にして 0.006 まで閉じる。
+
+    **task 92（黄本の順方向）の 44 本は全部 0/1 系である。**
+    生のまま robosuite へ流すと、`+1` が「閉じる」に、`0` が「そのまま」になり、
+    **掴む・放すが完全に入れ替わる**（本を掴めないまま腕だけ動く）。
+
+    変換: 0/1 系は `a → 1 - 2a`（1→-1 開く、0→+1 閉じる）。±1 系はそのまま。
+    判定は「負の値があるか」で行い、`states` があれば開き幅と符号が合うか検算する。
+    """
+    out = np.array(actions, dtype=np.float32, copy=True)
+    g = out[:, 6]
+    if float(g.min()) < 0.0:
+        encoding = "pm1"           # robosuite そのまま
+    else:
+        encoding = "zero_one"
+        out[:, 6] = 1.0 - 2.0 * g
+
+    if states is not None and len(states) == len(out):
+        # 検算: 「閉じる指令(+1)」の直後に開き幅が縮んでいるはず
+        width = np.asarray(states)[:, 6] - np.asarray(states)[:, 7]
+        dw = np.diff(width)
+        cmd = out[:-1, 6]
+        moving = np.abs(dw) > 1e-4
+        if moving.sum() >= 5:
+            corr = float(np.corrcoef(cmd[moving], -dw[moving])[0, 1])
+            if corr < 0:
+                print(f"  !! gripper 復号({encoding}) が開き幅と逆相関 ({corr:+.3f})。"
+                      f" 規約の判定を疑うこと", flush=True)
+            else:
+                print(f"  gripper 符号化={encoding}（開き幅との相関 {corr:+.3f}）",
+                      flush=True)
+    else:
+        print(f"  gripper 符号化={encoding}", flush=True)
+    return out
+
+
 def build_reversed_actions(
     actions: np.ndarray, gripper_mode: str = "keep", skip_gripper: bool = False
 ) -> np.ndarray:
     """順方向 action 列 (T, 7) を時間反転する。
 
-    データ規約: use_relative_actions=False（絶対 EEF 姿勢 6 次元 + gripper 1 次元）。
-    絶対姿勢の反転は意味が通る（同じ空間経路を戻る）。
-    gripper は開閉の絶対値なので、そのまま反転すると「掴む」が「放す」に
-    ならない。gripper_mode で扱いを選ぶ:
+    **データ規約（コンテナで実測）: OSC_POSE・`control_delta=True`・
+    `input_max/min=±1`・`output_max=[0.05,0.05,0.05,0.5,0.5,0.5]`。**
+    つまり `action[:6]` は「**今の姿勢からの相対差分**を ±1 に正規化した指令値」で、
+    絶対姿勢ではない（この docstring は以前 `use_relative_actions=False`＝絶対姿勢と
+    書いていたが、実測と食い違っていた。[017](../../../docs/talk/inter_sessions/017_action_convention_reconciliation.md)）。
 
-      keep   — action_6 をそのまま反転列に乗せる（デフォルト・最初に試す）
-      invert — action_6 を 1 - x で反転する（掴み/放しの切替を補正する）
-      skip_gripper=True — action_6 を 0（掴んだまま）にする
+    相対差分なので、**同じ経路を戻るには順序を逆にするだけでは足りず、符号も反転する**。
+    順方向が差分 d0,d1,...,d(T-1) で x0 → xT へ動くなら、戻る経路は
+    -d(T-1), -d(T-2), ..., -d0 である。順序だけ逆にすると、同じ向きの動きを
+    バラバラな順で撃つことになり、元の場所には戻らない。
+
+    gripper（`action[6]`）は差分ではなく開閉の指令なので**符号は反転しない**。
+    `decode_gripper` で robosuite 規約（-1=開く/+1=閉じる）に直してから渡すこと。
+
+      keep   — 並べ替えるだけ（**既定・これが正しい**）。pick&place の開閉は
+               「開く→閉じる→開く」で時間反転しても同じ形になり、掴む位置は
+               順方向で放した位置＝物が今ある場所に来る。
+      invert — `-x` で開閉を入れ替える（切り分け用。時間反転では通常不要）。
+               以前は `1 - x` だったが、robosuite 規約の ±1 に対しては {0,2} を返し
+               指令範囲の外だった。
+      skip_gripper=True — `action[6]` を +1（掴んだまま）にする。
     """
     rev = np.ascontiguousarray(actions[::-1].copy())
+    rev[:, :6] = -rev[:, :6]          # 相対差分なので符号を反転して経路を戻る
     if skip_gripper:
-        rev[:, 6] = 0.0
+        rev[:, 6] = 1.0               # +1 = 閉じたまま（robosuite 規約）
     elif gripper_mode == "invert":
-        rev[:, 6] = 1.0 - rev[:, 6]
+        rev[:, 6] = -rev[:, 6]
     return rev
+
+
+def reverse_reference_path(states: np.ndarray) -> np.ndarray:
+    """順方向の state 列から「逆向きに辿るべき基準経路」を作る。
+
+    `observation.state` は `[eef_pos(3), 軸角(3), 指(2)]`。時間反転は**姿勢の列を
+    逆順に並べるだけ**で意味が通る（014 の往復テストで残差 中央 0.6〜0.9 mm）。
+    差分を作り直すのは再生時（`rollout_tracking`）で、そこで**今の姿勢から次の
+    基準姿勢へ向かう差分**を撃つ。
+
+    open-loop（`build_reversed_actions`）との違い:
+    記録された指令を反転して撃つだけだと、OSC の遅れ（1 ステップで指令の 2 割しか
+    到達しない）と接触の非可逆性のぶん**誤差が溜まり続ける**。基準経路を持って
+    毎ステップ引き直せば、溜まらない。
+    """
+    return np.asarray(states, dtype=np.float32)[::-1].copy()
 
 
 # --------------------------------------------------------------------------
@@ -95,6 +174,10 @@ def replay(env, init_state, actions, max_steps=None):
     set_state_from_flattened → forward → qvel ゼロの空撃ち 10 ステップ。
     step は ControlEnv の内部 env に対して行う（ndarray action を受理する）。
     """
+    # `set_state_from_flattened` は qpos/qvel しか戻さない。OSC コントローラの
+    # 内部目標（goal_pos/goal_ori）は前の再生のまま残るので、先に reset を通す。
+    # これが無いと、同じ初期状態から始めても前の再生に結果が引きずられる。
+    env.reset()
     inner = env.env
     sim = inner.sim
     sim.set_state_from_flattened(init_state)
@@ -125,14 +208,14 @@ def main():
         "--gripper-mode",
         choices=["keep", "invert"],
         default="keep",
-        help="反転時の gripper 軸(action_6)の扱い。keep=そのまま、invert=1-x で反転。"
-        "データは use_relative_actions=False（絶対姿勢）で、gripper は開閉の絶対値なので"
-        "単純反転では意味が狂う可能性がある。両方試すのが安全。",
+        help="反転時の gripper 軸(action_6)の扱い。keep=並べ替えのみ（既定・これが正しい）、"
+        "invert=-x で開閉を入れ替える（切り分け用）。"
+        "action は相対差分の指令値なので、姿勢 6 次元は常に符号反転される。",
     )
     ap.add_argument(
         "--skip-gripper",
         action="store_true",
-        help="反転再生時に action_6 を 0（掴んだまま）にする。"
+        help="反転再生時に action_6 を +1（掴んだまま）にする。"
         "『放す瞬間の位置をそのまま辿る』解釈。",
     )
     args = ap.parse_args()
@@ -159,7 +242,10 @@ def main():
         rec = {"episode_index": ep}
         print(f"=== episode {ep} ===", flush=True)
 
-        actions = z[f"actions_{ep}"].astype(np.float32)
+        # 生データの gripper 符号化はエピソードによって違う。robosuite 規約へ直す。
+        raw_actions = z[f"actions_{ep}"].astype(np.float32)
+        states = z[f"states_{ep}"] if f"states_{ep}" in z.files else None
+        actions = decode_gripper(raw_actions, states)
         rec["n_actions"] = len(actions)
         print(f"  actions: {actions.shape}", flush=True)
 
