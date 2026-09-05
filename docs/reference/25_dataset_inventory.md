@@ -14,7 +14,7 @@
 | 5 | **トラックごとに使うべきデータセット**（**9/2 に書き換えた。配布 tar 1 つで足りる**） |
 | 6 | 追加の観点（`no_noops`・エピソード長・`libero_90` の 73・Track2 の非公開セット） |
 | 7 | **公開版の `meta/` を落として数え直した**（8/31。形式・大きさ・指示文と場面の重なり） |
-| **8** | **配布 tar `libero_combined_20hz` の中身**（**9/2。`total_tasks` は 111・乗り換えで踏む穴・`splits` は無視してよい**） |
+| **8** | **配布 tar `libero_combined_20hz` の中身**（**9/2。`total_tasks` は 111・乗り換えで踏む穴・`splits` は無視してよい**）＋ **9/5: 逆向きタスク 3/4 の順方向デモが tar にある** |
 | 数え方 | 打ったコマンド |
 
 ## 調査結果の要約
@@ -40,6 +40,12 @@
 - **ただし「これを足せば Track3 が動く」の根拠は弱い。****配布ベースラインはこのデータで学習されていて、それでも Track3 は 0.000 である**（8.3 節）
 - **`info.json` の `"splits": {"train": "0:432"}` は無視してよい。**同梱の LeRobot でも `solution/train/` でも、`splits` は書かれるだけでエピソードの選択には 1 度も読まれない（8.4 節）
 - **乗り換えには 3 か所の書き換えが要る。**`_DATASET_REPO`・`_DATASET_REVISION`・`--dataset-root` で、**`--dataset-root` を忘れると足した 5,186 本が 1 本も選ばれないまま、エラーも出ずに学習が走る**（8.2 節）
+
+**2026-09-05 に会社の RTX6000 で tar の `tasks.parquet` と bddl を突き合わせて分かったこと**（8.5 節）:
+
+- **Track3 の逆向きタスク 3/4（黄色い本・赤いマグ・2 つのマグ）の順方向デモは配布 tar に実在する**。**「黄色い本の順方向は無い」という初判断は誤りで、修正済み**——タスクの指示文は「the book」（「yellow book」ではない）で、一致させなきゃいけないのは指示文の文字列ではなくシーン（fixtures・objects）の構成である
+- **デモの使い道は会社マシンのローカルだけで足りる。Blackwell からの転送は不要**（tar は 20 GB でこのマシンに実在する）
+- **例外はスープ 1 タスクだけ**（スープの順タスクは全て `basket` 向けで、逆向きタスクが `tray` を使うため別場面）
 
 ---
 
@@ -593,7 +599,49 @@ print(f"libero_90: {len(libero_90_base)} tasks")
 **エピソードを選ぶために読んでいる箇所は 1 つも無い。**
 **選び方は `meta/episodes/*.parquet` を読む**（`train.py:840` の `_select_without_holdout`）。
 
-### 8.5 引き直すコマンド
+### 8.5 配布 tar のタスクが Track3（黄色い本タスクの順方向）と対応する（2026-09-05）
+
+**Track3 の逆向きタスク「棚から黄色い本を下ろす」の順方向は、配布 tar の `task 92`
+（`STUDY_SCENE4_pick_up_the_book_on_the_left_and_place_it_on_top_of_the_shelf`）である。**
+**2 つの bddl を直接突き合わせて確認した**（2026-09-05・会社の RTX6000 上で実行）。
+
+| | 順方向 `STUDY_SCENE4_…top_of_the_shelf`（tar `task 92`） | 逆向き（配布 `compe/t3` 黄色い本タスク） |
+|---|---|---|
+| `:fixtures` | `study_table`＋`wooden_two_layer_shelf_1` | 同一 |
+| `:objects` | `black_book_1`・`yellow_book_1 yellow_book_2` | 同一 |
+| `:obj_of_interest` | `yellow_book_2`・棚 | 同一 |
+| `yellow_book_2` の初期 | 机上 `yellow_book_left_init_region` | 棚 `top_side` |
+| `yellow_book_2` の目標 | 棚 `top_side` | 机上 `yellow_book_left_init_region` |
+
+**初期配置と目標条件がきれいに反転している**（他の物体の配置は同じ）。
+**この場面の順方向 bddl は `libero_90` の `STUDY_SCENE4` に 4 件あり、4 件とも tar に入っている**
+（`task 62/79/92/106`）。
+
+**注意 —— 2 つの落とし穴:**
+
+1. **タスクの指示文は「the yellow book」ではなく「the book」である。**
+   指示文の文字列で `yellow` を探すと全て取りこぼす。
+   **シーン（fixtures・objects の構成）で一致させよ。**
+2. **tar のエピソードにはフルなシミュレータ状態が無い。**
+   `observation.state`（8 次元）と `action`（7 次元）だけで、物体の位置は含まれない。
+   **「順方向デモの最終状態を `.pruned_init` に書き出す」には、
+   `action` 列をシミュレータで順再生して最終フレームの状態を捕まえる手順になる。**
+   この順再生自体が「デモがこちらのシミュレータで成立するか」の確認にもなる。
+
+**Track3 の 4 タスクに対する tar の順方向デモの対応表**（2026-09-05・実測）:
+
+| 配布の逆向きタスク | 順方向（反転元） | tar にデモがあるか |
+|---|---|---|
+| 黄色い本を棚から机へ | `task 92`（上） | **ある** |
+| 赤いマグを左の皿から机へ | `put the red mug on the left plate`（`task 59`・`LIVING_ROOM_SCENE5`） | **ある** |
+| 2 つのマグを皿から机へ | `put the white mug on the left plate and put the yellow and white mug on the right plate`（`task 30`・`LIVING_ROOM_SCENE5`） | **ある** |
+| スープをトレイから机へ | スープをトレイへ置く順タスク（soup の順タスクは全て `basket` 向け・tray 向けは `cream cheese`） | **無い**（`basket` と `tray` は別 fixture） |
+
+**3/4 の逆向きタスクの順方向デモは、配布 tar（会社の RTX6000 に 20 GB で実在する
+`/home/ubuntu/src/train_data/libero_combined_20hz.tar`）から取れる。
+Blackwell からの転送は不要。**
+
+### 8.6 引き直すコマンド
 
 ```bash
 # 配布 tar の info.json（打つのは配布物がある機械。Hugging Face には無い）
@@ -604,4 +652,13 @@ tar -xOf libero_combined_20hz.tar --wildcards '*/meta/tasks*'
 
 # splits が読まれていないことの確認
 grep -rn "\.splits" work/lerobot-src/src/lerobot/
+
+# 8.5 節の確認（9/5・会社の RTX6000。pyarrow は pyenv の python3.12.14）
+tar -xOf libero_combined_20hz.tar libero_combined_20hz/meta/info.json
+# tasks.parquet の全タスクを出力（タスク文字列は `__index_level_0__` 列）
+python3 -c "
+import pyarrow.parquet as pq
+for r in pq.read_table('libero_combined_20hz/meta/tasks.parquet').to_pylist():
+    print(r['task_index'], r['__index_level_0__'])"
+# シーンの一致は指示文ではなく fixtures・objects で見る（2 つの bddl を突き合わせる）
 ```
