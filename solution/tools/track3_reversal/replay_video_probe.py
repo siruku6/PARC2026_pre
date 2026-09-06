@@ -285,9 +285,50 @@ def osc_command(obs, target, grip, gain=1.0):
     return np.concatenate([dpos, drot, [grip]]).astype(np.float32)
 
 
+def _aa_of(obs):
+    """obs の eef クォータニオンを軸角にする（state 列と同じ形）。"""
+    from robosuite.utils import transform_utils as T
+
+    return np.asarray(T.quat2axisangle(
+        np.asarray(obs["robot0_eef_quat"], dtype=np.float64)))
+
+
+def pose_offset(actual, reference):
+    """`reference` の姿勢を `actual` に重ねる剛体変換を (位置差, 回転差) で返す。"""
+    from robosuite.utils import transform_utils as T
+
+    d_pos = np.asarray(actual[:3], dtype=np.float64) - np.asarray(
+        reference[:3], dtype=np.float64)
+    r_act = T.quat2mat(T.axisangle2quat(np.asarray(actual[3:6], dtype=np.float64)))
+    r_ref = T.quat2mat(T.axisangle2quat(np.asarray(reference[3:6], dtype=np.float64)))
+    return d_pos, r_act @ r_ref.T
+
+
+def apply_offset(target, d_pos, r_off, w):
+    """基準姿勢 `target` に、重み `w` で薄めた剛体変換を掛ける。
+
+    `w=1` で「掴んだ瞬間の実際の姿勢」に完全に合わせ、`w=0` で基準経路そのものに
+    戻る。回転は軸角の角度を `w` 倍して薄める（成分ごとの内挿は回転にならない）。
+    """
+    from robosuite.utils import transform_utils as T
+
+    target = np.asarray(target, dtype=np.float64)
+    pos = target[:3] + w * d_pos
+    aa_off = np.asarray(T.quat2axisangle(T.mat2quat(r_off)))
+    ang = float(np.linalg.norm(aa_off))
+    if ang > 1e-9:
+        r_scaled = T.quat2mat(T.axisangle2quat(aa_off / ang * (ang * w)))
+    else:
+        r_scaled = np.eye(3)
+    r_tgt = T.quat2mat(T.axisangle2quat(target[3:6]))
+    aa = T.quat2axisangle(T.mat2quat(r_scaled @ r_tgt))
+    return np.concatenate([pos, np.asarray(aa)])
+
+
 def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
                    gain=1.0, body_pos=None, tol=0.005, max_approach=60,
-                   grip_hold=10, grasp_pose=None):
+                   grip_hold=10, grasp_pose=None, blend=False, grasp_pose_fn=None,
+                   standoff=0.0):
     """掴むまでは**時刻表を捨てて**姿勢で判定し、掴んでから時刻逆向きに戻る。
 
     **なぜ要るか。** 時刻をそのまま逆にすると、掴む指令が出る時刻は
@@ -314,6 +355,21 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
     順再生の eef 列から取れば、本が今どこにあっても必ず整合する。
     省略時は `ref_states[close_i]`（＝デモの姿勢）を使う。
 
+    `blend=True` にすると、C 段の基準経路を「実際に掴んだ姿勢」へ寄せてから追い、
+    残りで 0 へ薄める。**既定は切**——掴んだ直後の手首の飛びを消す狙いで入れたが、
+    実測では**入れると成功していたものが落ちた**（`standoff` で接近を直せば、
+    飛びは問題にならない）。切り分け用に残してある。
+
+    **`grasp_pose_fn` を渡すと、A 段で毎ステップ目標を引き直す。** 物は接近中に
+    動く（実測で本が 10 mm ずれ、グリッパから見た位置が順方向と 12.5 mm 食い違った）。
+    姿勢を 1 回スナップショットしただけの目標は、着いた頃には古い。
+
+    **`standoff` を渡すと、A 段の前に「掴む姿勢の手前」へ寄る段を足す。**
+    手前の向きは**グリッパ自身の進入軸**（eef ローカル z の逆向き）に取る。
+    真上ではない——寝た物の最短辺は鉛直を向くので、真上から降ろすと天面に当たる。
+    進入軸に沿って下がれば、最後の一手が「まっすぐ差し込む」動きになり、
+    物を横から押さずに指の間へ入れられる。
+
     戻り値の `n_extra` が A+B で足したコマ数。
     """
     obs = reset_to(env, init_state, body_pos)
@@ -338,9 +394,28 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
         ref_states[close_i] if grasp_pose is None else grasp_pose,
         dtype=np.float64)
 
-    # A: 掴む姿勢へ、開いたまま、着くまで
+    # A0: 掴む姿勢の手前（進入軸に沿って standoff だけ下がった点）へ先に寄る。
+    #     直進で掴む姿勢へ向かうと、途中で物を横から押してしまう。
+    n_pre = 0
+    if standoff > 0:
+        from robosuite.utils import transform_utils as T
+
+        r_g = T.quat2mat(T.axisangle2quat(grasp_pose[3:6]))
+        pre = np.concatenate([grasp_pose[:3] - r_g[:, 2] * standoff,
+                              grasp_pose[3:6]])
+        for _ in range(max_approach):
+            if float(np.linalg.norm(
+                    np.asarray(obs["robot0_eef_pos"]) - pre[:3])) < tol * 3:
+                break
+            step(osc_command(obs, pre, -1.0, gain))
+            n_pre += 1
+
+    # A: 掴む姿勢へ、開いたまま、着くまで。
+    #    `grasp_pose_fn` があれば毎ステップ目標を引き直す（物が動くため）。
     n_app = 0
     for _ in range(max_approach):
+        if grasp_pose_fn is not None:
+            grasp_pose = np.asarray(grasp_pose_fn(obs), dtype=np.float64)
         d = float(np.linalg.norm(
             np.asarray(obs["robot0_eef_pos"]) - grasp_pose[:3]))
         if d < tol:
@@ -354,15 +429,27 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
     for _ in range(grip_hold):
         step(osc_command(obs, grasp_pose, 1.0, gain))    # +1 = 閉じる
 
-    # C: 掴んだ以降は記録どおりの時刻逆向き
-    for i in range(close_i, len(ref_states) - 1):
-        step(osc_command(obs, ref_states[i + 1], grip[i], gain))
+    # C: 掴んだ以降は記録どおりの時刻逆向き。
+    #    基準経路は「実際に掴んだ姿勢」へ寄せてから追い、残りで 0 へ薄める。
+    d_pos = np.zeros(3)
+    r_off = np.eye(3)
+    if blend:
+        here = np.concatenate([
+            np.asarray(obs["robot0_eef_pos"], dtype=np.float64),
+            np.asarray(_aa_of(obs), dtype=np.float64)])
+        d_pos, r_off = pose_offset(here, ref_states[close_i])
+    n_c = len(ref_states) - 1 - close_i
+    for n, i in enumerate(range(close_i, len(ref_states) - 1)):
+        w = 1.0 - (n + 1) / max(n_c, 1) if blend else 0.0
+        tgt = (apply_offset(ref_states[i + 1], d_pos, r_off, w)
+               if blend else ref_states[i + 1])
+        step(osc_command(obs, tgt, grip[i], gain))
 
     if video_path is not None:
         write_video(frames, video_path)
     eef = np.asarray(eef)
     return {"n_steps": len(acts), "eef_pos": eef, "actions": np.asarray(acts),
-            "n_extra": n_app + grip_hold, "n_approach": n_app,
+            "n_extra": n_pre + n_app + grip_hold, "n_approach": n_pre + n_app,
             "approach_err_mm": round(approach_err * 1000, 2),
             "close_i": close_i,
             "err_m": np.array([approach_err])}
