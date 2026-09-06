@@ -45,7 +45,7 @@
 | **F8** | あなた | JAIST か RTX6000・10 分 | 学習の完走（済） | `WEIGHTS=.../024000/pretrained_model` で `run_final_eval.sh track2` |
 | **F12** | 私が zip・あなたが提出 | 提出枠 1 つ・私 5 分 | **学習は完走した**（8/27 23:21・終了コード 0）。あとは chown | `sudo chown -R ubuntu:ubuntu work/train/stage4_b16_24k` |
 | **F31** | あなた | RTX6000 30 分（約 100 ロールアウト） | **`F30` の結果**（2 cm 以上で 12 件が埋まるなら急がない） | `make_robot_initstate_ladder.py` に cm で層を作る口を足す |
-| **F71** | 私（1 行を渡す）＋あなた（起動） | Blackwell・学習 4 時間 46 分・実装ゼロ | 引数は実装済み。**`F48` とは同時に回せない**（batch 64 で 49.4 GB） | [260902_two_week_plan.md](260902_two_week_plan.md) 15 節の④ |
+| **F71** | 私（1 行を渡す）＋あなた（起動） | Blackwell・学習 4 時間 46 分・実装ゼロ | 引数は実装済み。**`F48` とは同時に回せない**（batch 64 で 49.4 GB） | `. ~/env_pi05.sh` のあと `cd "$CODE_DIR"` して `time python train_pi05.py --run-name pi05_fast250 --init-from /opt/dlami/nvme/weights/trial1500/001500 --steps 2500 --batch-size 64 --num-workers 8 --learning-rate 5e-6 --save-freq 500 --freeze-vision-encoder false --train-expert-only false --camera-viewpoint-augment --max-demo-steps 250`（8.0.0 を作った学習と最後の 1 引数だけ違う。依頼の 011・16 は 9/8 に消したので、1 行はここに置く） |
 | **F73** | 私 | GPU 不要・30 分 | 無し | `solution/tools/analysis/parse_grading_log.py` の出力 2 本を [../reference/26_score_formula_fit.md](../reference/26_score_formula_fit.md) の当てはめに足す |
 | **F60** | 私（設計）＋学習 1 本 | 設計が未定 | 無し | **まだ無い**（何を変えるかが決まっていない） |
 | **F5** | あなた＋私 | RTX6000・20 分 | `git pull`（採点器の差し替え） | `RECORD=1 ... run_final_eval.sh track2` |
