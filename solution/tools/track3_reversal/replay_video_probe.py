@@ -57,34 +57,52 @@ def make_render_env(bddl_file: str, control_freq: int = 20, camera_size: int = 2
     )
 
 
-def fixture_snapshot(env):
-    """据え置き(fixture)の配置（位置と向き）を写し取る。`reset_to` に渡して固定する。
+def pin_fixtures(env, seed):
+    """`reset()` のたびに fixture の配置を戻す env にして返す。
 
-    棚・机などの fixture の位置は `qpos` ではなく **`model.body_pos`** に入るので
-    `set_state_from_flattened` では復らず、**`reset()` のたびに引き直される**。
-    `reset()` の前後で model の数値フィールドを全件比較すると、変わるのは
-    `body_pos` だけで、振れ幅は最大 18.7 mm あった。
+    棚・机などの fixture の位置と向きは `qpos` ではなく **`model.body_pos` /
+    `model.body_quat`** に入るので `set_state_from_flattened` では復らず、
+    **`reset()` のたびに引き直される**（実測 最大 18.7 mm）。固定しないと、
+    同じ初期状態・同じ action を流しても本の着地が 2 か所に割れる（実測 35 mm）。
+    固定すれば同一プロセス内の繰り返しはビット一致する。
 
-    **比較するときは必ず固定すること。**これを渡さないと、同じ初期状態・同じ
-    action を流しても本の着地が 2 か所に割れる（実測 35 mm）。固定すれば
-    同一プロセス内の繰り返しはビット一致する。
+    **`seed` も要る。**固定するのは「1 回目の reset が引いた配置」なので、
+    その 1 回目が run ごとに違えばプロセスをまたいだ比較ができない。016 の
+    [_016_libero_env.py](../probe/_016_libero_env.py) と同じ `seed=42` を使う。
 
-    比べるときの注意: `model` は `hard_reset=True` のたびに**作り直される**ので、
-    写し取った直後のオブジェクトを持ち回して比べても差は出ない（1 度これで
-    「変化なし」と誤判定した）。毎回 `env.env.sim.model` を取り直すこと。
+    **包む形にしているのは、呼び出し側へ配って回ると必ず忘れるからである。**
+    以前は配置を写し取って `reset_to` などへ引数で配っていたが、同じファイルの
+    `main()` が既に渡し忘れており、黙って 35 mm ずれた数字が出ていた。
 
-    なお**プロセスをまたいで揃えるには `env.seed()` も要る**。固定するのは
-    「1 回目の reset が引いた配置」なので、その 1 回目が run ごとに違えば
-    固定先も違う。016 の [_016_libero_env.py](../probe/_016_libero_env.py) と
-    同じ `seed=42` を使う。
+    注意: `model` は `hard_reset=True` のたびに**作り直される**ので、写し取った
+    オブジェクトを持ち回して比べても差は出ない（1 度これで「変化なし」と
+    誤判定した）。毎回 `env.env.sim.model` を取り直すこと。
     """
-    sim = env.env.sim
-    # 位置だけでなく**向き**も引き直される。片方だけ固定すると差が残る。
-    return (np.asarray(sim.model.body_pos).copy(),
-            np.asarray(sim.model.body_quat).copy())
+
+    class PinnedEnv:
+        """fixture を固定した env。それ以外の属性は元の env へ素通しする。"""
+
+        def __init__(self, inner_env):
+            inner_env.seed(seed)
+            inner_env.reset()
+            model = inner_env.env.sim.model
+            self._env = inner_env
+            self._pins = (np.asarray(model.body_pos).copy(),
+                          np.asarray(model.body_quat).copy())
+
+        def reset(self, *a, **kw):
+            obs = self._env.reset(*a, **kw)
+            model = self._env.env.sim.model      # reset で作り直されている
+            model.body_pos[:], model.body_quat[:] = self._pins
+            return obs
+
+        def __getattr__(self, name):
+            return getattr(self._env, name)
+
+    return PinnedEnv(env)
 
 
-def reset_to(env, init_state, body_pos=None):
+def reset_to(env, init_state):
     """初期状態へ入れる。**先に `env.reset()` を通すこと。**
 
     `set_state_from_flattened` は qpos/qvel しか戻さない。OSC コントローラが持つ
@@ -92,16 +110,11 @@ def reset_to(env, init_state, body_pos=None):
     reset を挟まないと「同じ初期状態から始めたのに前回の再生に依存して結果が変わる」。
     実際、これを入れる前は同じ初期状態選びが run ごとに違う番号を返していた。
 
-    `body_pos` に [fixture_snapshot](#) の戻り値を渡すと、`reset()` が引き直した
-    fixture の配置を上書きして固定する。掃引のように**条件だけを変えて比べる**
-    ときは必ず渡すこと。
+    fixture の配置を揃えたい比較では、env を [pin_fixtures](#) で包んでおくこと。
     """
     env.reset()                      # コントローラの内部状態まで初期化する
     inner = env.env
     sim = inner.sim
-    if body_pos is not None:
-        # reset が引き直した fixture の姿勢を戻す
-        sim.model.body_pos[:], sim.model.body_quat[:] = body_pos
     sim.set_state_from_flattened(np.asarray(init_state, dtype=np.float32))
     sim.forward()
     obs = None
@@ -111,33 +124,44 @@ def reset_to(env, init_state, body_pos=None):
     return obs
 
 
-def pick_init(env, inits, ref_eef_pos, body_pos=None):
+def probe_init_eef(env, inits):
+    """各初期状態を実際に復元して eef 位置を測り、`(N, 3)` で返す。
+
+    **高い。**1 本ごとに `reset()` が要るので 50 本で 25 秒かかる（`reset` は
+    `hard_reset=True` でモデルごと作り直すため）。**結果はエピソードに依らない**
+    ので、複数エピソードを回すなら 1 度測って使い回すこと。
+
+    復元だけで済ませる近道（`reset()` を飛ばして `set_state_from_flattened`）は
+    使えない。実測で eef が最大 27 mm ずれ、選ばれる初期状態が変わった。
+    """
+    return np.array([np.asarray(reset_to(env, st)["robot0_eef_pos"])
+                     for st in inits])
+
+
+def pick_init(env, inits, ref_eef_pos, probed=None):
     """デモ 1 フレーム目の eef_pos にいちばん近い初期状態を選ぶ。
 
     デモは特定の初期状態から録られている。`inits[0]` 決め打ちで再生すると
     「初期状態が違うから序盤で発散した」のか「action の規約が違う」のかが
     分離できない（006 の候補 (c) と (b) の混線）。
+
+    `probed` に [probe_init_eef](#) の結果を渡すと、測り直さずに選ぶだけになる。
     """
-    best, best_d, dists = None, None, []
-    for i, st in enumerate(inits):
-        obs = reset_to(env, st, body_pos)
-        d = float(np.linalg.norm(np.asarray(obs["robot0_eef_pos"]) - ref_eef_pos))
-        dists.append(d)
-        if best_d is None or d < best_d:
-            best, best_d = i, d
-    return best, best_d, dists
+    if probed is None:
+        probed = probe_init_eef(env, inits)
+    d = np.linalg.norm(np.asarray(probed) - np.asarray(ref_eef_pos), axis=1)
+    i = int(np.argmin(d))
+    return i, float(d[i]), d.tolist()
 
 
 def rollout(env, init_state, actions, video_path=None, ref_states=None,
-            body_pos=None, track_obj=None):
+            track_obj=None):
     """初期状態から action 列を再生する。動画と、フレーム毎の eef_pos を返す。
 
     `track_obj` に物体名を渡すと、その姿勢も毎コマ残す（`obj_pos` / `obj_quat`）。
     逆向きの掴む姿勢を [grasp_pose_from_forward](#) で作るのに要る。
     """
-    from robosuite.utils import transform_utils as T
-
-    obs = reset_to(env, init_state, body_pos)
+    obs = reset_to(env, init_state)
     frames, eef, aa = [], [], []
 
     obj_p, obj_q = [], []
@@ -147,8 +171,7 @@ def rollout(env, init_state, actions, video_path=None, ref_states=None,
             frames.append(obs[f"{CAMERA}_image"][::-1])
         eef.append(np.asarray(obs["robot0_eef_pos"]).copy())
         # 逆向きの掴む姿勢をここから作るので、向きも残す（軸角。state 列と同じ形）
-        aa.append(np.asarray(T.quat2axisangle(
-            np.asarray(obs["robot0_eef_quat"], dtype=np.float64))))
+        aa.append(eef_axisangle(obs))
         if track_obj is not None:
             # 掴む瞬間の「本から見た手の位置」を作るために、物体の姿勢も残す
             obj_p.append(np.asarray(obs[f"{track_obj}_pos"]).copy())
@@ -229,7 +252,7 @@ OUT_MAX_ROT = np.array([0.5, 0.5, 0.5], dtype=np.float64)
 
 
 def rollout_tracking(env, init_state, ref_states, gripper_cmd, video_path=None,
-                     gain=1.0, body_pos=None):
+                     gain=1.0):
     """基準経路（逆順の state 列）を**閉ループで追いかける**再生。
 
     記録された指令を反転して撃つ open-loop と違い、毎ステップ
@@ -243,7 +266,7 @@ def rollout_tracking(env, init_state, ref_states, gripper_cmd, video_path=None,
 
     `gripper_cmd` は robosuite 規約に直した `action[6]` を逆順にしたもの。
     """
-    obs = reset_to(env, init_state, body_pos)
+    obs = reset_to(env, init_state)
     frames, eef = [], []
     if video_path is not None:
         frames.append(obs[f"{CAMERA}_image"][::-1])
@@ -285,9 +308,17 @@ def osc_command(obs, target, grip, gain=1.0):
     return np.concatenate([dpos, drot, [grip]]).astype(np.float32)
 
 
+def eef_axisangle(obs):
+    """obs の eef クォータニオンを軸角にする（`observation.state[3:6]` と同じ形）。"""
+    from robosuite.utils import transform_utils as T
+
+    return np.asarray(T.quat2axisangle(
+        np.asarray(obs["robot0_eef_quat"], dtype=np.float64)))
+
+
 def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
-                   gain=1.0, body_pos=None, tol=0.005, max_approach=60,
-                   grip_hold=10, grasp_pose=None):
+                   gain=1.0, tol=0.005, max_approach=60, grip_hold=10,
+                   grasp_pose=None, standoff=0.0):
     """掴むまでは**時刻表を捨てて**姿勢で判定し、掴んでから時刻逆向きに戻る。
 
     **なぜ要るか。** 時刻をそのまま逆にすると、掴む指令が出る時刻は
@@ -312,11 +343,18 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
     ことがある——順再生はデモと同じ場所へ本を置くとは限らず、実測で 25〜35 mm
     ずれた。腕は基準の姿勢へ 3〜4 mm で着くのに空を掴む、という失敗になる。
     順再生の eef 列から取れば、本が今どこにあっても必ず整合する。
-    省略時は `ref_states[close_i]`（＝デモの姿勢）を使う。
+    省略時は `ref_states[close_i]`（＝デモの姿勢）に落ちるが、それは上記の
+    失敗そのものなので、切り分け以外では必ず渡すこと。
+
+    **`standoff` を渡すと、A 段の前に「掴む姿勢の手前」へ寄る段を足す。**
+    手前の向きは**グリッパ自身の進入軸**（eef ローカル z の逆向き）に取る。
+    真上ではない——寝た物の最短辺は鉛直を向くので、真上から降ろすと天面に当たる。
+    進入軸に沿って下がれば、最後の一手が「まっすぐ差し込む」動きになり、
+    物を横から押さずに指の間へ入れられる。
 
     戻り値の `n_extra` が A+B で足したコマ数。
     """
-    obs = reset_to(env, init_state, body_pos)
+    obs = reset_to(env, init_state)
     inner = env.env
     frames, eef, acts = [], [], []
     if video_path is not None:
@@ -338,15 +376,30 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
         ref_states[close_i] if grasp_pose is None else grasp_pose,
         dtype=np.float64)
 
+    # A0: 掴む姿勢の手前（進入軸に沿って standoff だけ下がった点）へ先に寄る。
+    #     直進で掴む姿勢へ向かうと、途中で物を横から押してしまう。
+    def approach(target, reach):
+        """開いたまま `target` へ、`reach` 以内に入るまで寄る。掛けたコマ数を返す。"""
+        n = 0
+        for _ in range(max_approach):
+            if float(np.linalg.norm(
+                    np.asarray(obs["robot0_eef_pos"]) - target[:3])) < reach:
+                break
+            step(osc_command(obs, target, -1.0, gain))   # -1 = 開く
+            n += 1
+        return n
+
+    # A0: 掴む姿勢の手前（進入軸に沿って standoff だけ下がった点）へ先に寄る。
+    n_pre = 0
+    if standoff > 0:
+        from robosuite.utils import transform_utils as T
+
+        r_g = T.quat2mat(T.axisangle2quat(grasp_pose[3:6]))
+        n_pre = approach(np.concatenate([grasp_pose[:3] - r_g[:, 2] * standoff,
+                                         grasp_pose[3:6]]), tol * 3)
+
     # A: 掴む姿勢へ、開いたまま、着くまで
-    n_app = 0
-    for _ in range(max_approach):
-        d = float(np.linalg.norm(
-            np.asarray(obs["robot0_eef_pos"]) - grasp_pose[:3]))
-        if d < tol:
-            break
-        step(osc_command(obs, grasp_pose, -1.0, gain))   # -1 = 開く
-        n_app += 1
+    n_app = approach(grasp_pose, tol)
     approach_err = float(np.linalg.norm(
         np.asarray(obs["robot0_eef_pos"]) - grasp_pose[:3]))
 
@@ -360,12 +413,17 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
 
     if video_path is not None:
         write_video(frames, video_path)
-    eef = np.asarray(eef)
-    return {"n_steps": len(acts), "eef_pos": eef, "actions": np.asarray(acts),
-            "n_extra": n_app + grip_hold, "n_approach": n_app,
-            "approach_err_mm": round(approach_err * 1000, 2),
-            "close_i": close_i,
-            "err_m": np.array([approach_err])}
+    return {"n_steps": len(acts), "eef_pos": np.asarray(eef),
+            "n_extra": n_pre + n_app + grip_hold, "n_approach": n_pre + n_app,
+            "approach_err_mm": round(approach_err * 1000, 2)}
+
+
+def episode_ids(npz, spec=""):
+    """npz にある `actions_<ep>` から、回すエピソード番号を決める。"""
+    if spec.strip():
+        return [int(x) for x in spec.split(",") if x.strip()]
+    return sorted(int(k.split("_")[1]) for k in npz.files
+                  if k.startswith("actions_"))
 
 
 def write_video(frames, path, fps=20):
@@ -427,10 +485,7 @@ def main():
     args = ap.parse_args()
 
     z = np.load(args.ep_npz, allow_pickle=True)
-    eps = ([int(x) for x in args.episodes.split(",") if x.strip()]
-           if args.episodes.strip()
-           else sorted(int(k.split("_")[1]) for k in z.files
-                       if k.startswith("actions_")))
+    eps = episode_ids(z, args.episodes)
     out_dir = Path(args.out)
     vid_dir = out_dir / "videos"
     vid_dir.mkdir(parents=True, exist_ok=True)
