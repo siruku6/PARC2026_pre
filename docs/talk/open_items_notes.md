@@ -35,7 +35,7 @@
 |---|---|---|---|---|
 | **F48** | 私（設定）＋あなた（組んで出す） | **学習は済んだ。**残りは zip 1 本＝**Mac で 40 分**（この機械は空きが 11 GB しかなく、要る 19 GB に足りない） | **満たした**（HF `siruku6/pi05_all111` に 4 個） | [../howto/02_build_submission.md](../howto/02_build_submission.md)「zip を 1 本組んで出す」。**渡す 3 つ**——**①Mac で組む ②版は `13.0.0`（6 文字なので道 A）③`vlm/` は無いので足す。****重みは `siruku6/pi05_all111` の `002000`**（**濃さを 5.0.1 と揃えた点**。歩数を揃えた `001500` は次の日の枠に取っておく）。**3 トラックとも出す**（1007・1008・1009） |
 | **F27** | 別セッション | RTX6000 1 日 | 無し。**Blackwell を使わないので `F48` と並行できる** | [inter_sessions/006](inter_sessions/006_track3_reverse_direction.md) |
-| **F75** | あなた | RTX6000・1〜2 時間（parquet の読み出しだけなので Blackwell と並行できる） | `~/dataset/lerobot/` に `libero_combined_20hz` があること | [inter_sessions/014](inter_sessions/014_verify_raw_states_for_time_reversal.md) |
+| **F75** | あなた | RTX6000・1〜2 時間（parquet の読み出しだけなので Blackwell と並行できる） | `~/dataset/lerobot/` に `libero_combined_20hz` があること | **済**。中身は [reference/25](../reference/25_dataset_inventory.md) の 8.8 節 |
 | **F79** | 私 | GPU 不要・半日 | ユーザの判断 | HF の原典カードとファイル一覧を見る／手元で 1 回起動する |
 | **F72** | 私（実装）＋あなた（評価） | RTX6000・実装 2 時間 ＋ 評価 1 回 | 無し | [../howto/03_gpu_eval.md](../howto/03_gpu_eval.md)「RTX6000 で Track3 を測る」 |
 | **F77** | 私（提出はユーザ） | 提出枠 1 つ・GPU 不要 | ユーザの判断 | `policy_server.py` の `_MIN_LEXICAL` を 0.50 にして zip を組み直す（[../howto/02_build_submission.md](../howto/02_build_submission.md)） |
