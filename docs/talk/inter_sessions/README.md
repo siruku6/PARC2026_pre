@@ -84,9 +84,9 @@
 | **[012](012_dataset_overlap_inventory.md)** | **配布データセットの棚卸し**（何と何が重なっているのかを数える。011 の学習が走り出したら着手） | **依頼中**（`open_items.md` の `F11`） |
 | **[013](013_score_writeup_dedup.md)** | **提出結果の記述を実験台帳 1 か所に寄せる**（残り 7 版。**GPU も提出枠も使わない文書だけの作業なので、他の依頼と並行してよい**） | **依頼中**（`open_items.md` の `F63`） |
 | **[014](014_verify_raw_states_for_time_reversal.md)** | **学習データの raw states が時間反転に使えてかを実データ 2 本で確認する**（Track3 本命案の前提潰し） | **報告済み — go**（state は健全。ただし**チェック 4 は原文基準では FAIL**・gripper の逆転規則は未確定。中身は 006 へ移してから閉じる） |
-| **[015](015_mppi_benchmark_go_no_go.md)** | **MPPI を 1 タスクで実装・実測し、100 タスク × 10 デモの生成が RTX6000 で成立するか go / no-go を出す**（調査は [reference/28](../../reference/28_mppi_data_regeneration_survey.md)） | **依頼中**（受け側は RTX6000） |
-| **[016](016_reverse_transfer_probe_on_current_weights.md)** | **今の重み（`trial1500/001500`）は学習済みタスクの「逆向き」を動かせるのかを、RTX6000（EGL）で 3〜4 タスク × 2 本ずつ測る**（逆向きデータ生成 1 週間の前提潰し。014・015 が「作れるか」なら、これは「重みが動くか」） | **依頼中**（受け側は RTX6000） |
-| **[017](017_action_convention_reconciliation.md)** | **`action` 列が「正規化された相対差分」か「生の OSC 指令値」かを、シムで 1 本再生して決める**（014 の実測と `reversal_probe.py` の docstring が食い違っている。**006 の forward 0/3 の候補 (b) に直結**し、逆向きデモの作り方がこの 1 点で変わる） | **依頼中**（受け側は 006 の試作を触っているセッション。英語版 [017e](017e_action_convention_reconciliation.md) あり・**正は 017**） |
+| **[015](015_mppi_benchmark_go_no_go.md)** | **MPPI を 1 タスクで実装・実測し、100 タスク × 10 デモの生成が RTX6000 で成立するか go / no-go を出す**（調査は [reference/28](../../reference/28_mppi_data_regeneration_survey.md)） | **止めた（9/6・切る推奨）。**017 の時間反転が 3 本中 2 本で通ったので、第 2 の手段の値打ちが落ちた（`open_items.md` の `F90`・[260906_briefing.md](../260906_briefing.md) の判断 3）。**判断が「切らない」なら依頼中に戻す** |
+| **[016](016_reverse_transfer_probe_on_current_weights.md)** | **今の重み（`trial1500/001500`）は学習済みタスクの「逆向き」を動かせるのかを、RTX6000（EGL）で 3〜4 タスク × 2 本ずつ測る**（逆向きデータ生成 1 週間の前提潰し。014・015 が「作れるか」なら、これは「重みが動くか」） | **完了（go/no-go = No）。**逆向き 0/4・4 本とも 300 歩。**Track3 の 8 本のうち 2 本は学習済みタスクの厳密な逆向きだった**——中身を `reference/19` と `knowledge/` へ移してから閉じる |
+| **[017](017_action_convention_reconciliation.md)** | **`action` 列が「正規化された相対差分」か「生の OSC 指令値」かを、シムで 1 本再生して決める**（014 の実測と `reversal_probe.py` の docstring が食い違っている。**006 の forward 0/3 の候補 (b) に直結**し、逆向きデモの作り方がこの 1 点で変わる） | **追加依頼中（9/6）。**規約は確定し、**段階制で逆向きが 3 本中 2 本通った。****次は「学習データの形で 1 本書き出す」**（同ファイル末尾の「追加依頼」・`open_items.md` の `F87`）。英語版 [017e](017e_action_convention_reconciliation.md) あり・**正は 017** |
 
 **8/31 に 6 本消した**（001・003・004・005・007・009）。**中身の行き先はこうである。**
 
