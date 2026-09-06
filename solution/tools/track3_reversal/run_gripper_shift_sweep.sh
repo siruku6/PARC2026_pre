@@ -12,6 +12,12 @@
 #                                      （t3-lying = 腕は home・本は順再生が残した寝姿勢）
 #   GRASP_FRAME=release|grasp|clamped  掴む姿勢を順方向のどのフレームから測るか
 #   STANDOFF=0.06                      掴む姿勢の手前に置く待機点の距離[m]
+#   LIFT=0.08                          掴んだ直後に真上へ上がる高さ[m]
+#                                      （皿やトレイを擦らないため）
+#   RELEASE=schedule|contact           放す時刻。contact=触れた所で止めて開く
+#   SETTLE=20                          contact のとき下ろすコマ数の上限
+#   LEVEL=1                            放す前に荷物を水平へ直す（傾いたまま置くと
+#                                      放したあとに自分で起き上がる）
 #   MAX_APPROACH=60                    接近の各段に許すコマ数（遠い場面では上げる）
 #   SYMMETRY=1|2|0                     掴み方として等価な回転（0=缶のような回転体）
 #   GRASP_STYLE=transfer|top-down      掴む姿勢を順方向から移すか、真上からの握りを作るか
@@ -37,6 +43,11 @@ run_in_container gripper_shift_sweep.py \
   --init-source "${INIT_SOURCE:-forward-final}" \
   --grasp-frame "${GRASP_FRAME:-release}" \
   --standoff "${STANDOFF:-0}" \
+  --lift "${LIFT:-0}" \
+  --release "${RELEASE:-schedule}" \
+  --settle "${SETTLE:-20}" \
+  --trace-release "${TRACE:-0}" \
+  ${LEVEL:+--level-before-release} \
   --max-approach "${MAX_APPROACH:-60}" \
   --object-symmetry "${SYMMETRY:-1}" \
   --grasp-style "${GRASP_STYLE:-transfer}" \

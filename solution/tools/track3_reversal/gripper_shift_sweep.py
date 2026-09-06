@@ -35,7 +35,8 @@ from pathlib import Path
 
 import numpy as np
 
-from replay_video_probe import (DATASET_CAMERAS, episode_ids, grasp_backoff,
+from replay_video_probe import (DATASET_CAMERAS, contacting_bodies,
+                                episode_ids, grasp_backoff,
                                 standing_axis, top_down_grasp,
                                 grasp_pose_from_forward, make_render_env,
                                 pick_init, pin_fixtures, probe_init_eef,
@@ -215,6 +216,17 @@ def write_episode_npz(path, env, r, success):
              instruction=env.language_instruction)
 
 
+def all_object_pos(env):
+    """シーンの物すべての位置。**掴む物以外が動いたら、腕か荷物が押している。**
+
+    配布 T3 の採点は「置けたか」だけを見るが、皿やトレイがずれる経路は**接触で
+    動かしている**ので、学習データとしては入れたくない。1 本ごとにこの差分を
+    見れば、擦っている回をその場で弾ける。
+    """
+    return {n: np.asarray(env.env.sim.data.body_xpos[b]).copy()
+            for n, b in env.env.obj_body_id.items()}
+
+
 def site_frame(env, site):
     """site の world 位置と回転行列。**env をまたいで姿勢を移す基準に使う。**"""
     sim = env.env.sim
@@ -310,6 +322,9 @@ def parse_args():
                          "release=放す直前（既定）/ grasp=閉じる指令の瞬間"
                          "（**まだ掴んでいない**ので通常は不可）/ "
                          "clamped=実際に挟み終えた瞬間（立っている物にはこれ）")
+    ap.add_argument("--trace-release", type=int, default=0,
+                    help="放す前後のこのコマ数を 1 行ずつ出す。**落下の原因を"
+                         "「傾いて放した」「触れずに放した」に切り分けるため**")
     ap.add_argument("--out", default="/out")
     ap.add_argument("--episodes", default="", help="コンマ区切り。既定は npz の全部")
     ap.add_argument("--shifts", default="-8,-6,-4,-2,0,2,4,6,8",
@@ -336,6 +351,26 @@ def parse_args():
                     help="接近の各段に許すコマ数の上限。**距離はタスクで違う**——"
                          "本は 30〜41 コマで着くが、腕の home から遠い場面では"
                          "足りない。上げても着いた回の結果は変わらない")
+    ap.add_argument("--lift", type=float, default=0.0,
+                    help="掴んだ直後に**真上へ**上がる高さ[m]。0 で無効。"
+                         "復路の頭は物を置いた高さなので、そのまま追うと荷物を"
+                         "下ろしたまま横へ引きずり、**下の皿やトレイを動かす**。"
+                         "上がってから、復路が同じ高さに来る点で合流する")
+    ap.add_argument("--release", choices=["schedule", "contact"],
+                    default="schedule",
+                    help="放す時刻の決め方。schedule=記録どおりの開き指令の時刻"
+                         "（既定。**順方向の閉じ指令は挟む 8〜17 コマ前に出ている**"
+                         "ので、反転すると手が戻り始めてから開いて物を落とす）/ "
+                         "contact=順方向が実際に挟み終えたコマまで復路を辿り、"
+                         "そこから触れるまで下ろして放す")
+    ap.add_argument("--level-before-release", action="store_true",
+                    help="放す前に、荷物の**立つ軸が鉛直になるよう手を回す**。"
+                         "傾いたまま置くと、放したあとに荷物が自分で起き上がる"
+                         "（赤マグは皿の上で 10.5° 傾いており、起き上がりで重心が"
+                         "7.5 mm 下がっていた）。--release contact と併せて使う")
+    ap.add_argument("--settle", type=int, default=20,
+                    help="--release contact のとき、触れるまで 5 mm ずつ下ろす"
+                         "コマ数の上限")
     ap.add_argument("--standoff", type=float, default=0.0,
                     help="掴む姿勢の手前（グリッパの進入軸に沿って）に置く待機点の"
                          "距離[m]。0 で無効。物を押さずに近づくために使う")
@@ -380,7 +415,24 @@ def build_envs(args, render, rev_region):
     return env, env_t3, use_t3
 
 
-def measure(rev_env, obj, rev_region, r, rev_goal, book_rev_start):
+def print_release_trace(r, n):
+    """放す前後を 1 コマずつ出す。**落下の原因を切り分けるための唯一の窓である。**
+
+    見るのは 3 列。`grip` が負に変わったコマが放した瞬間で、そこで
+    `touch` が空なら**触れずに放している**、`tilt` が大きいなら**傾けたまま
+    放している**。`z` の落ち方はその結果でしかない。
+    """
+    a6 = r["actions"][:, 6]
+    held = np.where(a6 > 0)[0]
+    t0 = max(int(held[-1]) - 2 if len(held) else 0, 0)
+    for t in range(t0, min(t0 + n, len(r["obj_z"]))):
+        print(f"      t={t:3d} grip={a6[t]:+.0f} z={r['obj_z'][t] * 1000:7.1f} mm "
+              f"tilt={r['obj_tilt_deg'][t]:5.1f}° touch={r['obj_touch'][t]}",
+              flush=True)
+
+
+def measure(rev_env, obj, rev_region, r, rev_goal, book_rev_start,
+            obj_pos_start=None):
     """1 本の逆向き再生から、**その再生を回した env だけで測れる**値を出す。
 
     順方向 env の値（本の出発点など）と混ぜないこと。`--init-source t3` では
@@ -401,9 +453,18 @@ def measure(rev_env, obj, rev_region, r, rev_goal, book_rev_start):
         "region_half_mm": [round(float(v) * 1000, 1) for v in region_half[:2]],
         "n_steps": int(r["n_steps"]),
     }
+    if obj_pos_start is not None:
+        now = all_object_pos(rev_env)
+        moved = {n: round(float(np.linalg.norm(now[n] - p)) * 1000, 1)
+                 for n, p in obj_pos_start.items() if n != obj}
+        # **1 mm 未満は数えない。**シムの整定でこの程度は常に動く。
+        row["disturb_mm"] = {n: v for n, v in moved.items() if v >= 1.0}
+        row["disturb_max_mm"] = max(moved.values(), default=0.0)
     if "n_extra" in r:                          # phased のときだけ付く
         row.update(n_extra=int(r["n_extra"]), n_approach=int(r["n_approach"]),
                    n_standoff=int(r["n_standoff"]), n_reach=int(r["n_reach"]),
+                   n_lift=int(r["n_lift"]), n_floor=int(r["n_floor"]),
+                   n_settle=int(r["n_settle"]), drop_mm=r.get("drop_mm"),
                    approach_err_mm=r["approach_err_mm"])
     else:
         row["err_median_mm"] = round(float(np.median(r["err_m"])) * 1000, 1)
@@ -490,6 +551,13 @@ def main():
         close_i = int(closes[0]) if len(closes) else 0
         j = min(max(grasp_source_frame(args.grasp_frame, actions, states, close_i),
                     0), len(fwd["eef_pos"]) - 1)
+        # 放す位置は「順方向が実際に挟み終えたコマ」の反転。**開き指令の時刻では
+        # ない**——それは挟む 8〜17 コマ前なので、反転すると空中で放す。
+        release_i = (len(ref) - 1 - clamp_frame(actions[:, 6], states)
+                     if args.release == "contact" else None)
+        # **置いた先で鉛直を向くべき軸は、順方向の初期姿勢から測る。**逆向きは
+        # そこへ戻す動きなので、いま物が置かれている向き（T3 init）ではない。
+        place_axis = standing_axis(fwd["obj_quat"][0])
 
         # 2) 逆向きを回す env と初期状態を決める（軌道の作り方とは独立の軸）。
         #    **順再生（1)）は init に依らないので、外側でちょうど 1 回だけ回す。**
@@ -508,6 +576,9 @@ def main():
             else:
                 rev_init = fwd_final
                 book_rev_start, book_rev_quat = book_fwd_end, book_quat_fwd_end
+            # **この時点の env は逆向きの初期状態そのもの。**ここで全部の物の
+            # 位置を控えておき、終わりと引き算して「押して動かした量」を出す。
+            obj_pos_start = all_object_pos(rev_env)
             upright = object_is_upright(book_rev_quat)
             yaw = object_yaw_deg(book_rev_quat)
 
@@ -548,6 +619,11 @@ def main():
                                        grasp_pose=grasp_pose,
                                        standoff=args.standoff,
                                        max_approach=args.max_approach,
+                                       lift=args.lift, obj=obj,
+                                       release_i=release_i,
+                                       settle=args.settle,
+                                       place_axis=place_axis,
+                                       level=args.level_before_release,
                                        capture=bool(args.write_npz))
                 else:
                     r = rollout_tracking(rev_env, rev_init, ref, grip, vid)
@@ -564,7 +640,7 @@ def main():
                        "book_init_xy": [round(float(v), 4)
                                         for v in book_rev_start[:2]],
                        **measure(rev_env, obj, rev_region, r, rev_goal,
-                                 book_rev_start)}
+                                 book_rev_start, obj_pos_start)}
                 if not use_t3:
                     # 順方向と同じ env で回したときだけ、順方向側の座標と比べられる
                     book_end, _ = body_pose(rev_env, obj)
@@ -582,6 +658,13 @@ def main():
                          f"{row['approach_err_mm']:6.2f} mm"
                          if "n_approach" in row else
                          f"  腕ずれ {row['err_median_mm']:.1f} mm")
+                if row.get("drop_mm") is not None:
+                    extra += f"  落下 {row['drop_mm']:5.1f} mm"
+                if args.trace_release and "obj_z" in r:
+                    print_release_trace(r, args.trace_release)
+                if "disturb_max_mm" in row:
+                    extra += (f"  他の物 {row['disturb_max_mm']:5.1f} mm "
+                              f"{row['disturb_mm'] or ''}")
                 head = (f"  init #{t3_i:2d} yaw {yaw:+6.1f}°" if use_t3
                         else "  forward-final")
                 print(f"{head} shift {k:+3d}: "
