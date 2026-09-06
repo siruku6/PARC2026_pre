@@ -255,10 +255,16 @@ flow matching（行動を少しずつ形にしていく作り方）のサンプ�
 
 | これまでの主張 | 実際 | なぜ間違えたか |
 |---|---|---|
-| **Track2 の摂動は、採点ハーネスの `PerturbationConfig`（`robot_init_pos_noise` ほか 5 つ）で入る可能性が高い**（2026-08-24 に書いた。その文書は 8/26 に [07](07_track2_preparation.md) の 1.3.4 節へ統合して消した） | **違う。`compe/t2/T2_TASKS.csv` の 8 行は LIBERO-plus の variant で、`category` 列は Sensor Noise 2・Camera Viewpoints 2・Objects Layout 2・Robot Initial States 2 である。**[07](07_track2_preparation.md) の 1.1 節の推測がそのまま当たっていた | 配布キットに `PerturbationConfig` という設定があり、Track2 の文言と同じ 3 語がフィールド名に並んでいたことを根拠にした。**しかしタスクの一覧そのものを見れば直接分かる話だった。**本選のキットが配られてから CSV を 1 つ開けば済んだ。**新しい配布物が来たら、推論より先に中身を数える** |
+| **Track2 の摂動は、採点ハーネスの `PerturbationConfig`（`robot_init_pos_noise` ほか 5 つ）で入る可能性が高い**（2026-08-24 に書いた。その文書は 8/26 に [07](archive/07_track2_preparation.md) の 1.3.4 節へ統合して消した） | **違う。`compe/t2/T2_TASKS.csv` の 8 行は LIBERO-plus の variant で、`category` 列は Sensor Noise 2・Camera Viewpoints 2・Objects Layout 2・Robot Initial States 2 である。**[07](archive/07_track2_preparation.md) の 1.1 節の推測がそのまま当たっていた | 配布キットに `PerturbationConfig` という設定があり、Track2 の文言と同じ 3 語がフィールド名に並んでいたことを根拠にした。**しかしタスクの一覧そのものを見れば直接分かる話だった。**本選のキットが配られてから CSV を 1 つ開けば済んだ。**新しい配布物が来たら、推論より先に中身を数える** |
 | **`num_inference_steps` と `samples` は秒数しか増やさないので事実上ただである**（[../knowledge/06](../knowledge/06_step_count_drives_score.md)） | **1 リクエストが 10 秒を超えると、そのトラック全体が 0 点になる。**平均でも累積でもない | トラック全体の 1 時間の上限（実測 110.4 秒で 32 倍の余り）だけを見て、**リクエスト単位の上限を「余裕がある側」と同じ扱いにした。**2 つは別の制約で、後者は崖である |
 
 ## 決めてほしいこと
+
+> **【2026-09-08 に整理】この 3 つはいずれも答えが出た。**
+> **1（どのトラックか）** は 8/31 に「Track3 を第一」で決まり、Track3 は逆向きデータ（`F27`）へ全振りになった（[../reference/28_track3_contents.md](../reference/28_track3_contents.md)）。
+> **2（GPU 60 時間の割り振り）** は学習を Blackwell（配布 GPU 環境）へ移して変わった（[../howto/14_blackwell_session.md](../howto/14_blackwell_session.md)・[../reference/27_blackwell_environment.md](../reference/27_blackwell_environment.md)）。
+> **3（提出枠の毎日 3 枠・1 変数ずつ）** は `F85` で 9/6 に引き直した（[../talk/open_items.md](../talk/open_items.md) の H 節）。
+> 以下は 8/25 に書いていた案の記録である。
 
 ### 1. どのトラックに寄せるか
 
@@ -284,6 +290,12 @@ flow matching（行動を少しずつ形にしていく作り方）のサンプ�
 | B: 学習が終わった日だけ出す | 手間が少ない | **推論側の 1 変数を測る機会を捨てる。**予選で効いた 2 つの手（chunk 長・指示文の正規化）はどちらも推論側だった | 締切間際に「測っていない設定」が残る |
 
 ## やってほしい作業
+
+> **【2026-09-08 に整理】3 作業とも答えが出た。**
+> **作業 1（最終評価枠に 4.2.0 を入れる）** は 8/31 に開き、Track1・Track2・Track3 の 3 枠とも 5.0.1 が入った（[../reference/19_weights_catalog.md](../reference/19_weights_catalog.md)）。
+> **作業 2（Track3 の 8 行を手元で回す）** は 8/28 の「Track3 は逆向きのタスク」開示と、その後の逆向きデータへの全振り（`F27`）で形が変わった（[../reference/28_track3_contents.md](../reference/28_track3_contents.md)）。
+> **作業 3（1 リクエストの最大秒数を測る）** は「10 秒の壁」の実測で決まった。1 リクエスト 10 秒超でトラック全体が 0 点になる、という発見は下の「覆ったもの」の表と「10 秒の壁が…書き換える」の節に記録済み。
+> 以下は 8/25 に書いていた作業の記録である。
 
 **Claude が実行できない理由は 1 つ** ── このマシンでは `docker run`（新しいコンテナの
 作成）が組織の制約で拒否される。zip の組み立て・ログの解析・設定の準備はこちらでやる。
@@ -345,6 +357,13 @@ python validate_submission.py <4.4.0 の zip>
 **このうちインフラに関わるもの（配布 GPU 環境の仕様・手元のマシンの状態・Docker イメージの
 有無）は、[../resources/infra_and_docker.md](../resources/infra_and_docker.md) で確認する。**
 あちらがインフラの現在地の正本で、確認コマンドもマシン別にまとめてある。
+
+> **【2026-09-08 に整理】4 つの仮定はいずれも答えが出た。**
+> **①（60 時間は起動時間で、放置で減る）** は正しかったが、本選の学習は Blackwell（配布 GPU 環境）へ移したので、その 60 時間は Blackwell で使った（[../howto/14_blackwell_session.md](../howto/14_blackwell_session.md)：起動から 12 時間で切れる）。
+> **②（`omni submit` で GPU 時間を消費する）** は 9/1 に「切り替えない」と決めた（[../talk/open_items.md](../talk/open_items.md) の「決めた」9/1 の行）。
+> **③（`libero_combined_20hz` に `libero_90` が含まれるか）** は `total_tasks` 111 で確認済み。`libero_plus`＋`libero_90`＋`libero_10`＋`libero_spatial`＋`libero_object` の 5 つで、`libero_goal` だけ入っていない（[../reference/25_dataset_inventory.md](../reference/25_dataset_inventory.md) 8 節）。
+> **④（手元マシンの配布キットイメージ）** は 8/26 に確認済み（この項の本文に）。
+> 以下は 8/25 に書いていた仮定の記録である。
 
 - **60 時間はインスタンスの起動時間だと読んだ**（PDF が「カーネルを自分でシャットダウン
   するのを忘れないように」と書いていることから）。**計算に使った時間だけが引かれるので

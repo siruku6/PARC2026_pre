@@ -76,7 +76,7 @@ Camera Viewpoints variant の1つ（`_view_38_15_100_0_0_initstate_0`、方位�
 ### 2.3 作り直す variant の一覧
 
 **評価スイート（`compe/val/TRACK2_PROBE.csv`）と重ならない variant を選ぶ**必要がある
-（[08_training_data_creation_cautions.md](08_training_data_creation_cautions.md) 2.8 節の
+（[08_training_data_creation_cautions.md](../08_training_data_creation_cautions.md) 2.8 節の
 分離原則）。新規に書いた `solution/tools/probe/make_tier1_camera_variants.py` が、
 LIBERO-plus の分類表（`task_classification.json`）から scripted policy のある2タスクの
 Camera Viewpoints variant を集め、`TRACK2_PROBE.csv` に載っている variant（`KITCHEN_SCENE3` の
@@ -126,7 +126,7 @@ affine の回転・並行移動・拡大縮小を広げる形で実装した。*
 
 ### 3.1 draccus の制約——鍵ごとの上書きは効かない（訂正）
 
-[02_appearance_and_data.md](02_appearance_and_data.md) は「`--dataset.image_transforms.tfs.*`
+`02_appearance_and_data.md`（削除済み） は「`--dataset.image_transforms.tfs.*`
 で追加する」という書き方をしていたが、**実際には draccus 0.8.0 はこの形の CLI 引数を
 受け付けない。** `quant_train` コンテナ（`docker exec`、GPU不要）で
 `draccus.parse(ImageTransformsConfig, args=["--tfs.affine.kwargs", "..."])` を試すと
@@ -145,7 +145,7 @@ saturation・hue・sharpness・affine）をそのまま含めた上で、次の2
 |---|---|---|---|
 | `affine`（`RandomAffine`） | `degrees=(-5,5)`・`translate=(0.05,0.05)`・`scale` 無し | `degrees=(-15,15)`・`translate=(0.12,0.12)`・`scale=(0.82,1.22)` | 回転・並行移動を約3倍に広げ、`scale` を新規に足してズームを近似する。LIBERO-plus 公式の Camera Viewpoints variant は `scale_factor` が 1.00〜2.00 の範囲で使われている（`task_classification.json` を実際に数えて確認）が、**2D近似はあくまで近似**なので、その低め側（±22%）に留めた |
 | `camera_crop`（新規、`RandomResizedCrop`） | （無し） | `size=[256,256]`・`scale=(0.75,1.0)`・`ratio=(0.9,1.111)` | ランダムクロップ＋ズーム。`lerobot/libero_plus` の画像 shape（256×256×3。`meta/info.json` で確認）に合わせ、出力サイズは変えない |
-| `max_num_transforms` | 3 | 4 | 6種→8種に増やしたぶん、1種あたりの出現率が下がる（[02_appearance_and_data.md](02_appearance_and_data.md)が既に指摘していた注意点）。3のままだと新設の2種が選ばれる機会が薄まる |
+| `max_num_transforms` | 3 | 4 | 6種→8種に増やしたぶん、1種あたりの出現率が下がる（`02_appearance_and_data.md`（削除済み）が既に指摘していた注意点）。3のままだと新設の2種が選ばれる機会が薄まる |
 
 ### 3.3 CPU だけで確認した動作
 

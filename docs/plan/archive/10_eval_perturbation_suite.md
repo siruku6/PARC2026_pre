@@ -24,7 +24,7 @@
 | **単一摂動の評価データ（a）** | ある。`compe/val/TRACK2_PROBE.csv`（8タスク×[Base+4摂動]=40行）。生成スクリプト`solution/tools/probe/make_track2_probe.py`は各カテゴリで難易度1〜5の中央値を1件だけ選ぶ。スクリプト自身のdocstringが「1セル1件しか測らない順位付けツールで、本評価ではない」と明記している |
 | **複数摂動を組み合わせた評価データ（b）** | 無い。`work/LIBERO-plus`の公式タスク一覧（`task_classification.json`、7カテゴリ計10,030件）を数えたところ、**カテゴリを跨いで摂動を組み合わせたタスクは1件も無い**。LIBERO-plus論文自体は「組み合わせ摂動には単独の積を下回る相互作用効果がある（Negative Compositional Generalization）」と報告しているが、そのための生成コード・`.bddl`・分類表はこのリポジトリに同梱されていない |
 | **技術的な可能性（検証済み・4節参照）** | `env_wrapper.py`の`ControlEnv.__init__`は、`<base>_view_..._initstate_..._noise_...`という1つのtask_id名から、カメラ視点・ロボット初期姿勢・センサノイズの3要素を独立にパースできる構造になっている。**この3軸の組み合わせ、およびそこにObjects Layoutを加えた4軸の組み合わせは、実際に動作することを確認した**（4節）。Objects Layoutを混ぜた場合に評価ハーネス側の初期状態ファイル解決が見つけていなかった箇所は、原因を特定して修正済み（4.2節） |
-| **評価データの分離原則** | [08_training_data_creation_cautions.md](08_training_data_creation_cautions.md)の「学習で見せたカメラ角度・初期姿勢・物体配置の集合と、検証で使う集合を分離しないと汎化を測れない」（2.8節）は評価データにも直接効く。09で決まるTier 0/1/2の学習側variant IDと、評価側で使うvariant IDが重ならないようにする仕組み（`solution/tools/eval/make_validation_suite.py --exclude`）は既にある |
+| **評価データの分離原則** | [08_training_data_creation_cautions.md](../08_training_data_creation_cautions.md)の「学習で見せたカメラ角度・初期姿勢・物体配置の集合と、検証で使う集合を分離しないと汎化を測れない」（2.8節）は評価データにも直接効く。09で決まるTier 0/1/2の学習側variant IDと、評価側で使うvariant IDが重ならないようにする仕組み（`solution/tools/eval/make_validation_suite.py --exclude`）は既にある |
 
 ---
 
@@ -274,7 +274,7 @@ Base 2/8 対 45° 5/8 は p = 0.294。1点ずつで有意にするには**1点�
 `_get_action_chunk` に `noise=None` を渡し、モデル側が毎回引く。**そして手元の評価 49 回
 すべてが1タスク1エピソードで、同じ条件を回し直した差を一度も測っていない。**
 
-**(5) `blend_steps=4` は効かなかった。** [knowledge/06](../knowledge/06_step_count_drives_score.md)
+**(5) `blend_steps=4` は効かなかった。** [knowledge/06](../../knowledge/06_step_count_drives_score.md)
 が「打ち切り率が高かったときの再検討材料として置く」と条件を明示していた項目で、方位角
 45〜75° の 300 到達率が 54% になったことで条件が満たされたため、同じ48行を `blend0` と
 `blend4` で回して比べた。
@@ -304,7 +304,7 @@ knowledge/06 は手元36件で「基準で300未満だった30件が +13.1% 遅�
 タスクの中で物体数を変えないと分からない。
 
 **(9) 摂動の強さを決める整数の幅・方位角が二山であること・一覧に無い組み合わせでも評価が
-動くこと**は [reference/20 の 2.2・2.3 節](../reference/20_track2_perturbation_categories.md)
+動くこと**は [reference/20 の 2.2・2.3 節](../../reference/20_track2_perturbation_categories.md)
 に書いた。**`difficulty_level` は強度の段ではない**（Camera の方位角の中央値が難易度1〜5 で
 9.0 / 12.5 / 23.0 / **11.5** / 41.0）。
 
@@ -344,7 +344,7 @@ knowledge/06 は手元36件で「基準で300未満だった30件が +13.1% 遅�
 | **Base のうち 3 回すべて完走した 6 行の合計** | 828 / 877 / 793 | **+10.6%** |
 | **45〜75° のうち 3 回すべて完走した 6 行の合計** | 692 / 779 / 738 | **+12.6%** |
 
-**つまり [knowledge/06](../knowledge/06_step_count_drives_score.md) が選んだ「基準で完走して
+**つまり [knowledge/06](../../knowledge/06_step_count_drives_score.md) が選んだ「基準で完走して
 いた件だけのステップ数」は正しい指標だが、その床は約 11% である。**
 knowledge/06 が挙げる勝ち筋（全パラメータ学習 −13%・chunk 長 −20%・指示文の正規化 −16%）は、
 **この床のすぐ上**にある。
@@ -365,7 +365,7 @@ knowledge/06 が挙げる勝ち筋（全パラメータ学習 −13%・chunk 長
 
 | 決めたこと | 理由 |
 |---|---|
-| ~~**主に読む量は「300 に達した割合」にする。**~~ **【8/24 訂正】主に読む量は消費ステップ数である。**「300 に達した割合」は添える側に回す。**組の選び方を「Base 側だけで決める」ことで、打ち切りを捨てずにステップ数を使える**（8.1 節） | 本番のスコアと繋がっている量はステップ数（r=−0.868、[knowledge/06](../knowledge/06_step_count_drives_score.md)）。割合はそれを 2 値に潰すので情報を捨てる。**8.3 節でステップ数の床が ±6.5% と分かり、使える量だと確かめられた** |
+| ~~**主に読む量は「300 に達した割合」にする。**~~ **【8/24 訂正】主に読む量は消費ステップ数である。**「300 に達した割合」は添える側に回す。**組の選び方を「Base 側だけで決める」ことで、打ち切りを捨てずにステップ数を使える**（8.1 節） | 本番のスコアと繋がっている量はステップ数（r=−0.868、[knowledge/06](../../knowledge/06_step_count_drives_score.md)）。割合はそれを 2 値に潰すので情報を捨てる。**8.3 節でステップ数の床が ±6.5% と分かり、使える量だと確かめられた** |
 | **1 エピソードずつの比較では、24 行あっても 8〜10 行が偶然反転する。** 設定値や重みを比べるときは、まず同じ設定で回し直して床を測る | 7.1 (10)。`blend4` の 9 件はこの床と区別がつかなかった |
 | **ステップ数で比べるときは「一度も 300 に達していない行だけの合計」を使い、差が 11% 未満なら読まない** | 7.1 (11)。全行の合計は同じ設定でも ±33% 動く |
 | **1 点あたり 8 行・1 エピソードは、単独では何も言えない量である。** まとめて 24 行以上にしてから検定する | 7.1 (3)(12)。同じデータが n=8 で p=0.294、n=24 で p=0.0023 になった |
@@ -464,7 +464,7 @@ Camera +34.6% > Sensor +24.4% > Robot +17.5% > Layout +15.6% で、Robot は 3 �
 **ステップ数は使える量である。** 7 節 (11) は Camera の 32 行で「打ち切りを外しても
 ±10.6〜12.6%」と測っていたが、**提出を比べるのに使うこの 36 件では ±6.5% に収まる**
 ——この集合は 36 件中 26 件が毎回完走するので、打ち切りに揺らされにくい。
-[knowledge/06](../knowledge/06_step_count_drives_score.md) が挙げる勝ち筋
+[knowledge/06](../../knowledge/06_step_count_drives_score.md) が挙げる勝ち筋
 （全パラメータ学習 −13%・chunk 長 −20%・指示文の正規化 −16%）は、**どれもこの床の
 2 倍以上ある。**
 
@@ -531,7 +531,7 @@ Camera +34.6% > Sensor +24.4% > Robot +17.5% > Layout +15.6% で、Robot は 3 �
 | 実際のバグが`solution/tools/eval/make_validation_suite.py`の`_resolve_newobj_init`（完全一致でしか探さない）にあったこと、および修正後に単独名・複合4軸名の両方を正しく解決すること | 同ファイルを読み、修正前後の挙動を`_resolve_newobj_init`・`_place_variant`を直接呼んで比較。修正後は`py_compile`で構文確認済み |
 | 修正後、bddlパス構築→`ControlEnv`構築→初期状態の`torch.load`/`reshape`/`set_state_from_flattened`→`env.step()`まで実際のパイプラインと同じ手順で通ること | `parc2026_verify`コンテナで一連の手順を再現し、状態ベクトル長86（`1+nq+nv`）が一致・エラー無しで確認 |
 | LIBERO-plus論文の Negative Compositional Generalization の主張 | [07_track2_preparation.md](07_track2_preparation.md) §1.3.1（arXiv HTML再取得による2次情報） |
-| 検証データの分離原則・`make_validation_suite.py --exclude` | [08_training_data_creation_cautions.md](08_training_data_creation_cautions.md) 2.8節・4.3節、`solution/tools/eval/make_validation_suite.py` |
+| 検証データの分離原則・`make_validation_suite.py --exclude` | [08_training_data_creation_cautions.md](../08_training_data_creation_cautions.md) 2.8節・4.3節、`solution/tools/eval/make_validation_suite.py` |
 | `quant_train`にrobosuite/liberoが入っておらず、`parc2026`イメージには入っていること | 各コンテナへ`docker exec`で直接importを試して確認 |
 | 検証当時、`parc2026`イメージのコンテナ（`suspicious_hopper`）は別のGPU評価ジョブを実行中で、その後量子化スイープの評価回収（朝までかかる見込み）に引き継がれたこと | `docker exec suspicious_hopper ps aux`・`work/gpu_eval/`のログ・`work/quant_sweep/PROGRESS.md`（2026-08-21 21:47の記載） |
 | Track2の4カテゴリ対応が推測であり8/24のQ&Aで確認する計画であること | [07_track2_preparation.md](07_track2_preparation.md) §1.1 |

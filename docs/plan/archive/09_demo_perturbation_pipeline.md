@@ -4,7 +4,7 @@
 jsonl が壊れて読み返せなくなった。**メッセージの文面だけを書き写すのではなく**、現在の
 リポジトリの一次資料（`solution/tools/scripted_demo/scripted_demo.py`、`work/scripted/sweep_action_noise.sh`、
 [07_track2_preparation.md](07_track2_preparation.md)、
-[08_training_data_creation_cautions.md](08_training_data_creation_cautions.md)、
+[08_training_data_creation_cautions.md](../08_training_data_creation_cautions.md)、
 `work/gpu_eval/tonight_0821.sh`、`compe/val/TRACK2_PROBE.csv`）を実際に開いて、
 報告内容と食い違わないかを確かめながら書いた。**食い違いが 1 箇所あり**、4 節末尾に記す。
 
@@ -80,7 +80,7 @@ DART のやり方と合っている——欲しいのは『ずれたが戻って
 成功が困難になるほど大きな σ はそもそも採用対象にしない。**
 
 **「どの step を教師にするか」を特定する必要が無い理由もここにある。** SIRIUS の
-pre-intervention 除外（[08 の 3.3 節](08_training_data_creation_cautions.md#33-失敗介入データの収集siriusg本文まで確認)）は、
+pre-intervention 除外（[08 の 3.3 節](../08_training_data_creation_cautions.md#33-失敗介入データの収集siriusg本文まで確認)）は、
 「自律方策が実際に悪い行動を出し続けていた区間」を除くための仕組みだが、Tier 0 では
 **行動を出す主体が常に同一の閉ループ scripted policy で、どの step でも『今の状態から見て正しい
 是正動作』しか記録しない。** ノイズが乗った `action_executed` は学習に使わないので、
@@ -93,7 +93,7 @@ step 単位ではなく episode 単位（上記）なので、「失敗に向か
 
 - σ が大きいと、是正動作自体が急激・不自然な軌道になりうる（これをσスイープで潰そうとしている）
 - 「成功のみ採用」フィルタ自体にバイアスが乗りうる。たまたま補正できたケースに偏る可能性がある
-  （MimicGen が自ら認めている限界。[08 の 3.6 節](08_training_data_creation_cautions.md)）
+  （MimicGen が自ら認めている限界。[08 の 3.6 節](../08_training_data_creation_cautions.md)）
 
 ノイズを混ぜる `_noisy()` には、コードの docstring に書かれた **3 つの決定**がある。
 
@@ -158,7 +158,7 @@ SCENE8で得られる復帰の幅を無駄に狭めることになる）。
 | 手段 | 中身 | コスト |
 |---|---|---|
 | **学習側の拡張を有効化** | LeRobot の `image_transforms`（既定で `enable: false`、
-[02_appearance_and_data.md](02_appearance_and_data.md)で確認済み）を有効化し、
+`02_appearance_and_data.md`（削除済み）で確認済み）を有効化し、
 LIBERO-plus の `env_wrapper.py` が実装する 5 種の画質劣化（motion/gaussian/zoom blur・
 fog・glass blur）を移植して足す | ほぼゼロ（設定を切り替えるだけ） |
 | **作り直し** | `scripted_demo.py` の `--variant` 相当の仕組みで、同じ物理・別のカメラ設定で
@@ -354,7 +354,7 @@ Track2 疑似検証スイート（`compe/val/TRACK2_PROBE.csv`）に 5 行入っ
 ### 3.3 高強度Robot Initial Statesの追加実験（実行済み・2026-08-23）
 
 **3.1節にはSensor Noiseと同じ構造の未解決点がもう1つ残っている。** 文献
-（[20_track2_perturbation_categories.md §3](../reference/20_track2_perturbation_categories.md)）
+（[20_track2_perturbation_categories.md §3](../../reference/20_track2_perturbation_categories.md)）
 はRobot Initial Statesを、追加学習後も伸びが最小（+8.6pt止まり）の弱点カテゴリと報告する。
 一方、自チームの実測は+17.5%でObjects Layout（+15.6%）とほぼ同水準で、文献ほど突出して
 悪くない。**`make_track2_probe.py`の`_pick_variant`は各カテゴリで「難易度が中央値の1件」
@@ -435,7 +435,7 @@ severityを上げても悪化しないという、3.2節のSensor Noiseと同じ
 実際に平均1.6倍大きな摂動量（0.19→0.31、上記の訂正参照）でも再現・悪化せず、
 **元のprobeがたまたま拾った小さな揺れ（n=8）だった可能性が高い**——3.2節のSensor
 Noiseと同じ結論になった。文献
-（[20 §3](../reference/20_track2_perturbation_categories.md)）が報告するRobot
+（[20 §3](../../reference/20_track2_perturbation_categories.md)）が報告するRobot
 Initial Statesの突出した弱さ（π0系モデルでの実測、mix-SFT後も+8.6pt止まり）は、
 自チームのモデル・データには当たらないという判断材料が1つ増えた。**Tier1の優先度を
 支える根拠はCamera Viewpoints（+34.6%）にほぼ絞られる、という3.2節の結論は変わらない。**
@@ -494,7 +494,7 @@ Initial Statesの突出した弱さ（π0系モデルでの実測、mix-SFT後�
 | ノイズは多いほど良くない | DART の実機実験で α=3 が最適、α=6 では悪化している。σ スイープは「落ち始める直前」を探す作業であり、範囲を広げるほど良いという発想ではない |
 | 混ぜる対象を絞る | 指の開閉・手首の向きに混ぜると、復帰を学べないか誤った正解を作ってしまう。手先の位置だけに絞っている |
 
-**Tier 0/1/2 に共通する注意点**（[08_training_data_creation_cautions.md](08_training_data_creation_cautions.md)
+**Tier 0/1/2 に共通する注意点**（[08_training_data_creation_cautions.md](../08_training_data_creation_cautions.md)
 から、この作業に直接効く分を抜く）:
 
 | 観点 | 気をつけていること | 出典 |
@@ -510,7 +510,7 @@ Initial Statesの突出した弱さ（π0系モデルでの実測、mix-SFT後�
 **文献的な裏付けが無いことを明記しておく点**もある。ドメインランダマイゼーション（条件を
 機械的に振り回すこと）が、行動の正規化統計や、タスクがそもそも解けるかどうか（物体と
 背景が見分けられなくなる等）を壊すリスクについては、査読付き論文などの一次資料が
-見つかっていない（[08 の 3.7 節](08_training_data_creation_cautions.md#37-確認できなかったこと正直に記録)）。
+見つかっていない（[08 の 3.7 節](../08_training_data_creation_cautions.md#37-確認できなかったこと正直に記録)）。
 実務上は注意しておくが、根拠として引用しない。
 
 ---
@@ -523,7 +523,7 @@ Initial Statesの突出した弱さ（π0系モデルでの実測、mix-SFT後�
 | σ スイープの対象タスク・σ の候補・実行方法 | `work/scripted/sweep_action_noise.sh`（実際に読んで確認） |
 | scripted policy のあるタスクが 2 つであること | `work/scripted/sweep_action_noise.sh` のコメント（`scripted_demo.TASK_PLANS` を指す）。メッセージの「1 つ」は誤りで、訂正後の記述に一致 |
 | Track2 の背景・4 カテゴリ・mix-SFT の実測・Tier 0/1/2 の設計・優先順位 | [07_track2_preparation.md](07_track2_preparation.md) |
-| 成功デモだけでは復帰行動を学習できない問題・DART・SIRIUS・ログ規律等の注意点 | [08_training_data_creation_cautions.md](08_training_data_creation_cautions.md) |
+| 成功デモだけでは復帰行動を学習できない問題・DART・SIRIUS・ログ規律等の注意点 | [08_training_data_creation_cautions.md](../08_training_data_creation_cautions.md) |
 | 今夜の GPU 評価の内容・並行実行の設計 | `work/gpu_eval/tonight_0821.sh`（実際に読んで確認） |
 | `KITCHEN_SCENE3_...` が Track2 疑似検証スイートに 5 行入っていること | `compe/val/TRACK2_PROBE.csv`（`grep` で実際に数えて確認、40 行中 5 行） |
 | Tier 0 実装の配列レベルの確認結果（標準偏差・再現性等） | 別セッションで受け取った報告メッセージ。この文書を書く際に `_Rollout._noisy()` をホスト側の Python から直接呼んで再確認し、一致した（`docker run` を介していない） |

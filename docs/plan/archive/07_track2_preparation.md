@@ -4,13 +4,13 @@
 まだ何も実装していない。**理解 → 対策の検討**の順で書く。
 
 > **2026-08-21 追記**: 学習用デモデータを作る際の注意点を別途調査し、
-> [08_training_data_creation_cautions.md](08_training_data_creation_cautions.md) にまとめた。
+> [08_training_data_creation_cautions.md](../08_training_data_creation_cautions.md) にまとめた。
 > **その結果を受けて、この文書の 2 節（対策）と 3 節（推奨アクション）を改訂した。**
 > 改訂点は 2.0 節にまとめてある。**2 節・3 節を読む前に 2.0 節を読むこと。**
 
 - 出典は 予選 PDF・LIBERO-plus 原典（README・実装コード・論文 arXiv:2510.13626）・
   松尾研講義第6回・第7回。**この `.md` 自体は 2 次資料なので、次に読むときは元を見ること**
-  （[11_primary_sources.md](../knowledge/11_primary_sources.md) の格付けに従う）。
+  （[11_primary_sources.md](../../knowledge/11_primary_sources.md) の格付けに従う）。
 - LIBERO-plus のコードは `/tmp/.../scratchpad/LIBERO-plus`（`git clone --depth 1
   https://github.com/sylvestf/LIBERO-plus.git`）に一時展開して読んだ。**リポジトリには含めていない**
   （153MB・セッション限りの参照用）。
@@ -33,11 +33,11 @@
 「7 つの摂動軸を持つベンチマーク」として設計されている（`README.md` の
 「7 Perturbation Dimensions」）。**Track1 は運営 Q&A No.21 によりこの 7 軸のうち
 Background Textures・Light Conditions（推測を含む）に限定されると確認済み**
-（[05_perturbation_categories.md](../reference/05_perturbation_categories.md)）。
+（[05_perturbation_categories.md](../../reference/05_perturbation_categories.md)）。
 
 **Track2 の文言「位置・視点・ノイズ」は、残る 4 軸に字面のまま対応する。**
 （この対応づけ・各カテゴリの中身・自チームの実測は
-[20_track2_perturbation_categories.md](../reference/20_track2_perturbation_categories.md)
+[20_track2_perturbation_categories.md](../../reference/20_track2_perturbation_categories.md)
 に集約した。以下はその要約。）
 
 | Track2 の文言 | 対応する LIBERO-plus のカテゴリ | 母集団（全 10,030 件中） |
@@ -188,7 +188,7 @@ README に載る 3 件を同エージェントが調査した（要旨のみ、�
 
 **我々が使っている π0.5・SmolVLA そのものがセンサ劣化に極めて脆弱である**（CRT の
 90%→2%）という報告は重い。**Track1 で確認済みの「Sensor Noise も Track1 候補になりうる」
-という推測**（[05_perturbation_categories.md](../reference/05_perturbation_categories.md)）
+という推測**（[05_perturbation_categories.md](../../reference/05_perturbation_categories.md)）
 と合わせて読むと、Noise 対策は Track1・Track2 の両方に効く可能性がある。
 
 **位置（Robot Initial States・Objects Layout）への対策**
@@ -291,13 +291,13 @@ Objects Layout 2・Robot Initial States 2**、`difficulty_level` は L3 が 2・
 ### 2.0 2026-08-21 の方針改訂（08 の調査を受けて）
 
 **当初この 2 節は「摂動カテゴリ別に、どうデータを増やすか（Tier 1/Tier 2）」だけを
-考えていた。** [08_training_data_creation_cautions.md](08_training_data_creation_cautions.md)
+考えていた。** [08_training_data_creation_cautions.md](../08_training_data_creation_cautions.md)
 の調査で、**それとは直交する軸が 1 本欠けていたことが分かった ── 「ずれた状態から
 立て直す行動」の教師信号である。**
 
 | # | 改訂点 | 根拠 |
 |---|---|---|
-| **A** | **摂動カテゴリを増やすこと（Tier 1/Tier 2）と、ずれからの復帰を教えること（新設 Tier 0）は別問題であり、両方必要である。** 摂動に強い視覚表現をいくら学ばせても、**一度ずれてしまった状態から戻る行動の教師信号は、成功デモだけを集めたデータには原理的に入っていない**（[08](08_training_data_creation_cautions.md) 1.1 節・3.1 節） | Ross+ 2011（誤りが積み重なる問題）、Qiita 記事の実践 |
+| **A** | **摂動カテゴリを増やすこと（Tier 1/Tier 2）と、ずれからの復帰を教えること（新設 Tier 0）は別問題であり、両方必要である。** 摂動に強い視覚表現をいくら学ばせても、**一度ずれてしまった状態から戻る行動の教師信号は、成功デモだけを集めたデータには原理的に入っていない**（[08](../08_training_data_creation_cautions.md) 1.1 節・3.1 節） | Ross+ 2011（誤りが積み重なる問題）、Qiita 記事の実践 |
 | **B** | **その復帰データは、当初想定していた「scripted policy に失敗シナリオを書き足す」より安く作れる見込みがある。** scripted policy の出力 action にノイズを乗せて実行するだけで、閉ループの性質上、scripted policy 自身が目標へ引き戻す軌道になる（新設 2.1.1 節） | DART（Laskey+ 2017）。**この発想が今回の調査で得た最も実務的な収穫である** |
 | **C** | **評価スイートの設計要件を追加した。** 学習で使った視点・初期姿勢・配置の集合と、検証で使う集合を明示的に分離しないと、Track2 が測ろうとしている「未知ドメインへの汎化」を測れない（2.2 節に追記） | 講義第6回 p59（データ分割とリーク） |
 | **D** | **データ生成の前に「少数サンプルで成功判定・接触の安定性を確認する」工程を必須にした**（2.1 節・3 節に追記） | Qiita の実例（`push`・`drawer-open` を対象から除外）、講義第6回 p45、MimicGen が自ら認める限界 |
@@ -312,7 +312,7 @@ Tier 0 が**既存の scripted policy を書き換えずに（action にノイ�
 ### 2.1 データを作成する手法と、実現可能性
 
 自チームの手元には Track1 対応で作った **scripted policy によるエピソード作成パイプライン**
-が既にある（[05_scripted_demos.md](../howto/05_scripted_demos.md)）。`solution/tools/scripted_demo/scripted_demo.py`
+が既にある（[05_scripted_demos.md](../../howto/05_scripted_demos.md)）。`solution/tools/scripted_demo/scripted_demo.py`
 を読むと、この scripted policy は各ステップで `obs["<object>_pos"]` などの**実測の物体位置・EE位置から
 目標への差分**を計算して行動を出している（`follow()` の
 `delta = targets[index] - self.eef_position`）。**つまり新しい観測を見ながらそのつど
@@ -337,13 +337,13 @@ Tier 0 が**既存の scripted policy を書き換えずに（action にノイ�
 
 **Tier 1/Tier 2 は「どんな条件でエピソードを作るか」を変える話であり、「何を教えるか」は成功軌道の
 ままである。** これとは別に、**「ずれた状態から立て直す行動」を教えるデータが必要である**
-（[08](08_training_data_creation_cautions.md) 1.1 節・3.1 節）。これを Tier 0 と呼ぶ。
+（[08](../08_training_data_creation_cautions.md) 1.1 節・3.1 節）。これを Tier 0 と呼ぶ。
 
 **作り方**: scripted policy が出力する action に、実行直前にノイズを加える。scripted policy は
 **実測の位置から目標への差分を計算する閉ループ制御**なので、ノイズで目標からずれても、
 **次のステップで scripted policy 自身がそのずれを埋めようとする行動を出す。** 結果として、
 **「ずれた観測」と「そこから戻る行動」の対が、scripted policy を 1 行も書き換えずに手に入る**
-（DART の発想。[08](08_training_data_creation_cautions.md) 3.2 節）。
+（DART の発想。[08](../08_training_data_creation_cautions.md) 3.2 節）。
 
 | | コスト | 実現可能性 |
 |---|---|---|
@@ -356,13 +356,13 @@ Tier 0 が**既存の scripted policy を書き換えずに（action にノイ�
   最初から作業に含める。**
 - **「ずれ始めた区間」を正例として学習させるかを決める。** SIRIUS は、人が介入する直前の
   15 ステップ（方策が既におかしくなっている区間）を**学習から完全に除外**している
-  （[08](08_training_data_creation_cautions.md) 3.3 節）。**Tier 0 でも、ノイズで大きく
+  （[08](../08_training_data_creation_cautions.md) 3.3 節）。**Tier 0 でも、ノイズで大きく
   ずれた直後の区間をそのまま模範として学習させると、「ずれる動き」まで覚えさせる
   リスクがある。** 少なくとも、ノイズを加えたステップ自身を教師信号にするのか、
   それとも「ノイズ後の観測 → scripted policy が出した復帰行動」の対だけを教師信号にするのかを、
   実装時に明確に区別する。**後者が意図した設計である。**
 - **同じ失敗状態に対して複数の異なる復帰のやり方を混ぜない。** 混ぜると平均されて
-  どちらでもない誤った軌道を学ぶ（[08](08_training_data_creation_cautions.md) 3.4 節）。
+  どちらでもない誤った軌道を学ぶ（[08](../08_training_data_creation_cautions.md) 3.4 節）。
   scripted policy は決まった手順で動くので自然にこの条件を満たすが、**将来複数の scripted policy を併用する
   場合は注意する。**
 
@@ -395,7 +395,7 @@ Tier 0 が**既存の scripted policy を書き換えずに（action にノイ�
 
 **確認が必要な前提**: 学習データ（`lerobot/libero_plus`、14,347 本）の各エピソードが
 「どの初期状態（`pruned_init` の何番目）で作られたか」の対応が、以前の調査
-（[02_appearance_and_data.md](02_appearance_and_data.md)）で**未確認のまま**残っている。
+（`02_appearance_and_data.md`（削除済み））で**未確認のまま**残っている。
 Tier 1 を「既存の学習データを別カメラ設定で作り直す」に使う場合、この対応が
 分からないと作り直しの初期状態を再現できない。**着手前に確認する。**
 
@@ -403,10 +403,10 @@ Tier 1 を「既存の学習データを別カメラ設定で作り直す」に�
 少数サンプルで成功判定・接触の安定性を確認し、不安定なタスクは対象から外すか、
 原因を切り分けてから増量する。** Qiita 記事は条件を変えたら `push` の接触方向と
 `drawer-open` の collision が安定せず、この 2 タスクを追加データの対象から明示的に
-外している（[08](08_training_data_creation_cautions.md) 1.4 節）。**「成功率が低いタスクほど
+外している（[08](../08_training_data_creation_cautions.md) 1.4 節）。**「成功率が低いタスクほど
 多くデータを作る」を機械的にやると、シミュレータ側の不安定さまで学習データに焼き込む。**
 また、失敗した生成試行を「成功のみ採用」で捨てる操作自体にもバイアスが乗りうる
-（MimicGen が自ら認めている限界。[08](08_training_data_creation_cautions.md) 3.6 節）ので、
+（MimicGen が自ら認めている限界。[08](../08_training_data_creation_cautions.md) 3.6 節）ので、
 **除外した試行とその理由を記録に残す。**
 
 ### 2.2 どのような学習データ・評価データを用意すべきか
@@ -437,7 +437,7 @@ CSV を作れることを確認した（`--dry-run` で実行・GPU 不要）。
 **評価スイートの設計要件（2026-08-21 追記）**
 
 上のコマンドで CSV を作るだけでは足りない。**次の 2 点を設計に入れる**
-（[08](08_training_data_creation_cautions.md) 1.3 節・2.8 節・4.3 節）。
+（[08](../08_training_data_creation_cautions.md) 1.3 節・2.8 節・4.3 節）。
 
 1. **成績をカテゴリ平均だけで出さず、タスク×カテゴリの粒度で記録する。** カテゴリ平均だけを
    見ると、少数派のタスクの崩れが埋もれる。Qiita 記事も「全体平均だけでは Background、
@@ -455,7 +455,7 @@ CSV を作れることを確認した（`--dry-run` で実行・GPU 不要）。
 - **Tier 0（ノイズ注入による復帰データ）は、scripted policy を持つタスクに限られるが、
   カテゴリを問わず効く**（2.1.1 節）。**最初に試すのはここである**（3 節）。
 - Tier 1（Camera・Noise）で増産したデータは、既存の `lerobot/libero_plus` に
-  `merge`（[05_scripted_demos.md](../howto/05_scripted_demos.md) 8 節と同じ仕組み）で
+  `merge`（[05_scripted_demos.md](../../howto/05_scripted_demos.md) 8 節と同じ仕組み）で
   混ぜ込む。**ただし全部混ぜて増量するのではなく、混合比（既存データ：Tier 0：Tier 1：
   Tier 2）を検証成績を見ながら調整する余地を残す。** 異種データを単純にプールすると
   性能が下がる場合がある（負の転移。講義第6回 p47・p80）。
@@ -472,11 +472,11 @@ CSV を作れることを確認した（`--dry-run` で実行・GPU 不要）。
 
 | 工夫 | 対応するカテゴリ | コスト | 効果の見立て |
 |---|---|---|---|
-| **画像の幾何拡張（ランダムクロップ・ズーム・微小回転）を有効にする** | Camera（近似） | **ほぼゼロ。** 出発点の学習設定は `image_transforms.enable: false` で**拡張を一切使っていない**ことを確認済み（[02_appearance_and_data.md](02_appearance_and_data.md)）。有効化するだけ | 3D 回転は近似できないが、ズーム・並進成分（LIBERO-plus の `scale_factor` に相当）には直接効く可能性がある |
+| **画像の幾何拡張（ランダムクロップ・ズーム・微小回転）を有効にする** | Camera（近似） | **ほぼゼロ。** 出発点の学習設定は `image_transforms.enable: false` で**拡張を一切使っていない**ことを確認済み（`02_appearance_and_data.md`（削除済み））。有効化するだけ | 3D 回転は近似できないが、ズーム・並進成分（LIBERO-plus の `scale_factor` に相当）には直接効く可能性がある |
 | **画像劣化拡張（motion/gaussian/zoom blur・fog・glass blur）を学習時に足す** | Sensor Noise | 低。LIBERO-plus の実装関数（`env_wrapper.py`）をそのまま学習側の augmentation として移植できる | 評価側と同じ劣化を学習時に見せることになるので、直接的に効くはずである |
 | **Tier 1/Tier 2 で増産したデータを混ぜて追加学習** | Camera・Noise（Tier1）／Robot・Layout（Tier2、scripted policy のあるタスクのみ） | 中（2.1 節） | 論文の mix-SFT 実測（Camera +35〜37pt、Robot +8.6pt）から、**Camera への投資対効果が高く、Robot は伸びが小さいと予想される**。**混ぜる比率は検証成績を見ながら調整する**（単純にプールすると下がる場合がある。2.2 節） |
 | **Tier 0（ノイズ注入で作った復帰データ）を混ぜて追加学習**（2026-08-21 追記） | **全カテゴリに共通**（摂動の種類ではなく「ずれた状態から戻る」能力を足すため） | 低〜中（2.1.1 節） | **成功デモだけのデータには入っていない教師信号を足すので、他のどの工夫とも重複しない。** 効果の大きさは未知だが、**Track2 の実際に採点で使われるタスクが推測どおりでなくても効く**という点で、他の工夫より当たり外れの risk が低い |
-| **復帰データの重みを大きくし、「ずれ始めた区間」を学習から外す**（2026-08-21 追記） | Tier 0 のデータの使い方 | 低（学習側のサンプリング重みの設定） | SIRIUS は介入区間の重みを全体の 50% まで上げ、介入直前の 15 ステップは完全に除外している（[08](08_training_data_creation_cautions.md) 3.3 節）。**Tier 0 のデータを素通しで混ぜるだけでなく、この重み付けと除外を試す価値がある** |
+| **復帰データの重みを大きくし、「ずれ始めた区間」を学習から外す**（2026-08-21 追記） | Tier 0 のデータの使い方 | 低（学習側のサンプリング重みの設定） | SIRIUS は介入区間の重みを全体の 50% まで上げ、介入直前の 15 ステップは完全に除外している（[08](../08_training_data_creation_cautions.md) 3.3 節）。**Tier 0 のデータを素通しで混ぜるだけでなく、この重み付けと除外を試す価値がある** |
 | **多環境×少デモの収集戦略**（講義第6回 §1、Lin & Hu ICLR 2025 の知見） | Robot・Layout（Tier2 のデータを増やす際の配分） | Tier2 のシミュレーション回数の配分方針 | 「1 環境あたりのデモ数は閾値で飽和し、環境数・物体数はべき乗則で効く」。**Tier2 は同じ初期姿勢を何度もエピソードを作るより、初期姿勢の種類を増やす方に予算を割る方が筋が良い** |
 | **視点不変な表現（3D 特徴・複数視点統合・手首カメラの活用）へのモデル構造変更** | Camera | 高（モデル改造） | 論文が示す「手首カメラの有無が Camera 耐性を大きく左右する」という知見に沿う。**現在の提出物が手首カメラ（`robot0_eye_in_hand_image`）を使っているかを先に確認する価値がある**（使っていなければ、追加するだけで視点摂動に強くなる可能性） |
 | **robosuite 側でカメラ姿勢・物体配置・初期姿勢のドメインランダマイゼーションを、Tier1/Tier2 のデータ生成に組み込む** | Camera・Robot・Layout | 中（2.1 節の Tier1/Tier2 と同じ実装） | arXiv:2603.22876 の実機報告（カメラ姿勢・テーブル高さという「幾何・視点の摂動」が見た目の摂動より効果が大きい、1 ステップごとの再サンプリングが 1 エピソード固定より効く）に沿う。**Track2 対策として最も根拠が強い** |
@@ -541,7 +541,7 @@ Claude は `docker run` を実行できないので、番号 1・2 は「回せ�
 
 **上の表の「終わったと言える条件」は、どれも成功率の表を求めている。これは足りない。**
 
-[../knowledge/07_local_eval_cannot_rank.md](../knowledge/07_local_eval_cannot_rank.md) が
+[../knowledge/07_local_eval_cannot_rank.md](../../knowledge/07_local_eval_cannot_rank.md) が
 決定的な 2 例で確立したのは、**手元の成功率は本番の順位を付けられない**ことである。
 
 | | 手元 36 件 | 本番 |
@@ -551,7 +551,7 @@ Claude は `docker run` を実行できないので、番号 1・2 は「回せ�
 
 **手元の +3 件はまったく同じ数字で、本番は正反対に動いた。** 本番と繋がっている量は
 **ステップ数**、とくに「基準で完走していた件だけのステップ数」である
-（[../knowledge/06_step_count_drives_score.md](../knowledge/06_step_count_drives_score.md)、
+（[../knowledge/06_step_count_drives_score.md](../../knowledge/06_step_count_drives_score.md)、
 r = −0.868）。
 
 **したがって、上の表のどの項目でも、比較の表は次の 3 列で作る。**
@@ -577,7 +577,7 @@ r = −0.868）。
 だったことになる（knowledge/06 に注記を足した）。**今すぐ開け直す必要はないが、
 打ち切り率が高ければ本戦期間中の再検討材料になる。**
 
-**全項目に共通する原則（2026-08-21 追記、[08](08_training_data_creation_cautions.md) 4.2・4.5 節）**
+**全項目に共通する原則（2026-08-21 追記、[08](../08_training_data_creation_cautions.md) 4.2・4.5 節）**
 
 - **どのデータ生成でも、増量の前に少数サンプルで成功判定・接触の安定性を確認する。**
   不安定なタスクは対象から外すか、原因を切り分けてから増やす。**除外した試行と理由を残す。**
@@ -623,12 +623,12 @@ Track2 の実際に採点で使われるタスクがどの 4 カテゴリであ�
 |---|---|
 | Track1/2/3 の区分と Track2 の文言 | `docs/materials/PARC2026開発コンペティション_予選.pdf` p8 |
 | LIBERO-plus の 7 カテゴリ・件数・実装 | `LIBERO-plus` 原典（README・`libero/libero/envs/env_wrapper.py`・`libero/libero/envs/problems/libero_tabletop_manipulation.py`・`libero/libero/envs/robots/new_init.py`・`libero/libero/benchmark/task_classification.json`） |
-| Track1 が 7 カテゴリ全部ではないこと | 運営 Q&A No.21（[05_perturbation_categories.md](../reference/05_perturbation_categories.md)） |
+| Track1 が 7 カテゴリ全部ではないこと | 運営 Q&A No.21（[05_perturbation_categories.md](../../reference/05_perturbation_categories.md)） |
 | LIBERO-plus 論文の実験結果・mix-SFT の効果・後続研究 3 件 | arXiv:2510.13626／2511.18960／2511.18810／2511.15605（researcher エージェントが HTML 版を複数回取得。数値の食い違いは本文に明記） |
 | 視点・ノイズ・位置ロバスト性の広い文献（VISTA・RoboSplat・3D Diffuser Actor・CRT・StableVLA・RobustVLA・ADR・MimicGen・arXiv:2603.22876 等） | researcher エージェントによる Web 調査（1.3.3 節に確認度を明記。要旨止まりのものと本文確認済みのものを区別している） |
 | scripted policy が閉ループであること | `solution/tools/scripted_demo/scripted_demo.py` の `follow()` 実装 |
-| 学習データが拡張を使っていないこと | `work/artifacts/model_weights.bak/train_config.json`（[02_appearance_and_data.md](02_appearance_and_data.md)で既確認） |
+| 学習データが拡張を使っていないこと | `work/artifacts/model_weights.bak/train_config.json`（`02_appearance_and_data.md`（削除済み）で既確認） |
 | `make_task_suite.py` が任意のカテゴリで検証スイートを作れること | `solution/tools/suite/make_task_suite.py` の `--categories` 引数を実行して確認 |
 | 講義第6回・第7回の知見 | `docs/materials/第6回 講義資料.pdf`／`docs/materials/第7回 講義資料part1.pdf` |
-| Tier 0（ノイズ注入で復帰データを作る）の発想と注意点 | DART（Laskey+ 2017, arXiv:1703.09327）・SIRIUS（Liu+ 2022, arXiv:2211.08416）・Ross+ 2011（arXiv:1011.0686）。詳細と確認度は [08_training_data_creation_cautions.md](08_training_data_creation_cautions.md) 3 節 |
-| 検証データの分割・ログ規律・混合比・前処理一致などの実務要件 | 講義第6回 p39-p60・`docs/materials/qiita_OpenVLA-OFT+.md`。詳細は [08_training_data_creation_cautions.md](08_training_data_creation_cautions.md) 1・2 節 |
+| Tier 0（ノイズ注入で復帰データを作る）の発想と注意点 | DART（Laskey+ 2017, arXiv:1703.09327）・SIRIUS（Liu+ 2022, arXiv:2211.08416）・Ross+ 2011（arXiv:1011.0686）。詳細と確認度は [08_training_data_creation_cautions.md](../08_training_data_creation_cautions.md) 3 節 |
+| 検証データの分割・ログ規律・混合比・前処理一致などの実務要件 | 講義第6回 p39-p60・`docs/materials/qiita_OpenVLA-OFT+.md`。詳細は [08_training_data_creation_cautions.md](../08_training_data_creation_cautions.md) 1・2 節 |

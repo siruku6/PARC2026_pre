@@ -218,7 +218,7 @@ SmolVLA 期は本数を絞った回がある（`lora20k` は 200 本、`weak3x_2
    移動しているだけである。
 
 **これが「画像側も学習する」を RunPod でやる理由の実測の裏付けである**
-（[../plan/15_runpod_fullparam_with_augment.md](../plan/15_runpod_fullparam_with_augment.md)）。
+（[../howto/06_runpod_pi05.md](../howto/06_runpod_pi05.md)）。
 
 ### 手元の 8 行は、並進の倍率については採点の向きを再現した（8/27）
 
@@ -238,7 +238,7 @@ SmolVLA 期は本数を絞った回がある（`lora20k` は 200 本、`weak3x_2
 評価まるごとで 2 倍である**（箱 1 個の描画だけなら 16 倍だが、物理計算と推論が
 含まれるので実際はここまで）。
 
-### その学習で出た点（SmolVLA 期・[plan/04](../plan/04_training_targets.md) から移した）
+### その学習で出た点（SmolVLA 期・元 `plan/04_training_targets.md` から移した）
 
 **列の意味。** 「1 コマ」は 1 ステップの推論にかかる秒数、「84 件」は検証用データ
 84 件での成功率、「36 件」は絞り込んだ 36 件での成功率、「本番」は予選の採点スコア。

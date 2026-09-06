@@ -155,13 +155,13 @@ python3 solution/tools/analysis/compare_with_production.py \
 > | 平均ジャーク | **4.304** |
 >
 > **この 4 つが今日以降のものさしである** ——
-> [../plan/04_training_targets.md](../plan/04_training_targets.md) に集めた。
+> 素の重みの 36 件と 84 件で測った値は [../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) の実験台帳にある（36 件は [../reference/13_holdout_episodes.md](../reference/13_holdout_episodes.md)）。
 > **84 件で決めた 3 条件の合格ライン（空回り 0.131・ジャーク 4.223）は
 > そのまま使えない。** 測った集合が違うので 36 件では 0.083・4.304 になる。
 >
 > **次は同じ設定値で LoRA 20k を回し、`compare_with_production.py` にかける。**
 > **カテゴリ別の表は読まないこと** ——36 件は 1 指示文 variant 1 件なので、
-> `tb` 0.29 / `table` 0.85 はタスクの偏りで説明がつく（04 の 5 節）。
+> `tb` 0.29 / `table` 0.85 はタスクの偏りで説明がつく（[../reference/13_holdout_episodes.md](../reference/13_holdout_episodes.md) の「摂動カテゴリ別の表が読めるか」）。
 
 ### 設定値は採点時に合わせる
 
@@ -540,7 +540,7 @@ python3 solution/tools/eval/summarize_gpu_eval.py \
 
 | 症状 | 見るところ |
 |---|---|
-| **`エラー: 重みが無い` / `vlm が無い` が出て、出力先も作られない** | **`merged_model/` を `WEIGHTS` に渡した。** あれには `vlm/` が入らない（`install_weights.py` が素から引き継ぐ設計）。0/5 は出力先を作る前に止まるので、**ディレクトリが無いのは正常な止まり方である。** 直し方は [../plan/04_training_targets.md](../plan/04_training_targets.md) の 7 節。8/13 に踏んだ |
+| **`エラー: 重みが無い` / `vlm が無い` が出て、出力先も作られない** | **`merged_model/` を `WEIGHTS` に渡した。** あれには `vlm/` が入らない（`install_weights.py` が素から引き継ぐ設計）。0/5 は出力先を作る前に止まるので、**ディレクトリが無いのは正常な止まり方である。** 直し方は [../howto/01_retrain.md](../howto/01_retrain.md)（`install_weights.py` で取り込む）とこの節の上部（重みの置き場）。8/13 に踏んだ |
 | **`84 タスクを読み込み` と出る** | **このマシンのリポジトリが古い。** `git pull` する。8/13 に踏んだ ——「渡された一覧を使う」が出ない版だと黙って 84 件を生成する。タスク名に `_view_`・`_language_`・`_noise_`・`_add_` が現れるのも同じ合図（36 件は `_table_`・`_tb_`・`_light_` だけ） |
 | **`確かめた行: 36 / 落ちる行: 36 —— 初期状態が無い`** | **CSV に `init_states_file` 列が無い。** `make_eval_split.py` を新しくして作り直す。8/13 に踏んだ ——`register.py` の `_SUFFIX_RE` は `_light_*` と `_table_\d+` しか剥がさないので、**`_tb_N` は必ず落ちる** |
 | **方策サーバーが消えた** | **script が途中で終わった症状である**（`trap cleanup EXIT`）。原因は `launcher.log` にある。**止めるときも評価側のコンテナを止める** ——`parc-policy` を先に落とすとパイプラインが例外を握って終了コード 0 で終わり、中途の結果が残る |

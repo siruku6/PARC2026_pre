@@ -216,7 +216,7 @@ sed -n '/^class ImageTransformsConfig/,/^def make_transform/p' \
 > つまり足りないのは**届く範囲ではなく、タスクごとの密度**かもしれない
 > （1 タスク 5 本しか使っていない）。平均輝度は 1 次元の代理値でしかなく、
 > **同じ明るさでまったく違う模様**がありうる。
-> **どちらなのかは、見た目の分布を数えてから決める**（[plan/02_appearance_and_data.md](../plan/02_appearance_and_data.md)）。
+> **どちらなのかは、見た目の分布を数えてから決める**（測り方は [reference/08_appearance_spread.md](08_appearance_spread.md)）。
 
 ## 出典
 

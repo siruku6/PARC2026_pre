@@ -1052,7 +1052,7 @@ tail -f work/gpu_eval/launcher.log
 | 初衝突 N 歩 | 前半なら近づき方、後半なら置き方の話 |
 
 集計にも節が増えた。**読み方（どの数字が出たら何をするか）は先に決めてある** —
-[plan/01_failure_accounting.md](../plan/01_failure_accounting.md)。
+[reference/18_failure_breakdown.md](../reference/18_failure_breakdown.md)。
 
 ```
   ゴール到達率 0.333  (28/84)
@@ -1225,7 +1225,7 @@ RECORD=1 bash solution/tools/eval/smoke_test_suite.sh   # 5 タスク・20 ス�
 **全データを使えばこの問題は自然に消える。** 拡張はそのあとの上積みとして考える。
 
 測り方は残してある（方策を動かさずに数分で終わる） —
-[plan/02_appearance_and_data.md](../plan/02_appearance_and_data.md)。
+[reference/08_appearance_spread.md](../reference/08_appearance_spread.md)。
 
 ### ~~8. 指示文の正規化~~ — **閉じた（8/11）。測ったら効かないと分かった**
 
@@ -1330,7 +1330,6 @@ RECORD=1 bash solution/tools/eval/smoke_test_suite.sh   # 5 タスク・20 ス�
 
 > **物体の動きはデータセットに入っていない。** 測るには物理だけ再生する
 > 必要があり、**LeRobot のエピソード番号と初期状態の対応**を先に確かめる関門がある。
-> 見通しは [plan/02_appearance_and_data.md](../plan/02_appearance_and_data.md)。
 
 ### 10 → 11. 調べる前に、判断の材料を決める
 

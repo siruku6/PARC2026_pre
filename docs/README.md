@@ -7,8 +7,8 @@
 | **今なにをやるべきか（候補の `open_items.md`）** | **[talk/open_items.md](talk/open_items.md)** ── 1 行ごとに「何が決まるか・誰が・資源・所要・前提・打つもの」を持つ。**アイデアを思いついたらここへ足す** |
 | **手を動かす手順** | [howto/](howto/) |
 | **測った数字** | [strategy/05_実測結果.md](strategy/05_実測結果.md) |
-| **次にどこを直して学習するか** | **[plan/04_training_targets.md](plan/04_training_targets.md)** |
-| **本選 Track2（位置・視点・ノイズ）の準備** | **[plan/07_track2_preparation.md](plan/07_track2_preparation.md)** |
+| **次にどこを直して学習するか** | **[reference/11_training_schedule.md](reference/11_training_schedule.md)** |
+| **本選 Track2（位置・視点・ノイズ）の準備** | **[reference/20_track2_perturbation_categories.md](reference/20_track2_perturbation_categories.md)**（弱点の地図は [reference/21](reference/21_weakness_map.md)） |
 | **これから作るものの設計** | [plan/](plan/) |
 | **提出物のしくみ** | [solution/README.md](solution/README.md) |
 | **次のコンペに持ち越すこと** | [talk/lessons_learned.md](talk/lessons_learned.md) |
@@ -49,15 +49,15 @@
 | **[howto/09_free_disk_space.md](howto/09_free_disk_space.md)** | **`df` の空きが減ってきたとき。消してよいものの判定と、「消したのに空かない」3 つの罠** |
 | **[howto/10_rebuild_machine.md](howto/10_rebuild_machine.md)** | **マシンを作り替えてディスクが消えるとき。持ち出す 1 本のスクリプト・秘密の 4 件・常駐コンテナの起動コマンド** |
 | **[knowledge/16_docker_group_needs_session_restart.md](knowledge/16_docker_group_needs_session_restart.md)** | **`usermod -aG docker` を入れたのに `permission denied` が続くとき。`id -nG` での切り分けと、VS Code の Remote-SSH で必要になる操作** |
-| **[plan/15_runpod_fullparam_with_augment.md](plan/15_runpod_fullparam_with_augment.md)** | **RunPod でフルパラメータ ＋ 画像拡張を回す 1 回分の設計。**歩数と費用の表・立ち上がりの確認 3 点・何と比べられるか |
+| **[howto/06_runpod_pi05.md](howto/06_runpod_pi05.md)** | **RunPod でフルパラメータ学習を回すとき。14 節の長い学習の段取り・14.5 節の立ち上がり確認** |
 | **[howto/14_blackwell_session.md](howto/14_blackwell_session.md)** | **配布 GPU 環境（Blackwell サーバ）に初めて入るとき。60 時間の減り方・下見・配布データの数え方・止め方。自分の Docker は持ち込めない** |
 | **[howto/11_colab_eval.md](howto/11_colab_eval.md)** | **評価を回すとき（Colab。8 ファイルを上げてセルを 5 つ。π0.5 も回せる。T4 で動くかは未確認）** |
 | [strategy/05_実測結果.md](strategy/05_実測結果.md) | 判断する前。数字はすべてここ |
 | **[strategy/06_scripted_demos.md](strategy/06_scripted_demos.md)** | **手本が 300 ステップに収まらないタスクを扱うとき。scripted policy で手本を自分で作る** |
-| **[plan/04_training_targets.md](plan/04_training_targets.md)** | **学習を流す前と、評価が出た直後。**ものさし・天井・候補・外したもの・記録が 1 枚にある |
-| [plan/01_failure_accounting.md](plan/01_failure_accounting.md) | 評価の結果を読むとき。**ゴール到達と衝突の読み分け方** |
-| **[plan/07_track2_preparation.md](plan/07_track2_preparation.md)** | **本選 Track2 に手をつけるとき。摂動 4 カテゴリの中身・関連研究・対策・推奨アクションが 1 枚にある。まず 2.0 節（方針改訂）と 3 節（推奨アクション）** |
-| **[plan/08_training_data_creation_cautions.md](plan/08_training_data_creation_cautions.md)** | **学習用デモを作る前。成功例だけでは復帰を学べない等、データ作成の落とし穴。07 の方針改訂の根拠** |
+| **[reference/11_training_schedule.md](reference/11_training_schedule.md)** | **学習を流す前と、評価が出た直後。次にどこを直すか（ものさし・候補・外したもの）** |
+| [reference/18_failure_breakdown.md](reference/18_failure_breakdown.md) | 評価の結果を読むとき。**失敗が 4 つの型に割れる内訳と、どの型に手を入れるか** |
+| **[reference/20_track2_perturbation_categories.md](reference/20_track2_perturbation_categories.md)** | **本選 Track2 に手をつけるとき。摂動 4 カテゴリの中身・実測・対策（弱点の地図は [reference/21](reference/21_weakness_map.md)）** |
+| **[plan/08_training_data_creation_cautions.md](plan/08_training_data_creation_cautions.md)** | **学習用デモを作る前。成功例だけでは復帰を学べない等、データ作成の落とし穴** |
 | **[reference/19_weights_catalog.md](reference/19_weights_catalog.md)** | **学習を流したあと、点が返ってきたあと、`pi05/full_local_024000` のような名前を見たとき。流した学習・重み・版ごとの設定・本選のトラック別の点が 1 ファイルに並ぶ** |
 | [reference/04_track1_population.md](reference/04_track1_population.md) | 採点のタスクの母集団を確かめるとき |
 | **[reference/05_perturbation_categories.md](reference/05_perturbation_categories.md)** | **摂動 7 カテゴリの中身と、どれが出るか（運営回答の原文つき）** |
