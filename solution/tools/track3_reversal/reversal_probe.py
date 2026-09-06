@@ -97,7 +97,8 @@ def decode_gripper(actions: np.ndarray, states: np.ndarray | None = None) -> np.
 
 
 def build_reversed_actions(
-    actions: np.ndarray, gripper_mode: str = "keep", skip_gripper: bool = False
+    actions: np.ndarray, gripper_mode: str = "keep", skip_gripper: bool = False,
+    gripper_shift: int = 0,
 ) -> np.ndarray:
     """順方向 action 列 (T, 7) を時間反転する。
 
@@ -122,6 +123,9 @@ def build_reversed_actions(
                以前は `1 - x` だったが、robosuite 規約の ±1 に対しては {0,2} を返し
                指令範囲の外だった。
       skip_gripper=True — `action[6]` を +1（掴んだまま）にする。
+
+    `gripper_shift` は開閉指令だけを姿勢 6 次元に対して前倒し（負なら遅らせ）する。
+    理由は [shift_gripper](#) の docstring を読むこと。
     """
     rev = np.ascontiguousarray(actions[::-1].copy())
     rev[:, :6] = -rev[:, :6]          # 相対差分なので符号を反転して経路を戻る
@@ -129,7 +133,37 @@ def build_reversed_actions(
         rev[:, 6] = 1.0               # +1 = 閉じたまま（robosuite 規約）
     elif gripper_mode == "invert":
         rev[:, 6] = -rev[:, 6]
+    if gripper_shift:
+        rev[:, 6] = shift_gripper(rev[:, 6], gripper_shift)
     return rev
+
+
+def shift_gripper(gripper_cmd: np.ndarray, shift: int) -> np.ndarray:
+    """gripper 指令列を `shift` フレームだけ**前倒し**する（負なら遅らせる）。
+
+    **なぜ要るか。** 逆向き再生では、腕とグリッパの遅れが**どちらも打ち消されない**。
+
+      - 腕: OSC は 1 指令で目標の 2 割ほどしか進まない。実測すると逆向き再生の eef は
+        基準経路を**ちょうど 3 フレーム遅れて**なぞる（`eef[i]` を `ref[i-3]` と
+        突き合わせると残差 中央 27〜30 mm → 3〜6 mm）。
+      - 指: `PandaGripper.format_action` は
+        `current_action += [-1,+1] * 0.01 * sign(a6)` を**サブステップ毎**に回す
+        積分器で、1 指令あたり 0.25 しか進まない。全開↔全閉の 2.0 を渡るのに
+        **8 指令 = 0.4 秒**かかる。
+
+    遅れを時間反転すると「先読み」になるが、それは実現できない。つまり反転列では
+    遅れが打ち消されず**二重に効く**。オフラインで指令を前倒しするのが、その
+    実現できない先読みを与える唯一の手段である。効かせるべき量は
+    （指のストローク）−（腕の遅れ）の向きの差なので、掃いて決める。
+
+    端は最初／最後の値で埋める。`action[6]` は切り替え点 2 つだけの矩形波
+    （開く→閉じる→開く）なので、端の値の延長が素直な外挿になる。
+    """
+    g = np.asarray(gripper_cmd, dtype=np.float32)
+    if shift == 0:
+        return g.copy()
+    idx = np.clip(np.arange(len(g)) + int(shift), 0, len(g) - 1)
+    return g[idx]
 
 
 def reverse_reference_path(states: np.ndarray) -> np.ndarray:
