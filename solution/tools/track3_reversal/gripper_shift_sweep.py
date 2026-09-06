@@ -14,7 +14,13 @@
 **新しく回すなら上の組み合わせを使うこと。**
 
 出力: `<out>/gripper_shift_sweep.json` と標準出力の表。
-描画しない `ControlEnv` で回す（掃引を速くするため。物理は同じ）。
+既定は描画しない `ControlEnv` で回す（掃引を速くするため。物理は同じ）。
+
+**`--write-npz <dir>` を付けると、逆向き goal が立った回を学習データの中継物
+（npz）として書く。**鍵は `scripted_demo.SavedEpisode` に合わせてあるので、
+そこから先は [npz_to_lerobot.py](../scripted_demo/npz_to_lerobot.py) の
+`build` / `inspect` / `merge` がそのまま使える。要るものの一覧は
+`docs/reference/29_training_data_requirements.md`。
 
 用法（コンテナ内。`/app` に track3_reversal を丸ごと mount する）:
     python /app/gripper_shift_sweep.py --ep-npz /out/ep_data.npz \\
@@ -29,10 +35,12 @@ from pathlib import Path
 
 import numpy as np
 
-from replay_video_probe import (episode_ids, grasp_pose_from_forward,
-                                make_render_env, pick_init, pin_fixtures,
-                                probe_init_eef, reset_to, rollout,
-                                rollout_phased, rollout_tracking)
+from replay_video_probe import (DATASET_CAMERAS, episode_ids, grasp_backoff,
+                                standing_axis, top_down_grasp,
+                                grasp_pose_from_forward, make_render_env,
+                                pick_init, pin_fixtures, probe_init_eef,
+                                reset_to, rollout, rollout_phased,
+                                rollout_tracking)
 from reversal_probe import (decode_gripper, load_pruned_init, make_env,
                             reverse_reference_path, shift_gripper)
 
@@ -107,6 +115,19 @@ def gripper_width(states):
     return st[:, 6] - st[:, 7]
 
 
+def rot_angle_deg(quat_a, quat_b):
+    """2 つの向きの間の回転角[deg]（どちらも robosuite 規約 (x,y,z,w)）。
+
+    **接近が発散したときに真っ先に見る値である。**OSC の回転指令は 1 コマ
+    0.5 rad で頭打ちなので、要求角が大きいと腕が回りながら遠回りし、位置の
+    誤差がかえって開く。「狙う位置は正しいのに届かない」はこれで起きる。
+    """
+    from robosuite.utils import transform_utils as T
+
+    r = T.quat2mat(np.asarray(quat_a)) @ T.quat2mat(np.asarray(quat_b)).T
+    return float(np.degrees(np.linalg.norm(T.quat2axisangle(T.mat2quat(r)))))
+
+
 def object_yaw_deg(quat):
     """物の鉛直軸まわりの向き[deg]。**配布 init が振っている主な軸である。**
 
@@ -172,6 +193,26 @@ def body_pose(env, name):
     data, bid = env.env.sim.data, env.env.obj_body_id[name]
     return (np.asarray(data.body_xpos[bid]).copy(),
             T.convert_quat(np.asarray(data.body_xquat[bid]).copy(), to="xyzw"))
+
+
+def write_episode_npz(path, env, r, success):
+    """1 本を `scripted_demo.SavedEpisode` の鍵で書く。
+
+    **形式を手で起こさない。**この鍵で書けば
+    [npz_to_lerobot.py](../scripted_demo/npz_to_lerobot.py) の
+    `build` / `inspect` / `align` / `merge` がそのまま使える。取り決めの置き場は
+    [scripted_demo.py](../scripted_demo/scripted_demo.py) の `SavedEpisode`。
+
+    `success` を書いておくと `build` が失敗した回を**画を伸長する前に**捨てる。
+    圧縮しない——動画へ再符号化するだけの中継物なので、時間のほうが高い。
+    """
+    n = len(r["actions"])
+    if len(r["states"]) != n:
+        raise SystemExit(f"state {len(r['states'])} と action {n} の長さが違う")
+    np.savez(path, state=r["states"], action=r["actions"],
+             front=r["images"]["front"], wrist=r["images"]["wrist"],
+             success=bool(success), steps=n,
+             instruction=env.language_instruction)
 
 
 def site_frame(env, site):
@@ -278,6 +319,23 @@ def parse_args():
                          "phased=掴むまで姿勢で判定してから時刻逆向き。"
                          "**phased でも --shifts は効く**——ずらした列から"
                          "「掴む時刻」を決めるので、復路に入る位置が変わる")
+    ap.add_argument("--grasp-style", choices=["transfer", "top-down"],
+                    default="transfer",
+                    help="掴む姿勢の作り方。transfer=順方向デモの相対姿勢を今の"
+                         "物の向きに掛け直す（既定）/ top-down=真上から降りて"
+                         "直径を挟む姿勢を物の形から組み立てる。**物が順方向デモ"
+                         "に無い向きで置かれているときは transfer が使えない**"
+                         "（配布 T3 の缶はトレイの中で横倒しだが、順方向デモは"
+                         "立っている缶しか掴んでいない）")
+    ap.add_argument("--object-symmetry", type=int, default=1,
+                    help="物のローカル z 軸まわりで**掴み方として等価**な回転の数。"
+                         "1=折り返さない（既定。向きが効く物）/ 2=180 度で等価"
+                         "（本）/ 0=連続対称（缶）。等価な向きのうち手首を"
+                         "いちばん回さずに済むものを選ぶ")
+    ap.add_argument("--max-approach", type=int, default=60,
+                    help="接近の各段に許すコマ数の上限。**距離はタスクで違う**——"
+                         "本は 30〜41 コマで着くが、腕の home から遠い場面では"
+                         "足りない。上げても着いた回の結果は変わらない")
     ap.add_argument("--standoff", type=float, default=0.0,
                     help="掴む姿勢の手前（グリッパの進入軸に沿って）に置く待機点の"
                          "距離[m]。0 で無効。物を押さずに近づくために使う")
@@ -285,6 +343,9 @@ def parse_args():
                     help="016 の評価パリティと同じ既定値。fixture 配置を決める")
     ap.add_argument("--render-shifts", default="",
                     help="この shift だけ動画も残す（コンマ区切り）。描画は物理を変えない")
+    ap.add_argument("--write-npz", default="",
+                    help="逆向き goal が立った回を、この directory へ学習データの"
+                         "中継物（npz）として書く。**--mode phased のときだけ**")
     return ap.parse_args()
 
 
@@ -294,12 +355,23 @@ def build_envs(args, render, rev_region):
     `--init-source t3` のときは T3 env が再生の舞台にもなるので、描画の要否は
     そちらにも効く。fixture の固定は [pin_fixtures](replay_video_probe.py) が
     面倒を見るので、以降どの関数にも配って回らなくてよい。
+
+    **`--write-npz` のときは両方とも学習用の 2 台で作る。**逆向きを回す env が
+    どちらになるかは `--init-source` で変わるので、片方だけ描画にすると
+    「画の無い観測から画を取ろうとした」で落ちる。
     """
     use_t3 = args.init_source.startswith("t3")
-    make = make_render_env if render else make_env
-    print(f"env を作る（描画{'あり' if render else 'なし'}）...", flush=True)
+    cams = list(DATASET_CAMERAS.values()) if args.write_npz else None
+
+    def make(bddl):
+        if args.write_npz:
+            return make_render_env(bddl, cameras=cams)
+        return make_render_env(bddl) if render else make_env(bddl)
+
+    print(f"env を作る（{'学習用 2 台' if args.write_npz else ''}"
+          f"描画{'あり' if render or args.write_npz else 'なし'}）...", flush=True)
     env = pin_fixtures(make(args.forward_bddl), args.seed)
-    env_t3 = pin_fixtures(make(args.t3_bddl) if use_t3 and render
+    env_t3 = pin_fixtures(make(args.t3_bddl) if use_t3 or args.write_npz
                           else make_env(args.t3_bddl), args.seed)
     env_t3.reset()
     _, t3_half = region_box(env_t3, rev_region)
@@ -331,6 +403,7 @@ def measure(rev_env, obj, rev_region, r, rev_goal, book_rev_start):
     }
     if "n_extra" in r:                          # phased のときだけ付く
         row.update(n_extra=int(r["n_extra"]), n_approach=int(r["n_approach"]),
+                   n_standoff=int(r["n_standoff"]), n_reach=int(r["n_reach"]),
                    approach_err_mm=r["approach_err_mm"])
     else:
         row["err_median_mm"] = round(float(np.median(r["err_m"])) * 1000, 1)
@@ -348,6 +421,11 @@ def main():
     vid_dir = out_dir / "videos"
     if render:
         vid_dir.mkdir(parents=True, exist_ok=True)
+    npz_dir = Path(args.write_npz) if args.write_npz else None
+    if npz_dir is not None:
+        if args.mode != "phased":
+            raise SystemExit("--write-npz は --mode phased のときだけ使える")
+        npz_dir.mkdir(parents=True, exist_ok=True)
 
     fwd_pred, obj, fwd_region = goal_of(args.forward_bddl)
     rev_pred, rev_obj, rev_region = goal_of(args.t3_bddl)
@@ -357,8 +435,12 @@ def main():
     env, env_t3, use_t3 = build_envs(args, render, rev_region)
     # 順方向 goal の領域 site（＝本を置いた棚）を、env をまたぐ姿勢の基準にする。
     # 同じ fixture が両方の env にあるので、タスク名を書かずに対応が取れる。
-    fwd_frame, t3_frame = site_frame(env, fwd_region), site_frame(env_t3, fwd_region)
+    # **t3-lying のときだけ要る。**順方向 goal の相手が site とは限らないので
+    # （マグは `plate_1` という物が相手）、要らないときに引くと落ちる。
+    fwd_frame = t3_frame = None
     if args.init_source == "t3-lying":
+        fwd_frame, t3_frame = (site_frame(env, fwd_region),
+                               site_frame(env_t3, fwd_region))
         print(f"基準 site {fwd_region}: 順方向 {np.round(fwd_frame[0], 4)} / "
               f"T3 {np.round(t3_frame[0], 4)}  "
               f"ずれ {np.linalg.norm(t3_frame[0] - fwd_frame[0]) * 1000:.1f} mm",
@@ -431,8 +513,30 @@ def main():
 
             # 掴む姿勢は**本の座標系で測った相対姿勢を、今の本の姿勢に掛け直して**
             # 作る。本がどの向きに置かれていても狙える。shift に依らないので 1 度だけ。
-            grasp_pose = grasp_pose_from_forward(fwd, j, book_rev_start,
-                                                 book_rev_quat)
+            from robosuite.utils import transform_utils as T
+
+            start_eef = (np.asarray(obs_rev["robot0_eef_pos"]) if use_t3
+                         else np.asarray(fwd["eef_pos"][-1]))
+            start_quat = (np.asarray(obs_rev["robot0_eef_quat"]) if use_t3
+                          else T.axisangle2quat(fwd["eef_aa"][-1]))
+            if args.grasp_style == "top-down":
+                grasp_pose = top_down_grasp(
+                    book_rev_start, book_rev_quat,
+                    standing_axis(fwd["obj_quat"][0]), grasp_backoff(fwd, j),
+                    ref_quat=start_quat)
+            else:
+                grasp_pose = grasp_pose_from_forward(
+                    fwd, j, book_rev_start, book_rev_quat,
+                    symmetry=args.object_symmetry)
+            # 手首を何度回す必要があるか／物が順方向のときから何度回っているか
+            d_wrist = rot_angle_deg(T.axisangle2quat(grasp_pose[3:6]), start_quat)
+            d_obj = rot_angle_deg(book_rev_quat, fwd["obj_quat"][j])
+            print(f"  init #{t3_i} 物 {np.round(book_rev_start, 3)} / "
+                  f"腕 {np.round(start_eef, 3)} → 掴む先 "
+                  f"{np.round(grasp_pose[:3], 3)}（"
+                  f"{np.linalg.norm(grasp_pose[:3] - start_eef) * 1000:.0f} mm 先・"
+                  f"手首 {d_wrist:.0f}° 回す／物は順方向 f{j} から {d_obj:.0f}° "
+                  f"回っている）", flush=True)
 
             for k in shifts:
                 tag = f"ep{ep}" + (f"_i{t3_i}" if use_t3 else "")
@@ -442,7 +546,9 @@ def main():
                 if args.mode == "phased":
                     r = rollout_phased(rev_env, rev_init, ref, grip, vid,
                                        grasp_pose=grasp_pose,
-                                       standoff=args.standoff)
+                                       standoff=args.standoff,
+                                       max_approach=args.max_approach,
+                                       capture=bool(args.write_npz))
                 else:
                     r = rollout_tracking(rev_env, rev_init, ref, grip, vid)
                 # **判定は逆向きを回した env で行う。**T3 env で回したならそのまま
@@ -466,6 +572,12 @@ def main():
                         book_end - book_start)) * 1000, 1)
                     row["forward_goal_undone"] = not bool(env.check_success())
                 rows.append(row)
+                if args.write_npz and rev_goal:
+                    # **通った回だけ書く。**落ちた回は学習に入れない方針なので、
+                    # 100 MB 級の npz をディスクに残す意味が無い。
+                    write_episode_npz(npz_dir / f"rev_{tag}_k{k:+03d}.npz",
+                                      rev_env, r, rev_goal)
+                    row["npz"] = f"rev_{tag}_k{k:+03d}.npz"
                 extra = (f"  接近 {row['n_approach']:2d} コマで "
                          f"{row['approach_err_mm']:6.2f} mm"
                          if "n_approach" in row else

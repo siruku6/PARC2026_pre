@@ -16,6 +16,7 @@
 | 採点のタスクの母集団（Track1 の母集団） | [04_track1_population.md](04_track1_population.md) |
 | 学習データ 14,347 本の中身 | [06_training_data_composition.md](06_training_data_composition.md) |
 | **自分でエピソードを作るとき、1 本に何が要るか**（形式・中継物の npz・既にある変換器） | **[29_training_data_requirements.md](29_training_data_requirements.md)** |
+| **逆向きエピソードの掴む姿勢の決め方**（順方向から移せる条件・「立つ軸」の測り方・真上からの握り・順方向デモのふるい） | **[30_reverse_grasp_pose.md](30_reverse_grasp_pose.md)** |
 | 学習の条件と、次にどこを直すか | [11_training_schedule.md](11_training_schedule.md) |
 | LoRA をどこに当てるか | [12_lora_targets.md](12_lora_targets.md) |
 | 検証用に取り分けたエピソード | [13_holdout_episodes.md](13_holdout_episodes.md) |

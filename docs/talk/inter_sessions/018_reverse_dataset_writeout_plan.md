@@ -20,16 +20,17 @@
 | [`scripted_demo/scripted_demo.py`](../../../solution/tools/scripted_demo/scripted_demo.py) の `SavedEpisode` | **npz の取り決めの唯一の置き場。写しを作らない** |
 | [`scripted_demo/npz_to_lerobot.py`](../../../solution/tools/scripted_demo/npz_to_lerobot.py) | `build` / `inspect` / `align` / `merge`。**そのまま使える** |
 
-## 2. まだ無いもの
+## 2. 書き出し口に足りなかったもの——**4 つとも入れた**
 
-**4 つだけである。**どれも `track3_reversal` 側にある。
+どれも `track3_reversal` 側にあった。`--write-npz` を付けると `SavedEpisode`
+の鍵で書き出す。
 
-| # | 無いもの | いまの状態 |
+| # | 足りなかったもの | 入れた形 |
 |---|---|---|
-| 1 | `action` 列 | `rollout_phased` が `acts` を集めているのに**返していない** |
-| 2 | `observation.state` の**指 2 次元** | eef 位置と軸角しか記録していない。`robot0_gripper_qpos` が要る |
-| 3 | **手首カメラ** | `agentview` しか描画していない。`robot0_eye_in_hand` を足す |
-| 4 | 指示文の読み出し | bddl の `:language` を読んでいない |
+| 1 | `action` 列 | `rollout_phased` に `capture=True` を足し、`acts` を返す |
+| 2 | `observation.state` の**指 2 次元** | `obs_state8` が `robot0_gripper_qpos` を連結する |
+| 3 | **手首カメラ** | `make_render_env` を複数カメラ対応にし、`robot0_eye_in_hand` を足す |
+| 4 | 指示文の読み出し | `env.language_instruction` をそのまま書く |
 
 **指示文を書く作業は無い。**配布 T3 の bddl に入っている
 （[reference/29 の 4 節](../../reference/29_training_data_requirements.md)）。
@@ -42,20 +43,31 @@
 | T3 タスク | 対応する順方向 | 可否 |
 |---|---|---|
 | yellow book | `STUDY_SCENE4_pick_up_the_book_on_the_left_and_place_it_on_top_of_the_shelf` | **済**（150/150） |
-| alphabet soup | `LIVING_ROOM_SCENE3_pick_up_the_alphabet_soup_and_put_it_in_the_tray` | **1:1 の逆。行ける** |
-| red mug | `LIVING_ROOM_SCENE5_put_the_red_mug_on_the_left_plate` | **1:1 の逆。行ける** |
+| alphabet soup | `LIVING_ROOM_SCENE3_pick_up_the_alphabet_soup_and_put_it_in_the_tray` | **通った**（真上からの握りが要る。[reference/30 の 4 節](../../reference/30_reverse_grasp_pose.md)） |
+| red mug | `LIVING_ROOM_SCENE5_put_the_red_mug_on_the_left_plate` | **通った**（順方向デモ 20 本中 14 本が 2/2） |
 | two mugs | `..._put_the_white_mug_on_the_left_plate` ＋ `..._put_the_yellow_and_white_mug_on_the_right_plate` | **2 本の合成が要る。後回し** |
 
 ## 4. やる順番
 
 **1 → 2 → 3 → 4。**1 はどちらの方向にも必要なので、これが最初に来る。
 
-| # | やること | なぜその順か |
-|---|---|---|
-| **1** | **書き出し口を作る**（2 節の 4 つ）。npz を `SavedEpisode` の鍵で書く | これが無いと何も検証できない。ここまでで変換から先は既存コードに乗る |
-| **2** | 本タスク 1 本を通しで検証。`build` → `inspect` | **ファイルが揃うことと、学習が読めることは別である。**動画の符号化はここで初めて落ちる |
-| **3** | **soup と red mug へ広げる**。掴む姿勢の作り方（`clamped` + standoff）がそのまま効くか | 1 タスクだけのデータで学習すると崩れる実績がある（[reference/29 の 5 節](../../reference/29_training_data_requirements.md)） |
-| **4** | two mugs（2 本の合成）と、はみ出し対策 | どちらも 3 までの結果が出てから要否を判断する |
+| # | やること | なぜその順か | 状態 |
+|---|---|---|---|
+| **1** | **書き出し口を作る**（2 節の 4 つ）。npz を `SavedEpisode` の鍵で書く | これが無いと何も検証できない。ここまでで変換から先は既存コードに乗る | **済** |
+| **2** | 本タスク 1 本を通しで検証。`build` → `inspect` | **ファイルが揃うことと、学習が読めることは別である。**動画の符号化はここで初めて落ちる | **済** |
+| **3** | **soup と red mug へ広げる**。掴む姿勢の作り方（`clamped` + standoff）がそのまま効くか | 1 タスクだけのデータで学習すると崩れる実績がある（[reference/29 の 5 節](../../reference/29_training_data_requirements.md)） | 生成中 |
+| **4** | two mugs（2 本の合成）と、はみ出し対策 | どちらも 3 までの結果が出てから要否を判断する | 未着手 |
+
+**3 で分かったことは 2 つあり、どちらも [reference/30](../../reference/30_reverse_grasp_pose.md) に置いた。**
+
+1. **掴む姿勢は、物の向きが順方向デモと一致していないと移せない。**缶は順方向で
+   立っているのに配布 T3 ではトレイの中で横倒しで、移すと壁に阻まれる。真上から
+   直径を挟む姿勢を別に作って通した（0/4 → **4/4**）。
+2. **順方向デモには再生が再現しないものが混ざる。**マグは 20 本中 6 本で物が
+   1 mm も動かず、その 6 本は逆向きもほぼ全滅した。**物が動いたか**でふるう。
+
+本タスクの 150 本は LeRobot 形式まで出来ている（26,443 コマ、npz 9.7 GB →
+140 MB）。
 
 ## 5. 決めてあること
 
