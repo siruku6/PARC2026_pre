@@ -190,13 +190,18 @@ def rollout(env, init_state, actions, video_path=None, ref_states=None,
             track_obj=None):
     """初期状態から action 列を再生する。動画と、フレーム毎の eef_pos を返す。
 
-    `track_obj` に物体名を渡すと、その姿勢も毎コマ残す（`obj_pos` / `obj_quat`）。
+    `track_obj` に物体名（または名前の並び）を渡すと、その姿勢も毎コマ残す。
     逆向きの掴む姿勢を [grasp_pose_from_forward](#) で作るのに要る。
+    **並びで渡すと `obj[名前]` に全部入る**（two mugs のように 1 本のデモが
+    2 つの物を動かす場合に要る）。`obj_pos` / `obj_quat` は先頭の物のもの。
     """
     obs = reset_to(env, init_state)
     frames, eef, aa = [], [], []
 
-    obj_p, obj_q = [], []
+    names = ([track_obj] if isinstance(track_obj, str)
+             else list(track_obj or []))
+    obj_p = {n: [] for n in names}
+    obj_q = {n: [] for n in names}
 
     def record():
         if video_path is not None:
@@ -204,10 +209,10 @@ def rollout(env, init_state, actions, video_path=None, ref_states=None,
         eef.append(np.asarray(obs["robot0_eef_pos"]).copy())
         # 逆向きの掴む姿勢をここから作るので、向きも残す（軸角。state 列と同じ形）
         aa.append(eef_axisangle(obs))
-        if track_obj is not None:
+        for name in names:
             # 掴む瞬間の「本から見た手の位置」を作るために、物体の姿勢も残す
-            obj_p.append(np.asarray(obs[f"{track_obj}_pos"]).copy())
-            obj_q.append(np.asarray(obs[f"{track_obj}_quat"]).copy())
+            obj_p[name].append(np.asarray(obs[f"{name}_pos"]).copy())
+            obj_q[name].append(np.asarray(obs[f"{name}_quat"]).copy())
 
     record()
     inner = env.env
@@ -220,9 +225,11 @@ def rollout(env, init_state, actions, video_path=None, ref_states=None,
     eef = np.asarray(eef)
 
     out = {"n_steps": len(actions), "eef_pos": eef, "eef_aa": np.asarray(aa)}
-    if track_obj is not None:
-        out["obj_pos"] = np.asarray(obj_p)
-        out["obj_quat"] = np.asarray(obj_q)
+    if names:
+        out["obj"] = {n: {"pos": np.asarray(obj_p[n]),
+                          "quat": np.asarray(obj_q[n])} for n in names}
+        out["obj_pos"] = out["obj"][names[0]]["pos"]
+        out["obj_quat"] = out["obj"][names[0]]["quat"]
     if ref_states is not None:
         # 再生 t ステップ後の位置を、データの state[t] と突き合わせる。
         # データの state[t] は「action[t] を撃つ**前**の姿勢」なので、
@@ -253,6 +260,16 @@ def symmetry_rotations(order, n_continuous=72):
     """
     n = n_continuous if order == 0 else max(int(order), 1)
     return [_rz(2 * np.pi * k / n) for k in range(n)]
+
+
+def fwd_view(fwd, name):
+    """順再生の結果を、**その物を追っていたことにして**見せる。
+
+    `grasp_pose_from_forward` も `grasp_backoff` も `fwd["obj_pos"]` を見るので、
+    物ごとに掴む姿勢を引き直すには、その物の列に差し替えた見え方が要る。
+    """
+    return {**fwd, "obj_pos": fwd["obj"][name]["pos"],
+            "obj_quat": fwd["obj"][name]["quat"]}
 
 
 def grasp_pose_from_forward(fwd, j, obj_pos_now, obj_quat_now, symmetry=1):
@@ -525,7 +542,7 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
                    gain=1.0, tol=0.005, max_approach=60, grip_hold=10,
                    grasp_pose=None, standoff=0.0, capture=False,
                    lift=0.0, release_i=None, settle=0, obj=None,
-                   place_axis=None, level=False):
+                   place_axis=None, level=False, cycles=None):
     """掴むまでは**時刻表を捨てて**姿勢で判定し、掴んでから時刻逆向きに戻る。
 
     **なぜ要るか。** 時刻をそのまま逆にすると、掴む指令が出る時刻は
@@ -577,6 +594,14 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
     時刻で放すと、その時点で手は既に戻り始めていて**物を空中で落とす**。
     `settle` コマまで 5 mm ずつ下ろし、`obj` に触れる物が出たらそこで止めて開く。
 
+    **`cycles` を渡すと「掴んで置く」を何回でも回す。**渡さなければ引数から
+    1 サイクルを組み立てるので、単体タスクの呼び方は変わらない。1 サイクルは
+    `{"grasp_pose", "start_i", "release_i", "obj", "place_axis", "level"}` で、
+    **逆向きに辿る順**（＝順方向の最後のサイクルが先頭）に並べて渡す。
+    two mugs のように 1 本のデモが 2 回掴んで放す場合、**サイクルごとに
+    「その物の今の姿勢へ接近して掴む → その区間の復路を辿る → 触れたら置く」**を
+    回す。物がどこに置き直されていても、掴む姿勢はサイクルごとに引き直される。
+
     **`capture=True` で学習データの中身も残す。**`actions` (T,7) と
     `states` (T,8) が返り、画も要るなら env を `DATASET_CAMERAS` の 2 台で
     作っておくこと（`images` が付く）。**画は観測に乗っている台ぶんしか取れない。**
@@ -585,13 +610,30 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
     inner = env.env
     frames, eef, acts, states8 = [], [], [], []
     cams = {k: [] for k in DATASET_CAMERAS} if capture else {}
-    obj_z, obj_tilt, obj_touch = [], [], []   # 放す瞬間に何が起きたかを追う
-    # **置いた先で鉛直を向くべき軸。**渡されなければ今の姿勢から測る。
-    # 逆向きでは掴む場所と置く場所で物の寝方が違うことがある（缶はトレイの中で
-    # 横倒しだが、机の上では立つ）ので、**呼ぶ側が順方向の初期姿勢から測って
-    # 渡すのが正しい。**
-    axis_local = (place_axis if place_axis is not None else
-                  (standing_axis(obs[f"{obj}_quat"]) if obj is not None else 2))
+    grip = np.asarray(gripper_cmd)
+    ref = np.asarray(ref_states, dtype=np.float64)
+
+    # **掴んで置く単位（サイクル）に揃える。**単体タスクは 1 サイクルで、
+    # そのときは引数から組み立てる（呼ぶ側は今までどおりで動く）。
+    if cycles is None:
+        closes = np.where(grip > 0)[0]
+        i0 = int(closes[0]) if len(closes) else 0
+        cycles = [{"grasp_pose": ref[i0] if grasp_pose is None else grasp_pose,
+                   "start_i": i0, "release_i": release_i, "obj": obj,
+                   "place_axis": place_axis, "level": level}]
+    cycles = [dict(c) for c in cycles]
+    for c in cycles:
+        c["grasp_pose"] = np.asarray(c["grasp_pose"], dtype=np.float64)
+        c.setdefault("obj", None)
+        c.setdefault("level", False)
+        c.setdefault("release_i", None)
+        if c.get("place_axis") is None and c["obj"] is not None:
+            c["place_axis"] = standing_axis(obs[f"{c['obj']}_quat"])
+
+    # 追いかける物。**サイクルごとに違う**ので、名前ごとに列を持つ。
+    axis_of = {c["obj"]: int(c["place_axis"]) for c in cycles if c["obj"]}
+    trace = {n: {"z": [], "tilt": [], "touch": []} for n in axis_of}
+
     if video_path is not None:
         frames.append(obs[f"{CAMERA}_image"][::-1])
     eef.append(np.asarray(obs["robot0_eef_pos"]).copy())
@@ -609,129 +651,139 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
         if video_path is not None:
             frames.append(obs[f"{CAMERA}_image"][::-1])
         eef.append(np.asarray(obs["robot0_eef_pos"]).copy())
-        if obj is not None:
-            obj_z.append(float(obs[f"{obj}_pos"][2]))
-            # 傾き = 物のローカル「立つ軸」が鉛直から何度ずれているか
-            obj_tilt.append(tilt_deg(obs[f"{obj}_quat"], axis_local))
-            obj_touch.append(sorted(contacting_bodies(env, obj)))
+        for name, t in trace.items():
+            t["z"].append(float(obs[f"{name}_pos"][2]))
+            t["tilt"].append(tilt_deg(obs[f"{name}_quat"], axis_of[name]))
+            t["touch"].append(sorted(contacting_bodies(env, name)))
 
-    grip = np.asarray(gripper_cmd)
-    closes = np.where(grip > 0)[0]
-    close_i = int(closes[0]) if len(closes) else 0
-    grasp_pose = np.asarray(
-        ref_states[close_i] if grasp_pose is None else grasp_pose,
-        dtype=np.float64)
-
-    def move_to(target, reach, grip=-1.0):
+    def move_to(target, reach, gripcmd=-1.0):
         """`target` へ `reach` 以内に入るまで寄る（既定は開いたまま）。コマ数を返す。"""
         n = 0
         for _ in range(max_approach):
             if float(np.linalg.norm(
                     np.asarray(obs["robot0_eef_pos"]) - target[:3])) < reach:
                 break
-            step(osc_command(obs, target, grip, gain))   # -1 = 開く / +1 = 閉じる
+            step(osc_command(obs, target, gripcmd, gain))   # -1 = 開く / +1 = 閉じる
             n += 1
         return n
 
-    # A0: 掴む姿勢の手前（進入軸に沿って standoff だけ下がった点）へ先に寄る。
-    #     直進で掴む姿勢へ向かうと、途中で物を横から押してしまう。
-    n_pre = 0
-    if standoff > 0:
-        from robosuite.utils import transform_utils as T
+    n = {"standoff": 0, "reach": 0, "grip": 0, "lift": 0, "floor": 0, "settle": 0}
+    approach_err, opened_at, placed, last_stop = [], [], [], None
 
-        r_g = T.quat2mat(T.axisangle2quat(grasp_pose[3:6]))
-        n_pre = move_to(np.concatenate([grasp_pose[:3] - r_g[:, 2] * standoff,
-                                        grasp_pose[3:6]]), tol * 3)
+    for cyc in cycles:
+        gp = cyc["grasp_pose"]
 
-    # A: 掴む姿勢へ、開いたまま、着くまで
-    n_app = move_to(grasp_pose, tol)
-    approach_err = float(np.linalg.norm(
-        np.asarray(obs["robot0_eef_pos"]) - grasp_pose[:3]))
+        # A0: 掴む姿勢の手前（進入軸に沿って standoff だけ下がった点）へ先に寄る。
+        #     直進で掴む姿勢へ向かうと、途中で物を横から押してしまう。
+        if standoff > 0:
+            from robosuite.utils import transform_utils as T
 
-    # B: その場で閉じる（指が閉じ切るまで姿勢は保持）
-    for _ in range(grip_hold):
-        step(osc_command(obs, grasp_pose, 1.0, gain))    # +1 = 閉じる
+            r_g = T.quat2mat(T.axisangle2quat(gp[3:6]))
+            n["standoff"] += move_to(
+                np.concatenate([gp[:3] - r_g[:, 2] * standoff, gp[3:6]]), tol * 3)
 
-    # L: 掴んだら**まず真上へ**。横へ動かすと、下の皿やトレイを擦って動かす。
-    n_lift, z_safe = 0, None
-    if lift > 0:
-        up = np.concatenate([np.asarray(obs["robot0_eef_pos"]) + [0, 0, lift],
-                             grasp_pose[3:6]])
-        n_lift = move_to(up, tol * 2, grip=1.0)
-        z_safe = float(up[2])
+        # A: 掴む姿勢へ、開いたまま、着くまで
+        n["reach"] += move_to(gp, tol)
+        approach_err.append(round(float(np.linalg.norm(
+            np.asarray(obs["robot0_eef_pos"]) - gp[:3])) * 1000, 2))
 
-    # C: 掴んだ以降は記録どおりの時刻逆向き。ただし復路の頭は
-    #    **上げた高さより下へ潜らせない。**復路の頭は「順方向が物を置いた高さ」
-    #    なので、そのまま追うと持ち上げた物をまた下ろして横へ引きずる。
-    #    **コマを飛ばさずに高さだけ床を張る。**飛ばすと姿勢の変化まで飛ばすことに
-    #    なり、OSC の回転が追いつかずに荷物を傾けたまま運ぶ（本タスクで実測）。
-    stop_i = len(ref_states) - 1 if release_i is None else max(release_i, close_i)
-    i_join, n_floor = close_i, 0
-    if z_safe is not None:
-        z_path = np.asarray(ref_states)[close_i:stop_i, 2]
-        above = np.where(z_path >= z_safe)[0]
-        # 復路が一度も上がってこないなら、いちばん高い所までを床の対象にする
-        i_join = close_i + int(above[0] if len(above) else np.argmax(z_path))
-    for i in range(close_i, stop_i):
-        tgt = np.asarray(ref_states[i + 1], dtype=np.float64).copy()
-        if i < i_join and tgt[2] < z_safe:
-            tgt[2], n_floor = z_safe, n_floor + 1
-        step(osc_command(obs, tgt, grip[i], gain))
+        # B: その場で閉じる（指が閉じ切るまで姿勢は保持）
+        for _ in range(grip_hold):
+            step(osc_command(obs, gp, 1.0, gain))            # +1 = 閉じる
+        n["grip"] += grip_hold
 
-    # D: **触れた所で放す。**記録どおりの時刻で開くと、手はもう戻り始めていて
-    #    物を落とす。触れる物が出るまで 5 mm ずつ下ろしてから開く。
-    n_settle = 0
-    if release_i is not None:
+        # L: 掴んだら**まず真上へ**。横へ動かすと、下の皿やトレイを擦って動かす。
+        z_safe = None
+        if lift > 0:
+            up = np.concatenate([np.asarray(obs["robot0_eef_pos"]) + [0, 0, lift],
+                                 gp[3:6]])
+            n["lift"] += move_to(up, tol * 2, 1.0)
+            z_safe = float(up[2])
+
+        # C: このサイクルの復路。ただし頭は**上げた高さより下へ潜らせない。**
+        #    **コマを飛ばさずに高さだけ床を張る。**飛ばすと姿勢の変化まで飛んで、
+        #    OSC の回転が追いつかずに荷物を傾けたまま運ぶ（本タスクで実測）。
+        i0 = int(cyc["start_i"])
+        rel = cyc["release_i"]
+        stop_i = (len(ref) - 1) if rel is None else max(int(rel), i0)
+        i_join = i0
+        if z_safe is not None and stop_i > i0:
+            z_path = ref[i0:stop_i, 2]
+            above = np.where(z_path >= z_safe)[0]
+            # 復路が一度も上がってこないなら、いちばん高い所までを床の対象にする
+            i_join = i0 + int(above[0] if len(above) else np.argmax(z_path))
+        for i in range(i0, stop_i):
+            tgt = ref[i + 1].copy()
+            if i < i_join and tgt[2] < z_safe:
+                tgt[2] = z_safe
+                n["floor"] += 1
+            step(osc_command(obs, tgt, grip[i], gain))
+        last_stop = stop_i
+        if rel is None:
+            continue
+
+        # D: **触れた所で放す。**記録どおりの時刻で開くと、手はもう戻り始めていて
+        #    物を落とす。触れる物が出るまで 5 mm ずつ下ろしてから開く。
         hold = np.concatenate([np.asarray(obs["robot0_eef_pos"]),
                                eef_axisangle(obs)])
-        if level and obj is not None:
+        if cyc["level"] and cyc["obj"] is not None:
             # **下ろす前に水平へ直す。**少し浮かせてから回さないと机に擦る。
-            hold = level_pose(obs, obj, axis_local, clearance=0.02)
+            hold = level_pose(obs, cyc["obj"], cyc["place_axis"], clearance=0.02)
             for _ in range(grip_hold):
                 step(osc_command(obs, hold, 1.0, gain))
-                n_settle += 1
+                n["settle"] += 1
         for _ in range(settle):
-            if obj is not None and contacting_bodies(env, obj):
+            if cyc["obj"] is not None and contacting_bodies(env, cyc["obj"]):
                 break
             hold[2] -= 0.005
             step(osc_command(obs, hold, 1.0, gain))
-            n_settle += 1
-        hold[:3] = np.asarray(obs["robot0_eef_pos"])     # 止めた所で開く
+            n["settle"] += 1
+        hold[:3] = np.asarray(obs["robot0_eef_pos"])         # 止めた所で開く
+        opened_at.append(len(acts))
+        placed.append(cyc["obj"])
         for _ in range(grip_hold):
             step(osc_command(obs, hold, -1.0, gain))
-        # 放したあとは残りの復路（＝順方向の接近を逆に辿って手を引く）
-        for i in range(stop_i, len(ref_states) - 1):
-            step(osc_command(obs, ref_states[i + 1], -1.0, gain))
+        n["grip"] += grip_hold
+
+    # 放したあとは残りの復路（＝順方向の接近を逆に辿って手を引く）
+    if opened_at and last_stop is not None:
+        for i in range(last_stop, len(ref) - 1):
+            step(osc_command(obs, ref[i + 1], -1.0, gain))
 
     if video_path is not None:
         write_video(frames, video_path)
-    n_release = (grip_hold + n_settle) if release_i is not None else 0
     out = {"n_steps": len(acts), "eef_pos": np.asarray(eef),
-           "n_extra": n_pre + n_app + grip_hold + n_lift + n_release,
-           "n_approach": n_pre + n_app,
+           "n_cycles": len(cycles),
+           "n_extra": (n["standoff"] + n["reach"] + n["grip"] + n["lift"]
+                       + n["settle"]),
+           "n_approach": n["standoff"] + n["reach"],
            # **どちらの段で足りなかったかを分けて残す。**片方が上限に張り付いた
            # ときだけ `max_approach` を上げればよく、闇雲に伸ばさずに済む。
-           "n_standoff": n_pre, "n_reach": n_app,
-           "n_lift": n_lift, "n_floor": n_floor, "n_settle": n_settle,
-           "approach_err_mm": round(approach_err * 1000, 2),
+           "n_standoff": n["standoff"], "n_reach": n["reach"],
+           "n_lift": n["lift"], "n_floor": n["floor"], "n_settle": n["settle"],
+           # サイクルごとの残り誤差。**代表値は最悪のもの**を出す。
+           "approach_err_mm": max(approach_err) if approach_err else 0.0,
+           "approach_err_mm_all": approach_err,
            "actions": np.asarray(acts, dtype=np.float32)}
-    if obj_z:
-        out["obj_z"] = np.asarray(obj_z)
-        out["obj_tilt_deg"] = np.asarray(obj_tilt)
-        out["obj_touch"] = obj_touch
+    if trace:
+        out["trace"] = trace
+        out["release_frames"] = opened_at
+        out["release_objs"] = placed
         # **放してから終わりまでに物が落ちた高さ。**空中で放していれば大きい。
         # 指令の後も指は 8 指令ぶん開き続けるので、その間に手が持ち上げた高さも
         # 落ちる高さに入る。**開き指令以降の最高点**から終わりを引く。
-        held = np.where(out["actions"][:, 6] > 0)[0]
-        t_open = int(held[-1]) if len(held) else 0
-        tail = obj_z[min(t_open, len(obj_z) - 1):]
-        out["drop_mm"] = round((max(tail) - tail[-1]) * 1000, 1)
+        drops = {}
+        for k, name in enumerate(placed):
+            z = trace[name]["z"]
+            tail = z[max(min(opened_at[k] - 1, len(z) - 1), 0):]
+            drops[name] = round((max(tail) - z[-1]) * 1000, 1)
+        out["drop_mm_by"] = drops
+        out["drop_mm"] = max(drops.values()) if drops else 0.0
     if capture:
         out["states"] = np.asarray(states8, dtype=np.float32)
         out["images"] = {k: np.asarray(v, dtype=np.uint8)
                          for k, v in cams.items()}
     return out
-
 
 def episode_ids(npz, spec=""):
     """npz にある `actions_<ep>` から、回すエピソード番号を決める。"""

@@ -24,12 +24,20 @@ case "$TASK" in
         T3_STEM=take_the_alphabet_soup_out_of_the_tray_and_place_it_on_the_table ;;
   mug)  FWD_STEM=LIVING_ROOM_SCENE5_put_the_red_mug_on_the_left_plate
         T3_STEM=take_the_red_mug_off_the_left_plate_and_put_it_on_the_table ;;
-  *) echo "TASK は book|soup|mug のどれか（来た値: $TASK）" >&2; exit 1 ;;
+  # **two mugs の順方向だけ libero_90 に無い。**組み合わせタスクの bddl は
+  # 016 が組み立てたものを使う（デモは配布データセットの task_index 30 に
+  # 313 本ある）。$OUT の下に置いてあるので、コンテナからは /out で見える。
+  twomugs)
+        FWD_STEM=LIVING_ROOM_SCENE5_put_the_white_mug_on_the_left_plate_and_put_the_yellow_and_white_mug_on_the_right_plate
+        FWD_BDDL="/out/assets/$FWD_STEM.bddl"
+        FWD_INITS="/out/assets/$FWD_STEM.pruned_init"
+        T3_STEM=take_the_two_mugs_off_the_plates_and_place_them_on_the_table ;;
+  *) echo "TASK は book|soup|mug|twomugs のどれか（来た値: $TASK）" >&2; exit 1 ;;
 esac
 L90=/workspace/LIBERO-plus/libero/libero
 T3A=/workspace/compe/t3/assets
-FWD_BDDL="$L90/bddl_files/libero_90/$FWD_STEM.bddl"
-FWD_INITS="$L90/init_files/libero_90/$FWD_STEM.pruned_init"
+FWD_BDDL="${FWD_BDDL:-$L90/bddl_files/libero_90/$FWD_STEM.bddl}"
+FWD_INITS="${FWD_INITS:-$L90/init_files/libero_90/$FWD_STEM.pruned_init}"
 T3_BDDL="$T3A/bddl_files/libero_t3/$T3_STEM.bddl"
 T3_INITS="$T3A/init_files/libero_t3/$T3_STEM.pruned_init"
 

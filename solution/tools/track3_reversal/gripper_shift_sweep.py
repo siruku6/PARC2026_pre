@@ -35,9 +35,8 @@ from pathlib import Path
 
 import numpy as np
 
-from replay_video_probe import (DATASET_CAMERAS, contacting_bodies,
-                                episode_ids, grasp_backoff,
-                                standing_axis, top_down_grasp,
+from replay_video_probe import (DATASET_CAMERAS, episode_ids, fwd_view,
+                                grasp_backoff, standing_axis, top_down_grasp,
                                 grasp_pose_from_forward, make_render_env,
                                 pick_init, pin_fixtures, probe_init_eef,
                                 reset_to, rollout, rollout_phased,
@@ -50,18 +49,24 @@ PLACEMENT = {"on", "in", "at", "infrontof", "behind",
              "totheleftof", "totherightof", "ontopof"}
 
 
-def goal_of(bddl_path):
-    """bddl の :goal から「置く系」の (predicate, 物体, 領域) を返す（小文字名）。
+def goals_of(bddl_path):
+    """bddl の :goal から「置く系」の (predicate, 物体, 領域) を**全部**返す。
 
     置く系だけを拾う。`(And (Turnon stove) (On pot region))` のように別の述語が
     先に来ることがあり、それを取ると逆向きの向きを取り違える。
+
+    **1 つとは限らない。**two mugs の goal は
+    `(And (On porcelain_mug_1 領域) (On white_yellow_mug_1 領域))` で、
+    **2 つの物をそれぞれ別の領域へ**置くことを求める。
     """
     from libero.libero.envs import bddl_utils as BDDLUtils
 
-    for st in BDDLUtils.robosuite_parse_problem(str(bddl_path))["goal_state"]:
-        if len(st) == 3 and st[0] in PLACEMENT:
-            return tuple(st)
-    raise SystemExit(f"{bddl_path} の goal から「置く系」の述語を取れない")
+    out = [tuple(st) for st
+           in BDDLUtils.robosuite_parse_problem(str(bddl_path))["goal_state"]
+           if len(st) == 3 and st[0] in PLACEMENT]
+    if not out:
+        raise SystemExit(f"{bddl_path} の goal から「置く系」の述語を取れない")
+    return out
 
 
 def eval_in_t3(env_t3, obj, pred, region, pos, quat):
@@ -92,7 +97,7 @@ def eval_in_t3(env_t3, obj, pred, region, pos, quat):
     return bool(env_t3.env._eval_predicate([pred, obj, region]))
 
 
-def clamp_frame(gripper_cmd, states):
+def clamp_frame(gripper_cmd, states, lo=None, hi=None):
     """順方向で**実際に物を挟み終えた**フレームを、指の開き幅から決める。
 
     **「閉じる指令が出たフレーム」は掴む前である。** デモは指令を出したあとも
@@ -104,10 +109,43 @@ def clamp_frame(gripper_cmd, states):
     """
     w = gripper_width(states)
     g = np.asarray(gripper_cmd)
-    t_close = int(np.argmax(g > 0))
-    t_open = len(g) - 1 - int(np.argmax(g[::-1] > 0))     # 最後に閉じている frame
-    w_hold = float(np.median(w[t_close:t_open + 1]))
-    return t_close + int(np.argmax(w[t_close:t_open + 1] <= w_hold + 0.003))
+    if lo is None:
+        lo = int(np.argmax(g > 0))
+    if hi is None:
+        hi = len(g) - 1 - int(np.argmax(g[::-1] > 0))     # 最後に閉じている frame
+    w_hold = float(np.median(w[lo:hi + 1]))
+    return lo + int(np.argmax(w[lo:hi + 1] <= w_hold + 0.003))
+
+
+def grasp_cycles(gripper_cmd, states, obj_pos, min_frames=4, min_move=0.02):
+    """順方向デモを「掴んで放す」単位に切り分け、各回で**動いた物**を割り当てる。
+
+    **物の名前は書かない。**閉じている区間で最も動いた物をその回の相手とする。
+    測って決めるので、隠しタスクにも同じ規則が効く。
+
+    捨てるものが 2 つある。**指が一瞬しか閉じない区間**（`min_frames`）と、
+    **何も動かしていない区間**（`min_move`）である。どちらも掴み損ねで、
+    そこから掴む姿勢を測ると値が壊れる（[reference/30 の 5 節]）。
+
+    実測: two mugs の順方向デモ 20 本のうち 19 本が**ちょうど 2 回**、
+    1 本が 3 回（掴み直し）だった。
+    """
+    g = np.asarray(gripper_cmd) > 0
+    edge = np.diff(np.concatenate([[False], g, [False]]).astype(int))
+    out = []
+    for c, o in zip(np.where(edge == 1)[0], np.where(edge == -1)[0] - 1):
+        if o - c < min_frames:
+            continue
+        moved = {n: float(np.linalg.norm(p[o] - p[c])) for n, p in obj_pos.items()}
+        name, dist = max(moved.items(), key=lambda kv: kv[1])
+        if dist < min_move:
+            continue
+        out.append({"close": int(c), "open": int(o), "obj": name,
+                    "clamp": clamp_frame(gripper_cmd, states, int(c), int(o)),
+                    "moved_mm": round(dist * 1000, 1)})
+    if not out:
+        raise SystemExit("順方向デモに「掴んで物を動かした区間」が 1 つも無い")
+    return out
 
 
 def gripper_width(states):
@@ -287,15 +325,6 @@ def region_box(env, region):
             np.asarray(env.env.object_sites_dict[region].size).copy())
 
 
-def grasp_source_frame(kind, actions, states, close_i):
-    """掴む姿勢の相対オフセットを、順方向のどのフレームから測るかを決める。"""
-    if kind == "clamped":
-        return clamp_frame(actions[:, 6], states)
-    if kind == "grasp":
-        return int(np.argmax(actions[:, 6] > 0))
-    return len(actions) - 1 - close_i          # release: 放す直前
-
-
 def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ep-npz", required=True)
@@ -421,42 +450,58 @@ def print_release_trace(r, n):
     見るのは 3 列。`grip` が負に変わったコマが放した瞬間で、そこで
     `touch` が空なら**触れずに放している**、`tilt` が大きいなら**傾けたまま
     放している**。`z` の落ち方はその結果でしかない。
+
+    掴んで置くのが複数回ある回（two mugs）は、**サイクルごとに**出す。
     """
-    a6 = r["actions"][:, 6]
-    held = np.where(a6 > 0)[0]
-    t0 = max(int(held[-1]) - 2 if len(held) else 0, 0)
-    for t in range(t0, min(t0 + n, len(r["obj_z"]))):
-        print(f"      t={t:3d} grip={a6[t]:+.0f} z={r['obj_z'][t] * 1000:7.1f} mm "
-              f"tilt={r['obj_tilt_deg'][t]:5.1f}° touch={r['obj_touch'][t]}",
-              flush=True)
+    for k, name in enumerate(r.get("release_objs", [])):
+        tr, a6 = r["trace"][name], r["actions"][:, 6]
+        t0 = max(int(r["release_frames"][k]) - 3, 0)
+        print(f"    [{k + 1}/{len(r['release_objs'])}] {name}", flush=True)
+        for t in range(t0, min(t0 + n, len(tr["z"]))):
+            print(f"      t={t:3d} grip={a6[t]:+.0f} z={tr['z'][t] * 1000:7.1f} mm "
+                  f"tilt={tr['tilt'][t]:5.1f}° touch={tr['touch'][t]}", flush=True)
 
 
-def measure(rev_env, obj, rev_region, r, rev_goal, book_rev_start,
-            obj_pos_start=None):
+def measure(rev_env, rev_goals, r, rev_goal, starts, obj_pos_start=None):
     """1 本の逆向き再生から、**その再生を回した env だけで測れる**値を出す。
 
     順方向 env の値（本の出発点など）と混ぜないこと。`--init-source t3` では
     逆向きを別の env で回すので、順方向側の座標と引き算しても意味が無い。
+
+    **物は 1 つとは限らない**（two mugs）。物ごとに測ったうえで、代表値は
+    **いちばん領域中心から遠い物**のものを出す。1 つのときは同じ値になる。
     """
-    book_end, _ = body_pose(rev_env, obj)
-    region_pos, region_half = region_box(rev_env, rev_region)
+    per = {}
+    for _, name, region in rev_goals:
+        end, _ = body_pose(rev_env, name)
+        region_pos, region_half = region_box(rev_env, region)
+        per[name] = {
+            "moved_mm": round(float(np.linalg.norm(
+                end - starts[name])) * 1000, 1),
+            "z": round(float(end[2]), 3),
+            # `On(物, 領域site)` は TargetZone.under() で判定される。
+            # 「領域の箱の中に居るか」を xy に分けて出す（落ちた理由を読むため）。
+            "region_dxy_mm": [round(float(v) * 1000, 1)
+                              for v in (end - region_pos)[:2]],
+            "region_half_mm": [round(float(v) * 1000, 1) for v in region_half[:2]],
+        }
+    worst = max(per, key=lambda n: float(np.hypot(*per[n]["region_dxy_mm"])))
     row = {
-        # 本が「逆向きの出発点」からどれだけ動いたか（掴んで運べたかの目安）
-        "book_moved_mm": round(float(np.linalg.norm(
-            book_end - book_rev_start)) * 1000, 1),
-        "book_z": round(float(book_end[2]), 3),
+        # 物が「逆向きの出発点」からどれだけ動いたか（掴んで運べたかの目安）
+        "book_moved_mm": per[worst]["moved_mm"],
+        "book_z": per[worst]["z"],
         "reverse_goal": rev_goal,
-        # `On(物, 領域site)` は TargetZone.under() で判定される。
-        # 「領域の箱の中に居るか」を xy に分けて出す（落ちた理由を読むため）。
-        "region_dxy_mm": [round(float(v) * 1000, 1)
-                          for v in (book_end - region_pos)[:2]],
-        "region_half_mm": [round(float(v) * 1000, 1) for v in region_half[:2]],
+        "region_dxy_mm": per[worst]["region_dxy_mm"],
+        "region_half_mm": per[worst]["region_half_mm"],
         "n_steps": int(r["n_steps"]),
     }
+    if len(per) > 1:
+        row["per_object"] = per
     if obj_pos_start is not None:
         now = all_object_pos(rev_env)
+        handled = {name for _, name, _ in rev_goals}
         moved = {n: round(float(np.linalg.norm(now[n] - p)) * 1000, 1)
-                 for n, p in obj_pos_start.items() if n != obj}
+                 for n, p in obj_pos_start.items() if n not in handled}
         # **1 mm 未満は数えない。**シムの整定でこの程度は常に動く。
         row["disturb_mm"] = {n: v for n, v in moved.items() if v >= 1.0}
         row["disturb_max_mm"] = max(moved.values(), default=0.0)
@@ -464,11 +509,21 @@ def measure(rev_env, obj, rev_region, r, rev_goal, book_rev_start,
         row.update(n_extra=int(r["n_extra"]), n_approach=int(r["n_approach"]),
                    n_standoff=int(r["n_standoff"]), n_reach=int(r["n_reach"]),
                    n_lift=int(r["n_lift"]), n_floor=int(r["n_floor"]),
-                   n_settle=int(r["n_settle"]), drop_mm=r.get("drop_mm"),
-                   approach_err_mm=r["approach_err_mm"])
+                   n_settle=int(r["n_settle"]), n_cycles=int(r["n_cycles"]),
+                   drop_mm=r.get("drop_mm"),
+                   approach_err_mm=r["approach_err_mm"],
+                   approach_err_mm_all=r.get("approach_err_mm_all"))
     else:
         row["err_median_mm"] = round(float(np.median(r["err_m"])) * 1000, 1)
     return row
+
+
+def pose_now(env, obs, name, use_obs):
+    """逆向き env のいまの物の姿勢（robosuite 規約 (x,y,z,w)）。"""
+    if use_obs:
+        return (np.asarray(obs[f"{name}_pos"]).copy(),
+                np.asarray(obs[f"{name}_quat"]).copy())
+    return body_pose(env, name)
 
 
 def main():
@@ -488,10 +543,15 @@ def main():
             raise SystemExit("--write-npz は --mode phased のときだけ使える")
         npz_dir.mkdir(parents=True, exist_ok=True)
 
-    fwd_pred, obj, fwd_region = goal_of(args.forward_bddl)
-    rev_pred, rev_obj, rev_region = goal_of(args.t3_bddl)
-    print(f"順方向 goal: {fwd_pred} {obj} -> {fwd_region}", flush=True)
-    print(f"逆向き goal: {rev_pred} {rev_obj} -> {rev_region}", flush=True)
+    fwd_goals, rev_goals = goals_of(args.forward_bddl), goals_of(args.t3_bddl)
+    fwd_pred, obj, fwd_region = fwd_goals[0]
+    rev_pred, rev_obj, rev_region = rev_goals[0]
+    # **動かす物は 1 つとは限らない**（two mugs は 2 つ）。順再生では全部を追う。
+    watch = [o for _, o, _ in rev_goals]
+    for pred, o, reg in fwd_goals:
+        print(f"順方向 goal: {pred} {o} -> {reg}", flush=True)
+    for pred, o, reg in rev_goals:
+        print(f"逆向き goal: {pred} {o} -> {reg}", flush=True)
 
     env, env_t3, use_t3 = build_envs(args, render, rev_region)
     # 順方向 goal の領域 site（＝本を置いた棚）を、env をまたぐ姿勢の基準にする。
@@ -530,7 +590,7 @@ def main():
         book_start = np.asarray(reset_to(env, inits[idx])[f"{obj}_pos"]).copy()
         fwd = rollout(env, inits[idx], actions,
                       vid_dir / f"{args.mode}_ep{ep}_forward.mp4" if render else None,
-                      states, track_obj=obj)
+                      states, track_obj=watch)
         fwd_ok = bool(env.check_success())
         fwd_final = env.env.sim.get_state().flatten()
         book_fwd_end, book_quat_fwd_end = body_pose(env, obj)
@@ -547,17 +607,35 @@ def main():
 
         ref = reverse_reference_path(states)
         grip_rev = actions[::-1, 6].copy()
-        closes = np.where(grip_rev > 0)[0]
-        close_i = int(closes[0]) if len(closes) else 0
-        j = min(max(grasp_source_frame(args.grasp_frame, actions, states, close_i),
-                    0), len(fwd["eef_pos"]) - 1)
-        # 放す位置は「順方向が実際に挟み終えたコマ」の反転。**開き指令の時刻では
-        # ない**——それは挟む 8〜17 コマ前なので、反転すると空中で放す。
-        release_i = (len(ref) - 1 - clamp_frame(actions[:, 6], states)
-                     if args.release == "contact" else None)
-        # **置いた先で鉛直を向くべき軸は、順方向の初期姿勢から測る。**逆向きは
-        # そこへ戻す動きなので、いま物が置かれている向き（T3 init）ではない。
-        place_axis = standing_axis(fwd["obj_quat"][0])
+        # **順方向デモを「掴んで放す」単位に切り分ける。**単体タスクは 1 つ、
+        # two mugs は 2 つになる。どの物を相手にした回かは**動いた量で決める。**
+        fwd_cycles = grasp_cycles(actions[:, 6], states,
+                                  {n: fwd["obj"][n]["pos"] for n in watch})
+        for c in fwd_cycles:
+            print(f"  掴んで放す f{c['close']}→f{c['open']}"
+                  f"（挟んだのは f{c['clamp']}）: {c['obj']} が "
+                  f"{c['moved_mm']:.0f} mm 動いた", flush=True)
+        T = len(actions)
+        # 逆向きは**順方向の最後のサイクルから**辿る。
+        rev_cycles = []
+        for c in reversed(fwd_cycles):
+            # 掴む姿勢を測るコマ。clamped=実際に挟んだ / grasp=閉じ指令 /
+            # release=放す直前。**1 サイクルのときは従来と同じ値になる。**
+            j = {"clamped": c["clamp"], "grasp": c["close"],
+                 "release": c["open"]}[args.grasp_frame]
+            rev_cycles.append({
+                "obj": c["obj"], "j": min(max(j, 0), len(fwd["eef_pos"]) - 1),
+                # 復路の入口は「順方向が放したコマ」の反転
+                "start_i": T - 1 - c["open"],
+                # 放す位置は「順方向が実際に挟み終えたコマ」の反転。**開き指令の
+                # 時刻ではない**——それは挟む 8〜17 コマ前なので、反転すると空中
+                # で放す。
+                "release_i": (T - 1 - c["clamp"]
+                              if args.release == "contact" else None),
+                # **置いた先で鉛直を向くべき軸は、順方向の初期姿勢から測る。**
+                # 逆向きはそこへ戻す動きなので、いま置かれている向きではない。
+                "place_axis": standing_axis(fwd["obj"][c["obj"]]["quat"][0]),
+                "level": args.level_before_release})
 
         # 2) 逆向きを回す env と初期状態を決める（軌道の作り方とは独立の軸）。
         #    **順再生（1)）は init に依らないので、外側でちょうど 1 回だけ回す。**
@@ -571,43 +649,49 @@ def main():
                         rev_env, rev_init, obj,
                         rebase_qpos(book_fwd_qpos, fwd_frame, t3_frame))
                 obs_rev = reset_to(rev_env, rev_init)
-                book_rev_start = np.asarray(obs_rev[f"{obj}_pos"]).copy()
-                book_rev_quat = np.asarray(obs_rev[f"{obj}_quat"]).copy()
             else:
-                rev_init = fwd_final
-                book_rev_start, book_rev_quat = book_fwd_end, book_quat_fwd_end
+                rev_init, obs_rev = fwd_final, None
             # **この時点の env は逆向きの初期状態そのもの。**ここで全部の物の
             # 位置を控えておき、終わりと引き算して「押して動かした量」を出す。
             obj_pos_start = all_object_pos(rev_env)
+            starts = {n: pose_now(rev_env, obs_rev, n, use_t3)[0] for n in watch}
+            book_rev_start, book_rev_quat = pose_now(
+                rev_env, obs_rev, rev_cycles[0]["obj"], use_t3)
             upright = object_is_upright(book_rev_quat)
             yaw = object_yaw_deg(book_rev_quat)
 
-            # 掴む姿勢は**本の座標系で測った相対姿勢を、今の本の姿勢に掛け直して**
-            # 作る。本がどの向きに置かれていても狙える。shift に依らないので 1 度だけ。
+            # 掴む姿勢は**物の座標系で測った相対姿勢を、今の物の姿勢に掛け直して**
+            # 作る。どの向きに置かれていても狙える。shift に依らないので 1 度だけ。
+            # **サイクルごとに引き直す。**two mugs は物が違えば掴む所も違う。
             from robosuite.utils import transform_utils as T
 
             start_eef = (np.asarray(obs_rev["robot0_eef_pos"]) if use_t3
                          else np.asarray(fwd["eef_pos"][-1]))
             start_quat = (np.asarray(obs_rev["robot0_eef_quat"]) if use_t3
                           else T.axisangle2quat(fwd["eef_aa"][-1]))
-            if args.grasp_style == "top-down":
-                grasp_pose = top_down_grasp(
-                    book_rev_start, book_rev_quat,
-                    standing_axis(fwd["obj_quat"][0]), grasp_backoff(fwd, j),
-                    ref_quat=start_quat)
-            else:
-                grasp_pose = grasp_pose_from_forward(
-                    fwd, j, book_rev_start, book_rev_quat,
-                    symmetry=args.object_symmetry)
-            # 手首を何度回す必要があるか／物が順方向のときから何度回っているか
-            d_wrist = rot_angle_deg(T.axisangle2quat(grasp_pose[3:6]), start_quat)
-            d_obj = rot_angle_deg(book_rev_quat, fwd["obj_quat"][j])
-            print(f"  init #{t3_i} 物 {np.round(book_rev_start, 3)} / "
-                  f"腕 {np.round(start_eef, 3)} → 掴む先 "
-                  f"{np.round(grasp_pose[:3], 3)}（"
-                  f"{np.linalg.norm(grasp_pose[:3] - start_eef) * 1000:.0f} mm 先・"
-                  f"手首 {d_wrist:.0f}° 回す／物は順方向 f{j} から {d_obj:.0f}° "
-                  f"回っている）", flush=True)
+            cycles = []
+            for cy in rev_cycles:
+                name, j = cy["obj"], cy["j"]
+                pos_now, quat_now = pose_now(rev_env, obs_rev, name, use_t3)
+                fv = fwd_view(fwd, name)
+                if args.grasp_style == "top-down":
+                    grasp_pose = top_down_grasp(
+                        pos_now, quat_now, cy["place_axis"],
+                        grasp_backoff(fv, j), ref_quat=start_quat)
+                else:
+                    grasp_pose = grasp_pose_from_forward(
+                        fv, j, pos_now, quat_now, symmetry=args.object_symmetry)
+                cycles.append({**cy, "grasp_pose": grasp_pose})
+                # 手首を何度回す必要があるか／物が順方向のときから何度回っているか
+                d_wrist = rot_angle_deg(T.axisangle2quat(grasp_pose[3:6]),
+                                        start_quat)
+                d_obj = rot_angle_deg(quat_now, fv["obj_quat"][j])
+                print(f"  init #{t3_i} {name} {np.round(pos_now, 3)} / "
+                      f"腕 {np.round(start_eef, 3)} → 掴む先 "
+                      f"{np.round(grasp_pose[:3], 3)}（"
+                      f"{np.linalg.norm(grasp_pose[:3] - start_eef) * 1000:.0f} mm 先"
+                      f"・手首 {d_wrist:.0f}° 回す／物は順方向 f{j} から "
+                      f"{d_obj:.0f}° 回っている）", flush=True)
 
             for k in shifts:
                 tag = f"ep{ep}" + (f"_i{t3_i}" if use_t3 else "")
@@ -616,14 +700,10 @@ def main():
                 grip = shift_gripper(grip_rev, k)
                 if args.mode == "phased":
                     r = rollout_phased(rev_env, rev_init, ref, grip, vid,
-                                       grasp_pose=grasp_pose,
+                                       cycles=cycles,
                                        standoff=args.standoff,
                                        max_approach=args.max_approach,
-                                       lift=args.lift, obj=obj,
-                                       release_i=release_i,
-                                       settle=args.settle,
-                                       place_axis=place_axis,
-                                       level=args.level_before_release,
+                                       lift=args.lift, settle=args.settle,
                                        capture=bool(args.write_npz))
                 else:
                     r = rollout_tracking(rev_env, rev_init, ref, grip, vid)
@@ -639,8 +719,8 @@ def main():
                        "book_init_yaw_deg": round(yaw, 1),
                        "book_init_xy": [round(float(v), 4)
                                         for v in book_rev_start[:2]],
-                       **measure(rev_env, obj, rev_region, r, rev_goal,
-                                 book_rev_start, obj_pos_start)}
+                       **measure(rev_env, rev_goals, r, rev_goal,
+                                 starts, obj_pos_start)}
                 if not use_t3:
                     # 順方向と同じ env で回したときだけ、順方向側の座標と比べられる
                     book_end, _ = body_pose(rev_env, obj)
