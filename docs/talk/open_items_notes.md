@@ -1,8 +1,9 @@
 # まだ手つかずのもの — 根拠と経緯
 
-このファイルは [open_items.md](open_items.md)（板）の**根拠置き場**である。
-板は「いま何をするか」だけを持ち、**測定値・理由・閉じた項目の詳細はここに置く**。
-板の各項目からは項目番号（`17` など）でここへ来る。**番号は板と共通の結合キー**なので振り直さない。
+このファイルは [open_items.md](open_items.md)の**根拠置き場**である。
+`open_items.md` は「いま何をするか」だけを持ち、**測定値・理由・閉じた項目の詳細はここに置く**。
+`open_items.md` の各項目からは項目番号（本選 1 は `F79`、予選は `17` など）でここへ来る。
+**番号は `open_items.md` と共通の結合キー**なので振り直さない。
 
 - 生の数字と再現手順は [strategy/05_実測結果.md](../strategy/05_実測結果.md) と
   [reference/](../reference/) が一次情報。ここは「読み・理由・判断基準」を持つ。
@@ -10,7 +11,112 @@
 
 ---
 
-## 経緯 — 板から移した履歴と費用の根拠
+## 本選 1 の項目（`F` 番号）
+
+**2026-09-05 に `open_items.md` の表から移した。**
+表は「何をしようとしているか」だけを持ち、根拠・経過・数字はここか、
+下の表の行き先にある。
+
+| 移すもの | 行き先 |
+|---|---|
+| 測った値・採否の理由・重みの素性 | [reference/19](../reference/19_weights_catalog.md)（実験台帳） |
+| 分かったこと・踏んだ穴・外した読み | [knowledge/](../knowledge/) |
+| 2 回以上打つ手順 | [howto/](../howto/) |
+| 数え上げた事実 | [reference/](../reference/) |
+| 追う／追わないの結論 | [open_items.md](open_items.md) の「決めた — 蒸し返さない」 |
+| **どこにも家が無いもの（下の 3 件）** | **ここ** |
+
+### 段取り —— 誰が・何を使う・前提・打つもの
+
+**[open_items.md](open_items.md) の表からここへ移した（2026-09-05）。**あちらの表は
+**「やること・何が決まるか・状態」だけ**を持つ。**着手するときにここを見る。**
+
+| # | 誰が | 何を使う・所要 | 前提 | 打つもの |
+|---|---|---|---|---|
+| **F48** | 私（設定）＋あなた（組んで出す） | **学習は済んだ。**残りは zip 1 本＝**Mac で 40 分**（この機械は空きが 11 GB しかなく、要る 19 GB に足りない） | **満たした**（HF `siruku6/pi05_all111` に 4 個） | [../howto/02_build_submission.md](../howto/02_build_submission.md)「zip を 1 本組んで出す」。**渡す 3 つ**——**①Mac で組む ②版は `13.0.0`（6 文字なので道 A）③`vlm/` は無いので足す。****重みは `siruku6/pi05_all111` の `002000`**（**濃さを 5.0.1 と揃えた点**。歩数を揃えた `001500` は次の日の枠に取っておく）。**3 トラックとも出す**（1007・1008・1009） |
+| **F27** | 別セッション | RTX6000 1 日 | 無し。**Blackwell を使わないので `F48` と並行できる** | [inter_sessions/006](inter_sessions/006_track3_reverse_direction.md) |
+| **F75** | あなた | RTX6000・1〜2 時間（parquet の読み出しだけなので Blackwell と並行できる） | `~/dataset/lerobot/` に `libero_combined_20hz` があること | [inter_sessions/014](inter_sessions/014_verify_raw_states_for_time_reversal.md) |
+| **F79** | 私 | GPU 不要・半日 | ユーザの判断 | HF の原典カードとファイル一覧を見る／手元で 1 回起動する |
+| **F72** | 私（実装）＋あなた（評価） | RTX6000・実装 2 時間 ＋ 評価 1 回 | 無し | [../howto/03_gpu_eval.md](../howto/03_gpu_eval.md)「RTX6000 で Track3 を測る」 |
+| **F77** | 私（提出はユーザ） | 提出枠 1 つ・GPU 不要 | ユーザの判断 | `policy_server.py` の `_MIN_LEXICAL` を 0.50 にして zip を組み直す（[../howto/02_build_submission.md](../howto/02_build_submission.md)） |
+| **F80** | 私（提出はユーザ） | 提出枠 1 つ・半日 ＋ 採点待ち。**壁時計は K 倍**（余裕 32 倍の内側） | 学習は要らない。推論側だけ | `policy_server.py` に medoid 選択を足す |
+| **F51** | 私 | 10 分・費用ゼロ | 無し | `policy_server.py:824` の既定を確認して zip に固定する |
+| **F3** | あなた | RTX6000・5 分 | `git pull`（採点器の差し替え） | `MUJOCO_GL=egl TRACK_EPISODES=1 LABEL=g100_s0 PARC_GAIN_TRANSLATION=1.0 PARC_SEED=0 bash solution/tools/eval/run_final_eval.sh track2`（注意は [../howto/03_gpu_eval.md](../howto/03_gpu_eval.md)「会社の RTX6000 では EGL が効く」） |
+| **F8** | あなた | JAIST か RTX6000・10 分 | 学習の完走（済） | `WEIGHTS=.../024000/pretrained_model` で `run_final_eval.sh track2` |
+| **F12** | 私が zip・あなたが提出 | 提出枠 1 つ・私 5 分 | **学習は完走した**（8/27 23:21・終了コード 0）。あとは chown | `sudo chown -R ubuntu:ubuntu work/train/stage4_b16_24k` |
+| **F31** | あなた | RTX6000 30 分（約 100 ロールアウト） | **`F30` の結果**（2 cm 以上で 12 件が埋まるなら急がない） | `make_robot_initstate_ladder.py` に cm で層を作る口を足す |
+| **F71** | 私（1 行を渡す）＋あなた（起動） | Blackwell・学習 4 時間 46 分・実装ゼロ | 引数は実装済み。**`F48` とは同時に回せない**（batch 64 で 49.4 GB） | [260902_two_week_plan.md](260902_two_week_plan.md) 15 節の④ |
+| **F73** | 私 | GPU 不要・30 分 | 無し | `solution/tools/analysis/parse_grading_log.py` の出力 2 本を [../reference/26_score_formula_fit.md](../reference/26_score_formula_fit.md) の当てはめに足す |
+| **F60** | 私（設計）＋学習 1 本 | 設計が未定 | 無し | **まだ無い**（何を変えるかが決まっていない） |
+| **F5** | あなた＋私 | RTX6000・20 分 | `git pull`（採点器の差し替え） | `RECORD=1 ... run_final_eval.sh track2` |
+| **F6** | 私 | GPU 不要・1 時間 | **`F5` の動画** | **まだ無い** |
+| **F7** | 私 | GPU 不要・20 分 | 無し | `T2_TASKS.csv` の `category` 列と、学習データ 14,347 本の中身を突き合わせる |
+| **F81** | ユーザまたは私 | 20 分・道具は要らない | 無し | <https://libero-eda.vercel.app/> を開く |
+| **F56** | あなた（`~/dataset` は配布環境にしかない） | 配布環境 → RTX6000・10 分 | `~/dataset/Sylvest`・`v2.1`・`v2.0` が読めること | `mkdir -p ~/meta_only && tar -xf <アーカイブ> --wildcards '*/meta/*' -C ~/meta_only` |
+| **F32** | あなた（判断）＋私（表の更新） | 判断 10 分 | **済**（`F30` で母集団が出た） | [../plan/12_tier2_recording_spec.md](../plan/12_tier2_recording_spec.md) 4.4 節の候補から選ぶ |
+| **F33** | 私 | `parc2026_verify`・30 分 | 無し | `git log -p -- solution/tools/scripted_demo/scripted_demo.py` を 8/26 以降で見る |
+| **F39** | 私 | 手元の H100-20C・3 時間 | 無し | `--geometry-fuse` を外して同じ 12,000 歩 |
+| **F41** | 私 | 手元の H100-20C・実装 2 時間 ＋ 学習 3 時間 | 無し | [../plan/16_finals_initiative_priority.md](../plan/16_finals_initiative_priority.md) 7.5.4 節 |
+| **F40** | 私 | 手元の H100-20C・実装 2 時間 ＋ 学習 3 時間 | **`F41`**（先に精度を直す） | [../plan/16_finals_initiative_priority.md](../plan/16_finals_initiative_priority.md) 7.5.5 節 |
+
+### 出典について —— `plan/22_slack_talks_expectation.md` は存在しない
+
+**`F77`・`F79`・`F80`・`F81` は 9/4 に `plan/22_slack_talks_expectation.md` の
+節番号で出典を書いていたが、そのファイルは 1 度も作られていない**
+（`git log --all -- 'docs/plan/22*'` が空）。**元になったのは 9/4 の他チームの発表と
+[../materials/slack_talks/](../materials/slack_talks/) である。**
+だから 3 件の中身をここへ写し、`open_items.md` からのリンクもここへ向け直した。
+
+### F79. 基盤モデルを MolmoAct2-LIBERO に差し替える下調べ
+
+**別チームの報告**——基盤を SmolVLA → MolmoAct2-LIBERO に替えただけで、
+**追加学習をする前の時点で 50.0% → 91.7%** になったという。
+
+**差し替えるかは決めていない。**先に 4 つだけ確かめる。
+
+| # | 確かめること | なぜそれで決まるか |
+|---|---|---|
+| 1 | 重みの大きさ | いまの zip が 9.4 GB で、提出の上限は 20 GB |
+| 2 | 起動が 1200 秒以内か | 採点側の制限 |
+| 3 | ライセンスの原典 | π0.5 は Gemma 規約で、表示義務が 4 つある |
+| 4 | LeRobot で読めるか | 読めないなら学習の道具を作り直すことになる |
+
+**打つもの**——Hugging Face の原典カードとファイル一覧を見る／手元で 1 回起動する。
+
+### F80. K 本サンプルして medoid を選ぶ
+
+**同じ観測から K 本引いて、互いにいちばん近い 1 本（medoid）を返す。**
+実装の説明は [reference/07](../reference/07_chunk_params.md) 、
+`PARC_SAMPLES` の意味は [reference/19](../reference/19_weights_catalog.md) にある。
+
+**確かめたいのはこの 2 倍差である。**
+
+| 版 | n | samples | 歩数 | 点 |
+|---|---|---|---|---|
+| `3.3.0` | 1 | — | 1,992 | **0.080** |
+| `3.4.0` | 2 | 3 | 1,994 | **0.168** |
+
+**歩数がほぼ同じで点が 2 倍違う。**サンプル数で説明が付くなら、K を増やす価値がある。
+
+**別チームの報告**——同じ観測から 16 回推論すると、失敗する場面では
+**約半数から 16/16 が、対象物から離れる向き**を出していた。
+
+**壁時計は K 倍になるが、余裕は 32 倍あるので内側に収まる。**
+
+### F81. `vis_libero_plus` で、汚れたデモが実在するかを目で見る
+
+<https://libero-eda.vercel.app/> で LIBERO-Plus の学習軌道 14,347 本の
+手先の軌道と動画が見られる。**20 分で見終わる。**
+
+**決めたいのは「学習データのリプレイ清掃に 1〜2 日払うか」である。**
+別チームは 2 人とも「目当て以外の物が少しでも動いた回は悪いデータ」として
+リプレイで落としている。**こちらの 1 mm の門（`threshold_m` 0.001）と同じ話である。**
+
+---
+
+# ここから下は予選（数字の番号）
+
+## 経緯 — `open_items.md` から移した履歴と費用の根拠
 
 ### 残り 3 日で回る本数 — **GPU は 1 台で、学習と評価が同じ枠を取り合う**
 
@@ -194,7 +300,7 @@ LABEL=lora15k bash solution/tools/eval/run_docker_eval.sh --detach   # 学習後
 **84 件では背景 0.67・照明 0.75 と縮み、しかも 7 つの中で上位である。**
 **「背景テクスチャに的を絞る」という筋は、測った結果に支えられていない。**
 
-**② 弱いカテゴリは、出題に入らない見込みのものだった。**
+**② 弱いカテゴリは、採点に出るタスクに入らない見込みのものだった。**
 最弱の Language Instructions は、**判定の基準（「テクスチャなどの摂動」）に
 当てはまらず**、しかも**論文いわくモデルが指示文をほぼ読んでいない**（項目 8）。
 **ここを直しても本番のスコアには乗らない。**
@@ -829,7 +935,7 @@ python3 solution/tools/analysis/decompose_failures.py outputs/0811_101824_base_n
 
 | カテゴリ | ずれ | 読み |
 |---|---|---|
-| **Language Instructions** | **−0.42** | **最大。ただし出題の基準に当てはまらない**（項目 8） |
+| **Language Instructions** | **−0.42** | **最大。ただし採点の対象になる基準に当てはまらない**（項目 8） |
 | **Robot Initial States** | **−0.24** | **腕の初期姿勢。ここは本物の弱点である** |
 | Sensor Noise | −0.01 | 効いていない |
 | Background Textures | **+0.16** | **タスクの平均より易しい** |
@@ -1088,7 +1194,7 @@ RECORD=1 bash solution/tools/eval/smoke_test_suite.sh   # 5 タスク・20 ス�
 
 **「背景の模様が変わると届かなくなる」は、母集団では成り立っていない。**
 むしろ**この 2 つは強い側**である（17-1）。
-**弱いのは指示文・物の配置・初期姿勢**で、うち指示文は出題の基準に当てはまらない。
+**弱いのは指示文・物の配置・初期姿勢**で、うち指示文は採点の対象になる基準に当てはまらない。
 
 > **なぜ外れたか。** 40 タスク中 4 タスクで測っていた。
 > **タスクの難しさとカテゴリの難しさが混ざる。**
@@ -1147,7 +1253,7 @@ RECORD=1 bash solution/tools/eval/smoke_test_suite.sh   # 5 タスク・20 ス�
 > あれは綴りではなく**意味ごと書き換えたもの**（`lift the red condiment made from
 > crushed garden fruits and position it within the woven container`）で、
 > **40 種類のどれにも寄せられない。** 正規化では届かない。
-> **そして出題の基準にも当てはまらない**（Q&A No.21）。
+> **そして採点の対象になる基準にも当てはまらない**（Q&A No.21）。
 
 ### 34. 苦手タスクを重く学習する口を作る — **私・手つかず**
 
@@ -1334,8 +1440,11 @@ Colab で 1 度通したので控えは不要になり、説明は
 **未提出だとランキング上位でも本選に行けない**（予選ルール PDF p.23）。
 提出は PDF 2 ページ以内で、申告項目が細かい（p.14）。
 
-**書く値は [03_report_values.md](../reference/03_report_values.md) に集めた。**
-版・ハッシュ・LoRA の設定・ライセンスはすべて埋まっている。
+**書く値は 2 か所から引く**——版・重み・ハッシュ・学習の設定は
+[19_weights_catalog.md](../reference/19_weights_catalog.md)、
+ライセンスは [../knowledge/04_licenses.md](../knowledge/04_licenses.md) である
+（**予選期にこれを集めていた `reference/03_report_values.md` は、
+レポート提出後の 8/31 に消した**）。
 
 > **「あと 4 つ GPU マシン側にしか無い」と書いていたが、埋まった（8/11）。**
 > バッチ 8・40 タスク × 5 本 = 200 エピソード・画像拡張 有効・20,000 ステップ。

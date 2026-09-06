@@ -46,12 +46,15 @@
 速くする手は並列だけである（`--episodes` を分けて同時に流す。手順は
 `docs/howto/05_scripted_demos.md` の 3 節）。
 
+**「fixture」はコンロ・棚・引き出しのように、シーンに据え置かれた物である**
+（LIBERO のコードの呼び名。掴んで運ぶ対象の物体とは別で、自由関節を持たない）。
+
 **scripted policy を書くときに必ず先に測ること**（`measure` が出す）。
 
 | 測るもの | なぜ | moka pots で実際に踏んだ穴 |
 |---|---|---|
 | 指の開き 対 物体の幅 | 開かなければ掴めない | 本体は 5cm 角、指は 4.8cm しか開かない。**掴めるのは蓋のつまみだけ** |
-| 当たり判定のある什器の上端 | 運搬中にぶつける | コンロ上面 0.9305 に対し運搬中の鍋の底が 0.922。8mm 潜っていた |
+| 当たり判定のある fixture の上端 | 運搬中にぶつける | コンロ上面 0.9305 に対し運搬中の鍋の底が 0.922。8mm 潜っていた |
 | 1 ステップで進む距離 | ステップ数の見積もり | OSC の追従の限界で **1 ステップ 1.25cm**。行動の上限 5cm には届かない |
 
 Reads:
@@ -109,7 +112,7 @@ class PickPlace:
         掴む物体の観測名（`moka_pot_1` なら観測の `moka_pot_1_pos` を見る）。
     place_site : str
         置く先の基準にする site。**ゴール判定に使われている枠そのものを指す。**
-        什器は初期配置ごとに数 mm ずれるので、**絶対座標で書くと variant で外れる。**
+        fixture は初期配置ごとに数 mm ずれるので、**絶対座標で書くと variant で外れる。**
     place_offset : tuple[float, float]
         `place_site` の中心から見た、置く先の水平方向のずれ。
     grasp_dz : float
@@ -146,7 +149,7 @@ class TurnKnob:
     Attributes
     ----------
     joint : str
-        回る関節の名前。**回転の中心はこの関節から実行時に読む**（什器は
+        回る関節の名前。**回転の中心はこの関節から実行時に読む**（fixture は
         初期配置ごとに数 mm ずれるので、絶対座標では書けない）。
     radius : float
         中心から、掴む位置までの距離。**羽の半径 4cm より内側を掴む。**
@@ -184,7 +187,7 @@ class TaskPlan:
         前から順に実行する。**動きの種類ごとに実行の中身が違う**
         （`_RUNNERS` で引く）。
     carry_z : float
-        運ぶときの手先の高さ。**什器の上端より、物体の背丈のぶん高く取る。**
+        運ぶときの手先の高さ。**fixture の上端より、物体の背丈のぶん高く取る。**
     place_z : float
         離すときの手先の高さ。**置く面のすぐ上。**
     retreat_z : float
@@ -208,7 +211,7 @@ class TaskPlan:
         上げる 1 段に許すステップ数の上限。
     blend_radius : float
         通過点をどれだけ手前で見切るか。**大きいほど滑らかだが、角が内側へ
-        膨らむ。** 什器の際を通る経路では小さくする。
+        膨らむ。** fixture の際を通る経路では小さくする。
     smoothing : float
         指令を前回からなます強さ。**既定の 1.0 はなまさない。**
         向きを保つ指令と角の丸めだけでジャークは 18.3 → 12.3 まで下がり、
@@ -758,7 +761,7 @@ class _Rollout:
         self.phases.append((label, self.record.steps - used, error))
 
     def joint_anchor(self, name: str) -> np.ndarray:
-        """関節の回転の中心。**什器は初期配置ごとに数 mm ずれる**ので実行時に読む。"""
+        """関節の回転の中心。**fixture は初期配置ごとに数 mm ずれる**ので実行時に読む。"""
         sim = self.env.env.sim
         return np.asarray(sim.data.xanchor[sim.model.joint_name2id(name)])
 
@@ -833,7 +836,7 @@ def _run_pick_place(rollout: _Rollout, step: PickPlace, plan: TaskPlan) -> None:
     rollout.hold(f"{name} 掴む", GRIPPER_CLOSE, plan.close_steps)
 
     # 掴んでから置く手前まで。**持ち上げと運びを 1 つの弧にする。**
-    # 直に運び先へ向かうと什器にぶつけるので、まず持ち上げる点を経由する。
+    # 直に運び先へ向かうと fixture にぶつけるので、まず持ち上げる点を経由する。
     #
     # **弧はここで終える。** 置く位置の真上まで斜めに降りると、
     # 先に置いた物体に横から当たって落とす。**最後は真下へまっすぐ降ろす。**
@@ -1066,12 +1069,12 @@ def _report_gripper_span(sim: Any) -> None:
 
 
 def _report_collision_extents(env: Any, sim: Any) -> None:
-    """物体と什器の当たり判定。**運ぶ高さと掴む高さを決める値。**"""
-    print("\n--- 物体・什器の当たり判定 ---")
-    print("  **運ぶ高さは、什器の上端＋物体の背丈より高く取る。**")
+    """物体と fixture の当たり判定。**運ぶ高さと掴む高さを決める値。**"""
+    print("\n--- 物体・fixture の当たり判定 ---")
+    print("  **運ぶ高さは、fixture の上端＋物体の背丈より高く取る。**")
     geoms = _collidable_geoms(sim)
     for name, body_id in env.env.obj_body_id.items():
-        # 什器は子の body に geom がぶら下がるので、**body ではなく名前で拾う。**
+        # fixture は子の body に geom がぶら下がるので、**body ではなく名前で拾う。**
         # body で拾うとコンロの上端が 1 つも出ず、運搬中にぶつける。
         extents = [geom for geom in geoms if geom[0].startswith(name)]
         if not extents:
@@ -1097,7 +1100,7 @@ def _report_goal_sites(env: Any, sim: Any) -> None:
 
 
 def _report_articulation(env: Any, sim: Any) -> None:
-    """関節を持つ什器（コンロの火力つまみ・引き出し）の状態と、点く境目を出す。
+    """関節を持つ fixture（コンロの火力つまみ・引き出し）の状態と、点く境目を出す。
 
     **「点ける」は関節の角度で判定される。** `flat_stove` なら
     `qpos >= 0.5`（`libero/libero/envs/objects/articulated_objects.py` の
@@ -1152,7 +1155,7 @@ def _setup(args: argparse.Namespace, with_images: bool
 def command_measure(args: argparse.Namespace) -> None:
     """scripted policy を書く前に、場面の寸法を測って印字する。
 
-    **推測で scripted policy を書かない。** 指の開き・物体の幅・什器の上端は
+    **推測で scripted policy を書かない。** 指の開き・物体の幅・fixture の上端は
     ここで出た値をそのまま使う。
     """
     plan, variant, env, init_states = _setup(args, with_images=False)

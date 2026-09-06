@@ -25,7 +25,7 @@
 #   QUANT_SWEEP_STEPS 各候補の学習ステップ数（既定 16000。work/quant_sweep/PROGRESS.md
 #                     のステップ数見積りを参照。較正 run の実測値で見直すこと）
 #   QUANT_SWEEP_BATCH batch_size（既定 16。work/train/pi05_full_local.log の実測値）
-#   MAX_SWEEP_HOURS   壁時計の強制終了までの時間（既定 24）
+#   MAX_SWEEP_HOURS   実行時間の上限。超えたら強制終了する（既定 24）
 set -u
 
 REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -361,8 +361,8 @@ progress_note "スイープ開始" "候補: ${CANDIDATES_ALL[*]} / steps=$STEPS 
 while true; do
     left=$(time_left_seconds)
     if (( left <= 0 )); then
-        log "**壁時計の上限（${MAX_SWEEP_HOURS}時間）に到達。強制終了する。**"
-        progress_note "壁時計上限で終了" "この時点の結果は $RESULTS_CSV を参照"
+        log "**かかった時間 の上限（${MAX_SWEEP_HOURS}時間）に到達。強制終了する。**"
+        progress_note "実行時間の上限で終了" "この時点の結果は $RESULTS_CSV を参照"
         break
     fi
 

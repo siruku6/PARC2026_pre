@@ -82,7 +82,7 @@ gated repo のエラーで止まる。
     # 段を分けた学習の 2 段目（全データで馴染ませた重みを、苦手タスクを厚くした
     # データで仕上げる）。**--learning-rate を必ず明示すること** —— 既定のままだと
     # 前の段が 2.5e-6 で終わっている 10 倍から焚き直す。
-    # 詳しくは docs/talk/handoff_pi05_stage2.md
+    # 詳しくは docs/howto/07_train_pi05_local.md の「段2を始めるときの注意 4 つ」
     python train_pi05.py --run-name pi05_weak3x_stage2 \
         --init-from /out/pi05_full_local/checkpoints/024000/pretrained_model \
         --steps 6000 --batch-size 16 --learning-rate 5e-6 --max-demo-steps 300 \
@@ -135,7 +135,6 @@ from huggingface_hub.utils import GatedRepoError, HfHubHTTPError
 # 同じディレクトリに置くこと（Dockerfile が両方を /workspace へ COPY する）。
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from train import (  # noqa: E402
-    _download_metadata,
     _find_resume_checkpoint,
     _load_holdout,
     _resolve_dataset_root,
@@ -146,7 +145,7 @@ from train import (  # noqa: E402
 
 # 量子化候補（C1〜C3）の窓口。**このファイルは import して呼ぶだけで、
 # 何をどう低精度にするかは一切持たない**（experiments/quantization/__init__.py）。
-from experiments import geometry, quantization  # noqa: E402
+from experiments import camera_dropout, geometry, quantization  # noqa: E402
 
 _BASE_MODEL_REPO = "lerobot/pi05_libero_base"
 _BASE_MODEL_REVISION = "a217bfd3b14673cf2ce597e69997ab21866438dd"
@@ -212,11 +211,20 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--max-demo-steps", type=int, default=0)
     parser.add_argument("--holdout-tasks", type=Path, default=None, metavar="CSV")
     parser.add_argument("--dataset-root", type=Path, default=None, metavar="DIR")
+    parser.add_argument("--dataset-repo", type=str, default=_DATASET_REPO,
+                        metavar="REPO_ID",
+                        help="学習データの名前。既定は lerobot/libero_plus。"
+                             "配布の libero_combined_20hz へ乗り換えるときに使う"
+                             "（そのときは --dataset-root も必ず渡すこと）")
+    parser.add_argument("--dataset-revision", type=str, default=None,
+                        metavar="SHA",
+                        help="学習データの版。省くと、既定のデータのときだけ"
+                             "既定の版が付く（別のデータには付けない）")
     parser.add_argument("--init-from", type=Path, default=None, metavar="DIR",
                         help="初期重みに HF の pi05_libero_base ではなく、"
                              "前の学習の checkpoints/<ステップ数>/pretrained_model を使う"
                              "（段を分けた学習の 2 段目。"
-                             "docs/talk/handoff_pi05_stage2.md）")
+                             "docs/howto/07_train_pi05_local.md）")
     parser.add_argument("--save-freq", type=int, default=500)
     parser.add_argument("--num-workers", type=int, default=2)
     parser.add_argument("--learning-rate", type=float, default=2.5e-5,
@@ -236,6 +244,7 @@ def _parse_args() -> argparse.Namespace:
                         choices=("bfloat16", "float32"))
     quantization.add_arguments(parser)
     geometry.add_arguments(parser)
+    camera_dropout.add_arguments(parser)
     parser.add_argument("--camera-viewpoint-augment", action="store_true",
                         help="Tier 1（Camera Viewpoints 対策）の安価な近似。LeRobot の "
                              "image_transforms を有効化し、既定 6 種に加えて crop+zoom "
@@ -322,10 +331,53 @@ def _command_head(args: argparse.Namespace) -> list[str]:
     量子化と幾何の接ぎ木は、どちらも「候補を import してから lerobot-train の
     main() を呼ぶ」ラッパーを使う。同時には選べないので、両方が選ばれていたら
     `geometry.validate` が先に止める（この関数に届く時点で片方以下である）。
+
+    **場面カメラを潰す工夫は、この 2 つとは組み合わせられる。**自分のラッパーを
+    返すのは、他のどちらも選ばれていないときだけである——選ばれているときは
+    **そちらのラッパーが同じパッチを import する**（各ラッパーの docstring）。
+    どのラッパーでも読むのは同じ環境変数なので、伝え方は 1 つで済む。
     """
     if geometry.selected(args):
         return geometry.command_head(args)
-    return quantization.command_head(args)
+    if quantization.selected(args):
+        return quantization.command_head(args)
+    return camera_dropout.command_head(args)
+
+
+def _dataset_revision(args: argparse.Namespace) -> str | None:
+    """学習データの版を決める。**別のデータには既定の版を付けない。**
+
+    `_DATASET_REVISION` は `lerobot/libero_plus` のコミットである。
+    **配布の `libero_combined_20hz` へ向けたままこれを渡すと、
+    「そんな版は無い」で落ちるか、悪くすると別物を取りに行く。**
+
+    Returns
+    -------
+    revision : str | None
+        `--dataset.revision` に渡す値。**None なら引数ごと付けない。**
+    """
+    if args.dataset_revision is not None:
+        return args.dataset_revision
+    if args.dataset_repo == _DATASET_REPO:
+        return _DATASET_REVISION
+    return None
+
+
+def _check_dataset_choice(args: argparse.Namespace) -> None:
+    """データを乗り換えるときに、**置き場所も一緒に替えたか**を確かめる。
+
+    **`--dataset-repo` だけ替えて `--dataset-root` を忘れると、
+    エピソード番号の選び方が Hub から取った `lerobot/libero_plus` の
+    14,347 本のままになる。**足したぶんが 1 本も選ばれないまま学習が始まり、
+    **エラーは出ない**（`train.py` の `_resolve_dataset_root` の注意書きと同じ穴）。
+    """
+    if args.dataset_repo != _DATASET_REPO and args.dataset_root is None:
+        raise SystemExit(
+            f"[train_pi05] --dataset-repo を {args.dataset_repo!r} にするなら、"
+            "--dataset-root も渡すこと。\n"
+            "    渡さないと、番号選びが Hub の lerobot/libero_plus を読み、"
+            "足したエピソードが 1 本も選ばれない（エラーは出ない）。"
+        )
 
 
 def _build_command(
@@ -346,8 +398,9 @@ def _build_command(
         "--policy.device=cuda",
         "--policy.push_to_hub=false",
         f"--policy.optimizer_lr={args.learning_rate}",
-        f"--dataset.repo_id={_DATASET_REPO}",
-        f"--dataset.revision={_DATASET_REVISION}",
+        f"--dataset.repo_id={args.dataset_repo}",
+        *([f"--dataset.revision={_dataset_revision(args)}"]
+          if _dataset_revision(args) is not None else []),
         *([f"--dataset.root={args.dataset_root.expanduser().resolve()}"]
           if args.dataset_root is not None else []),
         f"--dataset.video_backend=torchcodec",
@@ -370,6 +423,7 @@ def _build_command(
         command.append(f"--dataset.episodes=[{','.join(map(str, episode_indices))}]")
     command += quantization.extra_arguments(args)
     command += geometry.extra_arguments(args)
+    command += camera_dropout.extra_arguments(args)
     if args.camera_viewpoint_augment:
         command += [
             "--dataset.image_transforms.enable=true",
@@ -478,6 +532,9 @@ def main() -> None:
     quantization.validate(args)
     geometry.set_environment(args)
     geometry.validate(args)
+    camera_dropout.set_environment(args)
+    camera_dropout.validate(args)
+    _check_dataset_choice(args)
 
     output_dir: Path = (args.output_root / args.run_name).resolve()
 
@@ -537,7 +594,11 @@ def main() -> None:
             episode_indices = None
             print("[train_pi05] 全エピソードを使う")
         elif args.episodes_per_task <= 0 and not selects_by_task:
-            dataset_root = _download_metadata()
+            # **`--dataset-root` を渡されていたらそちらを読む。** ここで
+            # `_download_metadata()` を直に呼ぶと、データを乗り換えていても
+            # `lerobot/libero_plus` のメタデータを読んでしまう
+            # （`--dataset-root` が無いときの中身は今までと同じである）。
+            dataset_root = _resolve_dataset_root(args.dataset_root)
             episode_indices = _select_without_holdout(dataset_root, holdout)
         else:
             dataset_root = _resolve_dataset_root(args.dataset_root)
@@ -558,7 +619,10 @@ def main() -> None:
             f"freeze_vision_encoder={args.freeze_vision_encoder}、"
             f"train_expert_only={args.train_expert_only}、"
             f"dtype={args.dtype}、grad_ckpt={args.gradient_checkpointing}、"
-            f"{quantization.describe(args)}、{geometry.describe(args)}）"
+            f"{quantization.describe(args)}、{geometry.describe(args)}、"
+            f"{camera_dropout.describe(args)}、"
+            f"データ {args.dataset_repo}"
+            f"{'（' + str(args.dataset_root) + '）' if args.dataset_root else ''}）"
         )
         if args.smoke_test:
             print("[train_pi05] **smoke test** — 20 ステップで OOM しないか・"

@@ -1,6 +1,6 @@
 # 01. レポートの必須欄
 
-**出典は予選 PDF のみ。** `docs/PARC2026開発コンペティション_予選.pdf` の **p14**（必須欄）と
+**出典は予選 PDF のみ。** `docs/materials/PARC2026開発コンペティション_予選.pdf` の **p14**（必須欄）と
 **p23**（注意事項）。このリポジトリの `.md` は経由していない。
 
 ```bash
@@ -8,7 +8,7 @@
 .venv/bin/pip install pypdf
 .venv/bin/python3 -c "
 import pypdf
-r = pypdf.PdfReader('docs/PARC2026開発コンペティション_予選.pdf')
+r = pypdf.PdfReader('docs/materials/PARC2026開発コンペティション_予選.pdf')
 for n in (14, 23):
     print(f'--- p{n} ---'); print(r.pages[n-1].extract_text())
 "

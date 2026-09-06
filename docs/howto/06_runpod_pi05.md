@@ -14,6 +14,11 @@
 にある。**1 回目との差分・歩数と費用・立ち上がりの確認 3 点はそちら。
 **このファイルは何度でも使う手順（イメージ・Pod・batch の探り方・間引き・持ち帰り）を持つ。**
 
+> **いますぐ長い学習を回すなら 14 節へ飛ぶ。** 2026-08-29 に決めた 6,000 歩の段取りが、
+> 確認コマンドと期待される出力の対、踏みそうな穴ごとの対処、見張りの時刻表まで
+> 揃った形で置いてある。**0〜13 節は 2026-08-14 の記録なので、数字が食い違うときは
+> 14 節が新しい。**
+
 ## 0. 締切から逆算した時間割(2026-08-14 07:15 に書いた)
 
 **提出は 8/14 23:59。残り約16時間45分。** この節は「確実に結果を出す」ために
@@ -473,6 +478,9 @@ done
 
 ## 10. 本番のフルパラメータ学習を始める
 
+> **この節の `--steps 30000` は公式ドキュメントの値をそのまま写したもので、
+> 実行していない**（13 節で前提が崩れた）。**実際に打つコマンドは 14.3 の 8 番である。**
+
 バッチサイズが決まったら、本番へ進む。**接続が切れてもプロセスが生き残るよう、
 `tmux`の中で実行すること**(道Aのイメージには`tmux`を入れてある。道Bで
 無ければ`apt-get install -y tmux`)。**入り口はWeb Terminalではなく
@@ -539,9 +547,13 @@ nohup /opt/pi05/prune_checkpoints.sh /workspace/out/pi05_full 2 \
 
 ```bash
 tail -f /workspace/out/pi05_full_prune.log     # 「監視開始:」の行が出ていれば動いている
-pgrep -af prune_checkpoints.sh                 # プロセスが居るか
-df -h /workspace                               # 空きが減り続けていないか
+pgrep -af prune_checkpoints.sh                 # プロセスが居るか(1個であること)
+du -sh /workspace/out                          # 使用量が頭打ちになっているか
 ```
+
+**`df -h /workspace`では空きを見られない。** Network Volumeはクラスタ全体の数字
+(数百TB)を返す(3節「使用量は`du`で見る」・[knowledge/13](../knowledge/13_runpod_operations.md)③)。
+**見るのは`du -sh`である。**
 
 **消す物が無い回は何も書かない**ので、「監視開始:」の1行だけでも異常ではない。
 
@@ -566,6 +578,11 @@ LeRobotが張る`checkpoints/last`のリンク切れが起きうる。)
 
 ## 12. 終わったら——チェックポイントを持ち帰る
 
+> **先に読むこと。持ち帰りはHugging Face経由にする。** 13節で測った結果、
+> **`scp`は1.7 MB/sしか出ず、9.4 GBに1時間以上かかる**(HF経由は16分)。
+> **下の`scp`の例は、測る前に書いたものである。**実際に打つのはこの節の後半にある
+> `hf upload`のほうで、**長い学習でそのまま使える形は14.6にある。**
+
 **道A・道Bどちらでもscpで持ち帰れる**(道Aは5節でsshdを起動しているため。
 道Bは公式テンプレートに最初から入っている)。このマシン側で実行する。
 
@@ -578,7 +595,9 @@ scp -P <port> -i ~/.ssh/id_ed25519 -r \
 `<IP>`と`<port>`は、Connectタブに出る**公開IP側**(Full SSH)のもの。
 RunPodのサーバを経由するBasic SSHのホスト名を使うとscpは動かない(5.3)。
 
-**`pretrained_model`だけで8.7GBを転送するので回線次第で時間がかかる**
+**`pretrained_model`だけで9.37 GBを転送するので回線次第で時間がかかる**
+(2026-08-29に`huggingface_hub`の`model_info(..., expand=["usedStorage"])`で
+`siruku6/pi05_full_runpod`を測った値。14.2 (b)のコマンド)
 (`training_state`まで持ち帰る必要は無い。評価に使うのは`pretrained_model`である)。
 途中で切れてやり直したくない
 場合、あるいはscpが通らない場合は、Hugging Face Hubへ上げる方法もある
@@ -592,9 +611,24 @@ huggingface-cli upload <自分のHFユーザー名>/pi05_full_runpod \
 (`huggingface-cli`の代わりに新しい`hf upload`が使える版もある。どちらも
 リポジトリが無ければ自動で作られる。**非公開にしたい場合は`--private`を付ける。**)
 
-いずれの方法でも、**持ち帰りが終わってからポッドをStop(またはTerminate)して
-課金を止めること。** Volume Diskは3節の表のとおりStopでは消えないが、
-**Terminateすると消える**ので、Terminateする前には必ず持ち帰りを終えること。
+**3つ目の引数(`path_in_repo`)の使い分けに罠がある。**
+
+| 送るもの | 3つ目の引数 |
+|---|---|
+| ディレクトリ | `.`でよい。**ただし歩数の違う重みを何本も上げるときは、`.`にすると重なって上書きし合う**ので歩数を入れる(14.3の10番) |
+| **単一ファイル**(ログなど) | **ファイル名が要る。**`.`にすると落ちる(2026-08-28に踏んだ) |
+
+いずれの方法でも、**持ち帰りが終わってからポッドを止めること。**
+**止めるならTerminateである。Stopではない**(2026-08-28に、Stopして
+GPUを取られた)。
+
+| 操作 | 何が起きるか |
+|---|---|
+| **Stop** | GPU代は止まるが、**Volume Diskの保管料は続く。**しかも**GPUを手放すので、次にStartしたときGPU 0枚で起動しうる**(出典: [Manage Pods](https://docs.runpod.io/pods/manage-pods) "Stopping a Pod releases the GPU"・"You may be allocated zero GPUs if capacity has changed." 2026-08-28に読んだ) |
+| **Terminate** | 全部止まる。**Volume Diskの中身は消える**ので、**持ち帰りを終えてから押す** |
+
+**Pod作成時に別途付けたNetwork Volumeは、Terminateでも残る**(3節)。
+Volume Disk(Podに付いてくるディスク)とは別物である。
 
 ## 13. 実際にやったこと —— **「30,000 ステップを最初から」は捨てた(2026-08-14)**
 
@@ -847,7 +881,7 @@ PY
 
 **ただし192,000コマはデータ全体の0.086周にすぎない。** 効く保証は無く、
 **元々持っていた見る力を忘れる目もある。** 判断は本番スコアで行う
-([../talk/260814_today.md](../talk/260814_today.md)の18:10の節)。
+——**手元の 36 件では順位が付かない**（[../knowledge/07_local_eval_cannot_rank.md](../knowledge/07_local_eval_cannot_rank.md)）。
 
 ## 確認できたこと(2026-08-14 に道Aで実際に動かして)
 
@@ -876,3 +910,377 @@ PY
 | 80GBでbatch_size=64が収まるか | **収まる**(`mem_gb` 48.76)。**128は落ちる**(75.77GB) |
 | `hf upload`が8.7GB級で完走するか | **完走する。9.4GBで16分。**分割の設定は要らない |
 | 出来たチェックポイントを`policy_server.py`が読めるか | **読める。**中身の並びが段1と完全に同じ(813個・型も形も一致) |
+
+---
+
+# 14. 6,000 歩の長い学習を、上から順に打って終わらせる（2026-08-29 に決めた）
+
+**この節だけで 1 回の学習が終わる。**出発点は `001500`
+（HF `siruku6/pi05_trial1500` の `001500/`。画像側を開けて 1,500 歩・カメラ拡張つきで
+作った重み。採点側で Track1 0.492・Track2 0.233 を出したもの）。
+**13 節までは 2026-08-14 の 3,000 歩の記録である。数字が食い違うときはこの節が新しい。**
+
+## 14.1 決めた 3 つ
+
+| 決めたこと | 値 | なぜそう決めたか |
+|---|---|---|
+| **歩数** | **6,000** | 1 歩 10.24 秒（8/28 の実測。一次資料は HF `siruku6/pi05_trial1500` の `pi05_trial1500.log`——1,500 歩を 4 時間 16 分 05 秒で回している）で **17 時間 04 分**。**1 回の走りで終わるので途中で Stop を挟まずに済む**（Stop は GPU を手放す操作である。7 節の下と `knowledge/13` ⑦）。データを見た量は `rp3000` ＋ `001500` の 0.13 エポックから **0.30 エポック**（(3,000＋1,500＋6,000)×64 ÷ 2,238,036 コマ）へ 2.3 倍になる |
+| **保存の間隔** | **1,500 歩ごと**（4 個できる） | **上限は GPU 代ではなく Hugging Face の非公開の枠である。**14.2 (b) のコマンドで測った 2026-08-29 の使用量は **84.34 GB／100 GB**、重み 1 個は **9.37 GB**。`parc2026-submission`（37.51 GB・使い捨て）を消しても入るのは **4 個まで**（46.83＋9.37×4＝84.3 GB で、次の提出 zip 1 本ぶん 9.4 GB がちょうど残る）。1,000 歩ごとの 6 個は 93.9 GB になり、**zip を置く場所が無くなる。**加えて採点は 8 エピソードなので 1 本ひっくり返ると 0.125 動く。**1,000 歩差より 1,500 歩差のほうが、本当の差がその 0.125 を超える見込みが高い** |
+| **カメラ拡張** | **`--camera-viewpoint-augment` を残す** | **`001500` はこの拡張つきで作った重みである。**外すと学習の途中で見せる画像の性質が切り替わる。しかも 0.492／0.233 を出した設定から 2 つ（拡張と歩数）が同時に変わり、**上がっても下がっても、どちらのせいか読めなくなる** |
+
+**学習率は `5e-6` を明示する。**省くと頂点が 2.5e-5 に戻り、`001500` が 2.5e-6 で
+終わっているぶんの 10 倍から焚き直すことになる（13 節「学習率の下げ幅が段1と違う」）。
+
+**途中の 3 個（1500・3000・4500）は学習率が下がりきる前の重みである。**
+`--steps 6000` を渡すと減衰は 6,000 歩に引き伸ばされる。ただし下がりきった値
+（`decay_lr`）は 2.5e-6 に据え置かれるので、**始まりの半分までしか動かない。**
+13 節で確かめたとおり、**途中の歩数の重みもそのまま提出に使える。**
+
+## 14.2 始める前に確かめること（違っていたら、そこで止める）
+
+**(a) 送るファイルにカメラ拡張が入っているか**（このマシンで打つ）
+
+```bash
+grep -c "camera.viewpoint.augment" /home/ubuntu/lab/PARC2026_pre/solution/train/train_pi05.py
+```
+
+**期待する出力: `2`。** `0` なら送るファイルが古い。**Pod のイメージ `:v2` に
+焼き込まれているのは 08-13 の版で、この引数は入っていない**（入ったのは 08-24 の
+`6ee31db`）。**このマシンの版を送る前提なので、ここが `0` なら止まる。**
+
+**(b) Hugging Face の非公開の枠がいくら空いているか**（このマシンで打つ）
+
+```bash
+cd /home/ubuntu/lab/PARC2026_pre && python3 - <<'PY'
+from huggingface_hub import HfApi
+api = HfApi()
+total = 0
+for m in api.list_models(author="siruku6"):
+    info = api.model_info(m.id, expand=["usedStorage", "private"])
+    size = info.used_storage or 0
+    if info.private:
+        total += size
+    print(f'{m.id:44s} {"非公開" if info.private else "公開  "} {size/1e9:7.2f} GB')
+print(f"非公開の合計 {total/1e9:.2f} GB ／ 無料枠 100 GB")
+PY
+```
+
+**期待する出力: 「非公開の合計」が 55 GB 以下。**
+**2026-08-29 の実測は 84.34 GB で、このままでは重みが 1 個しか入らない。**
+**その場合は 14.4 の分岐 D（`parc2026-submission` を空にする）を先にやる。**
+上限そのものは https://huggingface.co/settings/storage で読む。
+
+**(c) ログインできているか**（このマシンで打つ）
+
+```bash
+cd /home/ubuntu/lab/PARC2026_pre && hf auth whoami
+```
+
+**期待する出力: `user=siruku6`。**違うなら `hf auth login` をやり直す。
+
+**(d) RunPod の残高**（画面で見る）
+
+Pod を作ったあと、管理画面の **`Estimated time left` が 20 時間以上**あること。
+**17 時間 04 分の学習に対して、残高が先に尽きると止まる**（`knowledge/13` ①）。
+**足りなければ残高を足す。**目安は `時間単価 × 20`。
+**Network Volume を付けてあれば、残高が尽きても止まるだけでデータは残る**（同 ②）。
+
+**(e) このマシンのディスク**——**何も要らない。**重みは Pod から HF へ直接上げるので、
+このマシンには 1 バイトも降りてこない。
+
+## 14.3 順番（上から順に打つ）
+
+### 1. HF の枠を空ける（14.2 (b) が 55 GB を超えていたときだけ）
+
+**その日の提出を出し終えてから消すこと。**まだ出していなければ後回しでよい——
+**最初の重みが出るのは学習開始から 4 時間 16 分後**なので、それまでに消せば間に合う。
+
+```bash
+cd /home/ubuntu/lab/PARC2026_pre && python3 -c \
+  "from huggingface_hub import HfApi; HfApi().delete_repo('siruku6/parc2026-submission')"
+```
+
+**リポジトリごと消すこと。**ファイルだけ消しても git の履歴が枠を食い続ける
+（8/28 に踏んだ）。
+
+### 2. Pod を作る（RunPod の画面で）
+
+**5.2 の手順そのまま。**今回ぶんだけ書き出すと次の 6 つである。
+
+| 欄 | 入れるもの |
+|---|---|
+| Image | **`sirukufarios/parc2026-train-pi05:v2`**（**`:v1` は SSH が入っていない**） |
+| Container Start Command | **`bash /opt/pi05/runpod_ssh_start.sh`**（**空にしない**） |
+| Container Disk | 20 GB |
+| Volume Disk | **150 GB** |
+| Environment Variables | `OUTPUT_ROOT=/workspace/out` と `HF_HOME=/workspace/hf_home` |
+| Expose TCP Ports | **`22`**（**足し忘れると scp もログの持ち出しもできない**） |
+
+GPU は **A100 80GB PCIe または H100 80GB（Secure Cloud）**。
+
+### 3. SSH で入る
+
+```bash
+ssh root@<IP> -p <port> -i ~/.ssh/id_ed25519
+```
+
+`<IP>` と `<port>` は Connect タブの**公開 IP 側**（Full SSH）。
+
+### 4. 学習スクリプトを送る（このマシンで打つ）
+
+```bash
+cd /home/ubuntu/lab/PARC2026_pre/solution/train && \
+tar czf - --exclude='__pycache__' experiments train.py train_pi05.py | \
+ssh -p <port> -i ~/.ssh/id_ed25519 root@<IP> 'tar xzf - -C /opt/pi05 --no-same-owner'
+```
+
+**116 KB・10 秒。**`--no-same-owner` は `/opt/pi05` では要らないが、**付けたまま打てば
+`/workspace` へ送るときも同じ 1 行で済む**（`/workspace` は MFS なので所有者を復元できず、
+付けないと落ちる。`knowledge/13` ⑧）。**`experiments/` を一緒に送ること**——
+`train_pi05.py` は `from experiments import geometry, quantization` を実行する。
+
+### 5. 送れたか確かめる（Pod で打つ）
+
+```bash
+python /opt/pi05/train_pi05.py --help | grep -c camera-viewpoint-augment
+```
+
+**期待する出力: `2`。** `0` なら 14.4 の分岐 A。
+
+### 6. HF にログインする（Pod で打つ）
+
+```bash
+hf auth login
+```
+
+**先にやること。**非公開リポジトリは権限が無いと `not found` に見えるので、
+**飛ばすと「リポジトリが無い」という誤った見立てに引っかかる。**
+`HF_HOME=/workspace/hf_home` は Volume の上なので、**一度で残る。**
+
+### 7. 出発点の重みを取る（Pod で打つ）
+
+```bash
+hf download siruku6/pi05_trial1500 --include '001500/*' --local-dir /workspace/init
+ls /workspace/init/001500/config.json /workspace/init/001500/model.safetensors
+ls /workspace/init/001500/vlm | head -3
+```
+
+**期待する出力: 3 行とも中身が出る。**`--init-from` に渡すディレクトリの直下に
+`config.json` と `model.safetensors` の 2 つが要る（1 階層深い
+`pretrained_model` を渡す間違いが起きやすい）。**`vlm/`（17 MB のトークナイザ）は
+このあと各歩数の重みへコピーするので、ここで一緒に降りていることを見ておく。**
+
+### 8. 学習を始める（Pod で打つ）
+
+```bash
+tmux new -s train
+cd /workspace
+python /opt/pi05/train_pi05.py --run-name pi05_long \
+    --init-from /workspace/init/001500 \
+    --camera-viewpoint-augment \
+    --steps 6000 --batch-size 64 --num-workers 16 \
+    --learning-rate 5e-6 --save-freq 1500 \
+    --freeze-vision-encoder false --train-expert-only false
+```
+
+`tmux` から抜けるのは `Ctrl+b` → `d`。戻るのは `tmux attach -t train`。
+**Web Terminal ではなく SSH で入っていること**（5.3 の表）。
+
+### 9. 古い重みを消す見張りを常駐させる（Pod の別の窓で打つ）
+
+```bash
+nohup /opt/pi05/prune_checkpoints.sh /workspace/out/pi05_long 2 \
+    --interval 60 --log /workspace/out/pi05_long_prune.log >/dev/null 2>&1 &
+```
+
+**チェックポイント 1 個は Volume 上で 25 GB**（重み 9.4 GB ＋ 学習の途中状態）。
+**2 個残す設定なら 30＋25×2＝80 GB で安定し、書いている一瞬だけ 105 GB になる。**
+150 GB に収まる。
+
+### 10. HF へ上げる見張りを常駐させる（Pod の別の窓で打つ）
+
+**1,500 歩ごとに出る重みへ `vlm/` を足し、HF へ上げる。**貼るのはこの 1 かたまりだけ。
+
+```bash
+cat > /workspace/upload_ckpt.sh <<'EOF'
+#!/bin/bash
+# 1,500 歩ごとに出る pretrained_model へ vlm/ を足して HF へ上げる。
+# 書き終わってから上げるために、model.safetensors が 180 秒以上変わっていないものだけを扱う。
+RUN=/workspace/out/pi05_long
+REPO=siruku6/pi05_long
+VLM=/workspace/init/001500/vlm
+while true; do
+  for d in "$RUN"/checkpoints/[0-9]*; do
+    step=$(basename "$d")
+    w="$d/pretrained_model/model.safetensors"
+    [ -f "$w" ] || continue
+    [ -e "/workspace/uploaded_$step" ] && continue
+    [ $(( $(date +%s) - $(stat -c %Y "$w") )) -gt 180 ] || continue
+    [ -d "$d/pretrained_model/vlm" ] || cp -r "$VLM" "$d/pretrained_model/vlm"
+    if hf upload "$REPO" "$d/pretrained_model" "$step" --private; then
+      touch "/workspace/uploaded_$step"
+      echo "$(date '+%F %T') 上げ終わった: $step"
+    else
+      echo "$(date '+%F %T') 失敗: $step（60 秒後にもう一度）"
+    fi
+  done
+  sleep 60
+done
+EOF
+chmod +x /workspace/upload_ckpt.sh
+nohup /workspace/upload_ckpt.sh > /workspace/out/pi05_long_upload.log 2>&1 &
+```
+
+**押さえどころが 4 つある。**
+
+| なぜそう書いてあるか | |
+|---|---|
+| **送り先を歩数ごとに分ける**（`hf upload <repo> <dir> <step>`） | 3 つ目を `.` にすると 4 個が同じ場所へ重なって上書きし合う |
+| **`vlm/` を各歩数へコピーする** | 学習のチェックポイントには付かない。**無いと評価も zip の組み立ても落ちる。**`ln -s` では駄目（HF は中身を送るのでリンクは空になる） |
+| **180 秒静かなものだけ上げる** | 保存の途中の `model.safetensors` を上げないため |
+| **`uploaded_<歩数>` という印を置く** | 上げ直しを避ける。上げ直したいときはその印を消す |
+
+### 11. 走り出しを 3 つ確かめる
+
+**開始 2 分。**
+
+```bash
+grep -a num_learnable_params /workspace/out/pi05_long.log | tail -1
+```
+
+| 出た値 | 意味 |
+|---|---|
+| **4143404816** | **正しい。全部を学習している** |
+| 693422112 | **行動側だけ。2 つの `false` が効いていない。その場で止める**（14.4 の分岐 B） |
+
+**開始 5 分。**20 歩目の `loss`。
+
+```bash
+grep -a "step:" /workspace/out/pi05_long.log | head -1
+```
+
+**期待する値: `loss` が 0.23〜0.25。**`001500` の終わりが 0.2407 なので、そこから
+続いていればこの帯に入る。**1.5 以上なら `--init-from` が効いていない**（14.4 の分岐 F）。
+
+**開始 30 分。**`compile_model` が false であること。
+
+```bash
+python3 -c "import json;print(json.load(open('/workspace/out/pi05_long/checkpoints/001500/pretrained_model/train_config.json'))['policy']['compile_model'])" 2>/dev/null \
+  || grep -a -m1 compile_model /workspace/out/pi05_long.log
+```
+
+**期待する出力: `False`。**`True` だと評価サーバの起動に 1,177.9 秒かかって落ちる。
+**このコマンドは 1,500 歩の保存より前だとファイルが無いので、そのときはログ側が出る。**
+
+## 14.4 踏みそうな穴と、その場ですること
+
+| 起きたこと | その場ですること |
+|---|---|
+| **A. `--help` の `camera-viewpoint-augment` が 0 件** | **古い版で回さない。**14.3 の 4 番をやり直し、`ls -l /opt/pi05/train_pi05.py` の日付が今日になっているか見る。それでも 0 なら `tar` が `/opt/pi05` ではなく別の場所へ展開されている |
+| **B. `num_learnable_params` が 693422112** | `Ctrl+C` で止める。`--freeze-vision-encoder false` と `--train-expert-only false` の**両方**が付いているか、ログの `[train_pi05] コマンド:` の行で読み直して打ち直す。**出力先が既にあると次の実行が始まらないので、`rm -rf /workspace/out/pi05_long` も一緒に打つ** |
+| **C. Pod が同じ 1 行を延々と吐く** | イメージが **`:v1`**。**起動コマンドの欄を直しても直らない**（`runpod_ssh_start.sh` が `v1` に入っていない）。**`:v2` で Pod を作り直す** |
+| **D. `hf upload` が `storage limit reached`** | HF の非公開の枠が尽きた。14.3 の 1 番（`parc2026-submission` をリポジトリごと消す）を打つ。**ファイルだけ消しても枠は戻らない。**見張りは 60 秒後に自分でやり直す |
+| **E. `hf upload` や `hf download` が `not found`** | `hf auth login` をしていない。非公開リポジトリは権限が無いと存在ごと隠される |
+| **F. 20 歩目の `loss` が 1.5 以上** | `--init-from` が効いていない（素の π0.5 から始まっている）。止めて、`/workspace/init/001500/` の直下に `config.json` と `model.safetensors` があるか見る |
+| **G. `tar` が `Cannot change ownership to uid 1000`** | `--no-same-owner` が抜けている。付けて送り直す |
+| **H. `df -h /workspace` が数百 T を返す** | **異常ではない。**Network Volume ではクラスタ全体の数字が出る。**使用量は `du -sh /workspace/*`、枠は RunPod の Storage 画面で見る** |
+| **I. Volume が足りなくなってきた**（`du -sh /workspace/out` が 110 GB を超える） | 間引きが動いていない。`pgrep -af prune_checkpoints.sh` が **1 個**か見る（0 個なら 14.3 の 9 番を打ち直す。2 個以上なら `pkill -f prune_checkpoints.sh` してから 1 回だけ打ち直す）。**Pod を編集してディスクを増やしてはいけない——コンテナが再起動して学習が死ぬ** |
+| **J. GPU を取られた／残高が尽きて止まった** | **Stop も Start も押さない。**上げ終わった歩数までは HF に残っている。Pod を作り直し、`--init-from` に**最後に上げた歩数**の重みを渡し、`--steps` を残りの歩数にして続ける（`--run-name` も変える） |
+| **K. `hf upload` が 403 で止まる** | [08_hf_transfer_troubleshooting.md](08_hf_transfer_troubleshooting.md)。**`hf auth whoami` が通ることは書ける証拠にならない**——`hf upload` は送る前に「リポジトリを作る」API を叩き、そこが権限で断られている |
+
+## 14.5 走り出したあとの見張り方
+
+**17 時間かかる。見るのは 6 回でよい。**
+
+| いつ | 打つもの | 正常な見え方 |
+|---|---|---|
+| 2 分後 | 14.3 の 11 番（`num_learnable_params`） | **4143404816** |
+| 5 分後 | 同（20 歩目の `loss`） | 0.23〜0.25 |
+| 30 分後 | `grep -a "step:" /workspace/out/pi05_long.log \| tail -1` | `updt_s` が **10.0〜10.3**。1 割以上遅ければ `--num-workers` がデータ読みに追いついていない |
+| **4 時間 20 分後** | `tail /workspace/out/pi05_long_upload.log` | **`上げ終わった: 001500`** |
+| 以後 4 時間 16 分ごと（8 時間 32 分後／12 時間 48 分後／17 時間 04 分後） | 同上 ＋ `du -sh /workspace/out` | 歩数が 1 つずつ増える。`du` は **80 GB 前後**で頭打ちになる |
+| 17 時間 05 分後 | `tail -3 /workspace/out/pi05_long.log` | **`End of training`** と終了コード 0 |
+
+**異常の見分け方は 3 つだけである。**
+
+| 見えたもの | 読み |
+|---|---|
+| `loss` が `nan` になる／`grdn` が跳ね上がる | 学習が壊れた。止めて、最後に上げた歩数までを使う |
+| `updt_s` が 15 秒を超えて戻らない | データ読みが詰まっている。**止めなくてよいが、終わる時刻が延びるので残高を見直す** |
+| 4 時間 20 分経っても `上げ終わった:` が出ない | `pgrep -af upload_ckpt.sh` を見る。0 個なら 14.3 の 10 番を打ち直す。動いていて失敗行が出ているなら分岐 D か E |
+
+## 14.6 終わり方
+
+**順番が大事である。ログを先に外へ出す。**
+
+```bash
+# 1. 学習ログを上げる（45 KB。あとから「どこで平らになったか」を答える唯一の材料）
+hf upload siruku6/pi05_long /workspace/out/pi05_long.log pi05_long.log --private
+
+# 2. 上げる見張りのログも上げる（どの歩数がいつ上がったかが残る）
+hf upload siruku6/pi05_long /workspace/out/pi05_long_upload.log pi05_long_upload.log --private
+```
+
+**単一ファイルは 3 つ目の引数にファイル名が要る。**`.` にすると落ちる。
+
+```bash
+# 3. 4 個そろっているか数える（Pod でも、このマシンでも打てる）
+python3 -c "from huggingface_hub import HfApi; \
+  print(sorted(HfApi().list_repo_files('siruku6/pi05_long')))" | tr ',' '\n' | grep -c model.safetensors
+```
+
+**期待する出力: `4`**（`001500` `003000` `004500` `006000`）。
+**各歩数の下に `vlm/` が入っていることも見る**（同じ一覧に `001500/vlm/…` が出る）。
+
+**4. Pod を終わらせる。画面から Terminate する。Stop ではない。**
+
+| 操作 | 何が止まるか |
+|---|---|
+| **Stop** | GPU 代は止まるが、**Volume の保管料は続く。**しかも **GPU を手放すので、次に Start したとき 0 枚で起動しうる** |
+| **Terminate** | 全部止まる。**Volume Disk の中身は消える**ので、**上の 1〜3 が終わってから押す** |
+
+**Network Volume（Pod 作成時に別途付けたもの）は Terminate でも残る。**
+Volume Disk（Pod に付いてくるディスク）とは別物である。
+
+## 14.7 `libero_90` を足せるか——**今回は足さない**
+
+**8/29 に数え直した結果、いま学習に使っている `Sylvest/libero_plus` の 40 タスクは
+標準スイート 4 つ（spatial・object・goal・libero_10）ちょうどで、`libero_90` の
+90 タスクを 1 つも学習していない**（[../reference/25_dataset_inventory.md](../reference/25_dataset_inventory.md)）。
+**Track3 の元タスクは SCENE 名のものに限られ、その 9 割が `libero_90` にある。**
+そこで「今回の 6,000 歩に足せるか」を、LeRobot 0.6.0 の中身を読んで確かめた。
+
+**足せない。データセットは 1 つしか渡せない。**
+
+```
+work/lerobot-src/src/lerobot/datasets/factory.py:116
+    raise NotImplementedError("The MultiLeRobotDataset isn't supported for now.")
+```
+
+`make_dataset` は `cfg.dataset.repo_id` が文字列のときだけ動き、**リストを渡すと
+この行で止まる**（`raise` は `MultiLeRobotDataset(...)` を組み立てる行の**手前**にあり、
+複数データセットの道は上流が意図的に塞いでいる）。`train_pi05.py` の側も
+`_DATASET_REPO = "lerobot/libero_plus"` を焼き込んでいて（`_build_command` が
+`--dataset.repo_id=` を 1 つだけ出す）、**引数で 2 つ目を足す口は無い。**
+
+**足すとしたら、手間は次の 3 通りである。**
+
+| やり方 | 手間 | 効くか |
+|---|---|---|
+| **配布物の `libero_combined_20hz` に乗り換える**（`--dataset-root` に渡す） | **いちばん安い。**`train_pi05.py` は 1 行も直さない。**ただし中身をまだ数えていない**——113 タスク・3,080,714 コマなら `libero_90` 入りである（[../reference/06_training_data_composition.md](../reference/06_training_data_composition.md)「`libero_combined_20hz` が何を含むかは、数を見れば判別できる」）。数えるのは配布 GPU 環境の `~/dataset/lerobot/` で、`tar` を展開せずに `meta/info.json` だけ読めばよい | 列名が `front`／`wrist` で揃っているかが未確認。揃っていなければ差し替えが要る |
+| `factory.py` の `raise` を外して `MultiLeRobotDataset` を使う | **中。**上流が「対応していない」と書いている道を自分で開けることになる。列名の集合が 2 つのデータセットで一致している必要がある | 動く保証が無い。**17 時間の学習を賭ける先ではない** |
+| `libero_plus` と `libero_90_no_noops` を 1 つに結合して新しいデータセットを作る | **大。**エピソード番号とタスク番号の振り直し、`meta/` の作り直し、正規化統計の取り直し。このマシンは残り 11 GB しか無いので、Pod の 150 GB の上でやることになる | 確実だが、今回の学習には間に合わない |
+
+**今回足さない理由は、手間だけではない。**
+
+1. **同時に 2 つ変わると読めない。**歩数とデータの両方を変えると、点が動いても
+   どちらのせいか分からない。**0.492／0.233 と比べられる形を残すことが、この学習の目的である。**
+2. **Track3 は全参加者 0.000 である。**`libero_90` を足す価値は、まだ誰の点でも
+   確かめられていない。
+3. **Track1 と Track2 は 40 タスクで採点される。**73 タスクを足すと、その 40 タスクに
+   割り当たる学習の量が半分以下に薄まる。**いま点が付いている 2 トラックを削って、
+   まだ 0 点のトラックに賭ける形になる。**
+
+**次にやるなら、まず `libero_combined_20hz` を数えることである**（tar を展開せずに
+`meta/info.json` を読むだけ。上の表の 1 行目）。**そこで 113 タスクだと分かれば、
+`--dataset-root` を差し替えるだけの別の走りとして立てられる。**

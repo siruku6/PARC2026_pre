@@ -41,9 +41,14 @@
 | [09_two_stage_training.md](09_two_stage_training.md) | **学習を 2 回に分ける。行動側で頭打ちにしてから、視覚エンコーダの固定を外す** | 1, 4 |
 | [10_deciding_under_deadline.md](10_deciding_under_deadline.md) | **本選に出られる最低点を越えないと意味がない勝負での危険の取り方。運ぶと出すを切り離す** | 2, 3, 4 |
 | [11_primary_sources.md](11_primary_sources.md) | **1 次資料の当たり方。実際にやってしまった 4 件の間違い** | 2, 3 |
-| [12_workbench_accidents.md](12_workbench_accidents.md) | ディスク満杯・並行実行・大容量の運び方 | 2, 3 |
+| [12_workbench_accidents.md](12_workbench_accidents.md) | ディスク満杯・並行実行・書けていなかった動画・大容量の運び方 | 2, 3 |
 | [13_runpod_operations.md](13_runpod_operations.md) | **時間貸しの GPU マシンは期限ではなく残高で止まる。**ストレージの種類で $0 のとき消えるかが決まる・チェックポイント 25 GB の間引き・持ち帰りの経路 | 2, 3 |
-| [14_quantization_and_eval_bottleneck.md](14_quantization_and_eval_bottleneck.md) | **低精度化が速さになる条件は3つあり、1つ欠けると効果がゼロか逆になる。**手元の評価は方策ではなくCPU描画で律速されている（方策は壁時計の18〜29%） | 2, 3 |
+| [14_quantization_and_eval_bottleneck.md](14_quantization_and_eval_bottleneck.md) | **低精度化が速さになる条件は3つあり、1つ欠けると効果がゼロか逆になる。**手元の評価は方策ではなくCPU描画で律速されている（方策はかかった時間の18〜29%） | 2, 3 |
+| [15_instruction_normalizer_inverted_a_task.md](15_instruction_normalizer_inverted_a_task.md) | **指示文を学習側の言い方へ寄せる仕掛けが、1 課題を逆向きに壊していた** | 2, 3 |
+| [16_docker_group_needs_session_restart.md](16_docker_group_needs_session_restart.md) | `usermod -aG docker` は、古いセッションが残っている間は効かない | 2, 3 |
+| [17_track3_picks_the_wrong_object.md](17_track3_picks_the_wrong_object.md) | **Track3 で方策は順方向をやっている**（別の物を掴んでトレイへ入れた） | 3, 4 |
+| [18_local_eval_missed_the_gain.md](18_local_eval_missed_the_gain.md) | **手元の 72 行は、採点側で 2 トラックとも上がった重みを「効果なし」と読んだ** | 2, 3, 4 |
+| [19_infer_less_count_first.md](19_infer_less_count_first.md) | **推し量る前に数える。**配布物の中身・崖のある制約・期限が切れる資格情報の 3 件 | 2, 3 |
 
 
 ## 成果物 2 —— 出来た skill の日本語版（確認用）

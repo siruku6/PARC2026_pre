@@ -4,7 +4,7 @@
 作成する際に踏むべき注意点を整理する記録である。方針（[07_track2_preparation.md](07_track2_preparation.md)
 の 2 節・3 節）の再検討はこの整理の後に行う。**
 
-- 出典は `docs/qiita_OpenVLA-OFT+.md`（PARC2026 に取り組んだ別チームの体験談、**2 次情報**）と、
+- 出典は `docs/materials/qiita_OpenVLA-OFT+.md`（PARC2026 に取り組んだ別チームの体験談、**2 次情報**）と、
   松尾研講義第6回（一次資料、[07_track2_preparation.md](07_track2_preparation.md) で既読の続き）、
   および模倣学習の一般文献（researcher エージェントに調査を委任）。
 - Qiita 記事は自チームの提出物ではなく他者の記録である点に注意する。**数値（80 episode
@@ -20,7 +20,7 @@
 
 ## 1. Qiita 記事から読み取れる注意点
 
-`docs/qiita_OpenVLA-OFT+.md` は、LIBERO-plus で公開されている mix-SFT 済み OpenVLA-OFT+
+`docs/materials/qiita_OpenVLA-OFT+.md` は、LIBERO-plus で公開されている mix-SFT 済み OpenVLA-OFT+
 （camera 92.8・robot initial state 30.3 という偏り）をベースに、5 task・3,900 episode の
 追加データで LoRA 追加学習を行った記録である。**この偏りの直し方として何をしたか**が、
 そのまま「学習用データを作る際の注意点」になっている。
@@ -137,7 +137,7 @@ scripted policy で Tier 2（Robot・Layout の再収集、[07_track2_preparatio
 
 ## 2. 松尾研講義第6回からの補足
 
-**`docs/第6回 講義資料.pdf`（実世界データの収集、全83ページ）を実際に読んだ**（`pypdf` で
+**`docs/materials/第6回 講義資料.pdf`（実世界データの収集、全83ページ）を実際に読んだ**（`pypdf` で
 テキスト抽出。委任した researcher エージェントは `pdftoppm` 未導入のためページ画像として
 開けなかったので、この節は自分で読んで書いた一次確認）。第6回は実機データが対象だが、
 **「集めたデータをどう疑い、どう検証するか」という考え方はシミュレータ生成データにも
@@ -507,9 +507,9 @@ behavior cloning でも誤りが指数関数的に積み重なる事態を避け
 
 | 事実 | 出典 |
 |---|---|
-| Qiita 記事の全内容（データ構成・失敗切り分け・検証方法） | `docs/qiita_OpenVLA-OFT+.md`（2 次情報・他チームの体験談） |
+| Qiita 記事の全内容（データ構成・失敗切り分け・検証方法） | `docs/materials/qiita_OpenVLA-OFT+.md`（2 次情報・他チームの体験談） |
 | scripted policy が成功軌道のみを作る設計であること・閉ループ制御であること | `solution/tools/scripted_demo/scripted_demo.py`（[07_track2_preparation.md](07_track2_preparation.md) 2.1 節で既読） |
-| 松尾研講義第6回の補足内容（2節） | `docs/第6回 講義資料.pdf` p42-61・p77・p80（`pypdf` でテキスト抽出し実際に読んだ。ページ番号は本文中に明記） |
+| 松尾研講義第6回の補足内容（2節） | `docs/materials/第6回 講義資料.pdf` p42-61・p77・p80（`pypdf` でテキスト抽出し実際に読んだ。ページ番号は本文中に明記） |
 | DAgger・covariate shift（3.1節） | Ross, Gordon, Bagnell 2011, arXiv:1011.0686（researcher エージェントが ar5iv で本文確認） |
 | DART・デモ収集時のノイズ注入（3.2節） | Laskey et al. 2017, arXiv:1703.09327, CoRL 2017（同上、本文確認） |
 | SIRIUS・人間介入データ（3.3節） | Liu et al. 2022, arXiv:2211.08416（同上、本文確認） |

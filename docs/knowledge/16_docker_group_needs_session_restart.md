@@ -1,8 +1,7 @@
 # 16. docker を sudo なしで使うのに、グループに入れただけでは直らないとき
 
-**[../howto/12_bring_eval_to_rtx6000.md](../howto/12_bring_eval_to_rtx6000.md) の「手順 1 docker を sudo なしで
-使えるようにする」で書いた `usermod -aG docker` + ログインし直す、が
-`eng003sasaki01`（会社の RTX6000）では効かなかった。**
+**`usermod -aG docker` + ログインし直す、が `eng003sasaki01`（会社の RTX6000）では
+効かなかった。**
 
 **2026-08-27 に解決した。効いたのは下の表の #4 —— コマンドパレットから
 `Remote-SSH: Kill VS Code Server on Host` を実行し、ウィンドウを閉じて繋ぎ直す。**
@@ -70,4 +69,4 @@ flowchart LR
 
 | 知りたいこと | ファイル |
 |---|---|
-| このマシンで docker を使う手順の全体像 | [../howto/12_bring_eval_to_rtx6000.md](../howto/12_bring_eval_to_rtx6000.md) |
+| このマシンで評価を回すときの注意 | [../howto/03_gpu_eval.md](../howto/03_gpu_eval.md) の「会社の RTX6000 では EGL が効く」 |

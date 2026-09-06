@@ -2,6 +2,18 @@
 
 **この手順を最後まで実行すると、Omnicampus へ出せる `work/submission.zip` ができる。**
 
+**この文書は手順だけを持つ。**過去に何を出したか・点・sha256・どれが良かったかは置かない。
+
+| 引きたいもの | 置き場 |
+|---|---|
+| **いま何を出すか** | [../talk/open_items.md](../talk/open_items.md) |
+| 出した版・重み・点・zip の sha256 | [../reference/19_weights_catalog.md](../reference/19_weights_catalog.md)（実験台帳） |
+| 点の一次資料 | [../knowledge/05_score_history.md](../knowledge/05_score_history.md)（採点ログから抽出したもの） |
+| 予選期（0.1.0〜4.4.0）の zip の sha256 | [../reference/archive/16_qualifier_submission_zips.md](../reference/archive/16_qualifier_submission_zips.md) |
+| 踏んだ事故と回避策 | [../knowledge/](../knowledge/) |
+
+**提出のたびに要る値は 4 つだけである**——**版番号・重みの HF リポジトリ・歩数・どのトラックへ出すか。****この 4 つはそのつどチャットで渡す**（[「zip を 1 本組んで出す」](#zip-を-1-本組んで出す)の `<版>`・`<重み>` に入れる）。
+
 追加学習した重みを使う場合は、先に
 [01_retrain.md](01_retrain.md) を終えて `merged_model/` を用意しておく。
 
@@ -11,9 +23,9 @@
 
 ```mermaid
 flowchart LR
-    S["solution/<br/>policy_server.py<br/>requirements.txt"] --> Z["work/submission.zip"]
+    S["solution/<br/>policy_server.py<br/>requirements.txt<br/>geometry_graft.py"] --> Z["work/submission.zip"]
     V["work/artifacts/vendor/lerobot/<br/>同梱した LeRobot"] --> Z
-    W["work/artifacts/model_weights/<br/>重み"] --> Z
+    W["work/artifacts/model_weights/<br/>重み（--weights で差し替え可）"] --> Z
     Z --> H["work/submission.sha256"]
 ```
 
@@ -35,8 +47,8 @@ flowchart TD
 
 | | いつ | 所要 |
 |---|---|---|
-| ケース 0 | リポジトリを clone した直後、`work/` を消したとき | 20 分 |
-| **ケース 1** | **`policy_server.py` を変えたとき（いちばん多い）** | **2 分** |
+| ケース 0 | リポジトリを clone した直後、`work/` を消したとき、**別のマシンで初めて組むとき** | **`vendor/` が 3 分。重みを落とす時間は別** |
+| **ケース 1** | **`policy_server.py` を変えたとき（いちばん多い）** | **2 分**（π0.5 の 9.4 GB なら 10〜20 分） |
 | ケース 2 | 学習した重みを載せるとき | 5 分 |
 
 ---
@@ -44,9 +56,10 @@ flowchart TD
 # ケース 1. 作り直すだけ
 
 ```bash
-work/venv310/bin/python solution/tools/build/build_submission.py
+python3 solution/tools/build/build_submission.py
 ```
 
+**venv は要らない**（`build_submission.py` は標準ライブラリだけで動く。ケース 0 の 0-0）。
 これだけである。出力はこうなる。
 
 ```
@@ -107,16 +120,40 @@ rm -rf work/artifacts/model_weights && \
 
 # ケース 0. 土台を作る
 
-`work/artifacts/` が無い状態から始める。**3 つ作れば、あとはケース 1 に合流する。**
+`work/artifacts/` が無い状態から始める。**作るのは `vendor/` だけで、あとは重みを
+どこかに置けばケース 1 に合流する。**
 
-## 0-1. Python 3.10 の venv を作る
+## 0-0. 組めるかどうかは、この 5 つで決まる
+
+**`build_submission.py` が集めるのは `solution/` の 3 ファイルと
+`work/artifacts/{model_weights,vendor}` の 2 つだけである**（`build_submission.py:52`
+の `_SOLUTION_FILES` と `:55` の `_ARTIFACT_DIRS`）。
+**GPU も torch も venv も要らない。標準ライブラリだけで動く**
+（`argparse`・`hashlib`・`re`・`zipfile`・`pathlib`）。
+**だから重みが置いてあるマシンなら、どれでも組める。**
+
+| 要るもの | 何のため | 無いとどうなるか |
+|---|---|---|
+| `solution/policy_server.py`・`requirements.txt`・`geometry_graft.py` | `_SOLUTION_FILES`。3 つとも zip の直下に入る | `必須ファイルがありません` |
+| **`work/artifacts/vendor/lerobot/`**（487 ファイル・13 MB） | 採点環境は Python 3.10 固定だが、LeRobot v0.6.0 は `requires-python >= 3.12` を宣言していて `pip install` できない | `生成物がありません: .../work/artifacts/vendor`（**`--weights` では差し替えられない**） |
+| 重み（`model.safetensors`・`config.json`・`vlm/`） | `--weights` でどのディレクトリを指してもよい。zip の中の名前は `model_weights/` に固定される | `zip に model_weights/... がありません` |
+| 空き 9.4 GB（π0.5。SmolVLA なら 918 MB） | zip 本体 | 途中で切れた zip ができる |
+| `python3` | 上記のとおり標準ライブラリだけ | — |
+
+**`work/artifacts/model_weights/` という置き場は必須ではない。** `--weights` で
+チェックポイントを直に指すなら要らない（`build_submission.py:168-169`）。
+
+## 0-1. Python 3.10 の venv は要らない（構文検証に使うだけ）
+
+**`build_submission.py` と `install_weights.py` はどちらも標準ライブラリだけで動く。**
+venv が要るのは、下の `vendor_lerobot.py` に `--python310` を渡して
+**書き換えた結果が 3.10 で構文として通ることまで検証する**ときだけである。
+採点環境と同じ 3.10.12 に合わせたいなら作る。
 
 ```bash
 export UV_CACHE_DIR="$TMPDIR/uvcache"
 uv venv --python 3.10.12 work/venv310
 ```
-
-採点環境と同じ 3.10.12 に合わせる。
 
 ## 0-2. LeRobot を同梱用に書き換える
 
@@ -136,16 +173,24 @@ with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as tf:
 (dest / root).rename(target)
 "
 
-work/venv310/bin/python solution/tools/build/vendor_lerobot.py \
-    --python310 work/venv310/bin/python
+python3 solution/tools/build/vendor_lerobot.py \
+    --python310 work/venv310/bin/python     # venv が無ければこの行は外す
+
+find work/artifacts/vendor/lerobot -name '*.py' | wc -l    # 487 になること
 ```
 
 `vendor_lerobot.py` は**置換対象が 1 箇所でなければ例外にする**。
 LeRobot のバージョンが変われば、黙って壊れずにその場で落ちる。
 
+**別のマシンで作り直しても同じものになる。** 2026-08-28 に確かめた——
+v0.6.0 の tar を取り直して `vendor_lerobot.py` を走らせ、提出済みの zip 3 本に
+入っている `vendor/lerobot` と `diff -r` した結果、**`__pycache__` 以外の差は 0 で
+487 ファイルが一致した**（`__pycache__` は `_EXCLUDE_PARTS` で zip に入らない）。
+**`scp` で 13 MB を運ぶ必要は無い。**
+
 ### 0-2-b. VGGT も同梱する（幾何の接ぎ木を入れた重みを出すときだけ）
 
-**幾何の接ぎ木（板 F25・[plan/16](../plan/16_finals_initiative_priority.md) 7 節）を
+**幾何の接ぎ木（`open_items.md` の F25・[plan/16](../plan/16_finals_initiative_priority.md) 7 節）を
 入れた重みを提出するときは、VGGT のソースも要る。** `pip install vggt` は
 PyPI に無くて失敗するので、LeRobot と同じく `vendor/` へ置く。
 
@@ -162,30 +207,45 @@ python3 solution/tools/build/vendor_vggt.py --source /tmp/vggt-src/vggt
 | 同梱物が揃っているか | `python3 solution/tools/build/vendor_vggt.py --check` |
 | どちらの vggt を読んでいるか | `vggt.models.vggt.__file__` を見る（**`vggt.__file__` は `None` になる**——`__init__.py` を持たない名前空間パッケージである） |
 
-## 0-3. 重みを置く
+## 0-3. 重みを置く（π0.5 の場合）
 
-**VLM の `model.safetensors` は含めない。** VLM の重みはポリシー側の
-チェックポイントに入っているため、設定とトークナイザだけでよい。
+**`vlm/` には π0.5 のトークナイザが要る。** `policy_server.py` は
+`model_weights/vlm/` からトークナイザを読む。**無いと採点環境で Hub へ取りに行って
+失敗するので、`build_submission.py:248` が zip を書いた後に検証で落とす。**
 
-| 取得元 | revision | 置き場所 |
-|---|---|---|
-| `lerobot/smolvla_libero_plus` | `7bb70aa5bc92b82c9239142775d3a173103567ff` | `work/artifacts/model_weights/` |
-| `HuggingFaceTB/SmolVLM2-500M-Video-Instruct`（設定とトークナイザのみ） | — | `work/artifacts/model_weights/vlm/` |
+**π0.5 のトークナイザは PaliGemma / Gemma 系である。**
+`added_tokens.json`・`special_tokens_map.json`・`tokenizer.json`・
+`tokenizer_config.json` の 4 つ・合わせて 17 MB。
+**VLM の `model.safetensors` は要らない**——VLM の重みはポリシー側の
+チェックポイントに入っている。
+
+**HF に上げた π0.5 のチェックポイントには `vlm/` が同梱してある**
+（`siruku6/pi05_trial1500` の `000500`／`001000`／`001500` など。
+[../reference/19_weights_catalog.md](../reference/19_weights_catalog.md)）。
+**その場合は落として `--weights` で直に指すだけでよい。**
 
 ```bash
-work/venv310/bin/python -c "
-from huggingface_hub import snapshot_download
-snapshot_download('lerobot/smolvla_libero_plus',
-                  revision='7bb70aa5bc92b82c9239142775d3a173103567ff',
-                  local_dir='work/artifacts/model_weights',
-                  ignore_patterns=['eval/*', 'eval/**'])
-snapshot_download('HuggingFaceTB/SmolVLM2-500M-Video-Instruct',
-                  local_dir='work/artifacts/model_weights/vlm',
-                  allow_patterns=['*.json', '*.txt', '*.model', 'tokenizer*'])
-"
+hf download siruku6/pi05_trial1500 --include '001500/*' \
+    --local-dir work/artifacts/trial1500
+
+python3 solution/tools/build/build_submission.py \
+    --weights work/artifacts/trial1500/001500 \
+    --output work/submission_<版>.zip
 ```
 
-`eval/`（評価動画 402 ファイル・25.6 MB）は推論に使わないので除外する。
+**学習が書いたチェックポイントには `vlm/` が付かない。** その場合は
+`vlm/` を持っている重みから `cp` で足す（**`ln -s` は駄目である**——
+zip に実体が入らない）。
+
+```bash
+cp -r work/artifacts/pi05_rp3000/vlm <チェックポイント>/vlm
+```
+
+> **SmolVLA を出すときだけ違う。**
+> `lerobot/smolvla_libero_plus@7bb70aa5` を `model_weights/` に置き、
+> `HuggingFaceTB/SmolVLM2-500M-Video-Instruct` のトークナイザを `vlm/` に入れていた。
+> **π0.5 では入れてはならない**——トークナイザが別物になる。
+> SmolVLA を出すときだけ、その 2 つを取り寄せる。
 
 **ここまで来たらケース 1 に合流する。**
 
@@ -245,8 +305,8 @@ python3 solution/tools/eval/summarize_gpu_eval.py \
 | 満たすべき条件 | 基準 |
 |---|---|
 | ① 1 件ずつ対にして負けていない | 拾った件数 ≧ 失った件数 |
-| ② **グリッパ開閉 20 回以上の割合** | **素の重み以下**（8/11 は 13%） |
-| ③ 平均ジャーク | **素の重み以下**（8/11 は 4.223） |
+| ② **グリッパ開閉 20 回以上の割合** | **素の重み以下** |
+| ③ 平均ジャーク | **素の重み以下** |
 
 **満たさなければ λ を下げて組み直す**（混ぜは 2 分）。
 
@@ -287,11 +347,8 @@ python3 solution/tools/suite/check_instruction_normalization.py --sweep   # 合�
 **本番の 2 カテゴリで 1 件でも誤って寄せたら、道具が終了コードを立てて落ちる。**
 いま点が取れている場所なので、壊す変更を黙って通さないためである。
 
-| 束 | 渡る文 | 寄せた（正しい） | **誤り** | 触らない |
-|---|---|---|---|---|
-| **本番の 2 カテゴリ** | **40 種** | **40 種すべて** | **0** | 0 |
-| その他の摂動 | 30 種 | 30 種すべて | **0** | 0 |
-| 言い換え | 1,527 種 | 468 種 | 4 | 1,055 |
+**測った結果は
+[../knowledge/15_instruction_normalizer_inverted_a_task.md](../knowledge/15_instruction_normalizer_inverted_a_task.md) にある。**
 
 **意味で寄せる道（Q&A No.31 の埋め込み最近傍）は既定で切ってある。**
 `--embed` を付けると測れるが、**torch と重みが要るので Docker で回す**
@@ -366,377 +423,361 @@ cd /workspace && /opt/subvenv/bin/python validate_submission.py /sub/submission.
 work/venv310/bin/python solution/tools/build/digest_submission.py --per-entry
 ```
 
-## 既知のハッシュ
+## 出来上がった zip が同じものか確かめる
 
-`work/` は git 管理外なので zip 自体は残らない。**素の重みで組んだ提出物の
-ハッシュを記録しておく。** 作り直したときにこの値と一致すれば、
-同じものが再生成できたと言える。
-
-`policy_server.py` の先頭に `__version__` を置いてある。**採点ログの先頭に
-構成が出る**ので、スコアと提出物の対応が後から辿れる。
-
-```
-[parc] policy_server 1.0.0  device=cuda  n_action_steps=5  ema_alpha=0.3  blend_steps=0  samples=1
-```
-
-| 版 | 重み | 設定 | sha256 | **本番スコア** |
-|---|---|---|---|---|
-| **0.1.0** | 素（`7bb70aa5`） | 後処理なし（n=50） | `f80abc7b…` | **0.05832** |
-| **0.2.0** | 素 | n=10 | `8ed91671…` | **0.096** |
-| **0.3.0** | 素 | n=5 ＋ EMA 0.3 | `c1685507…` | **0.1409** |
-| **1.0.0** | LoRA 20,000 ステップ（均等） | 0.3.0 と同じ | `420aff5d…` | **0.016** |
-| **2.0.0** | λ=0.25 ブレンド（素 75% ＋ 1.0.0 の学習分 25%） | 同じ | （zip の sha は未記録） | **0.09507** |
-| **3.0.0** | weak3x（苦手 3 倍 ＋ 手本 300 ステップ超を落とす） | n=5 | `58751a22…` | **0.144**（成功 3/8。素 0.1409 と同水準・**学習済みで初めて到達**） |
-| **3.1.0** | weak3x | **n=2** | `47ca6ff8…` | **0.166**（天井の 1 本を解いた。**資格ありの最高**） |
-| **3.2.0** | weak3x | n=5・samples=3 | `2ef66638…` | 未提出（n=5 が n=2 に負けたため保留） |
-| **3.3.0** | weak3x | **n=1** | `c3b8b901…` | **0.080**（**本物の悪化。1.9 本ぶん**） |
-| **3.4.0** | weak3x | **n=2 ＋ samples=3** | `ff9b1b03…` | **0.168**（0.166 と **0.04 本ぶん**の差＝**同じ**。時間は 2.7 倍） |
-| **3.5.0** | weak3x | **指示文の正規化**（n=2・**samples=1**。3.1.0 から 1 変数） | `8c53248f…` | **0.181 ← 過去最高**（重みを変えずに ep2 が 300→94 ステップ、ep7 が 300→155 ステップ） |
-| **3.6.0** | weak3x | **n=2 → 5**（3.5.0 から 1 変数。正規化・EMA・samples は据え置き） | `046472fe…` | **0.184 ← 過去最高。しかも 272 秒**（3.5.0 の 487 秒の 56%）。1 ステップ 0.154 秒で見積もり 0.16 と一致 |
-| **3.6.1** | weak3x | **`reset` の印字を完全に落とす**（挙動は変わらない＝patch） | 8/13 は `28be5eab…`／**8/14 に組み直して `e5fdfd3b…`** | **最終提出はこれ**（挙動は 3.6.0 と同じで 0.184 相当） |
-| **3.7.0** | weak3x | **n=5 → 8**（3.6.1 から 1 変数） | `97d4e7af…` | 未提出（**用意済み。落ちたら 3.6.1 に戻す**） |
-| **3.8.0** | **π0.5 24,000 ステップ**（`model_weights_pi05_024000`。SmolVLA ではない） | n=10・`num_inference_steps`=10・EMA 0.3・正規化入り | `ea951d5d…` | **0.177**（8/14。**weak3x 0.184 に 0.007 届かなかった**。ただし 183.1 秒＝3.6.0 の 272 秒の 67%） |
-| **3.9.0** | π0.5 24,000 ステップ | **n=10 → 16**（3.8.0 から 1 変数） | `5a9eead5…` | **0.264 ← 過去最高を 0.080 上回った**（8/14。**8 本すべてが 300 ステップより前に終わった**のは初。ep3 が 300→225、ep7 が 300→96。128.3 秒） |
-| **3.10.0** | π0.5 24,000 ステップ（3.9.0 と**同一**） | **`PARC_BLEND_STEPS` の既定を 0 → 4**（3.9.0 から 1 変数） | `3e0f5446…` | **0.169。0.264 から 0.095 落ちた**（8/14 19:24 提出）。**手元 36 件では 0.778（28/36）で過去最高だったのに本番は負けた。**ステップ数が 1,142 → 1,471（**+29%**）になったのが原因 |
-| **3.11.0** | π0.5 24,000 ステップ | **RTC を入れる**（`horizon=4`・blend 0） | `2e6d746a…` | **未提出。**同じ 12 件で成功 **8 → 4**・ステップ数 **+39.5%**。**blend と同じ機構で、より強く悪化した** |
-| **3.12.0** | π0.5 24,000 ステップ | **`PARC_NUM_INFERENCE_STEPS` の既定を 10 → 20** | `f2226ce8…` | 未提出（単独では未測定） |
-| **3.13.0** | π0.5 24,000 ステップ | **infer 20 ＋ samples 3**（3.9.0 から 2 変数） | `f3b1d3c3…` | 未提出。**手元 36 件でゴール到達 34/36 ＝取れる上限**・打ち切り 6 → 2・成功 25 → 28・ステップ数 −5.3% |
-| **4.0.0** | **RunPod フルパラメータ 3,000 ステップ**（`pi05_rp3000`） | blend 4（3.10.0 から引き継ぎ） | `929fbf74…` | **未提出。**blend4 が本番で負けたので破棄した |
-| **4.1.0** | 同上 | samples を π0.5 で使えるようにした（既定 1 なので挙動は 4.0.0 と同じ） | — | zip なし |
-| **4.2.0** | **RunPod フルパラメータ 3,000 ステップ** | **3.9.0 と同一の設定**（n=16・blend 0・infer 10・samples 1）＝**重みだけの 1 変数** | **`5cf6b983…`** | **0.485 ← 過去最高。0.264 を 0.221 上回った**（8/14 21:25 提出）。**ステップ数 1,142 → 991（−13%）・110.4 秒。予選の最終提出はこれ** |
-| **4.3.0** | 同上 | infer 20 | 8/14 は `7a2bc2b3…`／**8/23 に組み直して `71c6b3c6…`** | 未提出（**本戦 1 の 8/25 用に用意済み**） |
-| **4.4.0** | 同上 | **infer 20 ＋ samples 3** | `02819ca3…` | **未提出。**4.2.0 が 0.485 で壁を超えたので、測っていない版に賭ける理由が消えた |
-
-> **【8/23 12:10】過去の zip が残っているのは HuggingFace だけである。**
-> `work/` は git 管理外なので、**ローカルには直前に組んだ 1 本しか無いのが普通である**
-> （8/23 時点では 4.3.0 の `work/submission_rp3000_i20.zip` だけ）。
-> 非公開リポジトリ `siruku6/parc2026-submission` にある 4 本が過去の現物である。
->
-> | リポジトリ内の名前 | 版 | sha256 |
-> |---|---|---|
-> | `submission_361.zip` | 3.6.1（SmolVLA・保険） | `e5fdfd3b…` |
-> | `submission_pi05_n16.zip` | 3.9.0 | `5a9eead5…` |
-> | **`submission_rp3000_blend0.zip`** | **4.2.0（本番 0.485）** | `5cf6b983…` |
-> | **`submission_rp3000_i20.zip`** | **4.3.0（8/23 に組み直した）** | `71c6b3c6…` |
->
-> **HuggingFace は大きいファイルの sha256 を API で返すので、9.4GB を落とさずに
-> 中身が本物かを確かめられる。** 上の 4 本はこの方法で記録と一致を確認した。
->
-> ```bash
-> .venv/bin/python -c "
-> from huggingface_hub import HfApi
-> for f in HfApi().list_repo_tree('siruku6/parc2026-submission',
->                                 recursive=True, expand=True):
->     if f.path.endswith('.zip'):
->         print(f.path, f.size, f.lfs.sha256)
-> "
-> ```
->
-> **4.2.0 と 4.3.0 のコードは commit されていない。** `policy_server.py` を触った
-> 32 個の commit を全部見たが、`__version__` が 4.2.0・4.3.0 のものは 1 つも無い。
-> git にあるのは 4.4.0（`653398a`）までで、この 2 つは既定値を書き換えて
-> 組んだだけである。
->
-> **したがって「4.3.0 が何だったか」は、この表からしか復元できない**
-> —— 4.3.0 は infer 20、4.4.0 は infer 20 ＋ samples 3 なので、
-> **差は `PARC_SAMPLES` の既定 3 → 1 の 1 行**と読める。8/23 の組み直しは
-> この読みに従って `653398a` から行った（`work/build_430/solution/` に置いた）。
-> **原物と突き合わせて確かめたわけではない。**
-> **HEAD から組んではいけない。** HEAD には量子化の分岐（`QUANT_SERVE_MODE`）・
-> samples が 2 以上のときの `.clone()`・起動ログへの `quant_serve=off` の追記が
-> 入っており、**本番で 1 度も走っていない。**
-
-> **【8/14 13:10】3.8.0 は 0.177 で、weak3x の 0.184 に 0.007 届かなかった。**
-> 採点ログは `outputs/260814_114832_pi0.5_bench.md`。**8 本のうち 6 本が
-> 300 ステップより前に終わっているのに点は上がらなかった** ——衝突でも早く終わるので、
-> ステップ数から成功本数は読めないという戒めの 4 度目の確認である
-> （ep3 と ep7 だけが 300 ステップに張り付いた）。
-> **1 ステップあたり 0.128 秒**（1,428 ステップで 183.1 秒）で、事前の見積もり 0.095 秒より
-> 遅いが、**3.6.0 の 0.154 秒より速い**のは当たった。
-> **【8/14 13:50 訂正】「予選の最終提出は 3.6.1 に決めた」は取り消す。**
-> **0.007 は勝ち負けを分ける幅ではない**（8 本しか走っておらず、しかも
-> **総合スコアは成功率だけではない** ——
-> [../reference/17_scoring_formula.md](../reference/17_scoring_formula.md)）。
-> **3.6.1 は「そのまま出せる保険」として確保し、π0.5 は n=16 で測り直す。**
->
-> **8/14 に 3.6.1 を組み直した。** 8/13 の zip は消えていたため
-> `git checkout efe7fb5 -- solution/policy_server.py solution/requirements.txt` で
-> 3.6.1 のコードに戻し、`--weights work/artifacts/model_weights_weak3x` で組んだ。
-> **sha は `28be5eab…` と一致しない**（`archive.write` がファイルの更新時刻を
-> zip に焼くため、vendor を作り直した時点でハッシュ一致は原理的に望めない）。
-> **一致を確かめたのは中身である**: `policy_server.py` と `requirements.txt` は
-> `efe7fb5` のバイトと一致、`model.safetensors` は `model_weights_weak3x` と一致、
-> `validate_submission.py --static` は PASS。
->
-> **このとき `model_weights/vlm/.cache/huggingface/` の 14 個が紛れ込んだ**
-> （`snapshot_download` が重みの隣に作るダウンロード履歴）。
-> **`build_submission.py` の除外リストに `.cache` を足して直した。**
->
-> **3.8.0 だけモデルが違う。** 中身は π0.5（4.14B。SmolVLA の約 9 倍）で、
-> `policy_server.py` は**重みの `config.json` の `type` を見て切り替える**。
-> **SmolVLA の道は 1 行も変えていない**ので、3.7.0 以前の zip は作り直せば
-> そのまま同じ挙動になる。
->
-> **組み方が 2 つだけ違う。**
-> - 重みは `--weights` で場所を指す（`build_submission.py`。zip の中では
->   `model_weights/` に固定される）。**本物のディレクトリを退避させない**
-> - `model_weights/vlm/` に入れるのは **paligemma のトークナイザ**である
->   （SmolVLA では SmolVLM のもの）。π0.5 が外から要るのはこれだけで、
->   PaliGemma 本体は設定から組み立てられる
->
-> **手元の 36 件では 0.667**（素 0.583・LoRA20k 0.528。同じ一覧・同じ 300 ステップ）。
-> **【8/14 15:20 訂正】「落とした 7 件はすべて届いたのに 1mm 動かして失格」は
-> 間違いだった。** 映像と数字で当たると**4 つの型に割れ、2 件は誰がやっても
-> 取れない**（採点ハーネスが落下中の物体の位置を初期位置として記録するため。
-> 3 つの別モデルで 0.1mm も違わず同じ値が出る）。
-> **設定値で動くのは 2 件だけ**で、残り 7 件は光への強さと物の見分けの話である。
-> 内訳は [../reference/18_failure_breakdown.md](../reference/18_failure_breakdown.md)。
-> ゴール到達率は 0.861（測定は
-> `work/gpu_eval/0814_091240_pi05_24k_n10_ep1_max300/summary.txt`）。
->
-> **時間の心配は無い**（H100-20C 実測）。1 推論 **0.303 秒**で `/act` の 10 秒に
-> 33 倍の余裕。1 ステップは `0.065 + 0.303/10 = 0.095 秒`の見込みで、
-> **n=5 の SmolVLA（0.154 秒）より速い。**
-
-> **variant** = 元のタスク 1 つに摂動を 1 つ当てたもの（`.bddl` 1 個）。初期配置は元タスクのものを共有するので、**1 つの variant から最大 50 エピソード作れる。**
->
-> **3.6.0 の狙いはスコアではなく打ち切りである。** 予選 PDF p.12 の
-> 「Track 評価に 1 時間以上かかる場合はタイムアウト」に、採点 10 回ぶんの
-> 秒数とステップ数から出した `0.065 秒 + 0.464 秒 / n`（1 ステップあたり）を当てると、
-> **n=2 は 1 本 300 ステップで 90 秒 → 39 本で上限、n=5 は 48 秒 → 74 本**まで持つ。
-> **予選最終評価の件数は非公開**で、運営は「リーダーボードとは総 Trial 数が
-> 異なる」と明言している（リーダーボードは 8 本）。
-> **n=2 と n=5 のスコア差 0.022 は 0.5 本ぶんで測れない。**
-> 測れない 0.5 本のために 0 になる目を買わない、という判断である。
->
-> **同時に `[parc] reset` の点数の印字を落とした**（挙動は変わらない）。
-> 3.5.0 の採点ログで点数が **0.851, 0.851, 0.819, 0.819, 0.972, 0.972,
-> 0.902, 0.902** と並び、**4 タスク × 2 エピソード**と読めたうえ、手元の
-> variant 10,030 件と突き合わせれば**タスク名まで特定できてしまう。**
-> 運営 Q&A No.33 が禁じるのはまさにこれなので、**特定できる状態を消した。**
-
-> **3.5.0 は samples を 1 に戻してある。** 一度 samples=3 で組んだ
-> （`c97b0b2e`）が、3.4.0 の結果で **samples の軸が閉じた**ので破棄した。
-> **これで 3.1.0（0.166）との差は正規化だけになる。**
-
-> **3.5.0 が変えるのは `/reset` で受け取る文だけである。** 本番の 2 カテゴリで
-> 渡ってくる文は **40 種**しかなく、そのうち **25 種が学習データの書き方と
-> ずれている**（配布 4 タスクの CSV が `Pick the akita black bowl …` を渡すのに、
-> 学習データは `pick up the black bowl …`）。**40 種すべてを正しく寄せ、誤りは 0**
-> だった（variant 7,280 件で実測。下の「指示文の正規化を測る」）。
-
-**`n_action_steps` の実測（weak3x・EMA 0.3・samples=1 で固定＝n だけの差）。**
-
-| n | 本番 | 早く終わった回 | 読み |
-|---|---|---|---|
-| 5 | 0.144 | 4/8 | — |
-| **2** | **0.166** | 4/8 | **最良。天井の 1 本（ep3）を 300→202 に解いた** |
-| 1 | **0.080** | 3/8 | **悪化。成功も滑らかさも落ちた** |
-
-> **n=1 の悪化は講義資料が説明している**（`docs/第7回 講義資料part1.pdf` p.10）。
-> 「**k が短すぎる（k=2）／チャンク境界のたびに分布から別のモードをサンプルしうる
-> → mode-jumping・jerky（ガクガク）な動き**」。n=1 は1 ステップごとが境界になる。
-> 逆に「k が長すぎる（k=100）」は open-loop 区間が伸びて応答性が落ちる。
-> **一般には k=16〜32 が普通**で、我々が n=2 で最良なのは**モデルが弱く、
-> 誤差の蓄積を頻繁に打ち切る必要がある**ためと読める。
-> **モデルが強くなれば最適な n は上がる**（＝いま n を触る余地は小さい）。
-
-**π0.5 では n の山の頂上が 16 だった**（手元 36 件・EMA 0.3・samples=1 で固定）。
-
-| n | 手元の成功率 | 打ち切り張り付き | 平均ジャーク | SPARC | 本番 |
-|---|---|---|---|---|---|
-| 10 | 0.667 | 0.139 | 4.300 | −2.474 | 0.177 |
-| **16** | **0.694** | 0.167 | 3.699 | −2.595 | **0.264** |
-| 32 | **0.583** | **0.361**（13/36） | **3.509** | **−2.810** | 未提出（出す価値なし） |
-
-> **n を上げるほど平均ジャークは下がり続けるのに、SPARC は悪くなり続ける。**
-> **段差の回数が減って 1 回が大きくなっている形**で、
-> **chunk の継ぎ目が効いているという読みを 3 点で裏づけた**
-> （`PARC_BLEND_STEPS` が狙うのはここである。既定 0）。
-> n=32 は open-loop で流す区間が長すぎ、**3 分の 1 が 300 ステップに張り付いた。**
-> 測定は `work/gpu_eval/0814_145933_pi05_24k_n32_ep1_max300/summary_compare.txt`。
-
-**【8/14 23:15】本番スコアを決めているのはステップ数である。** 8 本の合計ステップ数
-（採点ログの `POST /act` の回数）と総合スコアが、3 点で単調に並んだ。
-
-| 版 | 変えたもの | **8 本の合計ステップ数** | 秒数 | **総合スコア** |
-|---|---|---|---|---|
-| 3.10.0 | blend 4 | **1,471** | 153.9 | **0.169** |
-| 3.9.0 | 基準 | **1,142** | 128.3 | **0.264** |
-| **4.2.0** | **RunPod の重み** | **991** | **110.4** | **0.485** |
-
-> **数え方**: `grep -c "POST /act" outputs/<採点ログ>.md`。
-> **ステップ数は「成功そのもの」に効く**（`max_steps=300` で打ち切られ、成功した回は
-> 手本の 0.96 倍で終わっている＝余裕がゼロ）。**秒数は 1 時間の上限に対して
-> 15 倍以上の余裕があるので、判断に使ってはいけない。**
-> **ここから 2 つの方針が出る。**
-> - **ステップ数を増やす施策は採らない** —— `blend_steps`（+29%・本番 −0.095）と
->   RTC（手元 +39.5%・成功 8→4）はどちらも「継ぎ目で前の計画へ引き戻す」ため
->   前へ進まなくなる。**手元 36 件の成功率では見抜けなかった**（blend4 は手元で
->   +3 件だった）。**ステップ数で見れば見抜ける。**
-> - **秒数だけ払う施策は事実上ただ** —— `num_inference_steps` と `samples` は
->   推論の秒数しか増やさず、環境のステップ数を 1 ステップも増やさない。
-> ステップ数で 1 件ずつ突き合わせる道具: `solution/tools/analysis/compare_steps.py`。
-
-> **版と本番ログの表示がずれている点に注意。** 1.0.0 の採点ログには
-> `policy_server 0.3.0` と出ている（版を上げる前に重みだけ差し替えて出したため）。
-> **重みとスコアの対応はこの表が正で、ログの版文字列ではない。**
-
-0.1.0 はタグ `scored-0.05832` に対応する。**版の上げ方**は次のとおり。
-
-| 桁 | 上げるとき |
-|---|---|
-| major | **重みが変わったとき**（追加学習の反映など） |
-| minor | 推論の挙動が変わったとき（既定値の変更、後処理の追加） |
-| patch | 挙動が変わらない修正 |
-
-**本番で通ったことが確実なのはタグ `scored-0.05832` である。**
-何かがおかしくなったときはここへ戻る。
+**組み直した zip が前と同じバイトなら、sha256 が一致する。**
+突き合わせる相手は、**予選期（0.1.0〜4.4.0）は
+[../reference/archive/16_qualifier_submission_zips.md](../reference/archive/16_qualifier_submission_zips.md)、
+本選期（4.2.0 以降）は
+[../reference/19_weights_catalog.md](../reference/19_weights_catalog.md)** にある。
 
 ```bash
-git checkout scored-0.05832 -- solution/policy_server.py solution/requirements.txt
+shasum -a 256 work/submission_<版>.zip     # Linux では sha256sum
 ```
 
-一致しない場合は、LeRobot のバージョン・重みの revision・`requirements.txt` の
-いずれかが変わっている。追加学習した重みに差し替えれば当然変わる。
+> **重みを 1 バイトでも変えれば sha256 は変わる。**一致を期待するのは
+> **「同じ重み・同じコードで組み直した」ときだけである。**
 
----
+## 版番号を決める
 
-# zip を Mac へ運ぶ —— **運ばずに Mac で組むのが第一手**（2026-08-28 に変えた）
+**メジャー番号は重みを指す。**minor は挙動が変わる既定値の変更、patch は挙動が変わらない修正。
+**次に空いている番号と、過去のどの番号がどの重みかは
+[../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) の
+「版番号だけから引きたいとき」にある。**
 
-**zip を HF に置く道は、HF の容量を食い潰して止まった。**
-`siruku6/parc2026-submission` を「運ぶ通り道」として何度も上書きした結果、
-**HF が古い LFS の版も容量に数えるため、見えている 4 本（29 GB）よりずっと大きく
-なっていた。**無料枠は非公開 100 GB である
-（[Storage limits](https://huggingface.co/docs/hub/storage-limits) 2026-08-28 確認）。
-**リポジトリごと消して 28 GB まで下がった。**
+| 決めること | 決め方 |
+|---|---|
+| **メジャー** | **重みが変わったら上げる。**同じ重みなら据え置く |
+| **`_MIN_LEXICAL`** | **0.50 にする。**5.0.1 以降の全部が 0.50 で組んであり、揃えないと「重みだけの 1 変数」にならない |
+| **`PARC_EMA_ALPHA`** | **0.3 のまま動かさない** |
 
-**そもそも zip を運ぶ必要が無い。** `build_submission.py` が集めるのは
-`solution/` の 3 ファイルと `work/artifacts/{model_weights,vendor}` だけで、
-**標準ライブラリしか使わない**（`argparse`・`hashlib`・`re`・`zipfile`・`pathlib`）。
-**重みさえ Mac にあれば、Mac の `python3` で組める。**`venv310` も要らない
-（あれは `vendor_lerobot.py` が使うもので、`vendor/` を作り終えていれば出番は無い）。
+> **版が 6 文字（`10.0.0` 以上）なら、zip の中の書き換えでは付けられない。**
+> 書き換えは `__version__ = "4.6.0"` を**長さを変えずに**置き換える手だからである。
+> **6 文字の版は、組む前に `solution/policy_server.py` の `__version__` を直す**
+> ——重みが変われば zip はどうせ組み直すので、余分な手間は無い。
 
-| 道 | 9.4 GB が HF を通る回数 | HF に残る容量 |
+**どのトラックへどれを出すかは手順書では決めない。**
+**いま出すものは [../talk/open_items.md](../talk/open_items.md)、
+過去に出したものと点は
+[../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) の
+「本選の提出と点」にある。****課題 ID は Track1 が 1007・Track2 が 1008・Track3 が 1009 である。**
+
+## zip を 1 本組んで出す
+
+**1 本を提出まで終わらせてから次に移る。**2 本を並行して組むと、
+どちらの zip に何を書き換えたのかが分からなくなる。
+
+### 始める前に、3 つだけ決める
+
+**道は 1 本である。変わるのはこの 3 つだけで、それぞれ手順の 1 か所に効く。**
+
+| 分かれ道 | 見分け方 | どこが変わるか |
 |---|---|---|
-| **Mac で組む（第一手）** | **1 回**（重みだけ。これは成果物として上げるものでもある） | **重みのぶんだけ** |
-| GPU マシンで組んで zip を運ぶ | 2 回（重み＋zip） | **重み＋zip。しかも上書きのたびに履歴が積む** |
+| **① どこで組むか** | **重みが Mac にあるか**。無ければ「重みが置いてある機械」で組む | **Mac で組めば手順 5（運ぶ）が消える。**9.4 GB が流れるのは重みを降ろす 1 回だけになる |
+| **② 版が 5 文字か 6 文字か** | `8.0.0` は 5 文字、`12.0.0` は 6 文字 | **手順 3 で、組む前に直すか（6 文字）・組んだ後に zip を書き換えるか（5 文字）** |
+| **③ 重みに `vlm/` があるか** | `ls <重み>/vlm \| wc -l` が **4** なら在る、**0** なら無い | **無ければ手順 2 が要る。**学習が書いたチェックポイントには入っていない |
 
-## Mac で組む
+> **版番号と重みの道は、提出のたびにチャットで渡す。**
+> **この手順書には書かない**——書くと次の提出で必ず古くなる。
+> いま何を出すかは [../talk/open_items.md](../talk/open_items.md) にある。
 
-**運ぶのは `vendor/` の 13 MB だけである**（`work/` は git 管理外なので clone では来ない）。
-
-```bash
-# このマシン → Mac（13 MB）
-scp -r work/artifacts/vendor <Mac>:<リポジトリ>/work/artifacts/
-
-# Mac で
-hf download <重みのリポジトリ> --include '<歩数>/*' --local-dir work/artifacts/model_weights_<歩数>
-python3 solution/tools/build/build_submission.py \
-    --weights work/artifacts/model_weights_<歩数>/<歩数> \
-    --output work/submission_<版>.zip
+```mermaid
+flowchart LR
+    W["1. 重みを用意する<br/>9.4 GB・16 分"] --> V["2. vlm/ を足す<br/>③のときだけ・数秒"]
+    V --> B["3. 版を入れて組む<br/>数分"]
+    B --> S["4. sha256 を確かめる"]
+    S --> M["5. Mac へ運ぶ<br/>①のときだけ・16 分"]
+    M --> U["6. 出す<br/>1 本 20 分"]
+    U --> R["7. 片付けて記録する"]
 ```
 
-## それでも GPU マシンで組んで運ぶとき
+**要るのは空き 19 GB である**（重み 9.4 GB ＋ zip 9.4 GB）。**出したその日のうちに両方消す。**
+**足りなければ [09_free_disk_space.md](09_free_disk_space.md)。**
 
-**`scp` は 1.7 MB/s しか出ないので 9.4GB に 1 時間半掛かる。**
-**非公開リポジトリを中継すると 1 分で済む。ただし置きっぱなしにしない**
-——上げて、Mac で降ろしたら、**その場でリポジトリから消す。**
+### 1. 重みを用意する（律速。約 16 分）
 
-| やり方 | 9.4GB の実測 |
-|---|---|
-| `scp` | **1 時間半**（1.7 MB/s） |
-| HF 経由・初回 | **16 分** |
-| **HF 経由・作り直した zip** | **50 秒**（8/14 18:56 実測） |
-
-**作り直した zip が速いのは、送る前に中身を細かく切って、既に置いてある zip と
-同じ切れ端を送らないためである**（Xet。`hf_xet` が入っていると自動で効く）。
-`policy_server.py` を 1 行変えただけの zip なら、実際に送るのは数十 MB で済む。
-
-> **このリポジトリは非公開のままにする。** 中身は π0.5 の重み
-> （PaliGemma / gemma 由来）と提出コードである。**公開してはいけない。**
-
-## GPU マシン側（送る）
+**降ろすのと `vendor/` を作るのは同時に進む。**先に降ろし始める。
 
 ```bash
-cd ~/lab/PARC2026_pre
-
-# 入っていなければ  .venv/bin/pip install "huggingface_hub[hf_xet]"
-.venv/bin/hf auth whoami        # user=siruku6 が出ることを確かめる
-
-.venv/bin/hf upload siruku6/parc2026-submission \
-    work/submission_pi05_blend4.zip \
-    submission_pi05_blend4.zip \
-    --repo-type model \
-    --commit-message "3.10.0 blend_steps=4 (sha256 3e0f5446)"
+# ── ターミナル 1（先に打つ）
+cd <リポジトリ> && git pull
+hf download <HF のリポジトリ> --include '<歩数>/*' --local-dir work/artifacts/<置き場>
 ```
 
-**引数は「ローカルの場所」「リポジトリ内での名前」の順である。**
-順番を取り違えると変な階層に入る。**コミットメッセージに sha256 の頭 8 桁を
-入れておく**と、後からどの zip がどれか分かる。
-
-送れたかを確かめる。**「サイズが手元と一致すること」まで見る。**
-
 ```bash
+# ── ターミナル 2（裏で。約 3 分。`work/artifacts/vendor/lerobot` が既にあれば飛ばす）
+cd <リポジトリ>
 python3 -c "
-from huggingface_hub import HfApi
-for f in HfApi().list_repo_tree('siruku6/parc2026-submission', recursive=True):
-    if f.path.endswith('.zip'):
-        print(f'{f.path:34s} {getattr(f,\"size\",0):>13,}')
+import io, tarfile, urllib.request, pathlib, shutil
+url = 'https://codeload.github.com/huggingface/lerobot/tar.gz/refs/tags/v0.6.0'
+data = urllib.request.urlopen(url, timeout=300).read()
+dest = pathlib.Path('work'); target = dest / 'lerobot-src'
+if target.exists(): shutil.rmtree(target)
+with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as tf:
+    root = tf.getnames()[0].split('/')[0]; tf.extractall(dest)
+(dest / root).rename(target)
 "
-stat -c '%n %s' work/submission_pi05_blend4.zip
+python3 solution/tools/build/vendor_lerobot.py
+find work/artifacts/vendor/lerobot -name '*.py' | wc -l    # 487 になること
 ```
 
-## Mac 側（受け取る）
+**降り終わったら 3 つ確かめる。**
+
+| 打つもの | 出るはず |
+|---|---|
+| `ls <重み>` | `config.json model.safetensors policy_postprocessor.json policy_postprocessor_step_0_unnormalizer_processor.safetensors policy_preprocessor.json policy_preprocessor_step_2_normalizer_processor.safetensors train_config.json`（＋ `vlm` があれば手順 2 は不要） |
+| `du -sh <重み>` | **`8.8G`**（`model.safetensors` が 9,354,050,752 バイト） |
+| `shasum -a 256 <重み>/model.safetensors` | **HF の LFS のダイジェストと一致すること**（降ろし損ねの検出。各点の値は [../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) の「一覧」） |
+
+**`hf download` は `hf_xet` が入っていると速い。**入っていなければ
+`pip install "huggingface_hub[hf_xet]"`。
+**非公開リポジトリは `hf auth whoami` が通っていないと `not found` に見える。**
+
+### 2. `vlm/` を足す（**③ のときだけ**・17 MB・数秒）
+
+**`policy_server.py` は `model_weights/vlm/` からトークナイザを読む。**
+**無いと採点環境で Hub へ取りに行って失敗するので、`build_submission.py:248` が
+zip を書いた後に検証で落とす。**
 
 ```bash
-hf download siruku6/parc2026-submission submission_pi05_blend4.zip \
-    --repo-type model --local-dir ~/Downloads/parc2026
-
-# **必ずハッシュを突き合わせる。** 途中で切れても途中まで残るため
-shasum -a 256 ~/Downloads/parc2026/submission_pi05_blend4.zip
-# 3e0f5446a1190433bf41924425883f46940e034af4d5eece938e2cec04b71dbb と一致すること
+hf download siruku6/pi05_full_runpod --include 'vlm/*' \
+    --local-dir work/artifacts/pi05_rp3000        # 公開なので認証は要らない
+cp -R work/artifacts/pi05_rp3000/vlm <重み>/vlm
+ls <重み>/vlm | wc -l                             # 4 になること
 ```
 
-**`hf` が無ければ** `pip install "huggingface_hub[cli,hf_xet]"`。
-**初回はログインが要る**（`hf auth login`。読み取り権限のトークンでよい）。
+> **`ln -s` は駄目である**——zip に実体が入らない。
+> **π0.5 のトークナイザは Gemma 系である。**SmolVLA の SmolVLM のものを入れてはならない（別物になる）。
 
----
+### 3. 版を入れて組む（数分）
 
-# 提出する
+**② で分かれる。****どちらの道でも出来上がるバイトは同じである**
+（下の「なぜ 2 つの道があるのか」）。
 
-Omnicampus に `work/submission.zip` をアップロードする。
+**道 A —— 版が 6 文字（`10.0.0` 以上）。組む前に直して、組んだ直後に戻す。**
+
+```bash
+sed -i '' 's/_MIN_LEXICAL = 0.65/_MIN_LEXICAL = 0.50/' solution/policy_server.py
+sed -i '' 's/__version__ = "4.6.0"/__version__ = "<版>"/' solution/policy_server.py
+git diff --stat solution/policy_server.py          # 2 行だけ変わっていること
+
+python3 solution/tools/build/build_submission.py \
+    --weights <重み> --output work/submission_<版>.zip
+
+git checkout solution/policy_server.py
+grep -n '^_MIN_LEXICAL = \|^__version__' solution/policy_server.py   # 0.65 と 4.6.0 に戻ること
+```
+
+**道 B —— 版が 5 文字。組んでから zip の中の 2 行を書き換える。**
+
+```bash
+python3 solution/tools/build/build_submission.py \
+    --weights <重み> --output work/submission_<版>.zip
+
+python3 solution/tools/build/patch_zip_policy_server.py work/submission_<版>.zip \
+    --replace '_MIN_LEXICAL = 0.65' '_MIN_LEXICAL = 0.50' \
+    --replace '__version__ = "4.6.0"' '__version__ = "<版>"' \
+    --in-place
+```
+
+- **`sed -i` は macOS では `sed -i ''` と空文字が要る。**
+- **`_MIN_LEXICAL` を 0.50 にするのを忘れない**——5.0.1 以降は全部 0.50 で組んであり、
+  忘れると「重みだけの 1 変数」が壊れる。
+- **`--weights` に渡したディレクトリが、そのまま zip の `model_weights/` になる。**
+  `install_weights.py` は使わない（**9.4 GB の複製を 2 つ作るうえ、`model_weights.bak/` を上書きする**）。
+
+**出るはずのもの。**
+
+```
+[build] 検証     <数百> エントリ一致、必須構成あり
+[build] コード   .../solution
+[build] 生成物   .../work/artifacts
+[build] 重み     .../<重み>
+[build] 出力     .../work/submission_<版>.zip
+[build] <数百> files / 9378 MB
+[build] sha256 <64 桁>
+[build] ハッシュを保存: .../work/submission_<版>.sha256
+```
+
+| 見るもの | 合格の線 | 違ったら |
+|---|---|---|
+| **`[build] 検証` の行** | **出ていること** | **出ないビルドは使わない。**`git pull` してやり直す |
+| エントリ数 | **541**（π0.5・`vendor/` が v0.6.0 のとき） | 違えば `vendor/` が古い。手順 1 のターミナル 2 を打ち直す |
+| `MB` | **9,3xx**（重み 9,372 MB ＋ 同梱 LeRobot 13 MB） | 小さければ重みが入っていない |
+| `vlm/` のファイル数 | **4** | 0 なら `build_submission.py:248` が落とす。手順 2 へ |
+
+### 4. sha256 を確かめる
+
+| どちらの道を採ったか | sha256 |
+|---|---|
+| **道 A（組む前に直した）** | **`build_submission.py` が書いた値がそのまま最終である。取り直しは要らない** |
+| **道 B（zip を書き換えた）** | **必ず取り直す**——`work/submission_<版>.sha256` は書き換える前の値である |
+
+```bash
+shasum -a 256 work/submission_<版>.zip | tee work/submission_<版>.sha256   # Linux では sha256sum
+```
+
+**この値を控える。**手順 5 で運ぶなら、降ろした先で突き合わせる相手である。
+
+### 5. Mac へ運ぶ（**① で別の機械で組んだときだけ**・約 16 分）
+
+**`scp` は 1.7 MB/s しか出ないので 9.4 GB に 1 時間半掛かる。**
+**HF の非公開リポジトリを中継すると 16 分**（作り直した zip なら 50 秒。
+Xet が同じ切れ端を送らない）。**置きっぱなしにしない**——
+上げて、Mac で降ろしたら、**その場でリポジトリから消す。**
+
+```bash
+# ── 組んだ機械（送る）。引数は「ローカルの場所」「リポジトリ内での名前」の順である
+hf auth whoami        # user=siruku6 が出ること
+hf upload siruku6/parc2026-submission \
+    work/submission_<版>.zip submission_<版>.zip \
+    --repo-type model --commit-message "<版> <重み> (sha256 <頭 8 桁>)"
+```
+
+```bash
+# ── Mac（受け取る）。**必ずハッシュを突き合わせる**——途中で切れても途中まで残る
+hf download siruku6/parc2026-submission submission_<版>.zip \
+    --repo-type model --local-dir ~/Downloads/parc2026
+shasum -a 256 ~/Downloads/parc2026/submission_<版>.zip   # 手順 4 の値と一致すること
+```
+
+> **合わないものを出さない。**降ろし直す。
+> **このリポジトリは非公開のままにする**（中身は π0.5 の重みと提出コードである）。
+> **HF は古い LFS の版も容量に数える**ので、降ろしたその場で消す
+> （[../knowledge/12_workbench_accidents.md](../knowledge/12_workbench_accidents.md)）。
+
+### 6. 出す
+
+Omnicampus にアップロードする。**課題 ID は Track1 が 1007・Track2 が 1008・Track3 が 1009**
+（[../plan/14_finals1_gpu_and_submission_plan.md](../plan/14_finals1_gpu_and_submission_plan.md)
+の「いまどこにいるか」のルール表）。**どのトラックへ出すかは
+[../talk/open_items.md](../talk/open_items.md) にある。**
 
 | 制約 | 値 |
 |---|---|
-| 提出回数 | **1 日 1 回**。採点が完了した時点で消費される |
-| エラーで失敗したとき | **枠は消費されない**（運営 Q&A No.18） |
-| サーバー起動 | 120 秒以内（実測 38 秒） |
+| 提出回数 | **各トラック 1 日 1 回**（1 人あたり計 3 回/日）。**アップロードが完了した時点で消費される**——**だから日付が変わる前後の提出は、次の日の枠を食う可能性がある**と本選資料に明記されている |
+| エラーで失敗したとき | **本選では枠を消費する**（同じルール表）。予選の Q&A No.18 は「消費されない」だったが、本選の資料で変わった |
+| 枠の繰り越し | **できない。**使わなかったその日の枠は消える |
+| **1 本の所要** | **Mac の回線から 9.4 GB で 20 分。3 本なら 1 時間。****放っておける待ちなので、この間に次の zip を組める** |
+| サーバー起動 | **1200 秒以内**（本選。予選は 120 秒）。**π0.5 の実測 21 秒** |
 | `/act` 1 回 | 10 秒以内（実測 0.85 秒） |
-| トラック全体 | 1 時間以内（実測 147.6 秒） |
+| トラック全体 | 1 時間以内（**π0.5 の実測 118.8 秒**） |
 
-**出す前に、ローカル評価で成功率を確かめておくこと。** 手順は
-[03_gpu_eval.md](03_gpu_eval.md)（GPU マシン）か
-[11_colab_eval.md](11_colab_eval.md)（Colab）にある。
+**採点は 10〜20 分で返る。**返ってきたら**採点ログを保存し**、
+`b_PARC2026_final/outputs/submission_logs/track<N>/` へ置く。
 
-> **【8/14 17:30 訂正】「ローカル評価は本番スコアを再現する」は成り立たない。**
-> **手元の 36 件で「差が無い」と出たものが、本番では 5 割増しになった。**
->
-> | | 手元 36 件の成功率 | 本番 |
-> |---|---|---|
-> | 3.8.0（n=10） | 0.667 | 0.177 |
-> | 3.9.0（n=16） | 0.694（**+0.028。符号検定 p=1.000**） | **0.264（+0.087）** |
->
-> 原因は**総合スコアが成功率だけではない**ことである
-> （[../reference/17_scoring_formula.md](../reference/17_scoring_formula.md)。配点は非公開）。
-> n=16 は平均ジャークが 4.300 → 3.699（−14%）で、**8 本すべてが 300 ステップより前に
-> 終わった**（ep3 が 300→225、ep7 が 300→96。合計 1,428→1,142 ステップ）。
-> **手元で測れるのは成功率までで、滑らかさとステップ数が何点ぶんかは枠を使わないと分からない。**
-> **「手元で差が無いから出さない」という判断はしてはいけない。**
+```bash
+grep -n '総合スコア' <保存した採点ログ>
+grep -n '^\[parc\] policy_server' <保存した採点ログ>   # 出した版と設定を突き合わせる
+```
 
-**スコアが返ってきたら、ハッシュと一緒に
-[../strategy/05_実測結果.md](../strategy/05_実測結果.md) へ記録する。**
-どの zip が何点だったかを後から辿れなくなると、比較ができなくなる。
+**`[parc] policy_server <版> ... ema_alpha=0.3` と出ていれば、狙った zip が動いている。**
+
+> **出す前に、ローカル評価で成功率を確かめておくこと**（[03_gpu_eval.md](03_gpu_eval.md) か
+> [11_colab_eval.md](11_colab_eval.md)）。**ただし「手元で差が無いから出さない」と判断してはいけない。**
+> 手元で測れるのは成功率までで、**滑らかさとステップ数が何点ぶんかは枠を使わないと分からない**
+> （[../knowledge/07_local_eval_cannot_rank.md](../knowledge/07_local_eval_cannot_rank.md)・
+> [../knowledge/18_local_eval_missed_the_gain.md](../knowledge/18_local_eval_missed_the_gain.md)）。
+
+### 7. 片付けて記録する
+
+```bash
+git status --short                                   # 何も出ないこと
+grep -n '^_MIN_LEXICAL = ' solution/policy_server.py # 0.65 のままであること
+grep -n 'PARC_EMA_ALPHA' solution/policy_server.py   # 既定 "0.3" のままであること
+rm -f work/submission_<版>.zip                       # その日のうちに。重みも消す
+```
+
+**リポジトリの `solution/policy_server.py` は 0.65・EMA 0.3 のまま残す**
+（0.65 の由来は
+[../knowledge/15_instruction_normalizer_inverted_a_task.md](../knowledge/15_instruction_normalizer_inverted_a_task.md)）。
+
+**版・重み・sha256・大きさを
+[../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) に 1 行足す。**
+採点が返ったら同じ行に点を書く。**採点ログそのものは
+`b_PARC2026_final/outputs/submission_logs/track<N>/` へ置く**
+——`outputs/` は git で追跡しているので、点の一次資料はこちらである。
+
+---
+
+## 道具と分かれ道
+
+### `patch_zip_policy_server.py` の使い方（道 B の中身）
+
+**`build_submission.py` が作る zip では `policy_server.py` が無圧縮（method=0）で入っている。**
+だから**同じ長さの置き換えなら、バイトを差し替えて CRC を直すだけで済む。**
+9.4 GB を組み直す必要は無い。**既にある zip から設定を 1 つだけ振るときにも使える**
+（`PARC_EMA_ALPHA`・`PARC_NUM_INFERENCE_STEPS` など、文字数が変わらないもの）。
+
+```bash
+# ① まず中を見る（書き換える前に必ず打つ）
+python3 solution/tools/build/patch_zip_policy_server.py work/submission_<版>.zip --show
+
+# ② 元を残したまま書き換える
+#    この道具は zip をその場で書き換えるだけで、別名では出せない
+#    （`--in-place` が無いと「書いていない」と言って何もしない）。だから先に cp する
+cp work/submission_<元の版>.zip work/submission_<新しい版>.zip
+python3 solution/tools/build/patch_zip_policy_server.py work/submission_<新しい版>.zip --in-place \
+    --replace '_MIN_LEXICAL = 0.50' '_MIN_LEXICAL = 0.99' \
+    --replace '__version__ = "<元の版>"' '__version__ = "<新しい版>"'
+```
+
+> **手順 ① の `--show` を飛ばさない。**
+> **どの版のどの設定が入っているかは、zip の中を見るまで分からない**（ファイル名は当てにならない）。
+> **`--in-place` を付けない限り 1 バイトも書かない。**
+> **道具は置き換えの左辺が zip の中に 1 か所だけあることを確かめる。**0 か所でも 2 か所でも止まる。
+
+| 確かめること | 期待する値 |
+|---|---|
+| `--show` の `__version__` | **書き換え前は組んだときの値 → 書き換え後は狙った版** |
+| `--show` の `_MIN_LEXICAL` | **`0.50`** |
+| `"PARC_EMA_ALPHA"` | **`0.3` のまま**（動かさない） |
+| 採点ログの `[parc]` 行 | **`policy_server <版>`**（違ったら別の zip を出している） |
+
+> **しきい値（`_MIN_LEXICAL`）を振るためにこれを使うのは、もうやめた**
+> （3 通り出して 3 回とも 0 / 8 だった。
+> [../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) の「9/1 の 5.2.0」）。
+
+### なぜ 2 つの道があるのか
+
+**出来上がるバイトは同じである**（道具がしているのは `text.replace(src, dst, 1)` で、
+`build_submission.py` はファイルをそのまま格納する）。**選ぶ理由は 2 つだけである。**
+
+| | 良いところ | 気をつけること |
+|---|---|---|
+| **道 A（組む前に直す）** | 手順が 1 つ減る。**6 文字の版はこれしかない** | **戻し忘れるとリポジトリの 0.65 が消える。****`git checkout` を必ず打つ** |
+| **道 B（組んだ後に zip を書き換える）** | **リポジトリを汚さない。**書き換え前後の設定を印字し、`zipfile` で読み直して `testzip()` まで通す。**既にある zip から 10 分で作れる** | **長さが変わる置き換えは通らない**（6 文字の版は不可）。sha256 を取り直す |
+
+### zip をどう運ぶか（3 つの道の比べ）
+
+**そもそも zip を運ぶ必要が無い。** `build_submission.py` が集めるのは
+`solution/` の 3 ファイルと `work/artifacts/{model_weights,vendor}` だけで、
+**標準ライブラリしか使わない。****重みさえ Mac にあれば、Mac の `python3` で組める。**
+`venv310` も要らない（あれは `vendor_lerobot.py` が使うもので、`vendor/` を作り終えていれば出番は無い）。
+
+| 道 | Mac に届くバイト | Mac に一時的に置く量 | HF に新しく積む容量 | 掛かる時間 |
+|---|---|---|---|---|
+| **Mac で組む**（①で Mac を選ぶ） | 9.4 GB（重み） | **約 19 GB**（重み＋zip） | **0** | 16 分 ＋ 組む時間 |
+| 別の機械で組み、HF を中継に運ぶ | 9.4 GB（zip） | **9.4 GB** | **＋9.4 GB** | 16 分（作り直した zip なら 50 秒） |
+| 別の機械で組み、`scp` で運ぶ | 9.4 GB（zip） | **9.4 GB** | **0** | **1 時間半**（1.7 MB/s） |
+
+**Mac に届くバイト数はどれも約 9.4 GB で同じである。**違うのは
+**Mac のディスク**と **HF に新しく積む容量**、それに
+**同じ重みから 2 本目を組むときの費用**（別の機械で組むなら毎回 zip を運ぶ。
+Mac で組むなら重みが手元にあるので転送は 0）である。
+
+### 分かれ道 —— 想定どおりでなかったとき
+
+| 何が起きたか | どう見分けるか | どうするか |
+|---|---|---|
+| **`policy_server.py` が無圧縮でなかった** | `--show` が `policy_server.py が無圧縮ではない（method=8）。この道具は使えないので build_submission.py で組み直すこと` で止まる | **道 A へ切り替える**（組む前に直して組み直す） |
+| **`vendor/` が無い** | `build_submission.py` が `生成物がありません` で落ちる。`ls work/artifacts/vendor/lerobot` が空 | **手順 1 のターミナル 2 を打つ**（13 MB・3 分） |
+| **`__version__` の左辺が `4.6.0` でない** | `--show` の 1 行目が違う値を出す | **`--replace` の左辺を `--show` が出した実際の値に書き換える。**`4.6.0` はいまの `solution/policy_server.py` の値であって、将来も同じとは限らない |
+| **`_MIN_LEXICAL` が既に `0.50`** | `--show` に `_MIN_LEXICAL = 0.50` が出る | **その `--replace` を 1 行落とす。**左辺が 0 か所だと道具が止まる |
+| **長さが違う置き換えを書いた** | `長さが違う置き換えは通せない: N → M` で止まる | **桁数を合わせる**（`0.5` ではなく `0.50`）。合わせられないなら道 A |
+| **左辺が 2 か所ある** | `... が 2 箇所ある（1 箇所でないと危ない）` で止まる | 道 A へ切り替える |
+| **Mac で sha256 が合わない** | `shasum -a 256` が手順 4 の値と違う | **途中で切れている。**降ろし直す。**合わないものを出さない** |
+
 
 ---
 

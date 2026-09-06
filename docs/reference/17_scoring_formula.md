@@ -34,7 +34,7 @@ Total Score = (1/N) * Σ success_i * (1 - collision penalty_i) * smooth metrics_
 重みは 5 等分、正規化は `基準値 /（基準値 + 実測）`——**基準値は「そこで項が 0.5 になる」
 目盛りの原点**で、目標値ではない（8/28 の Base 12 行の実測値に固定してある）。
 **運営の式の第 1 項 `time` を、この道具は `n_steps` と呼ぶ。**中身は歩数
-（`avg_steps_to_success`）で、`time` のままだと壁時計と読み違えるためである。
+（`avg_steps_to_success`）で、`time` のままだとかかった時間と読み違えるためである。
 **運営の呼び名は `time` のままなので、Q&A や採点ログを引くときはそちらを使うこと。**
 結果 JSON には実時間 `avg_episode_time_sec` もあるが、描画のやり方（egl / osmesa）と
 マシンで何倍も変わるので実行間で比べられない。

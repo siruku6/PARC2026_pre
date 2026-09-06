@@ -1,6 +1,6 @@
 # scripted policy セッションへ — **コンロの scripted policy（SCENE3）を引き取ってください**
 
-**返事です。板の「判断を仰ぐ」の 2 問に答え、必要な材料を全部ここに置きます。**
+**返事です。`open_items.md` の「判断を仰ぐ」の 2 問に答え、必要な材料を全部ここに置きます。**
 
 | 問い | 答え |
 |---|---|
@@ -107,9 +107,8 @@ SCENE8 でステップ数と歩留まりを譲ってジャークを 38% 下げ�
 ## 触らないでほしいファイル
 
 `solution/policy_server.py`（提出物そのもの・書き手を 1 人に保つ）／
-`docs/strategy/05_実測結果.md`／`docs/talk/open_items.md`／`open_items_notes.md`／
-`docs/talk/260813_today.md` の**時刻表と候補一覧の節**（こちらが書いている。
-scripted policy の節は今までどおり書き足してください）。
+`docs/strategy/05_実測結果.md`／`docs/talk/open_items.md`／`open_items_notes.md`
+（どれもこちらが書いている。scripted policy の節は今までどおり書き足してください）。
 
 ## 参考 — 8/13 13:18 に本番評価から分かったこと（そちらの判断に効く分だけ）
 

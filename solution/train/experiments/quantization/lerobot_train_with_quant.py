@@ -39,6 +39,13 @@ if os.environ.get("QUANT_EXPERT_MODE") == "float8":
     # 副作用: action expert を float8 化するようパッチ
     import experiments.quantization.quant_float8_expert  # noqa: F401
 
+# **ラッパーは 1 つしか選べないので、場面カメラを潰すパッチはここでも当てる。**
+# CAMERA_DROPOUT_PROB が無いか 0 なら apply() は何もしない
+# （experiments/camera_dropout/camera_dropout_patch.py）。
+from experiments.camera_dropout import camera_dropout_patch
+
+camera_dropout_patch.apply()
+
 from lerobot.scripts.lerobot_train import main
 
 if __name__ == "__main__":

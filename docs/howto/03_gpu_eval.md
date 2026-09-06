@@ -212,8 +212,7 @@ python3 solution/tools/eval/summarize_rollout_videos.py work/gpu_eval/<回>/vide
 >
 > **`videos/sheets/<動画名>.png` が 1 本 8 コマで出る。** 動画を再生しなくても、
 > **ステップ数・グリッパの開閉回数・結末・衝突した物体**がコマに焼かれているので読める。
-> 8/13 にこれで「言い換えの回は掴む物を間違えている」ことを確かめた
-> （[../talk/260812_briefing.md](../talk/260812_briefing.md) の 5-3 節）。
+> 8/13 にこれで「言い換えの回は掴む物を間違えている」ことを確かめた。
 
 > **同時に流さないこと。** どちらも GPU を使い、方策サーバーのコンテナ名が
 > 同じ（`parc-policy`）である。**片方が終わってから次を流す。**
@@ -406,6 +405,79 @@ MUJOCO_GL=osmesa bash solution/tools/eval/run_docker_eval.sh --check
 
 **`MAX_STEPS` は 300 のまま動かさないこと**（本番と同じ値である）。
 詳しくは [open_items.md](../talk/open_items.md) の 29。
+
+### 会社の RTX6000（`eng003sasaki01`）では EGL が効く
+
+**GPU が Pass-Through の実機なので、このマシンと違って `MUJOCO_GL=egl` が通る。**
+**どちらも 2026-08-26 の実測で、描画は 9.7 ms/枚 → 0.6 ms/枚、本選の 1 エピソードは
+JAIST サーバの osmesa の 60.6 秒 → 30.6 秒とちょうど半分になった**
+（描画の 1 枚あたりは [../resources/infra_and_docker.md](../resources/infra_and_docker.md) にもある）。
+**持ち込みは 8/26 に済んでいる**——重み・`vendor/`・方策イメージが揃っており、
+**提出 zip もあの機械で組める**（[02_build_submission.md](02_build_submission.md) のケース 0）。
+
+```bash
+cd ~/src/PARC2026_pre
+MUJOCO_GL=egl TRACK_EPISODES=1 LABEL=<ラベル> \
+    bash solution/tools/eval/run_final_eval.sh track2
+```
+
+| 気をつけること | 中身 |
+|---|---|
+| **`docker` が `permission denied`** | `id -nG` に `docker` が無ければセッションが古い（[../knowledge/16](../knowledge/16_docker_group_needs_session_restart.md)）。`sudo` で回すなら `$HOME` が root のものに変わるので **`sudo -E`** で環境を引き継ぐ |
+| **`set -e` でいきなり終わる** | 採点キットがリポジトリの隣（`../b_PARC2026_final`）に無い。**`KIT_ROOT=<実際の場所>` を渡す。**キットの中身は評価イメージに入っているので `KIT_ROOT` は存在確認にしか使われないが、**無いと落ちる** |
+| 起動して 5 秒で落ちる | 重みの隣に `vlm/` が無い。`pi05_rp3000` から**コピー**する（リンクではない） |
+| json の指標が 14 個しかない | 採点器の差し替えが効いていない。`git pull` してから流し直す |
+| GitHub へ ssh が通らない | Personal Access Token で https clone する |
+
+> **8/25 に JAIST サーバで測った Track2 の 8 行（成功 0.75・衝突 0.25・ステップ 129.5・
+> 軌道 1.027・向き 0.886）を比較の相手にしてはいけない。** あれは版 4.4.0 の既定値
+> （`num_inference_steps=20`・`n_action_steps=16`・`samples=3`・`seed=off`）で回したもので、
+> **4.5.0 以降の既定とは 3 変数違う。**同じ機械で回した本どうしの比較だけが 1 変数である。
+
+### RTX6000 で Track3 を測る（**9/2 の夜に足した。`open_items.md` の `F72` の対照**）
+
+**Track3 こそ EGL の効きがいちばん大きい。****Track3 は 8 本すべてが 300 歩まで走る**
+——ゴールに着く回が 1 本も無いので打ち切りまで行き、**1 本が取りうる最長になる。**
+描画の枚数が最大なので、**描画を GPU に移した分がそのまま効く。**
+
+> **【9/2 に気づいた】`MUJOCO_GL=egl` は工夫ではなく、配布キットの既定に戻すことである。**
+> **配布キットの `Dockerfile` 17 行目に `ENV MUJOCO_GL=egl` と書かれている**
+> （19 行目は `ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics`）。
+> **つまり採点側は EGL で描いている。**このスクリプトが `osmesa` を既定にしているのは
+> **JAIST の vGPU が EGL を通せないから**であって、そちらのほうが本番に近いわけではない。
+>
+> **だから RTX6000 で EGL を渡す意味は、速さだけではない**——**描画のやり方まで
+> 採点側とそろう。**これは効きうる差である：**描画はモデルが見る画像そのものを作るので、
+> 実装が違えば画素が違い、8 本しかない集合では 1 本が入れ替わりうる**
+> （同じ重みを 2 回測るだけで成功が 0.667 → 0.722 動く。
+> [knowledge/18](../knowledge/18_local_eval_missed_the_gain.md)）。
+> **これまでの手元評価はすべて、採点側と違う描画で測っていた。**
+
+```bash
+cd ~/src/PARC2026_pre
+MUJOCO_GL=egl \
+WEIGHTS=$PWD/work/artifacts/trial1500/001500 \
+LABEL=t3_base_001500 \
+    bash solution/tools/eval/run_final_eval.sh track3
+```
+
+| | |
+|---|---|
+| **かかる見込み** | **10 分前後**（4 タスク × 2 本 ＋ 重みの読み込み 1〜2 分）。**確かな部分は「osmesa の半分」だけである**——8/26 の実測は 1 エピソード 60.6 秒（JAIST の osmesa）→ **30.6 秒（RTX6000 の EGL）**。**300 歩まで走る Track3 はこれより長いので、1 本 60 秒前後と見て 8 本で 8 分と置いた。これは実測ではない** |
+| **重み** | **`trial1500/001500`**（＝ 5.0.1 の重み）。**Track3 の最終提出に入っているのがこれ**なので、ここで良くなったものはそのまま出せる。**無ければ `hf download siruku6/pi05_trial1500 --include '001500/*'`** |
+| **`vlm/` を隣に置く** | **無いと 5 秒で落ちる**（スクリプトが先に見て止める）。学習で出たチェックポイントには入っていないので `pi05_rp3000` から**コピー**する（リンクではない） |
+| **動画は既定で残る** | `RECORD=1` が既定。**各タスクの 1 本目が mp4 になり、成功／失敗が名前に入る。****どの物を掴んだかはこれで見る**（[knowledge/17](../knowledge/17_track3_picks_the_wrong_object.md) と同じやり方） |
+| **物の変位も残る** | `results/object_disp.jsonl` に 1 行 1 ロールアウトで出る。**掴んだ物を数十 cm 運んでいれば、かすったのではなく運んだのだと分かる** |
+| **速く回したいとき** | **`TRACK_EPISODES=1` で 4 本になり、半分で済む。****物の見分けを見るだけなら 1 本ずつで足りる**（失敗はタスクごとに同じ形で出る） |
+
+**先に確かめる 1 行。**
+
+```bash
+docker image inspect parc2026-final >/dev/null && echo "キットのイメージあり"
+```
+
+**無ければ先に作る**（30〜60 分・30 GB）——`cd ~/src/b_PARC2026_final && docker build -t parc2026-final .`。
+**キットがリポジトリの隣に無ければ `KIT_ROOT=<実際の場所>` も渡す**（無いと `set -e` で即終了する）。
 
 ### かかった時間を自分で測る
 

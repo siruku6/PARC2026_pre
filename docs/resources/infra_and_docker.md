@@ -40,8 +40,11 @@ Docker だけでできて GPU を使わないため、他の作業と同時並�
 | RunPod | **RunPod** | ○（フルパラメータ） | — | — | A100/H100 80GB | 無し（秒単位の従量課金） |
 | ローカル Mac（colima） | **Mac マシン** | — | — | ○ | 不要 | 無し |
 
-※ 会社の RTX6000 は GPU を Docker から使えるところまで済んでいるが、**イメージも重みもまだ
-置いていない**ので、実際に流すには持ち込みが要る。
+※ 会社の RTX6000 には**重みと同梱ソースが揃っていて、提出 zip をここで組める**
+（2026-08-29 に `work/artifacts/vendor/lerobot` 487 ファイルを作り、9,378 MB の zip を組んだ）。
+`work/artifacts/` にあるのは `model_weights`・`pi05_rp3000`・`trial1500`・`vendor`。
+**`model_weights.new` は 8/29 に `install_weights.py` が `vlm/` で落ちたときの組み立て途中の
+残骸なので消してよい**（`_build_staging` が作る作業用ディレクトリ）。
 
 ※ ユーザとの会話の中では、認識を一致させるために「呼称」列の名称でインフラを呼ぶこととする。
 
@@ -56,7 +59,7 @@ Docker だけでできて GPU を使わないため、他の作業と同時並�
 | GPU | NVIDIA H100-20C（H100 を 20GB に切り出した vGPU）1 枚、compute capability 9.0、ドライバ 570.133.20 |
 | vCPU | **16**（Xeon Gold 6338） |
 | RAM | 114 GiB |
-| ストレージ | 298 GB（残り 75 GB） |
+| ストレージ | 298 GB（**残り 11 GB**。2026-08-29 実測。`work/train` 71 GB・`work/artifacts` 40 GB・`work/submission_geo12k.zip` 11.9 GB） |
 
 **vCPU は以前 2 だった。**`knowledge/14_quantization_and_eval_bottleneck.md` の
 「評価の 71〜82% は 2 コアでの CPU 描画」という実測は、2 コアだった頃のものである。
@@ -78,7 +81,7 @@ JAIST サーバでは選べない EGL が実際に効くことを確認した。
 | RAM | 47 GiB | **114 GiB** |
 | GPU | Quadro RTX 6000 1 枚・VRAM **24 GB**・cc **7.5**・ドライバ 595.84 | **H100-20C**（vGPU）・VRAM 20 GB・cc 9.0・ドライバ 570.133.20 |
 | GPU の種別 | **`Quadro RTX` / `Pass-Through`**（描画もできる実機） | `NVIDIA Virtual Compute Server` / `VGPU`（計算専用） |
-| ストレージ | **489 GB（残り 455 GB）** | 298 GB（残り 75 GB） |
+| ストレージ | **489 GB（残り 297 GB・使用 37%。2026-08-31 実測）** | 298 GB（**残り 11 GB**。2026-08-31 実測） |
 | OS | Ubuntu 24.04.4 LTS | Ubuntu 22.04.3 LTS |
 | `docker run` | **通る**（ただし `sudo` が要る） | **拒否される**（org の制約。`docker exec` のみ） |
 | `docker run --gpus all` | **通る**（NVIDIA Container Toolkit 1.20.0-1 を 08-26 に導入） | 通る |
@@ -86,6 +89,17 @@ JAIST サーバでは選べない EGL が実際に効くことを確認した。
 **勝っているのは 3 点である。** (a) **EGL が効く**、(b) ディスクが 455 GB 空いている
 （JAIST サーバは 75 GB）、(c) **JAIST サーバと並行して回せる 2 台目である**。
 GPU の計算力（cc 9.0 対 7.5）と RAM では JAIST サーバが上。
+
+**学習に使わない理由は cc 7.5 そのものである。**Turing 世代は **bf16 の演算ユニットを
+持たない**ので、いまの学習設定（`dtype=bfloat16`）を回すには fp16 か fp32 に変えるしかない
+——**fp32 はメモリが倍になって 24 GB では厳しく、fp16 は行動を少しずつ整える学習で
+不安定になりうる。**注意機構の速い実装（flash-attention 2）も Ampere 以降が要件なので、
+そこも遅い経路に落ちる。**だからこの台は評価と zip の組み立てに使い、学習は置かない。**
+
+```bash
+# 1 行で確かめられる
+python3 -c "import torch; print(torch.cuda.get_device_capability(), torch.cuda.is_bf16_supported())"
+```
 
 **EGL が効くことが一番大きい。**JAIST サーバの vGPU は OpenGL に対応しないため
 `MUJOCO_GL=osmesa`（CPU 描画）しか選べない。同じ描画スクリプト（240×320 を 50 枚）で測ると
@@ -113,7 +127,8 @@ cc 7.5 なので fp8（cc 8.9 以上が要件）は使えず、bf16 もネイテ
 
 **本選の評価イメージ `parc2026-final` はビルド済みである**（配布リポジトリを clone して
 `docker build` で作った。本選の `setup.sh` は LIBERO-plus・LIBERO・アセットのコミットを
-固定しているので、どこでビルドしても採点環境と同じ版になる）。**重みはまだ置いていない。**
+固定しているので、どこでビルドしても採点環境と同じ版になる）。**重みも 8/29 に置いた**
+（`work/artifacts/trial1500` の `001500`。`vlm/` 同梱）。
 
 ### Blackwell サーバは本選 1 で 60 時間、ディスクはほとんどが一時領域
 
@@ -123,9 +138,15 @@ cc 7.5 なので fp8（cc 8.9 以上が要件）は使えず、bf16 もネイテ
 
 | ステージ | 使える GPU 時間 |
 |---|---|
-| **本選 1**（8/24〜9/17） | **60 時間** |
+| **本選 1**（8/24〜9/17） | **60 時間。9/1 の時点で残り 53 時間弱**（ユーザの報告） |
 | 本選 2（9/28〜10/22 予定） | 75 時間 |
 | 本選 3（10/28〜11/24 予定） | 120 時間 |
+
+**残り 53 時間はほぼ学習に使える**——**6.85 秒/step で 27,000 歩ぶんである**
+（2 回目以降のセッションは環境構築の分がほとんど要らない）。
+**速さ・容量・パスの実体・踏んだ罠の実測値は
+[../reference/27_blackwell_environment.md](../reference/27_blackwell_environment.md) に集めた。
+この文書には二度書かない。**
 
 **時間は「起動してから自分で止めるまで」ずっと減る。**資料 v1.1 が
 「起動からシャットダウンの間，配布時間は消費され続けます」と明言した。GPU が計算して

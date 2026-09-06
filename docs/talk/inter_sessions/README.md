@@ -18,7 +18,19 @@
 ```
 
 状態は **依頼中 → 着手 → 報告済み → 閉じた** の 4 つだけ。
-**閉じたものは消さずに残す**——同じことを二度依頼しないための記録である。
+
+**閉じたら消す**（2026-08-31 に「消さずに残す」から変えた）。**ここは一時ファイルの置き場である。**
+残す価値のあるものは 1 つずつ行き先が決まっているので、**消す前にそちらへ移す。**
+
+| 報告に入っていたもの | 移す先 |
+|---|---|
+| 採否の理由・測った値 | `reference/19_weights_catalog.md` |
+| 2 回以上打つ手順 | `howto/` に節を作る（1 行で済むものは `open_items.md` の「打つもの」列） |
+| 分かったこと・踏んだ穴 | `knowledge/` |
+| 追わないと決めたこと | `talk/open_items.md` の「決めた — 蒸し返さない」 |
+
+**移し終わったら、他のファイルからこのディレクトリを指しているリンクを消す。**
+`grep -rn inter_sessions docs/` で全部出る。
 
 ## 依頼を書くときの決まり
 
@@ -55,6 +67,8 @@
   実行しなかったものは「報告」の末尾に 1 行で書く。
 - **`docker run` はこのマシンでは通らない**（組織の制約・解除不可）。既に起動しているコンテナへの
   `docker exec` は通る。GPU の評価は会社の RTX6000 でユーザが回す。
+  （**014・015 の受け側は RTX6000 そのもので、そこでは `docker run` が通る**——
+  その制約は依頼ごとに受け側のマシンで変わる）
 - **`NOW.md` は書き換えない。** 書き換えるのはユーザである。
 - 報告には**実測値と、それを出したコマンドかファイルの場所**を必ず添える。
 
@@ -62,10 +76,25 @@
 
 | # | 何を | 状態 |
 |---|---|---|
-| [001](001_collision_object_displacement.md) | 衝突と判定されたとき、どの物体がどれだけ動いたかを数える | **報告済み** |
 | [002](002_robot_init_pose_coverage.md) | ロボット初期姿勢の振り方を、作業空間を覆う形に作り直す | 進行中 |
-| [003](003_blackwell_readiness.md) | **Blackwell で短く試して、効くと分かったものだけ長く回す**段取りを作る | 保留（Blackwell が今日明日は開かない） |
-| [004](004_runpod_short_full_training.md) | **RunPod で 1,500 歩のフルパラメータ学習を回し、傾きを読む**（$8〜9） | 依頼中 |
-| [005](005_blend_and_ema_for_today.md) | `blend_steps` と `EMA` を測り、今日の提出物を作る | **blend 4 は悪化。EMA 0.5 の測定が残り** |
-| [007](007_rebuild_zips_with_4_2_0_settings.md) | **1,500 歩の zip を 4.2.0 と同じ推論設定で作り直し、版 `5.0.0` を置き換える**（RTX6000・`vlm/` が無くて止まっている） | 依頼中 |
-| [006](006_track3_reverse_direction.md) | **Track3 の逆向きタスクに、どう手を付けるかを決めて試作する**（方針の判断が主) | 依頼中 |
+| **[006](006_track3_reverse_direction.md)** | **Track3 の逆向きタスクを試作する**（**方針は 8/30 に決まった**——広く覆う・初日に時間反転と scripted の両方を 1 タスクで試す） | **依頼中**（`open_items.md` の `F27`） |
+| **[008](008_runpod_long_full_training.md)** | **RunPod で、効くと分かった学習を長く回す** | **報告済み**（成果物は `howto/06` の 14 節。**回すのはユーザで、まだ回していない**——`open_items.md` の `F44`） |
+| [010](010_blackwell_investigation_plan.md) | Blackwell の調査計画を作る | **報告済み**（`howto/14` を全面的に書き直した。実行は 011 へ） |
+| **[011](011_blackwell_long_training.md)** | **Blackwell に入って、長いフルパラメータ学習を始める**（接続・学習の回し方・1 歩あたりの秒数の実測を含む） | **依頼中**（`open_items.md` の `F11`） |
+| **[012](012_dataset_overlap_inventory.md)** | **配布データセットの棚卸し**（何と何が重なっているのかを数える。011 の学習が走り出したら着手） | **依頼中**（`open_items.md` の `F11`） |
+| **[013](013_score_writeup_dedup.md)** | **提出結果の記述を実験台帳 1 か所に寄せる**（残り 7 版。**GPU も提出枠も使わない文書だけの作業なので、他の依頼と並行してよい**） | **依頼中**（`open_items.md` の `F63`） |
+| **[014](014_verify_raw_states_for_time_reversal.md)** | **学習データの raw states が時間反転に使えてかを実データ 2 本で確認する**（Track3 本命案の前提潰し） | **報告済み — go**（state は健全。ただし**チェック 4 は原文基準では FAIL**・gripper の逆転規則は未確定。中身は 006 へ移してから閉じる） |
+| **[015](015_mppi_benchmark_go_no_go.md)** | **MPPI を 1 タスクで実装・実測し、100 タスク × 10 デモの生成が RTX6000 で成立するか go / no-go を出す**（調査は [reference/28](../../reference/28_mppi_data_regeneration_survey.md)） | **止めた（9/6・切る推奨）。**017 の時間反転が 3 本中 2 本で通ったので、第 2 の手段の値打ちが落ちた（`open_items.md` の `F90`・[260906_briefing.md](../260906_briefing.md) の判断 3）。**判断が「切らない」なら依頼中に戻す** |
+| **[016](016_reverse_transfer_probe_on_current_weights.md)** | **今の重み（`trial1500/001500`）は学習済みタスクの「逆向き」を動かせるのかを、RTX6000（EGL）で 3〜4 タスク × 2 本ずつ測る**（逆向きデータ生成 1 週間の前提潰し。014・015 が「作れるか」なら、これは「重みが動くか」） | **完了（go/no-go = No）。**逆向き 0/4・4 本とも 300 歩。**Track3 の 8 本のうち 2 本は学習済みタスクの厳密な逆向きだった**——中身を `reference/19` と `knowledge/` へ移してから閉じる |
+| **[017](017_action_convention_reconciliation.md)** | **`action` 列が「正規化された相対差分」か「生の OSC 指令値」かを、シムで 1 本再生して決める**（014 の実測と `reversal_probe.py` の docstring が食い違っている。**006 の forward 0/3 の候補 (b) に直結**し、逆向きデモの作り方がこの 1 点で変わる） | **追加依頼中（9/6）。**規約は確定し、**段階制で逆向きが 3 本中 2 本通った。****次は「学習データの形で 1 本書き出す」**（同ファイル末尾の「追加依頼」・`open_items.md` の `F87`）。英語版 [017e](017e_action_convention_reconciliation.md) あり・**正は 017** |
+
+**8/31 に 6 本消した**（001・003・004・005・007・009）。**中身の行き先はこうである。**
+
+| 消した # | 何だったか | 中身はどこにある |
+|---|---|---|
+| 001 | 衝突したときどの物体がどれだけ動いたか | 216 本の分布と犯人の物体は [reference/18](../../reference/18_failure_breakdown.md) 7 節。動画が書けていなかった件は [knowledge/12](../../knowledge/12_workbench_accidents.md) ③ |
+| 003 | Blackwell の段取り | **一度も着手していない。**010 が引き継いだ |
+| 004 | RunPod 1,500 歩 | [reference/19](../../reference/19_weights_catalog.md)（一次資料は HF `siruku6/pi05_trial1500` の `pi05_trial1500.log`）。踏んだ穴 7 件は [knowledge/13](../../knowledge/13_runpod_operations.md) ⑥⑦⑧・[howto/06](../../howto/06_runpod_pi05.md) 5.2 |
+| 005 | `blend_steps` と `EMA` | `open_items.md` の「決めた」の 8/28・8/29 の行。次に触る候補は [plan/19](../../plan/19_smoothness_beyond_postprocessing.md) 8 節 |
+| 007 | zip を組み直す | `open_items.md` の `F42` と [howto/02](../../howto/02_build_submission.md) のケース 0 |
+| 009 | 8/29 の提出 3 本 | 版番号の決まり（5=`001500`・6=`001000`・7=`000500`）は [howto/02](../../howto/02_build_submission.md) と [reference/19](../../reference/19_weights_catalog.md) |
