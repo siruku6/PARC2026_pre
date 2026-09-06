@@ -107,6 +107,38 @@ def gripper_width(states):
     return st[:, 6] - st[:, 7]
 
 
+def object_yaw_deg(quat):
+    """物の鉛直軸まわりの向き[deg]。**配布 init が振っている主な軸である。**
+
+    失敗した init を「位置のせい」と「向きのせい」に切り分けるために出す。
+    """
+    from robosuite.utils import transform_utils as T
+
+    return float(np.degrees(T.mat2euler(T.quat2mat(np.asarray(quat)))[2]))
+
+
+def index_spec(spec, n):
+    """`"0"` / `"0,2,5"` / `"0-49"` / `"all"` を行番号の並びにする。
+
+    `.pruned_init` は 1 タスクにつき **50 行**入っている（1 行ではない）。
+    既定で `#0` しか使わないと「初期状態が 1 通りだけの学習データ」になるので、
+    範囲で掃けるようにしてある。
+    """
+    s = spec.strip()
+    if not s or s == "all":
+        return list(range(n))
+    out = []
+    for part in s.split(","):
+        if not part.strip():
+            continue
+        a, _, b = part.strip().partition("-")
+        out.extend(range(int(a), int(b) + 1) if b else [int(a)])
+    bad = sorted({i for i in out if not 0 <= i < n})
+    if bad:
+        raise SystemExit(f"init の行番号が範囲外: {bad}（0..{n - 1}）")
+    return out
+
+
 def object_is_upright(quat, thin_axis_local=0):
     """物が「立っている」か（挟むべき最短辺の軸が水平を向いているか）を返す。
 
@@ -142,6 +174,60 @@ def body_pose(env, name):
             T.convert_quat(np.asarray(data.body_xquat[bid]).copy(), to="xyzw"))
 
 
+def site_frame(env, site):
+    """site の world 位置と回転行列。**env をまたいで姿勢を移す基準に使う。**"""
+    sim = env.env.sim
+    return (np.asarray(sim.data.get_site_xpos(site)).copy(),
+            np.asarray(sim.data.get_site_xmat(site)).reshape(3, 3).copy())
+
+
+def object_qpos(env, name):
+    """free joint の qpos 7 要素（xyz + quat **(w,x,y,z)**）をそのまま返す。
+
+    `body_pose` と違って**並べ替えない**。`.pruned_init` へ書き戻す値なので、
+    MuJoCo の並びのまま持ち回るほうが取り違えが起きない。
+    """
+    sim = env.env.sim
+    adr = sim.model.jnt_qposadr[sim.model.joint_name2id(f"{name}_joint0")]
+    return np.asarray(sim.data.qpos[adr:adr + 7]).copy()
+
+
+def rebase_qpos(qpos7, frame_from, frame_to):
+    """基準 site で測った姿勢を、別の env の同じ site の座標系へ移す。
+
+    **座標をそのままコピーしてはいけない。**同じ名前の棚でも env が違えば配置の
+    抽選が違い、実測で **21.7 mm** ずれていた（順方向 `(-0.198, 0.271)` に対し
+    配布 T3 は `(-0.210, 0.289)`）。はみ出し量は数 mm で掴めるかどうかが変わる
+    ので、このずれは結論を変える。
+    """
+    from robosuite.utils import transform_utils as T
+
+    p_a, r_a = frame_from
+    p_b, r_b = frame_to
+    r_rel = r_b @ r_a.T
+    pos = p_b + r_rel @ (np.asarray(qpos7[:3], dtype=np.float64) - p_a)
+    # qpos の quat は (w,x,y,z)、transform_utils は (x,y,z,w)。
+    r_obj = T.quat2mat(T.convert_quat(np.asarray(qpos7[3:7]), to="xyzw"))
+    return np.concatenate(
+        [pos, T.convert_quat(T.mat2quat(r_rel @ r_obj), to="wxyz")])
+
+
+def with_object_qpos(env, init_state, name, qpos7):
+    """flatten 済みシム状態の、その物の姿勢だけ差し替えた複製を返す。
+
+    `set_state_from_flattened` が読む並びは `[time] + qpos + qvel` なので、
+    qpos の先頭が index 1 になる。
+    """
+    sim = env.env.sim
+    adr = sim.model.jnt_qposadr[sim.model.joint_name2id(f"{name}_joint0")]
+    st = np.asarray(init_state, dtype=np.float64).copy()
+    if len(st) != 1 + sim.model.nq + sim.model.nv:
+        raise SystemExit(f"init の長さ {len(st)} が env（{sim.model.nq}+"
+                         f"{sim.model.nv}+1）と合わない")
+    st[1 + adr:1 + adr + 7] = qpos7
+    return st
+
+
 def region_box(env, region):
     """region site の中心と、箱の半サイズを返す。**必ず判定する env から取る。**"""
     return (np.asarray(env.env.sim.data.get_site_xpos(region)).copy(),
@@ -166,13 +252,17 @@ def parse_args():
                     help="逆向き goal の述語と、--init-source t3 のときの env に使う")
     ap.add_argument("--t3-inits", default="",
                     help="配布 T3 の .pruned_init。--init-source t3 に必須")
-    ap.add_argument("--init-source", choices=["forward-final", "t3"],
+    ap.add_argument("--init-source",
+                    choices=["forward-final", "t3", "t3-lying"],
                     default="forward-final",
                     help="逆向きエピソードの初期状態をどこから取るか。"
                          "forward-final=順再生の最終状態（既定。腕は棚の上・本は寝ている）/ "
-                         "t3=配布 T3 の init（本番と同じ。本は立ち・腕は home）")
-    ap.add_argument("--t3-init-index", type=int, default=0,
-                    help="--init-source t3 のとき使う init の行番号")
+                         "t3=配布 T3 の init（本番と同じ。本は立ち・腕は home）/ "
+                         "t3-lying=T3 の init に**順再生が残した本の姿勢だけ**を"
+                         "差し込む（腕は home のまま・本は寝ている）")
+    ap.add_argument("--t3-init-index", default="0",
+                    help="--init-source t3 のとき使う init の行番号。"
+                         "`0` / `0,2,5` / `0-49` / `all`（配布は 50 行ある）")
     ap.add_argument("--grasp-frame", choices=["release", "grasp", "clamped"],
                     default="release",
                     help="掴む姿勢の相対オフセットを順方向のどのフレームから測るか。"
@@ -205,7 +295,7 @@ def build_envs(args, render, rev_region):
     そちらにも効く。fixture の固定は [pin_fixtures](replay_video_probe.py) が
     面倒を見るので、以降どの関数にも配って回らなくてよい。
     """
-    use_t3 = args.init_source == "t3"
+    use_t3 = args.init_source.startswith("t3")
     make = make_render_env if render else make_env
     print(f"env を作る（描画{'あり' if render else 'なし'}）...", flush=True)
     env = pin_fixtures(make(args.forward_bddl), args.seed)
@@ -265,17 +355,26 @@ def main():
     print(f"逆向き goal: {rev_pred} {rev_obj} -> {rev_region}", flush=True)
 
     env, env_t3, use_t3 = build_envs(args, render, rev_region)
+    # 順方向 goal の領域 site（＝本を置いた棚）を、env をまたぐ姿勢の基準にする。
+    # 同じ fixture が両方の env にあるので、タスク名を書かずに対応が取れる。
+    fwd_frame, t3_frame = site_frame(env, fwd_region), site_frame(env_t3, fwd_region)
+    if args.init_source == "t3-lying":
+        print(f"基準 site {fwd_region}: 順方向 {np.round(fwd_frame[0], 4)} / "
+              f"T3 {np.round(t3_frame[0], 4)}  "
+              f"ずれ {np.linalg.norm(t3_frame[0] - fwd_frame[0]) * 1000:.1f} mm",
+              flush=True)
     inits = load_pruned_init(args.forward_inits)
     # 50 本ぶんの reset は 25 秒かかるが、結果はエピソードに依らない。1 度だけ測る。
     probed = probe_init_eef(env, inits)
     print(f"初期状態 {len(inits)} 本を下見した", flush=True)
-    t3_inits = None
+    t3_inits, t3_rows = None, [None]      # forward-final では init は 1 通り
     if use_t3:
         if not args.t3_inits:
             raise SystemExit("--init-source t3 には --t3-inits が要る")
         t3_inits = load_pruned_init(args.t3_inits)
-        print(f"T3 の初期状態 {len(t3_inits)} 本。#{args.t3_init_index} を使う",
-              flush=True)
+        t3_rows = index_spec(args.t3_init_index, len(t3_inits))
+        print(f"T3 の初期状態 {len(t3_inits)} 本のうち {len(t3_rows)} 本を使う "
+              f"(#{t3_rows[0]}..#{t3_rows[-1]})", flush=True)
 
     report = []
     for ep in eps:
@@ -292,6 +391,8 @@ def main():
         fwd_ok = bool(env.check_success())
         fwd_final = env.env.sim.get_state().flatten()
         book_fwd_end, book_quat_fwd_end = body_pose(env, obj)
+        # 順再生が本を残した姿勢。t3-lying はこれを T3 の init へ差し込む。
+        book_fwd_qpos = object_qpos(env, obj)
         print(f"\n=== ep {ep}  T={len(actions)}  初期状態 #{idx} "
               f"({dist * 1000:.1f} mm) ===", flush=True)
         print(f"  順再生: ずれ 中央 {np.median(fwd['err_m']) * 1000:.1f} mm  "
@@ -308,76 +409,97 @@ def main():
         j = min(max(grasp_source_frame(args.grasp_frame, actions, states, close_i),
                     0), len(fwd["eef_pos"]) - 1)
 
-        # 2) 逆向きを回す env と初期状態を決める（軌道の作り方とは独立の軸）
-        if use_t3:
-            rev_env = env_t3
-            rev_init = t3_inits[args.t3_init_index]
-            obs_t3 = reset_to(rev_env, rev_init)
-            book_rev_start = np.asarray(obs_t3[f"{obj}_pos"]).copy()
-            book_rev_quat = np.asarray(obs_t3[f"{obj}_quat"]).copy()
-            print(f"  T3 初期状態: 本 {np.round(book_rev_start, 3)}  "
-                  f"腕 {np.round(obs_t3['robot0_eef_pos'], 3)}", flush=True)
-        else:
-            rev_env = env
-            rev_init = fwd_final
-            book_rev_start, book_rev_quat = book_fwd_end, book_quat_fwd_end
-        upright = object_is_upright(book_rev_quat)
-        print(f"  逆向きの初期状態: 本は{'立っている' if upright else '寝ている'}"
-              f"／掴む姿勢は順方向 f{j} から取る", flush=True)
-
-        # 掴む姿勢は**本の座標系で測った相対姿勢を、今の本の姿勢に掛け直して**作る。
-        # 本がどの向きに置かれていても狙える。shift に依らないのでここで 1 度だけ。
-        grasp_pose = grasp_pose_from_forward(fwd, j, book_rev_start, book_rev_quat)
-
+        # 2) 逆向きを回す env と初期状態を決める（軌道の作り方とは独立の軸）。
+        #    **順再生（1)）は init に依らないので、外側でちょうど 1 回だけ回す。**
+        rev_env = env_t3 if use_t3 else env
         rows = []
-        for k in shifts:
-            vid = (vid_dir / f"{args.mode}_ep{ep}_rev_k{k:+03d}.mp4"
-                   if k in render else None)
-            grip = shift_gripper(grip_rev, k)
-            if args.mode == "phased":
-                r = rollout_phased(rev_env, rev_init, ref, grip, vid,
-                                   grasp_pose=grasp_pose, standoff=args.standoff)
-            else:
-                r = rollout_tracking(rev_env, rev_init, ref, grip, vid)
-            # **判定は逆向きを回した env で行う。**T3 env で回したならそのまま
-            # `check_success()` が T3 の goal。順方向 env で回したなら、本の姿勢を
-            # T3 env へ差し込んで判定する（順方向 env の同名 region は 7.5 倍狭い）。
+        for t3_i in t3_rows:
             if use_t3:
-                rev_goal = bool(rev_env.check_success())
+                rev_init = t3_inits[t3_i]
+                if args.init_source == "t3-lying":
+                    rev_init = with_object_qpos(
+                        rev_env, rev_init, obj,
+                        rebase_qpos(book_fwd_qpos, fwd_frame, t3_frame))
+                obs_rev = reset_to(rev_env, rev_init)
+                book_rev_start = np.asarray(obs_rev[f"{obj}_pos"]).copy()
+                book_rev_quat = np.asarray(obs_rev[f"{obj}_quat"]).copy()
             else:
-                rev_goal = eval_in_t3(env_t3, rev_obj, rev_pred, rev_region,
-                                      *body_pose(rev_env, obj))
-            row = {"shift": k,
-                   **measure(rev_env, obj, rev_region, r, rev_goal, book_rev_start)}
-            if not use_t3:
-                # 順方向と同じ env で回したときだけ、順方向側の座標と比べられる
-                book_end, _ = body_pose(rev_env, obj)
-                row["book_to_start_mm"] = round(float(np.linalg.norm(
-                    book_end - book_start)) * 1000, 1)
-                row["forward_goal_undone"] = not bool(env.check_success())
-            rows.append(row)
-            extra = (f"  接近 {row['n_approach']} コマで {row['approach_err_mm']} mm"
-                     if "n_approach" in row else
-                     f"  腕ずれ {row['err_median_mm']:.1f} mm")
-            print(f"  shift {k:+3d}: 本の移動 {row['book_moved_mm']:7.1f} mm  "
-                  f"領域dxy {row['region_dxy_mm']} (箱±{row['region_half_mm'][0]:.0f})  "
-                  f"z={row['book_z']:.3f}  逆向き goal={row['reverse_goal']}{extra}",
-                  flush=True)
+                rev_init = fwd_final
+                book_rev_start, book_rev_quat = book_fwd_end, book_quat_fwd_end
+            upright = object_is_upright(book_rev_quat)
+            yaw = object_yaw_deg(book_rev_quat)
+
+            # 掴む姿勢は**本の座標系で測った相対姿勢を、今の本の姿勢に掛け直して**
+            # 作る。本がどの向きに置かれていても狙える。shift に依らないので 1 度だけ。
+            grasp_pose = grasp_pose_from_forward(fwd, j, book_rev_start,
+                                                 book_rev_quat)
+
+            for k in shifts:
+                tag = f"ep{ep}" + (f"_i{t3_i}" if use_t3 else "")
+                vid = (vid_dir / f"{args.mode}_{tag}_rev_k{k:+03d}.mp4"
+                       if k in render else None)
+                grip = shift_gripper(grip_rev, k)
+                if args.mode == "phased":
+                    r = rollout_phased(rev_env, rev_init, ref, grip, vid,
+                                       grasp_pose=grasp_pose,
+                                       standoff=args.standoff)
+                else:
+                    r = rollout_tracking(rev_env, rev_init, ref, grip, vid)
+                # **判定は逆向きを回した env で行う。**T3 env で回したならそのまま
+                # `check_success()` が T3 の goal。順方向 env で回したなら、本の姿勢を
+                # T3 env へ差し込んで判定する（順方向 env の同名 region は 7.5 倍狭い）。
+                if use_t3:
+                    rev_goal = bool(rev_env.check_success())
+                else:
+                    rev_goal = eval_in_t3(env_t3, rev_obj, rev_pred, rev_region,
+                                          *body_pose(rev_env, obj))
+                row = {"t3_init": t3_i, "shift": k, "object_upright": upright,
+                       "book_init_yaw_deg": round(yaw, 1),
+                       "book_init_xy": [round(float(v), 4)
+                                        for v in book_rev_start[:2]],
+                       **measure(rev_env, obj, rev_region, r, rev_goal,
+                                 book_rev_start)}
+                if not use_t3:
+                    # 順方向と同じ env で回したときだけ、順方向側の座標と比べられる
+                    book_end, _ = body_pose(rev_env, obj)
+                    row["book_to_start_mm"] = round(float(np.linalg.norm(
+                        book_end - book_start)) * 1000, 1)
+                    row["forward_goal_undone"] = not bool(env.check_success())
+                rows.append(row)
+                extra = (f"  接近 {row['n_approach']:2d} コマで "
+                         f"{row['approach_err_mm']:6.2f} mm"
+                         if "n_approach" in row else
+                         f"  腕ずれ {row['err_median_mm']:.1f} mm")
+                head = (f"  init #{t3_i:2d} yaw {yaw:+6.1f}°" if use_t3
+                        else "  forward-final")
+                print(f"{head} shift {k:+3d}: "
+                      f"本の移動 {row['book_moved_mm']:7.1f} mm  "
+                      f"領域dxy {row['region_dxy_mm']} "
+                      f"(箱±{row['region_half_mm'][0]:.0f})  "
+                      f"z={row['book_z']:.3f}  "
+                      f"goal={'○' if rev_goal else '×'}{extra}", flush=True)
 
         # 最良の選び方: goal が立ったものを優先し、その中で領域中心に近いもの
         best = min(rows, key=lambda r: (not r["reverse_goal"],
                                         float(np.hypot(*r["region_dxy_mm"]))))
-        print(f"  --> 最良 shift={best['shift']:+d} "
-              f"(逆向き goal={best['reverse_goal']}, "
+        n_ok = sum(r["reverse_goal"] for r in rows)
+        print(f"  --> {n_ok}/{len(rows)} 本で逆向き goal。最良 "
+              f"init #{best['t3_init']} shift {best['shift']:+d} "
+              f"(goal={best['reverse_goal']}, "
               f"領域中心まで {np.hypot(*best['region_dxy_mm']):.1f} mm)", flush=True)
         report.append({"episode": ep, "n_actions": int(len(actions)),
                        "init_index": idx, "forward_goal": fwd_ok,
-                       "object_upright": upright, "grasp_frame_index": j,
+                       "grasp_frame_index": j, "n_goal": int(n_ok),
+                       "n_trials": len(rows),
                        "book_start": [round(float(x), 4) for x in book_start],
                        "book_forward_end": [round(float(x), 4)
                                             for x in book_fwd_end],
                        "shifts": rows, "best_shift": best["shift"]})
 
+    print("\n=== まとめ ===", flush=True)
+    for rec in report:
+        print(f"  ep {rec['episode']}: {rec['n_goal']}/{rec['n_trials']} 本成功",
+              flush=True)
     path = out_dir / "gripper_shift_sweep.json"
     path.write_text(json.dumps(report, ensure_ascii=False, indent=1),
                     encoding="utf-8")
