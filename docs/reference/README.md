@@ -24,5 +24,6 @@
 | 見た目の振れ幅 | [08_appearance_spread.md](08_appearance_spread.md) |
 | 失敗の内訳 | [18_failure_breakdown.md](18_failure_breakdown.md) |
 | **Track3 の中身（配布 4 件・目標条件・母集団の作り）** | **[28_track3_contents.md](28_track3_contents.md)** |
+| **LIBERO シムを回すときの規約と落とし穴**（`action` の意味・gripper の符号化・状態復元で復らないもの・時刻反転特有の落とし穴） | **[25](25_dataset_inventory.md) 8.7 節**・**[28_mppi_data_regeneration_survey.md](28_mppi_data_regeneration_survey.md) 5.1〜5.2 節** |
 | weak3x を π0.5 に使うか | [16_weak3x_for_pi05.md](16_weak3x_for_pi05.md) |
 | レポートに書く値 | 重み・版・点は [19_weights_catalog.md](19_weights_catalog.md)、ライセンスは [../knowledge/04_licenses.md](../knowledge/04_licenses.md)、必須欄は [../knowledge/01_report_requirements.md](../knowledge/01_report_requirements.md) |
