@@ -442,6 +442,59 @@ def command_merge(args: argparse.Namespace) -> None:
     _print_summary(args.output)
 
 
+def command_subset(args: argparse.Namespace) -> None:
+    """課題ごとに均等に選んで、小さいデータセットを書き出す。
+
+    **なぜ要るか。**`lerobot/libero_plus` は 14,347 本 15.8 GB あり、
+    ディスクの狭い機械（JAIST サーバは空き 11 GB）には置けない。
+    **配布データを混ぜる目的は「忘れないように繋ぎ止める」ことなので、
+    全部は要らない。**課題を 1 つも落とさずに本数だけ減らす。
+
+    **選び方は「課題ごとに、通し番号で等間隔」である。**先頭から N 本取ると
+    データセットの並び順の偏りをそのまま拾う。
+
+    Reads:
+      - <root>/meta/episodes/*.parquet
+    Generates:
+      - <output>/ … 選んだ本数だけのデータセット
+    """
+    import pandas as pd
+    from lerobot.datasets.dataset_tools import split_dataset
+    from lerobot.datasets.lerobot_dataset import LeRobotDataset
+
+    files = sorted((args.root / "meta" / "episodes").rglob("*.parquet"))
+    if not files:
+        raise SystemExit(f"メタデータが無い: {args.root}/meta/episodes/*.parquet")
+    frame = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+    frame["task"] = frame["tasks"].apply(
+        lambda cell: cell if isinstance(cell, str) else str(cell[0]))
+
+    chosen: list[int] = []
+    for _, group in frame.groupby("task"):
+        indices = sorted(group["episode_index"].astype(int).tolist())
+        count = min(args.per_task, len(indices))
+        if count == len(indices):
+            picks = indices
+        elif count == 1:
+            picks = [indices[len(indices) // 2]]
+        else:
+            picks = [indices[round(rank * (len(indices) - 1) / (count - 1))]
+                     for rank in range(count)]
+        chosen.extend(picks)
+    chosen = sorted(set(chosen))
+
+    kept = frame[frame["episode_index"].isin(chosen)]
+    print(f"=== {args.root} から {len(frame)} 本中 {len(chosen)} 本を選ぶ ===")
+    print(f"  課題 {frame['task'].nunique()} 種 × 1 課題あたり最大 {args.per_task} 本")
+    print(f"  コマ数 {int(frame['length'].sum()):,} → {int(kept['length'].sum()):,}")
+
+    name = args.output.name
+    _prepare_output(args.output)
+    dataset = LeRobotDataset(args.repo_id, root=args.root)
+    split_dataset(dataset, {name: chosen}, output_dir=args.output.parent)
+    _print_summary(args.output)
+
+
 def _print_summary(root: Path) -> None:
     """書き出されたものの宣言を印字する。**混ぜる前に目視で突き合わせる。**
 
@@ -501,13 +554,21 @@ def _parse_args() -> argparse.Namespace:
     merge.add_argument("--add-repo-id", default="local/scripted_demos")
     merge.add_argument("--output", type=Path, required=True)
     merge.add_argument("--output-repo-id", default="local/libero_plus_scripted")
+
+    subset = subparsers.add_parser("subset", help="課題ごとに均等に選んで小さくする")
+    subset.add_argument("--root", type=Path, required=True, metavar="DIR")
+    subset.add_argument("--output", type=Path, required=True, metavar="DIR")
+    subset.add_argument("--repo-id", default="local/source", metavar="REPO_ID")
+    subset.add_argument("--per-task", type=int, default=75,
+                        help="1 課題あたり何本残すか（既定 75）")
     return parser.parse_args()
 
 
 def main() -> None:
     args = _parse_args()
     {"check": command_check, "build": command_build, "align": command_align,
-     "inspect": command_inspect, "merge": command_merge}[args.command](args)
+     "inspect": command_inspect, "merge": command_merge,
+     "subset": command_subset}[args.command](args)
 
 
 if __name__ == "__main__":
