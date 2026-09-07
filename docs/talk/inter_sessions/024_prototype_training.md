@@ -300,8 +300,12 @@ state 0.95〜1.04 倍**である（`rp3000` と `all111` の normalizer を突�
 ```bash
 cd /home/ubuntu/src/PARC2026_pre
 tar -czf /tmp/proto389.tar.gz -C work/probe_017 reverse_lerobot_all   # 391 MB
-# Blackwell へ渡す手立ては howto/14 の 1 節（HF の非公開リポジトリ経由が確実）
+hf upload siruku6/reverse_lerobot_389 /tmp/proto389.tar.gz proto389.tar.gz \
+    --repo-type dataset --private
 ```
+
+**9/7 に上げたのは `siruku6/reverse_lerobot_389`（データセット・非公開）の
+`proto389.tar.gz`（395 MB・35 MB/s で 11 秒）である。**
 
 **道具を 2 つ一緒に渡す。**Blackwell では docker を使わず素の python で回すので、
 ファイルそのものが要る（どちらも依存は lerobot と numpy だけ）。
@@ -331,7 +335,15 @@ print(i['total_episodes'], i['total_frames'], i['total_tasks'], i['fps'])"
 
 ```sh
 P=/opt/dlami/nvme/data/proto
-mkdir -p "$P"; tar -xzf ~/proto389.tar.gz -C "$P"      # $P/reverse_lerobot_all
+# **`hf download` は $HOME ではなく HF キャッシュに置く。**返ってきた path を使う
+TAR=$(find "${HF_HOME:-$HOME/.cache/huggingface}/hub/datasets--siruku6--reverse_lerobot_389" \
+        -name proto389.tar.gz | head -1)
+echo "$TAR"                                            # 空でないこと
+mkdir -p "$P"; tar -xzf "$TAR" -C "$P"                 # $P/reverse_lerobot_all
+python3 -c "
+import json; i = json.load(open('$P/reverse_lerobot_all/meta/info.json'))
+print(i['total_episodes'], i['total_frames'], i['total_tasks'], i['fps'])"
+# 389 67775 3 20 と出ること
 M() { python ~/npz_to_lerobot.py merge \
         --base "$1" --base-repo-id local/a \
         --add  "$2" --add-repo-id  local/b \
@@ -444,7 +456,13 @@ bash solution/tools/eval/run_final_eval.sh track1     # 退化していないか
   **直すのは生成側の仕事で、コマ数の上限 300 と衝突する。**この 1 本は据え置きで逃げる。
 - **提出物を組むこと。**この重みは出さない。
 
-## 9. 報告の書き方
+## 9. 踏んだ穴（打ちながら足す）
+
+| 症状 | 原因と対処 |
+|---|---|
+| `tar: ~/proto389.tar.gz: Cannot open` | **`hf download` は `$HOME` に置かない。**HF キャッシュの `hub/datasets--<repo>/snapshots/<sha>/` に入る。6.2 の `find` で解決する（9/7 に踏んだ） |
+
+## 10. 報告の書き方
 
 | 欄 | 例 |
 |---|---|
@@ -456,7 +474,7 @@ bash solution/tools/eval/run_final_eval.sh track1     # 退化していないか
 | Track1 の点 | 0.4xx（`rp3000` は 0.492） |
 | 踏んだ穴 | 1 行ずつ |
 
-## 10. 関連
+## 11. 関連
 
 | 何 | どこ |
 |---|---|
@@ -468,7 +486,7 @@ bash solution/tools/eval/run_final_eval.sh track1     # 退化していないか
 | **明日の手元評価用データ**（4 タスク・作れる組を全部） | **[023](023_local_eval_dataset.md)** |
 | **本番学習用データ**（2 因子を振って 1 タスク 50 本） | **[020](020_reverse_dataset_regeneration.md)** |
 
-## 11. 後片付け（この依頼で作った手元の一時物）
+## 12. 後片付け（この依頼で作った手元の一時物）
 
 **2.8 GB が残っている**——`work/probe_024/proto_x1`（391 MB）・`proto_x2`（780 MB）・
 `proto_x4`（1.6 GB）。**このマシンでは `rm -rf` が拒否される**ので消せていない。
