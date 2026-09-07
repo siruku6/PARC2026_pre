@@ -346,7 +346,7 @@ python3 -c "
 import json; i = json.load(open('$P/reverse_lerobot_all/meta/info.json'))
 print(i['total_episodes'], i['total_frames'], i['total_tasks'], i['fps'])"
 # 389 67775 3 20 と出ること
-M() { python ~/npz_to_lerobot.py merge \
+M() { python ~/tools/npz_to_lerobot.py merge \
         --base "$1" --base-repo-id local/a \
         --add  "$2" --add-repo-id  local/b \
         --output "$3" --output-repo-id local/proto || exit 1; }
@@ -358,13 +358,15 @@ M $P/x10 $P/reverse_lerobot_all    $P/x11                   # 4,279 本 / 745,52
 ```
 
 **`x11` が 4,279 本 / 745,525 コマ / 3 タスクであることを確かめてから次へ進む。**
+**9/7 の実測では 5 回で 20 秒**（`Copy data and videos` が 1.9〜3.1 s/it）。
+**指示文が 3 のまま増えないことも見る**（同じ文なので task_index は共有される）。
 
 ### 6.3 配布データに 1 度だけ混ぜる（**10〜20 分・25 GB 書く**）
 
 ```sh
-python ~/npz_to_lerobot.py align --base "$DATA" --add "$P/x11"    # features の飾りを揃える
+python ~/tools/npz_to_lerobot.py align --base "$DATA" --add "$P/x11"    # features の飾りを揃える
 MERGED=/opt/dlami/nvme/data/proto20
-python ~/npz_to_lerobot.py merge \
+python ~/tools/npz_to_lerobot.py merge \
   --base "$DATA"   --base-repo-id lerobot/libero_combined_20hz \
   --add  "$P/x11"  --add-repo-id  local/t3_reverse_x11 \
   --output "$MERGED" --output-repo-id local/t3_proto20
@@ -378,9 +380,9 @@ print(i['total_episodes'], i['total_frames'], i['total_tasks'])"
 
 ```sh
 # ① 据え置く前に、混ぜた統計が式どおりかを検算する（ここは一致すること）
-python3 ~/check_merge_stats.py verify --parts "$DATA" "$P/x11" --merged "$MERGED"
+python3 ~/tools/check_merge_stats.py verify --parts "$DATA" "$P/x11" --merged "$MERGED"
 # ② 配布データの値へ据え置く
-python3 ~/check_merge_stats.py freeze --merged "$MERGED" --source "$DATA"
+python3 ~/tools/check_merge_stats.py freeze --merged "$MERGED" --source "$DATA"
 #    action: std の倍率 0.426〜0.992 を 1.0 に戻す  と出ること（割合 20% のとき）
 # ③ もう一度 verify を打つと、こんどは action と state が「ちがう」と出る。
 #    **それが据え置きが効いた証拠である**（元の値は stats.json.bak にある）
