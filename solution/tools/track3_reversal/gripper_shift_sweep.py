@@ -143,8 +143,6 @@ def grasp_cycles(gripper_cmd, states, obj_pos, min_frames=4, min_move=0.02):
         out.append({"close": int(c), "open": int(o), "obj": name,
                     "clamp": clamp_frame(gripper_cmd, states, int(c), int(o)),
                     "moved_mm": round(dist * 1000, 1)})
-    if not out:
-        raise SystemExit("順方向デモに「掴んで物を動かした区間」が 1 つも無い")
     return out
 
 
@@ -400,6 +398,15 @@ def parse_args():
     ap.add_argument("--settle", type=int, default=20,
                     help="--release contact のとき、触れるまで 5 mm ずつ下ろす"
                          "コマ数の上限")
+    ap.add_argument("--max-steps", type=int, default=300,
+                    help="**この長さを超えた回は学習データに書かない。**本番の "
+                         "`max_steps_per_episode` が 300 なので、それより長い"
+                         "動かし方を教えても必ず打ち切られる。0 で無制限")
+    ap.add_argument("--max-tail", type=int, default=-1,
+                    help="最後に放したあと手を引く区間の上限コマ数。**-1 で全部"
+                         "辿る（既定）・0 で落とす。**この区間は腕が初期姿勢へ"
+                         "戻るだけで、goal は既に立っているので採点に効かず、"
+                         "**学習データにも要らない**（実測で 44〜92 コマある）")
     ap.add_argument("--standoff", type=float, default=0.0,
                     help="掴む姿勢の手前（グリッパの進入軸に沿って）に置く待機点の"
                          "距離[m]。0 で無効。物を押さずに近づくために使う")
@@ -510,12 +517,35 @@ def measure(rev_env, rev_goals, r, rev_goal, starts, obj_pos_start=None):
                    n_standoff=int(r["n_standoff"]), n_reach=int(r["n_reach"]),
                    n_lift=int(r["n_lift"]), n_floor=int(r["n_floor"]),
                    n_settle=int(r["n_settle"]), n_cycles=int(r["n_cycles"]),
+                   n_path=int(r["n_path"]), n_tail=int(r["n_tail"]),
+                   per_cycle=r.get("per_cycle"),
                    drop_mm=r.get("drop_mm"),
                    approach_err_mm=r["approach_err_mm"],
                    approach_err_mm_all=r.get("approach_err_mm_all"))
     else:
         row["err_median_mm"] = round(float(np.median(r["err_m"])) * 1000, 1)
     return row
+
+
+def settle_frames(r, tol_mm=0.5):
+    """**放してから物が動かなくなるまでの猶予コマ数**をサイクルごとに返す。
+
+    最後の姿勢を基準に、そこから `tol_mm` 以内に入って**戻らなくなる**最初の
+    コマを探す。腕が初期姿勢へ戻る区間は学習データに要らないが、**置いた物が
+    落ち着く前に切ると、動いている途中で終わったデータになる。**その境目を
+    測るための値である。
+    """
+    out = {}
+    for k, name in enumerate(r.get("release_objs", [])):
+        pos = np.asarray(r["trace"][name]["pos"])
+        t0 = int(r["release_frames"][k])
+        d = np.linalg.norm(pos[t0:] - pos[-1], axis=1) * 1000
+        moving = np.where(d > tol_mm)[0]
+        out[name] = {"frames": int(moving[-1] + 1) if len(moving) else 0,
+                     # k コマ残したときに「まだ動く量」[mm]。切る所を決める値。
+                     "left_mm": {k: round(float(d[k]), 2)
+                                 for k in (0, 5, 10, 15, 20, 30) if k < len(d)}}
+    return out
 
 
 def pose_now(env, obs, name, use_obs):
@@ -615,6 +645,18 @@ def main():
             print(f"  掴んで放す f{c['close']}→f{c['open']}"
                   f"（挟んだのは f{c['clamp']}）: {c['obj']} が "
                   f"{c['moved_mm']:.0f} mm 動いた", flush=True)
+        # **goal が求める物を 1 つでも動かせていないデモは使えない。**掴む姿勢は
+        # 再生結果から測るので、動かしていない物の値は物理的な意味を持たない
+        # （[reference/30 の 5 節]）。two mugs では「2 つとも動いたか」になる。
+        missing = [n for n in watch if n not in {c["obj"] for c in fwd_cycles}]
+        if missing:
+            print(f"  !! 順再生が {', '.join(missing)} を動かせていない。"
+                  f"この ep は飛ばす", flush=True)
+            report.append({"episode": ep, "n_actions": int(len(actions)),
+                           "init_index": idx, "forward_goal": fwd_ok,
+                           "skipped": f"順再生が動かさなかった: {missing}",
+                           "n_goal": 0, "n_trials": 0, "shifts": []})
+            continue
         T = len(actions)
         # 逆向きは**順方向の最後のサイクルから**辿る。
         rev_cycles = []
@@ -704,6 +746,7 @@ def main():
                                        standoff=args.standoff,
                                        max_approach=args.max_approach,
                                        lift=args.lift, settle=args.settle,
+                                       max_tail=args.max_tail,
                                        capture=bool(args.write_npz))
                 else:
                     r = rollout_tracking(rev_env, rev_init, ref, grip, vid)
@@ -728,7 +771,13 @@ def main():
                         book_end - book_start)) * 1000, 1)
                     row["forward_goal_undone"] = not bool(env.check_success())
                 rows.append(row)
-                if args.write_npz and rev_goal:
+                too_long = (args.max_steps > 0
+                            and int(r["n_steps"]) > args.max_steps)
+                row["too_long"] = too_long
+                if args.write_npz and rev_goal and too_long:
+                    print(f"    !! {r['n_steps']} コマは打ち切り "
+                          f"{args.max_steps} を超えるので書かない", flush=True)
+                if args.write_npz and rev_goal and not too_long:
                     # **通った回だけ書く。**落ちた回は学習に入れない方針なので、
                     # 100 MB 級の npz をディスクに残す意味が無い。
                     write_episode_npz(npz_dir / f"rev_{tag}_k{k:+03d}.npz",
@@ -738,6 +787,8 @@ def main():
                          f"{row['approach_err_mm']:6.2f} mm"
                          if "n_approach" in row else
                          f"  腕ずれ {row['err_median_mm']:.1f} mm")
+                if "trace" in r:
+                    row["settle_frames"] = settle_frames(r)
                 if row.get("drop_mm") is not None:
                     extra += f"  落下 {row['drop_mm']:5.1f} mm"
                 if args.trace_release and "obj_z" in r:

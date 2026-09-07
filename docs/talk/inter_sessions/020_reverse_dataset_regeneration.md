@@ -23,6 +23,11 @@
 **`LEVEL=1` は赤マグにだけ付ける。**缶に付けると最後の一手で 90° 回そうとして
 隣のケチャップを 116 mm 薙ぎ倒す（[reference/31 の 5 節](../../reference/31_reverse_place_without_contact.md)）。
 
+**`MAX_TAIL=5` と `MAX_STEPS=300` は全タスクに付ける。**置いたあとに腕が初期姿勢
+へ戻る区間は goal にも学習にも要らず、**本番は 300 コマで打ち切られる**
+（[reference/31 の 6 節](../../reference/31_reverse_place_without_contact.md)）。
+物理は 1 本ごとに完全一致で変わらない。
+
 ## 2. 作り直す手順
 
 **3 タスクを別々に生成 → それぞれ LeRobot 形式へ変換 → 1 つに merge。**
@@ -49,7 +54,8 @@ mount するため）。よそのディレクトリのファイルは指せな�
 
 ```bash
 COMMON="MODE=phased INIT_SOURCE=t3 GRASP_FRAME=clamped STANDOFF=0.06 \
-        T3_INIT=all MAX_APPROACH=120 LIFT=0.08 RELEASE=contact SETTLE=20"
+        T3_INIT=all MAX_APPROACH=120 LIFT=0.08 RELEASE=contact SETTLE=20 \
+        MAX_TAIL=5 MAX_STEPS=300"
 R=solution/tools/track3_reversal/run_gripper_shift_sweep.sh
 ```
 
@@ -159,6 +165,7 @@ env OUT=$PWD/work bash solution/tools/track3_reversal/run_lerobot_merge.sh \
 | 接近が 120 コマに張り付く | `MAX_APPROACH` の既定 60 は本タスク（約 200 mm）の値。缶・マグは 300 mm 以上ある |
 | 缶で腕が横を向いてトレイの壁に当たる | `GRASP_STYLE=top-down` を渡し忘れている（[reference/30 の 4 節](../../reference/30_reverse_grasp_pose.md)） |
 | 落下や接触の原因が読めない | `TRACE=20` を足すと、放す前後を 1 コマずつ `grip` / `z` / `tilt` / `touch` で出す |
+| コマ数が 300 を超えて npz が書かれない | 表示に `goal=○/長` と出る。`MAX_TAIL` を短くするか、短い順方向デモを選ぶ |
 
 ## 5. 関連
 

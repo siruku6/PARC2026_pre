@@ -542,7 +542,8 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
                    gain=1.0, tol=0.005, max_approach=60, grip_hold=10,
                    grasp_pose=None, standoff=0.0, capture=False,
                    lift=0.0, release_i=None, settle=0, obj=None,
-                   place_axis=None, level=False, cycles=None):
+                   place_axis=None, level=False, cycles=None, max_tail=-1,
+                   level_tol=1.5):
     """掴むまでは**時刻表を捨てて**姿勢で判定し、掴んでから時刻逆向きに戻る。
 
     **なぜ要るか。** 時刻をそのまま逆にすると、掴む指令が出る時刻は
@@ -602,6 +603,11 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
     「その物の今の姿勢へ接近して掴む → その区間の復路を辿る → 触れたら置く」**を
     回す。物がどこに置き直されていても、掴む姿勢はサイクルごとに引き直される。
 
+    **`max_tail` は「放したあとに手を引く区間」の上限コマ数である**（`-1` で
+    全部辿る・`0` で落とす）。この区間は**腕が初期姿勢へ戻るだけ**で、最後に
+    放した時点で goal は既に立っているので採点に効かず、学習データにも要らない。
+    **本番は 300 コマで打ち切られる**ので、長い回はここを落とすのがいちばん安い。
+
     **`capture=True` で学習データの中身も残す。**`actions` (T,7) と
     `states` (T,8) が返り、画も要るなら env を `DATASET_CAMERAS` の 2 台で
     作っておくこと（`images` が付く）。**画は観測に乗っている台ぶんしか取れない。**
@@ -632,7 +638,7 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
 
     # 追いかける物。**サイクルごとに違う**ので、名前ごとに列を持つ。
     axis_of = {c["obj"]: int(c["place_axis"]) for c in cycles if c["obj"]}
-    trace = {n: {"z": [], "tilt": [], "touch": []} for n in axis_of}
+    trace = {n: {"pos": [], "z": [], "tilt": [], "touch": []} for n in axis_of}
 
     if video_path is not None:
         frames.append(obs[f"{CAMERA}_image"][::-1])
@@ -652,6 +658,7 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
             frames.append(obs[f"{CAMERA}_image"][::-1])
         eef.append(np.asarray(obs["robot0_eef_pos"]).copy())
         for name, t in trace.items():
+            t["pos"].append(np.asarray(obs[f"{name}_pos"]).copy())
             t["z"].append(float(obs[f"{name}_pos"][2]))
             t["tilt"].append(tilt_deg(obs[f"{name}_quat"], axis_of[name]))
             t["touch"].append(sorted(contacting_bodies(env, name)))
@@ -667,8 +674,10 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
             n += 1
         return n
 
-    n = {"standoff": 0, "reach": 0, "grip": 0, "lift": 0, "floor": 0, "settle": 0}
+    n = {"standoff": 0, "reach": 0, "grip": 0, "lift": 0, "floor": 0,
+         "settle": 0, "path": 0, "tail": 0}
     approach_err, opened_at, placed, last_stop = [], [], [], None
+    per_cycle = []
 
     for cyc in cycles:
         gp = cyc["grasp_pose"]
@@ -718,6 +727,8 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
                 tgt[2] = z_safe
                 n["floor"] += 1
             step(osc_command(obs, tgt, grip[i], gain))
+        n["path"] += stop_i - i0
+        per_cycle.append({"obj": cyc["obj"], "n_path": stop_i - i0})
         last_stop = stop_i
         if rel is None:
             continue
@@ -728,10 +739,14 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
                                eef_axisangle(obs)])
         if cyc["level"] and cyc["obj"] is not None:
             # **下ろす前に水平へ直す。**少し浮かせてから回さないと机に擦る。
+            # **水平になったら止める。**回す量は 10° 前後で数コマしか要らないのに
+            # 固定で待つと、本番の打ち切り 300 コマをそのぶん食う。
             hold = level_pose(obs, cyc["obj"], cyc["place_axis"], clearance=0.02)
             for _ in range(grip_hold):
                 step(osc_command(obs, hold, 1.0, gain))
                 n["settle"] += 1
+                if tilt_deg(obs[f"{cyc['obj']}_quat"], cyc["place_axis"]) < level_tol:
+                    break
         for _ in range(settle):
             if cyc["obj"] is not None and contacting_bodies(env, cyc["obj"]):
                 break
@@ -745,10 +760,16 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
             step(osc_command(obs, hold, -1.0, gain))
         n["grip"] += grip_hold
 
-    # 放したあとは残りの復路（＝順方向の接近を逆に辿って手を引く）
+    # 放したあとの残りの復路は**腕が初期姿勢へ戻るだけ**の区間である。最後に
+    # 放した時点で goal は既に立っているので採点に効かず、**学習データにも要ら
+    # ない。**本番は 300 コマで打ち切られるので、two mugs ではここ（実測 44〜92
+    # コマ）を落とすのがいちばん安い。`max_tail` は 0 で落とす・`-1` で全部辿る。
     if opened_at and last_stop is not None:
-        for i in range(last_stop, len(ref) - 1):
+        end_i = (len(ref) - 1 if max_tail < 0
+                 else min(len(ref) - 1, last_stop + max_tail))
+        for i in range(last_stop, end_i):
             step(osc_command(obs, ref[i + 1], -1.0, gain))
+            n["tail"] += 1
 
     if video_path is not None:
         write_video(frames, video_path)
@@ -761,6 +782,9 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
            # ときだけ `max_approach` を上げればよく、闇雲に伸ばさずに済む。
            "n_standoff": n["standoff"], "n_reach": n["reach"],
            "n_lift": n["lift"], "n_floor": n["floor"], "n_settle": n["settle"],
+           # **どの段がコマを食っているかを段ごとに残す。**打ち切り 300 に
+           # 収める作業は、この内訳を見ないと当てずっぽうになる。
+           "n_path": n["path"], "n_tail": n["tail"], "per_cycle": per_cycle,
            # サイクルごとの残り誤差。**代表値は最悪のもの**を出す。
            "approach_err_mm": max(approach_err) if approach_err else 0.0,
            "approach_err_mm_all": approach_err,

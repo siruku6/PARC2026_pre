@@ -16,6 +16,10 @@
 #                                      （皿やトレイを擦らないため）
 #   RELEASE=schedule|contact           放す時刻。contact=触れた所で止めて開く
 #   SETTLE=20                          contact のとき下ろすコマ数の上限
+#   MAX_TAIL=0                         放したあと手を引く区間の上限コマ数
+#                                      （-1=全部辿る・0=落とす。学習には不要）
+#   MAX_STEPS=300                      これを超えた回は npz に書かない
+#                                      （本番の打ち切りが 300 コマ）
 #   LEVEL=1                            放す前に荷物を水平へ直す（傾いたまま置くと
 #                                      放したあとに自分で起き上がる）
 #   MAX_APPROACH=60                    接近の各段に許すコマ数（遠い場面では上げる）
@@ -46,6 +50,8 @@ run_in_container gripper_shift_sweep.py \
   --lift "${LIFT:-0}" \
   --release "${RELEASE:-schedule}" \
   --settle "${SETTLE:-20}" \
+  --max-tail "${MAX_TAIL:--1}" \
+  --max-steps "${MAX_STEPS:-300}" \
   --trace-release "${TRACE:-0}" \
   ${LEVEL:+--level-before-release} \
   --max-approach "${MAX_APPROACH:-60}" \
