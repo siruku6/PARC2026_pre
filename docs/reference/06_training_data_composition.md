@@ -341,6 +341,38 @@ python3 solution/tools/analysis/measure_train_data_perturbation.py camera \
 「いくつの場面に散っているかの差」である。**摂動側は 1 シーンあたり 2〜3 本しか
 無く、`libero_90` 側は 1 シーンに 34〜99 本ある。
 
+### **203 シーンの中身**——`LIBERO-plus` の摂動である（two mugs で数えた）
+
+シーンの違いは**カメラ画像・明るさ・背景や面のテクスチャ・置いてある物・指示文の
+言い換え**である（カテゴリの一覧は [reference/05](05_perturbation_categories.md)）。
+two mugs の 203 個をファイル名の接尾辞で数えると、**4 種類が 50 個ずつ**だった。
+
+| 接尾辞 | 個数 | [reference/05](05_perturbation_categories.md) のカテゴリ | **物理を変えるか** |
+|---|---|---|---|
+| `_light_N` | 50 | Light Conditions（明るさ・向き・色・影） | 変えない |
+| `_table_N` 28 + `_tb_N` 22 | 50 | Background Textures（背景と面の見た目） | 変えない |
+| `_language_N` | 50 | Language Instructions（**指示文を言い換える**） | 変えない |
+| **`_add_N` 30 + `_levelN_sampleN` 20** | **50** | **Objects Layout（紛らわしい物体を足す・対象物をずらす）** | **変える** |
+| 素のシーン（`copy` 2 つを含む） | 3 | — | — |
+
+**この課題には Sensor Noise・Camera Viewpoints・Robot Initial States が入って
+いない**（`_noise_N` / `_initstate_N` が 1 つも無い）。
+
+素のシーンと `_add_1` の差分を取ると、**物体が 1 つ足されているだけ**だった。
+
+```
++    can_of_soda__1_1 - can_of_soda__1
++    (On can_of_soda__1_1 living_room_table_add_object_region_6)
+```
+
+**再生できるかは「物理を変えるか」で決まる。**明るさ・テクスチャ・言い換えだけの
+150 シーンは物理が素のシーンと同じなので、記録した行動をそのまま撃てば再現する
+はずである。**物を足す・ずらす 50 シーンは再現しない。**
+
+**ただし実測の歩留まりは 50%（20 本中 10 本）で、150/203 = 74% より悪い。**
+差の原因は切り分けていない（デモが variant に均等に散っている保証は無く、
+素のシーンを組み立て直したこと自体の誤差もある）。
+
 ### 我々の逆向きデータの構造は `libero_90` 側と同じ
 
 ```
