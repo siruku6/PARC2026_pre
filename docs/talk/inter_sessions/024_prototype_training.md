@@ -364,6 +364,14 @@ M $P/x10 $P/reverse_lerobot_all    $P/x11                   # 4,279 本 / 745,52
 
 ### 6.3 配布データに 1 度だけ混ぜる（**10〜20 分・25 GB 書く**）
 
+**先に配布 tar の動画に 3 桁の symlink を張る**（張らないと `merge` が
+`av.error.FileNotFoundError` で落ちる。理由は 9 節）。
+
+```sh
+python3 ~/tools/link_video_index_width.py --root "$DATA"
+ls -l "$DATA/videos/observation.images.wrist/chunk-000/" | head -4
+```
+
 ```sh
 python ~/tools/npz_to_lerobot.py align --base "$DATA" --add "$P/x11"    # features の飾りを揃える
 MERGED=/opt/dlami/nvme/data/proto20
