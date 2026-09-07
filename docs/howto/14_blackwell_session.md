@@ -372,9 +372,12 @@ chmod +x ~/tools/upload_ckpt.sh
 
 export PATH="$HOME/.local/bin:$PATH"
 RUN=pi05_proto20 REPO=siruku6/pi05_proto20 \
-    nohup ~/tools/upload_ckpt.sh > ~/upload_ckpt.nohup 2>&1 &
+    setsid nohup ~/tools/upload_ckpt.sh > ~/upload_ckpt.nohup 2>&1 &
 echo "PID $!"
 ```
+
+**`setsid` を付ける。**`nohup` は SIGHUP しか防がないので、**ターミナルが
+プロセスグループごと殺されると上げるループも落ちる**（9/7 にターミナルが落ちた）。
 
 **渡すのは 2 つだけである。**`RUN` は `--run-name` と同じ文字列、`REPO` は上げ先。
 `OUT`（既定 `/opt/dlami/nvme/out/$RUN`）・`MARK`（`~/uploaded/$RUN`）・

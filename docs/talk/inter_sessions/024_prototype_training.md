@@ -473,7 +473,7 @@ python train_pi05.py --run-name proto20_probe40 \
 
 ```sh
 NW=$(python -c "import os;print(min(os.cpu_count()//2, 16))")
-nohup python train_pi05.py --run-name pi05_proto20 \
+setsid nohup python train_pi05.py --run-name pi05_proto20 \
     --init-from /opt/dlami/nvme/weights/rp3000 \
     --dataset-repo local/t3_proto20 --dataset-root "$MERGED" \
     --steps 2000 --batch-size 64 --num-workers "$NW" \
@@ -530,6 +530,8 @@ bash solution/tools/eval/run_final_eval.sh track1     # 退化していないか
 | `tar: ~/proto389.tar.gz: Cannot open` | **`hf download` は `$HOME` に置かない。**HF キャッシュの `hub/datasets--<repo>/snapshots/<sha>/` に入る。6.2 の `find` で解決する（9/7 に踏んだ） |
 | `~/pi05_code/train_pi05.py` が無い | **`siruku6/pi05_code` は入れ子である。**実体は `~/pi05_code/solution/train/train_pi05.py`。`CODE_DIR` はそこを指す（9/7 に踏んだ） |
 | `hf download` が `Repository not found` | **データセットのリポジトリには `--repo-type dataset` が要る**（9/7 に踏んだ） |
+| **ターミナルが落ちて `M: not found` / `find: No such file or directory`** | **シェル変数が消え、`/bin/sh` に落ちている。**作った物はディスクに残っているので**作り直さない**。`bash` に入って `. ~/env_pi05.sh` と `DATA` / `P` / `MERGED` / `CODE_DIR` を張り直し、`meta/info.json` の 3 行で出来ているものを確かめる（9/7 に踏んだ） |
+| **落ちるターミナルから長い学習を起こす** | **`nohup` は SIGHUP しか防がない。**プロセスグループごと殺されると落ちるので **`setsid nohup` で別セッションにする。**監視セルは Notebook のカーネルで動かす（ターミナルとは独立） |
 | `No module named 'scripted_demo'` | **`npz_to_lerobot.py` だけ渡しても動かない。**隣に `scripted_demo.py` を並べる（9/7 に踏んだ） |
 | **`merge` が `av.error.FileNotFoundError: .../file-000.mp4` で落ちる** | **配布 tar の動画の通し番号は 6 桁**（`file-000038.mp4`）だが、**`aggregate_datasets` はデータセット自身の `video_path` を見ず、lerobot に焼き込まれた 3 桁だけを使う**（`aggregate.py` の `aggregate_videos`）。**`link_video_index_width.py --root "$DATA"` で 3 桁の symlink を張る。**info.json は書き換えないので配布データを直接学習に使う道は壊れない。**出力側は 3 桁で書かれ info.json も 3 桁を宣言するので自己整合する**（9/7 に踏んだ） |
 | `merge` をやり直すと `に中身がある` で止まる | `_prepare_output` は空でないと止まる。**書きかけの出力を消してから打つ** |
