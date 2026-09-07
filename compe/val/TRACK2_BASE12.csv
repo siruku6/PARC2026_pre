@@ -1,0 +1,13 @@
+task_num,task_id,instruction,libero_plus_id,suite,category,difficulty_level,init_states_file,n_nontarget_objects
+1,put_the_bowl_on_the_plate,Put the bowl on the plate,,libero_goal,Base,,put_the_bowl_on_the_plate.pruned_init,2
+7,turn_on_the_stove,Turn on the stove,,libero_goal,Base,,turn_on_the_stove.pruned_init,4
+13,pick_up_the_black_bowl_on_the_cookie_box_and_place_it_on_the_plate,Pick the akita black bowl on the cookies box and place it on the plate,,libero_spatial,Base,,pick_up_the_black_bowl_on_the_cookie_box_and_place_it_on_the_plate.pruned_init,3
+19,pick_up_the_black_bowl_between_the_plate_and_the_ramekin_and_place_it_on_the_plate,Pick the akita black bowl between the plate and the ramekin and place it on the plate,,libero_spatial,Base,,pick_up_the_black_bowl_between_the_plate_and_the_ramekin_and_place_it_on_the_plate.pruned_init,3
+25,put_the_cream_cheese_in_the_bowl,Put the cream cheese on the bowl,,libero_goal,Base,,put_the_cream_cheese_in_the_bowl.pruned_init,2
+31,pick_up_the_black_bowl_next_to_the_cookie_box_and_place_it_on_the_plate,Pick the akita black bowl next to the cookies box and place it on the plate,,libero_spatial,Base,,pick_up_the_black_bowl_next_to_the_cookie_box_and_place_it_on_the_plate.pruned_init,3
+37,open_the_middle_drawer_of_the_cabinet,Open the middle layer of the drawer,,libero_goal,Base,,open_the_middle_drawer_of_the_cabinet.pruned_init,4
+43,pick_up_the_milk_and_place_it_in_the_basket,Pick the milk and place it in the basket,,libero_object,Base,,pick_up_the_milk_and_place_it_in_the_basket.pruned_init,5
+49,pick_up_the_alphabet_soup_and_place_it_in_the_basket,Pick the alphabet soup and place it in the basket,,libero_object,Base,,pick_up_the_alphabet_soup_and_place_it_in_the_basket.pruned_init,5
+55,pick_up_the_chocolate_pudding_and_place_it_in_the_basket,Pick the chocolate pudding and place it in the basket,,libero_object,Base,,pick_up_the_chocolate_pudding_and_place_it_in_the_basket.pruned_init,5
+61,STUDY_SCENE1_pick_up_the_book_and_place_it_in_the_back_compartment_of_the_caddy,pick up the book and place it in the back compartment of the caddy,,libero_10,Base,,STUDY_SCENE1_pick_up_the_book_and_place_it_in_the_back_compartment_of_the_caddy.pruned_init,1
+67,pick_up_the_tomato_sauce_and_place_it_in_the_basket,Pick the tomato sauce and place it in the basket,,libero_object,Base,,pick_up_the_tomato_sauce_and_place_it_in_the_basket.pruned_init,5

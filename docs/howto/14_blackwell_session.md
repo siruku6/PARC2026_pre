@@ -349,7 +349,7 @@ import json; print('compile_model =', json.load(open(
 ### B3b 【9/8 に作った】段取りを 2 本のスクリプトに畳んだ
 
 **9/7 に手で打ったときは、作業だけで 2 時間かかった。**踏んだ穴は
-[024 の 9 節](../talk/inter_sessions/024_prototype_training.md)に全部並んでいる。
+[reference/27 の 5 節](../reference/27_blackwell_environment.md#5-踏んだ罠実際に-1-度は踏んだもの)に全部並んでいる。
 **次からはこの 2 本で済む。**
 
 ```bash
@@ -579,16 +579,11 @@ while not os.path.exists(DONE):
 if os.path.exists(DONE):
     print("全部上がった:", open(DONE).read().strip(), flush=True)
     print(tail(ULOG, 20), flush=True)
-    url, tok, user = (os.environ.get(k) for k in
-                      ("JUPYTERHUB_API_URL", "JUPYTERHUB_API_TOKEN", "JUPYTERHUB_USER"))
-    if url and tok and user:
-        req = urllib.request.Request(f"{url}/users/{user}/server", method="DELETE",
-                                     headers={"Authorization": f"token {tok}"})
-        try:
-            with urllib.request.urlopen(req, timeout=30) as r:
-                print("Stop Server ->", r.status)
-        except Exception as e:
-            print("止められなかった。待機による自動停止に任せる:", e)
+    # **API では止まらない。**`JUPYTERHUB_API_*` への DELETE は 9/8 に効かないことを
+    # 確認した。**止めるのは UI（File > Hub Control Panel > Stop Server）だけである。**
+    # ここでは「止めてよい」と印字するに留め、待機による自動停止に任せる
+    print("**全部上がった。UI から Stop Server を押してよい**", flush=True)
+    print("  File > Hub Control Panel > Stop Server", flush=True)
 else:
     # **印が無いままここへ来たら、待機による自動停止（1 時間）にも任せない。**
     # セルを回し続けてカーネルを生かし、人が戻るまでディスクを保たせる。
@@ -605,9 +600,13 @@ else:
 
 | 最後の行 | 意味 | やること |
 |---|---|---|
-| `Stop Server -> 204` | **全部上がって、自分で止まった** | HF の一覧で歩数 4 つを数える |
+| **`全部上がった。UI から Stop Server を押してよい`** | 全部上がった | HF の一覧で歩数を数えてから **UI で止める** |
 | `人を待っている` | **取りこぼしがある。サーバは生きている** | `~/upload_ckpt.log` を読み、手で上げる（[分岐 5](#分岐-5-hf-に-000500-しか上がっていない9-3-に実際に起きた)） |
-| `止められなかった` | 上がってはいる | 手で Stop Server |
+
+> **【9/8 に確かめた】サーバは UI からしか止められない。**
+> `JUPYTERHUB_API_URL` への `DELETE` は効かない。
+> **`File > Hub Control Panel > Stop Server` を押すこと。**
+> **押すまで時間の消費は止まらない。**
 
 
 ---
