@@ -351,80 +351,68 @@ import json; print('compile_model =', json.load(open(
 **これが分かると何が決まるか: セッションが消えたときに何が残るか。
 `/opt/dlami/nvme` はインスタンス終了で消えるので、上がっていないものは失われる。**
 
+> **【9/7 に作り直した】script はここに書かず、版を管理している 2 ファイルを使う。**
+> `solution/train/upload_ckpt.sh` と `solution/train/verify_upload.py` である。
+> **9/3 に踏んだ 2 つを潰した。**
+>
+> | 踏んだこと | どう潰したか |
+> |---|---|
+> | **`000500` の次から 1 個も上がらず、跡も残らなかった** | **上げた後に HF を読んで、手元のファイルと数と大きさを突き合わせる**（`verify_upload.py`）。**一致しなければ印を付けない**ので次の巡でやり直す。**止まりうる場所の手前に必ず 1 行書く**ので跡が残る。`du` にも `timeout` を掛けた |
+> | **上げている 10 分の間に学習が終わると `break` して最後の 1 個を落とす** | **抜ける条件を「学習が終わった かつ 未上げが 0 個」にした。**学習が終わってからも上げ切るまで抜けない |
+>
+> **もう 1 つ足した。**`RUN` の学習が立ち上がるのを最大 600 秒待つ
+> （`WAIT_START`）。**待たずに入ると、未上げ 0 個・学習なしの状態で
+> 「全部上がった」の印を誤って置き、B6 がサーバを止めてしまう。**
+
 ```bash
-cat > ~/upload_ckpt.sh <<'EOF'
-#!/usr/bin/env bash
-# 出来上がったチェックポイントの pretrained_model だけを HF へ上げる。
-# 上げ終えた印は $HOME に置く（チェックポイントの中に置くと、次の上げに混ざる）。
-set -u
-OUT=/opt/dlami/nvme/out/pi05_camdrop2500
-REPO=siruku6/pi05_camdrop2500
-# 上げ終えた印は「走りごと」に分ける。~/uploaded/<歩数> という置き方だと、
-# 前のセッションの別の走りが置いた 000500 を、新しい走りの 000500 だと思って飛ばす（9/5 に踏んだ）。
-MARK=~/uploaded/$(basename "$OUT")
-mkdir -p "$MARK"
-echo "$(date -Iseconds) 印の置き場 $MARK（既にある印: $(ls "$MARK" 2>/dev/null | tr '\n' ' '))" \
-    >> ~/upload_ckpt.log
-while true; do
-  for d in "$OUT"/checkpoints/*/pretrained_model; do
-    [ -d "$d" ] || continue
-    # LeRobot は保存のたびに checkpoints/last という symlink を貼り直す。
-    # これを拾うと HF に「last」という歩数のふりをした複製が 1 個できる（9/3 に踏んだ）。
-    [ -L "${d%/pretrained_model}" ] && continue
-    step=$(basename "$(dirname "$d")")
-    [ -f "$MARK/$step" ] && continue
-    # 書き終える前に上げないよう、30 秒間サイズが変わらないことを確かめる
-    a=$(du -sb "$d" | cut -f1); sleep 30; b=$(du -sb "$d" | cut -f1)
-    [ "$a" = "$b" ] || continue
-    # timeout: 1 個 9.35 GB なので正常なら 15 分。1 時間で諦めて次の巡へ回す。
-    if timeout 3600 hf upload "$REPO" "$d" "$step" --repo-type model; then
-      date -Iseconds > "$MARK/$step"
-      echo "$(date -Iseconds) 上げた $step" >> ~/upload_ckpt.log
-      rm -rf "$(dirname "$d")/training_state"   # 16 GB。上げないので消して空きを戻す
-    else
-      # 成功しか書かないと、失敗と「1 度も試していない」を後から区別できない（9/3 に踏んだ）
-      echo "$(date -Iseconds) 失敗 $step（終了コード $?）" >> ~/upload_ckpt.log
-    fi
-  done
-  # 1 巡ごとの足跡。これが無いと、止まったときにどこで止まったかを言えない（9/3 に踏んだ）
-  echo "$(date -Iseconds) 見回り $(ls -d "$OUT"/checkpoints/*/ 2>/dev/null | wc -l) 個" \
-      >> ~/upload_ckpt.log
-  pgrep -f "train_pi05.py --run-name pi05_camdrop2500" >/dev/null || break
-  sleep 60
-done
-echo "$(date -Iseconds) 上げるループを終える" >> ~/upload_ckpt.log
-EOF
-chmod +x ~/upload_ckpt.sh
+mkdir -p ~/tools
+hf download siruku6/reverse_lerobot_389 upload_ckpt.sh   --repo-type dataset --local-dir ~/tools
+hf download siruku6/reverse_lerobot_389 verify_upload.py --repo-type dataset --local-dir ~/tools
+chmod +x ~/tools/upload_ckpt.sh
+
 export PATH="$HOME/.local/bin:$PATH"
-nohup ~/upload_ckpt.sh > ~/upload_ckpt.nohup 2>&1 &
+RUN=pi05_proto20 REPO=siruku6/pi05_proto20 \
+    nohup ~/tools/upload_ckpt.sh > ~/upload_ckpt.nohup 2>&1 &
 echo "PID $!"
 ```
 
-> **【9/3 に直した】「もう一巡してから抜けるので最後の 1 個も上がる」と書いていたが、外れていた。**
-> **`pgrep` を見るのは `for` を回り終えた後なので、上げている 10 分の間に学習が終わると
-> その回で `break` し、最後のチェックポイントが上がらない。**
-> **1 個 9.35 GB あるので、この 10 分は普通に起きる。**
-> **だから最後の 1 個は、[分岐 5](#分岐-5-hf-に-000500-しか上がっていない9-3-に実際に起きた) の
-> 4 番のように手で上げて、上がったことを見てから Stop Server を押す。**
+**渡すのは 2 つだけである。**`RUN` は `--run-name` と同じ文字列、`REPO` は上げ先。
+`OUT`（既定 `/opt/dlami/nvme/out/$RUN`）・`MARK`（`~/uploaded/$RUN`）・
+`LOG`（`~/upload_ckpt.log`）・`VERIFY`（`~/tools/verify_upload.py`）は上書きできる。
+
+**上げ先は公開で作る。**`hf upload` が無ければ作る（`create_repo` を打たなくてよい）。
+**枠に効くのは非公開だけである**——9/7 に数えた非公開の使用量は 47.26 GB で、
+`pi05_all111` と `pi05_camdrop2500` はどちらも公開に置いてある。
+**公開にすればチェックポイント 4 個 35 GB は枠に当たらない。**
+
+**離席する前に、ログにこの 2 行が出るのを見る。**
+
+```bash
+tail -5 ~/upload_ckpt.log
+```
+
+| 見る行 | 意味 |
+|---|---|
+| `学習を見つけた（N 秒待った）` | ループが本体を掴んだ。**これが無いまま `印は置かず終わる` が出ていたら、順番を間違えている** |
+| **`000500 **確かめた。印を付けた**`** | **1 個目が HF に在ることを数えて確かめた。****これを見るまで離席しない** |
 
 **`train_config.json` はこのループで一緒に上がる。**上げているのが
 `pretrained_model` ディレクトリまるごとだからである。**中身の在り処はこうなる。**
 
 | | 場所 |
 |---|---|
-| 機械の上 | `$OUTPUT_ROOT/pi05_camdrop2500/checkpoints/<歩数>/pretrained_model/train_config.json` |
+| 機械の上 | `$OUTPUT_ROOT/<RUN>/checkpoints/<歩数>/pretrained_model/train_config.json` |
 | **HF** | **`<歩数>/train_config.json`**（`pretrained_model/` の階層は落ちる） |
 
 **`pretrained_model/` の外には書かれない**（LeRobot v0.6.0 の
 `configs/train.py` 280 行が `save_directory`＝`pretrained_model` に書く。
 階層は `common/train_utils.py` 107〜121 行の図のとおり）。
-**上の 2 行は 8/31 の `ladder2500` の実物で確かめた**——
-HF の `pi05_trial1500` に `ladder2500/002500/train_config.json` が在る。
 
 > **1 つだけ注意。**階層が落ちるので、**HF から LeRobot の `--resume` で直に続けることはできない**
 > （`configs/train.py` 329 行は Hub 上の `<歩数>/pretrained_model/train_config.json` を探す）。
 > **`--init-from` は落ちた形のままで読めるので、いつもの続け方には影響しない。**
 > **そして `train_config.json` は設定しか持たない**——**loss の推移は B4b のログにしか無い。**
+
 
 ### B4b 学習ログを `$HOME` と HF へ写すループを始める（3 分）
 
@@ -504,51 +492,88 @@ watch -n 60 'ls -la /opt/dlami/nvme/out/pi05_camdrop2500/checkpoints/ 2>/dev/nul
 ```
 
 **確かめるのは 2 つ。**(a) `checkpoints/000500/` が出来ること、
-(b) `~/upload_ckpt.log` に「上げた 000500」が出ること。
+(b) `~/upload_ckpt.log` に `000500 **確かめた。印を付けた**` が出ること。
 **(b) が出ないうちは離席しない。**上げの道が通っていなければ、
 夜通し回しても朝には何も残らない。
 
 ### B6 監視セルを実行状態のまま残して離席する（5 分）
 
-**これが分かると何が決まるか: 待機による自動停止（1 時間）で学習が殺されないか。**
+**これが分かると何が決まるか: 待機による自動停止（1 時間）で学習が殺されないか。
+そして「上がっていないチェックポイントを消してしまわないか」。**
 
 **`nohup` で走らせた学習は「セルの実行」ではない。**セルが 1 つも動いていない状態が
 1 時間続くと自動停止する規定なので、**カーネルを動かし続けるセルを 1 つ残す。**
+
+> **【9/7 に直した】止める条件を「上げるループが居ない」から
+> 「`_all_uploaded` の印が在る」に変えた。**
+> **前の条件は、上げるループが早く抜けたときに取りこぼしたまま `DELETE` を投げる。**
+> 9/3 はループが `000500` の次から 1 個も上げないまま生きていた（[分岐 5](#分岐-5-hf-に-000500-しか上がっていない9-3-に実際に起きた)）。
+> **印は `upload_ckpt.sh` が「未上げ 0 個」を確かめてから置く**ので、
+> **印が無いのに止めることは無い。**印が置かれないときは**止めずに待つ**——
+> **GPU 時間は減るが、上がっていないチェックポイントは消えない。**
 
 ```python
 # **このセルは Notebook のセルとして実行する（`!` も `%%bash` も付けない）。**
 import os, subprocess, time, urllib.request
 
-LOG = "/opt/dlami/nvme/out/pi05_camdrop2500.log"
-alive = lambda: bool(subprocess.run(
-    ["pgrep", "-f", "train_pi05.py --run-name pi05_camdrop2500"],
-    capture_output=True).stdout)
+RUN  = "pi05_proto20"
+LOG  = f"/opt/dlami/nvme/out/{RUN}.log"
+DONE = os.path.expanduser(f"~/uploaded/{RUN}/_all_uploaded")
+ULOG = os.path.expanduser("~/upload_ckpt.log")
 
-while alive():
-    tail = subprocess.run(["tail", "-n", "1", LOG], capture_output=True, text=True).stdout
-    print(time.strftime("%H:%M"), tail.strip()[-160:], flush=True)
+alive = lambda pat: bool(subprocess.run(["pgrep", "-f", pat],
+                                        capture_output=True).stdout)
+tail = lambda path, n=1: subprocess.run(["tail", "-n", str(n), path],
+                                        capture_output=True, text=True).stdout.strip()
+
+while alive(f"train_pi05.py --run-name {RUN}"):
+    print(time.strftime("%H:%M"), tail(LOG)[-160:], flush=True)
     time.sleep(300)
 
-print("学習が終わった。上げ残しを待つ", flush=True)
-while subprocess.run(["pgrep", "-f", "upload_ckpt.sh"], capture_output=True).stdout:
+print("学習が終わった。全部上がるのを待つ", flush=True)
+while not os.path.exists(DONE):
+    if not alive("upload_ckpt.sh"):
+        # **ループが死んだのに印が無い。止めてはいけない。**
+        print("**上げるループが居ないのに _all_uploaded が無い。"
+              "サーバは止めない。手で上げること**", flush=True)
+        print(tail(ULOG, 40), flush=True)
+        break
+    print(time.strftime("%H:%M"), "上げ待ち:", tail(ULOG)[-160:], flush=True)
     time.sleep(60)
-print(open(os.path.expanduser("~/upload_ckpt.log")).read(), flush=True)
 
-# JUPYTERHUB_API の GET が 200 だったときだけ、自分でサーバを止める
-url, tok, user = (os.environ.get(k) for k in
-                  ("JUPYTERHUB_API_URL", "JUPYTERHUB_API_TOKEN", "JUPYTERHUB_USER"))
-if url and tok and user:
-    req = urllib.request.Request(f"{url}/users/{user}/server", method="DELETE",
-                                 headers={"Authorization": f"token {tok}"})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            print("Stop Server ->", r.status)
-    except Exception as e:
-        print("止められなかった。待機による自動停止に任せる:", e)
+if os.path.exists(DONE):
+    print("全部上がった:", open(DONE).read().strip(), flush=True)
+    print(tail(ULOG, 20), flush=True)
+    url, tok, user = (os.environ.get(k) for k in
+                      ("JUPYTERHUB_API_URL", "JUPYTERHUB_API_TOKEN", "JUPYTERHUB_USER"))
+    if url and tok and user:
+        req = urllib.request.Request(f"{url}/users/{user}/server", method="DELETE",
+                                     headers={"Authorization": f"token {tok}"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                print("Stop Server ->", r.status)
+        except Exception as e:
+            print("止められなかった。待機による自動停止に任せる:", e)
+else:
+    # **印が無いままここへ来たら、待機による自動停止（1 時間）にも任せない。**
+    # セルを回し続けてカーネルを生かし、人が戻るまでディスクを保たせる。
+    print("**印が無いので、セルを回し続けてサーバを保たせる**", flush=True)
+    while True:
+        print(time.strftime("%H:%M"), "人を待っている", flush=True)
+        time.sleep(300)
 ```
 
 **このセルを実行したまま、ブラウザのタブは閉じてよい。**
 **カーネルはサーバ側で動き続ける。**
+
+**戻ったら最初に見るのはセルの出力の最後の行である。**
+
+| 最後の行 | 意味 | やること |
+|---|---|---|
+| `Stop Server -> 204` | **全部上がって、自分で止まった** | HF の一覧で歩数 4 つを数える |
+| `人を待っている` | **取りこぼしがある。サーバは生きている** | `~/upload_ckpt.log` を読み、手で上げる（[分岐 5](#分岐-5-hf-に-000500-しか上がっていない9-3-に実際に起きた)） |
+| `止められなかった` | 上がってはいる | 手で Stop Server |
+
 
 ---
 
