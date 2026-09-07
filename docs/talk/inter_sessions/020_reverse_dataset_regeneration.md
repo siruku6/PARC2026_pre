@@ -146,12 +146,20 @@ env OUT=$PWD/work bash solution/tools/track3_reversal/run_lerobot_merge.sh \
 足されるため（本タスクで 177 → 213 コマの例がある）。**本数が 389 から動いたら、
 そこは追うこと。**
 
+### 2.6 **two mugs はこの依頼に含まない**
+
+配布 T3 の 4 件目（two mugs）は、9/7 時点で**配布 init 1 行ぶんしか試していない**
+（[018](018_reverse_dataset_writeout_plan.md) の 4 節）。作り方そのものは同じで、
+`TASK=twomugs EP_NPZ=ep_twomugs20.npz LEVEL=1` に `MAX_TAIL=5` を付ければ回るが、
+**50 行へ広げると 300 コマを超える回が出る見込み**なので、まとめるのはそれが
+片付いてからにする。
+
 ## 3. 済んだら
 
 - [reference/31 の 5 節](../../reference/31_reverse_place_without_contact.md) の
   実測表に、**全 init での値**を足す（いまは init 5 行だけの値である）
 - [018](018_reverse_dataset_writeout_plan.md) の 4 節の表と、
-  [reference/30 の 7 節](../../reference/30_reverse_grasp_pose.md) の実績表を更新する
+  [reference/30 の 8 節](../../reference/30_reverse_grasp_pose.md) の実績表を更新する
 - **古い 389 本（`work/probe_017/reverse_lerobot_all`）は消さずに残す。**
   学習で比べるまで、どちらが良いかは分からない
 

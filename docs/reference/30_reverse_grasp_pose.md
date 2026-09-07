@@ -15,7 +15,8 @@
 | [4](#4-移せないときは真上からの握りを作る) | 移せないときは真上からの握りを作る |
 | [5](#5-順方向デモは再現するものだけ使う) | **順方向デモは再現するものだけ使う** |
 | [6](#6-掴む姿勢-1-つで全部は掴めない順方向デモを複数使う) | **掴む姿勢 1 つで全部は掴めない**——順方向デモを複数使う |
-| [7](#7-使い方と実績) | 使い方と実績 |
+| [7](#7-1-本のデモが何度も掴むときサイクルに切り分ける) | **1 本のデモが何度も掴むとき**——サイクルに切り分ける |
+| [8](#8-使い方と実績) | 使い方と実績 |
 
 ## 1. なぜ掴む姿勢だけ別に決めるのか
 
@@ -143,22 +144,92 @@ p_grasp = p_obj_now + R_obj_now · R_obj_thenᵀ · (p_eef_then − p_obj_then)
 （39 個は 3 回、11 個は 2 回）。1 本だけで回すと、物の向きに穴が空いたまま
 気づかない。
 
-## 7. 使い方と実績
+## 7. 1 本のデモが何度も掴むとき——サイクルに切り分ける
+
+**1 本のデモが 2 つの物を別々の場所へ置くことがある**（two mugs。
+[reference/28 の 1.1 節](28_track3_contents.md)）。このとき、いままでの
+「1 回掴んで、あとは反転した軌道を最後まで辿る」は**成り立たない。**
+
+実測: 1 個目のマグを掴んだまま 2 サイクルぶん引きずり、皿と赤マグを 13〜34 mm
+動かして **0/1** で終わった。
+
+### 切り分けは指の開閉で行い、相手は**動いた量で決める**
+
+順方向デモの `action[6]` が閉じている区間を 1 サイクルとする。**その回の相手は、
+閉じているあいだにいちばん動いた物**である。**物の名前は書かない**——測って
+決めるので、隠しタスクにも同じ規則が効く。実装は
+`gripper_shift_sweep.grasp_cycles`。
+
+捨てるものが 2 つある。**指が一瞬しか閉じない区間**（4 コマ未満）と、
+**何も動かしていない区間**（20 mm 未満）。どちらも掴み損ねで、そこから掴む
+姿勢を測ると値が壊れる（5 節）。
+
+実測（two mugs の順方向デモ 20 本、**指令の列だけを見た数**）: **19 本がちょうど
+2 回**、1 本が 3 回（掴み直し）。**ここから「動いたか」でさらに落ちる**——
+指令の上では 2 回掴んでいても、再生すると物が動かない回があるためである
+（下の表）。
+
+### 逆向きは**サイクルごとに掴み直す**
+
+逆向きは順方向の**最後のサイクルから**辿る。1 サイクルぶんの中身は、単体タスクで
+やってきたことと同じである。
+
+| 段 | 中身 |
+|---|---|
+| 接近・把持 | **その物のいまの姿勢**へ掴む姿勢を引き直して掴む（2〜4 節） |
+| 復路 | そのサイクルの区間だけを反転して辿る |
+| 設置 | 触れた所で放す（[reference/31](31_reverse_place_without_contact.md)） |
+
+コマ番号の対応は「逆向き `i` ↔ 順方向 `T-1-i`」だけで決まる。
+
+```
+復路の入口 = T - 1 - （順方向がそのサイクルで放したコマ）
+放す位置   = T - 1 - （順方向がそのサイクルで実際に挟み終えたコマ）
+```
+
+**サイクルが 1 つのときは、いままでと 1 ビットも変わらない**（本・缶・マグで
+確認済み）。単体タスクは N=1 の場合として同じ経路に畳まれている。
+
+### ふるいは「**goal の物を全部動かしたか**」になる
+
+5 節のふるい（順再生で物が動いたか）は、そのまま**物ごと**に効く。goal が求める
+物を 1 つでも動かせていないデモは使えない。
+
+実測（two mugs、順方向デモ 20 本 × 配布 init #0）:
+
+| | 本数 |
+|---|---|
+| 2 つとも動いた | **10**（うち逆向き goal が **8**） |
+| 片方だけ、または 1 つも動かなかった | 10（飛ばす） |
+
+## 8. 使い方と実績
 
 `run_gripper_shift_sweep.sh` の環境変数で選ぶ。既定は `transfer`。
+
+置き方（`LIFT` / `RELEASE` / `LEVEL` / `MAX_TAIL`）は
+[reference/31 の 8 節](31_reverse_place_without_contact.md)。**作り直しの手順は
+[020](../talk/inter_sessions/020_reverse_dataset_regeneration.md) に全部展開して
+ある。**
 
 ```bash
 # 本・マグ（立つ軸が一致する）
 TASK=mug EP_NPZ=ep_mug20.npz MODE=phased INIT_SOURCE=t3 \
   GRASP_FRAME=clamped STANDOFF=0.06 T3_INIT=all MAX_APPROACH=120 \
-  WRITE_NPZ=reverse_npz_mug \
+  LIFT=0.08 RELEASE=contact LEVEL=1 MAX_TAIL=5 WRITE_NPZ=reverse_npz_mug \
   bash solution/tools/track3_reversal/run_gripper_shift_sweep.sh "0" "2206,2199,2202"
 
 # 缶（立つ軸が食い違うので真上からの握りを作る）
 TASK=soup EP_NPZ=ep_soup.npz MODE=phased INIT_SOURCE=t3 \
   GRASP_FRAME=clamped STANDOFF=0.06 T3_INIT=all MAX_APPROACH=120 \
-  GRASP_STYLE=top-down WRITE_NPZ=reverse_npz_soup \
+  GRASP_STYLE=top-down LIFT=0.08 RELEASE=contact MAX_TAIL=5 \
+  WRITE_NPZ=reverse_npz_soup \
   bash solution/tools/track3_reversal/run_gripper_shift_sweep.sh "0" "3696,3697"
+
+# two mugs（1 本のデモが 2 回掴む。7 節）
+TASK=twomugs EP_NPZ=ep_twomugs20.npz MODE=phased INIT_SOURCE=t3 \
+  GRASP_FRAME=clamped STANDOFF=0.06 T3_INIT=all MAX_APPROACH=120 \
+  LIFT=0.08 RELEASE=contact LEVEL=1 MAX_TAIL=5 WRITE_NPZ=reverse_npz_twomugs \
+  bash solution/tools/track3_reversal/run_gripper_shift_sweep.sh "0" ""
 ```
 
 `MAX_APPROACH` は接近の各段に許すコマ数である。既定の 60 は本タスクの距離
@@ -172,5 +243,13 @@ TASK=soup EP_NPZ=ep_soup.npz MODE=phased INIT_SOURCE=t3 \
 | 缶 | `top-down` | 2 | **100/100** | 17,141 |
 | 赤マグ | `transfer` | 3 | **139/150** | 24,191 |
 | 合計（`merge` 後） | | | **389** | 67,775 |
+
+**この 389 本は、置き方（[reference/31](31_reverse_place_without_contact.md)）を
+直す前のものである。**作り直しは
+[020](../talk/inter_sessions/020_reverse_dataset_regeneration.md)。
+
+two mugs は配布 init #0 で試したところ（9/7）、順方向デモ 20 本のうち
+**10 本が使え、8 本で逆向き goal が立った**（1 本あたり 247〜300 コマ）。
+init 50 行への展開はこれから。
 
 動く様子は [work/shares](../../work/shares/README.md) に動画で置いてある。

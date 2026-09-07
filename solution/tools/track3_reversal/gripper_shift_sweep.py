@@ -655,6 +655,7 @@ def main():
             report.append({"episode": ep, "n_actions": int(len(actions)),
                            "init_index": idx, "forward_goal": fwd_ok,
                            "skipped": f"順再生が動かさなかった: {missing}",
+                           "skipped_objs": missing,
                            "n_goal": 0, "n_trials": 0, "shifts": []})
             continue
         T = len(actions)

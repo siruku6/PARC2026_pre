@@ -33,6 +33,35 @@ Track3 だけである**——ただし本番の採点は非公開タスクを�
 | **指示文は定義ファイルの中のほうが詳しい** | ファイル名より長い。例: `take the yellow book off the top of the shelf and put it back on the table on the left` |
 | **棚そのものが `:obj_of_interest` に入っている**（`wooden_two_layer_shelf_1`） | つまり**棚を動かしても 1 mm の衝突判定では失格にならない** |
 
+### 1.1 対応する順方向がどこにあるか（**two mugs だけ別扱い**）
+
+**逆向きデータは順方向デモの時刻反転で作る**ので、4 件それぞれに「対応する
+順方向」が要る。3 件は `libero_90` に bddl・init・デモが揃っているが、
+**two mugs だけ揃っていない。**
+
+| T3 の課題 | 対応する順方向 | bddl / init | デモ |
+|---|---|---|---|
+| 缶 | `LIVING_ROOM_SCENE3_pick_up_the_alphabet_soup_and_put_it_in_the_tray` | libero_90 | あり |
+| 赤マグ | `LIVING_ROOM_SCENE5_put_the_red_mug_on_the_left_plate` | libero_90 | あり |
+| 本 | `STUDY_SCENE4_pick_up_the_book_on_the_left_and_place_it_on_top_of_the_shelf` | libero_90 | あり |
+| **two mugs** | `LIVING_ROOM_SCENE5_put_the_white_mug_on_the_left_plate_and_put_the_yellow_and_white_mug_on_the_right_plate` | **libero_90 に無い**。016 が組み立てたもの（`work/probe_016/t3assets`）を使う。**公式配布ではない** | **配布データセットに `task_index 30` で 313 本**（214〜330 コマ） |
+
+**「順方向 2 本の合成が要る」は誤りである。**組み合わせタスクのデモは 1 本で
+丸ごと入っている。`libero_90` にあるのは単体 2 本
+（`..._put_the_white_mug_on_the_left_plate` と
+`..._put_the_yellow_and_white_mug_on_the_right_plate`）だが、**そちらを合成する
+必要は無い。**
+
+**two mugs の goal だけ述語が 2 つある。**
+
+```
+(And (On porcelain_mug_1   living_room_table_porcelain_mug_init_region)
+     (On white_yellow_mug_1 living_room_table_white_yellow_mug_init_region))
+```
+
+つまり**1 本の中で 2 つの物を別々の場所へ置く**。逆向きの作り方は
+[reference/30 の 7 節](30_reverse_grasp_pose.md) にある。
+
 ## 2. 運営の開示（8/28）—— Track3 は「逆向きのタスク」である
 
 **2026-08-28 15:12 の告知**（`../materials/notifications/260828_1512_track3_contents.md`）。
