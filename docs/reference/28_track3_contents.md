@@ -52,6 +52,12 @@ Track3 だけである**——ただし本番の採点は非公開タスクを�
 `..._put_the_yellow_and_white_mug_on_the_right_plate`）だが、**そちらを合成する
 必要は無い。**
 
+**two mugs の順方向は `libero_90` ではなく `libero_10` にある。**bddl は
+`libero_10` と `libero_mix` に **203 個ずつ**（摂動版）あり、デモ 313 本は
+**その 203 シーンに散っている**。1 シーンあたり 1〜2 本しかないので、
+**素のシーン 1 つで再生すると半分は再現しない**（実測で 20 本中 10 本）。
+数の関係は [reference/06 の末尾](06_training_data_composition.md)。
+
 **two mugs の goal だけ述語が 2 つある。**
 
 ```
