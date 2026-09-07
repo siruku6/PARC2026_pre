@@ -346,6 +346,38 @@ import json; print('compile_model =', json.load(open(
 | `compile_model` | **False**（**9/3 に HF の `pi05_trial1500` の `001500/config.json` を降ろして読んだ。**`train_pi05.py` はこの値を上書きしない。`rp3000` も 8/29 に False を確認済み） | **True なら止める。**チェックポイントに焼き付き、評価サーバの起動に 1,177.9 秒かかって落ちる |
 | `tail` の最後の行 | `step:20 smpl:1K ... loss:... updt_s:... mem_gb:...` | 例外が出ていれば A3 の環境に戻る |
 
+### B3b 【9/8 に作った】段取りを 2 本のスクリプトに畳んだ
+
+**9/7 に手で打ったときは、作業だけで 2 時間かかった。**踏んだ穴は
+[024 の 9 節](../talk/inter_sessions/024_prototype_training.md)に全部並んでいる。
+**次からはこの 2 本で済む。**
+
+```bash
+hf download siruku6/pi05_code --local-dir ~/pi05_code
+cd ~/pi05_code/solution/train
+
+. ~/env_pi05.sh
+COPIES=11 bash blackwell_setup.sh          # データを作る（何度打ってもよい）
+RUN=pi05_proto21 EXPERT_ONLY=1 bash blackwell_launch.sh   # 学習と上げるループを起こす
+```
+
+| script | 何をするか |
+|---|---|
+| **`blackwell_setup.sh`** | 道具 6 つの取得 → 配布 tar の展開 → **動画の 3 桁 symlink** → 逆向きデータの取得 → **N 倍**（倍々で組む）→ align と merge → **検算と据え置き** → `rp3000` の取得 → **`~/run_env.sh` を書く** |
+| **`blackwell_launch.sh`** | 前提を 7 つ確かめる → `setsid` で学習を起こす → 上げるループを起こす → **最初の 20 歩まで待って `num_learnable_params` と `dataset.num_episodes` を突き合わせる** |
+
+**どちらも、違っていたら原因と次の一手を出して止まる。**
+
+| 性質 | 中身 |
+|---|---|
+| **何度打ってもよい** | 各段は出来上がりの本数・コマ数・タスク数を数えて、正しければ飛ばす |
+| **ターミナルが落ちても続く** | `~/run_env.sh` を `.` で読めば変数が戻る。**スクリプトを打ち直せば続きから進む** |
+| **黙って進まない** | 数が 1 つでも違えば止まる（期待値は script に書いてある） |
+| **離席の合図が出る** | `=== 走っている。離席してよい ===` が出るまで待つ。**それまでに落ちる筋は全部そこで捕まる** |
+
+**`COPIES` で逆向きデータの割合が決まる。**11 で 19.75%、5 で 10.1%、22 で 33.0%。
+**`EXPERT_ONLY=1` を渡すと action expert だけ（693M）になり、期待値も自動で切り替わる。**
+
 ### B4 チェックポイントを HF へ上げるループを始める（10 分）
 
 **これが分かると何が決まるか: セッションが消えたときに何が残るか。
