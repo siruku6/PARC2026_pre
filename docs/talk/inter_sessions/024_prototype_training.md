@@ -300,8 +300,17 @@ state 0.95〜1.04 倍**である（`rp3000` と `all111` の normalizer を突�
 | **配布データの見え方** | **0.4261〜0.9918 倍**（4.2 節の予測 0.426〜0.992 と一致） |
 | 据え置き後の `verify` | **食い違いがある**＝据え置きが効いた証拠 |
 
-**smoke で loss が 1.0 を超えたら、据え置きをやめて混ぜた値で回し直す**
-（`stats.json.bak` を戻すだけでよい）。**そのときは Track1 の退化も合わせて報告すること。**
+**loss の高さで据え置きの是非は判断できない。**（9/7 に一度そう書いたが誤りだった。）
+**正規化を変えると loss の尺度自体が変わる**——混ぜた値にすると回転の std が
+2.35 倍に膨らむので、**同じデータでも loss は必ず下がる。**据え置きあり／なしの
+loss を並べても、良くなったのか目盛りが変わっただけなのか分けられない。
+
+**判断は 2 段でする。**
+
+| 段 | 見るもの | 落ちたら |
+|---|---|---|
+| **回るか** | loss が **NaN でなく 10 を超えない**・`grdn` が **100 未満**・`mem_gb` が 50 前後 | 発散するなら据え置きを外す（`stats.json.bak` を戻す） |
+| **効いたか** | **Track3 と Track1 の点** | Track1 が落ちるなら出発点の問題（[020 の 9 節](020_reverse_dataset_regeneration.md)） |
 
 ## 6. やること
 
@@ -423,8 +432,34 @@ python train_pi05.py --run-name proto20_smoke --smoke-test \
 | 見るもの | 期待値 | 違ったら |
 |---|---|---|
 | **`dataset.num_episodes`** | **23812** | **19533 なら混ざっていない。14347 なら乗り換えていない。どちらもその場で止める** |
-| `num_learnable_params` | 4143404816 | 693422112 なら行動側しか動かない |
-| loss（20 歩） | **0.2〜0.5** | **1.0 超なら据え置きをやめる**——`stats.json.bak` を戻して混ぜた値で回し直し、**Track1 の退化も合わせて報告する**（5.5 節） |
+| `num_learnable_params` | **smoke では 693422112**（`--smoke-test` にフラグを渡していないので既定の「行動側だけ」になる）。**本番の 1 本では 4143404816** | 本番で 693M ならフラグが効いていない |
+| loss（20 歩） | **NaN でないこと。値の高さは見ない** | **batch 2 は外れ値を極端に増幅する**（1 サンプルの \|z\|=25 がバッチを支配する）。**9/7 の実測は loss 1.245・`grdn` 7.213 で、これは batch 2 の産物である。**水準を見たいなら次の 6.4b を打つ |
+
+### 6.4b 本番と同じ条件で 40 歩だけ試す（**約 5 分**）
+
+**smoke は batch 2・学習率 2.5e-5・行動側だけなので、本番とは別物である。**
+**本番の条件で歩数だけ 40 にした 1 本を先に打つ。**
+
+```sh
+cd "$CODE_DIR"
+NW=$(python -c "import os;print(min(os.cpu_count()//2, 16))")
+python train_pi05.py --run-name proto20_probe40 \
+    --init-from /opt/dlami/nvme/weights/rp3000 \
+    --dataset-repo local/t3_proto20 --dataset-root "$MERGED" \
+    --steps 40 --batch-size 64 --num-workers "$NW" \
+    --learning-rate 5e-6 --save-freq 100 \
+    --freeze-vision-encoder false --train-expert-only false \
+    --camera-viewpoint-augment
+```
+
+**`--save-freq 100` にしてあるので 9 GB のチェックポイントは書かれない。**
+
+| 見るもの | 通す条件 |
+|---|---|
+| `num_learnable_params` | **4143404816** |
+| loss | **NaN でない・10 を超えない**（高さそのものは合否に使わない。5.5 節） |
+| **`grdn`** | **100 未満** |
+| `mem_gb` | 50 前後・OOM しない |
 
 ### 6.5 本番の 1 本（**3 時間 49 分**）
 
