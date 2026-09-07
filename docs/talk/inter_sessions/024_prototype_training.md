@@ -330,8 +330,8 @@ print(i['total_episodes'], i['total_frames'], i['total_tasks'], i['fps'])"
 
 ### 6.2 こちらの 389 本を 11 倍にする（**小さいので速い。3 分**）
 
-**倍々で組む。**11 = 8 + 2 + 1 なので 4 回の merge で済む
-（1 本ずつ足すと 11 回・書き込み 26 GB になる）。
+**倍々で組む。**11 = 8 + 2 + 1 なので **5 回**の merge で済む
+（1 本ずつ足すと 10 回・書き込み 26 GB になる）。**中間物も含めて約 14 GB 使う。**
 
 ```sh
 P=/opt/dlami/nvme/data/proto
@@ -461,6 +461,8 @@ bash solution/tools/eval/run_final_eval.sh track1     # 退化していないか
 | 症状 | 原因と対処 |
 |---|---|
 | `tar: ~/proto389.tar.gz: Cannot open` | **`hf download` は `$HOME` に置かない。**HF キャッシュの `hub/datasets--<repo>/snapshots/<sha>/` に入る。6.2 の `find` で解決する（9/7 に踏んだ） |
+| `~/pi05_code/train_pi05.py` が無い | **`siruku6/pi05_code` は入れ子である。**実体は `~/pi05_code/solution/train/train_pi05.py`。`CODE_DIR` はそこを指す（9/7 に踏んだ） |
+| `hf download` が `Repository not found` | **データセットのリポジトリには `--repo-type dataset` が要る**（9/7 に踏んだ） |
 
 ## 10. 報告の書き方
 
