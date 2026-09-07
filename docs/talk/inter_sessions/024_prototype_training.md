@@ -307,12 +307,14 @@ hf upload siruku6/reverse_lerobot_389 /tmp/proto389.tar.gz proto389.tar.gz \
 **9/7 に上げたのは `siruku6/reverse_lerobot_389`（データセット・非公開）の
 `proto389.tar.gz`（395 MB・35 MB/s で 11 秒）である。**
 
-**道具を 2 つ一緒に渡す。**Blackwell では docker を使わず素の python で回すので、
-ファイルそのものが要る（どちらも依存は lerobot と numpy だけ）。
+**道具を 3 つ一緒に渡す。**Blackwell では docker を使わず素の python で回すので、
+ファイルそのものが要る。**同じディレクトリに並べれば PYTHONPATH は要らない**
+（`npz_to_lerobot.py` が自分の隣を `sys.path` に入れる）。
 
 | ファイル | 何に使うか |
 |---|---|
 | `solution/tools/scripted_demo/npz_to_lerobot.py` | `align` / `merge` / `inspect` |
+| **`solution/tools/scripted_demo/scripted_demo.py`** | **上が import する。**npz の取り決めが書かれている。**忘れると `No module named 'scripted_demo'` で止まる** |
 | **`solution/tools/track3_reversal/check_merge_stats.py`** | **正規化統計の検算と据え置き**（5 節） |
 
 ### 6.1 配布 tar を展開する（[howto/14](../../howto/14_blackwell_session.md) の節をそのまま）
@@ -463,6 +465,7 @@ bash solution/tools/eval/run_final_eval.sh track1     # 退化していないか
 | `tar: ~/proto389.tar.gz: Cannot open` | **`hf download` は `$HOME` に置かない。**HF キャッシュの `hub/datasets--<repo>/snapshots/<sha>/` に入る。6.2 の `find` で解決する（9/7 に踏んだ） |
 | `~/pi05_code/train_pi05.py` が無い | **`siruku6/pi05_code` は入れ子である。**実体は `~/pi05_code/solution/train/train_pi05.py`。`CODE_DIR` はそこを指す（9/7 に踏んだ） |
 | `hf download` が `Repository not found` | **データセットのリポジトリには `--repo-type dataset` が要る**（9/7 に踏んだ） |
+| `No module named 'scripted_demo'` | **`npz_to_lerobot.py` だけ渡しても動かない。**隣に `scripted_demo.py` を並べる（9/7 に踏んだ） |
 
 ## 10. 報告の書き方
 
