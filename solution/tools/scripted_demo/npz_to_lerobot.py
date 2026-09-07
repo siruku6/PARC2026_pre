@@ -315,9 +315,14 @@ def _prepare_output(path: Path) -> None:
 
 
 def _feature_shape(feature: dict[str, Any]) -> tuple:
-    """比べるべき中身だけを取り出す。**飾りは見ない。**"""
-    return (feature.get("dtype"), tuple(feature.get("shape", ())),
-            tuple(feature.get("names") or ()))
+    """比べるべき中身だけを取り出す。**飾りは見ない。**
+
+    **`names` は見ない。**軸の名前は綴りが揃っていないことがあり
+    （配布 `libero_combined_20hz` は画像の 3 番目を `rgb`、こちらは `channel`）、
+    **形が同じなら意味も同じである。**食い違ったときは `command_align` が
+    どう変えたかを 1 行ずつ印字するので、黙って通ることはない。
+    """
+    return (feature.get("dtype"), tuple(feature.get("shape", ())))
 
 
 def command_align(args: argparse.Namespace) -> None:
@@ -329,10 +334,19 @@ def command_align(args: argparse.Namespace) -> None:
     データセットは、古い版で作られた `lerobot/libero_plus` と一致しない。**
     実際に食い違ったのは 2 つで、どちらも意味は同じである。
 
-    | | こちら（v0.6.0 で作った） | libero_plus（古い版） |
+    | | こちら（v0.6.0 で作った） | 配布データ |
     |---|---|---|
     | 非動画の列 | `fps` が無い | `'fps': 20` がある |
     | 動画の `info` | `is_depth_map` | `video.is_depth_map` |
+    | **画像の軸名** | **`('height','width','channel')`** | **`('height','width','rgb')`**（`libero_combined_20hz`） |
+    | **state / action の軸名** | `state_0…` / `action_0…` | 配布側の綴り |
+
+    **軸名は写して構わない。**`names` を見るのは
+    `dataset_to_policy_features` の HWC→CHW の判定（3 番目が `channel` か）と
+    `action_feature_names`（相対行動を使うときだけ）の 2 か所で、
+    **チェックポイントから学習を始めるときは `input_features` が既に埋まっている
+    ので、どちらも効かない。**そして `merge` は base の features を残すので、
+    **混ぜた結果は base（配布データ）の綴りになる。**
 
     そこで**相手の `features` をそのまま写す。** 写す前に
     **`dtype`・`shape`・`names` が一致することを確かめる**ので、
@@ -360,17 +374,23 @@ def command_align(args: argparse.Namespace) -> None:
     if missing:
         raise SystemExit(f"相手に無い列がある: {sorted(missing)}")
 
-    changed = []
+    changed, renamed = [], []
     for name, feature in add_features.items():
         ours, theirs = _feature_shape(feature), _feature_shape(base_features[name])
         if ours != theirs:
             raise SystemExit(
                 f"{name} の形が違う: こちら {ours}、相手 {theirs}\n"
                 "  **これは飾りではない。データを作り直すこと。**")
+        if feature.get("names") != base_features[name].get("names"):
+            renamed.append((name, feature.get("names"),
+                            base_features[name].get("names")))
         if feature != base_features[name]:
             changed.append(name)
 
     print(f"=== {args.add} の features を {args.base} に合わせる ===")
+    for name, ours_names, their_names in renamed:
+        print(f"  **{name}: 軸名が違う** {ours_names} → {their_names}"
+              "（形は同じ。写す）")
     for name in changed:
         print(f"  {name}: 形は同じ。飾りだけ書き換える")
     if not changed:

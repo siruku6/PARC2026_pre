@@ -468,6 +468,7 @@ bash solution/tools/eval/run_final_eval.sh track1     # 退化していないか
 | `~/pi05_code/train_pi05.py` が無い | **`siruku6/pi05_code` は入れ子である。**実体は `~/pi05_code/solution/train/train_pi05.py`。`CODE_DIR` はそこを指す（9/7 に踏んだ） |
 | `hf download` が `Repository not found` | **データセットのリポジトリには `--repo-type dataset` が要る**（9/7 に踏んだ） |
 | `No module named 'scripted_demo'` | **`npz_to_lerobot.py` だけ渡しても動かない。**隣に `scripted_demo.py` を並べる（9/7 に踏んだ） |
+| `align` が `observation.images.front の形が違う` で止まる | **軸名の綴りが違うだけ**（配布は `rgb`・こちらは `channel`）。**9/7 に `_feature_shape` から `names` を外した。**形（dtype と shape）は今も厳格に見る。名前を見るのは `dataset_to_policy_features` の HWC→CHW 判定だけで、**チェックポイントから始めるときは `input_features` が既に埋まっているので効かない** |
 
 ## 10. 報告の書き方
 
