@@ -153,6 +153,15 @@ python3 solution/tools/track3_reversal/check_merge_stats.py \
     freeze  --merged <混ぜたデータセット> --source <配布のデータセット>
 ```
 
+**耐えられた実績は ±8% しか無い。**`libero_plus`（2,238,036 コマ）から
+`libero_combined_20hz`（3,028,708 コマ）へ乗り換えた 9/5 の `pi05_all111` では、
+**std が動いた幅は action 0.95〜1.08 倍・state 0.95〜1.04 倍**だった
+（`rp3000` と `all111` の normalizer を突き合わせた）。
+**それより大きく動かすなら、据え置くか、統計を持たない
+`lerobot/pi05_libero_base` から通し直すかを選ぶ**（base は
+`normalizer_processor` の `stats` が空で `.safetensors` も同梱されていないので、
+**最初の学習が尺度を決める**）。
+
 **`freeze` が書き換えるのは `observation.state` と `action` だけ**で、元の値は
 `meta/stats.json.bak` に残る。**混ぜた割合 20% で配布データの回転チャンネルが
 0.43 倍に縮む**ことを実測してある——縮む原因（こちらの接近の回転が配布の 4〜5 倍広い）は

@@ -106,3 +106,12 @@
 | 腕の初期姿勢の振り方の設計 | [002](002_robot_init_pose_coverage.md) |
 | 逆向きデータの作り方全体 | [018](018_reverse_dataset_writeout_plan.md)・作り直しの手順は [020](020_reverse_dataset_regeneration.md) |
 | 置き方（擦らない・落とさない・傾けない） | [reference/31](../../reference/31_reverse_place_without_contact.md) |
+
+# 以下はメモ
+
+prototype 学習後の学習に使うデータ (検討中)
+
+- タスクは3種類、本とマグ、two mugs の3タスクのみにします
+- 初期配置は 50 も要りません。20 本で学習してみましょう
+- デモ数は最大で 15 デモにしましょう。それを超える分は作成しない
+
