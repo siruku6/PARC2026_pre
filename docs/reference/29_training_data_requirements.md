@@ -11,6 +11,8 @@
 | 3 | **中継物の npz と、既にある変換器** |
 | 4 | **指示文は bddl から取れる**（書かなくてよい） |
 | 5 | 作るときに踏む穴 |
+| **6** | **混ぜると正規化統計が変わる**——検算と据え置きのしかた |
+| 5 | 作るときに踏む穴 |
 
 ## 1. 1 本に必要なもの
 
@@ -108,3 +110,51 @@ import しない。npz を書くところまでをコンテナで行い、変換
 | **混ぜる前に `align` する** | lerobot の版が違うと列の書き方が食い違う。`merge` の前に `align` を通す |
 | **1 タスクだけで学習しない** | 手本が 1 タスクぶんしか無い追加学習で、本番 0.1409 → 0.016 に崩れた実績がある。`build` は確認用、**提出候補を作るのは `merge`** |
 | **シム側の落とし穴** | 状態復元で復らないもの・fixture の配置・predicate の呼び方は [28_mppi_data_regeneration_survey.md](28_mppi_data_regeneration_survey.md) の 5.1〜5.2 節。env をまたぐ姿勢の写し替えは [28_track3_contents.md](28_track3_contents.md) の 5.6 節 |
+
+## 6. 配布データに混ぜると、**配布データの正規化まで変わる**
+
+**2026-09-07 に、逆向き 389 本を配布データへ混ぜる前に確かめた事実である。**
+
+### 6.1 学習が読むのは「データセットの統計」で、重みの中の値ではない
+
+| 事実 | どこで確かめたか |
+|---|---|
+| pi05 は `observation.state` と `action` を **mean/std で正規化する** | `rp3000` と `all111` の `config.json` の `normalization_mapping` が `{ACTION: MEAN_STD, STATE: MEAN_STD, VISUAL: IDENTITY}`。**`configuration_pi05.py` の既定は `QUANTILES` だが、重みの `config.json` が勝つ** |
+| **学習は `dataset.meta.stats` を使う** | `lerobot_train.py` 315〜332 行が `preprocessor_overrides["normalizer_processor"]["stats"]` を `dataset.meta.stats` で**上書きする**（`--resume` でないとき） |
+| 推論は**チェックポイント同梱の preprocessor** を読む | 学習が書き出した値がそのまま使われるので、**学習側で決めた統計と食い違わない** |
+| 画像は正規化されない | `VISUAL: IDENTITY`。`stats.json` に値はあるが使われない |
+
+**帰結。**混ぜたデータセットで学習すると、**配布データ側の入力・出力の尺度まで変わる。**
+
+### 6.2 統計の合成は mean/std だけが厳密で、**分位点は近似**
+
+lerobot の `aggregate_feature_stats`（`datasets/compute_stats.py`）は
+**平均をコマ数で重み付き平均し、分散に群間の散らばりを足す並列アルゴリズム**を使う。
+これは数学的に厳密である。**一方で分位点はコマ数による単純な重み付き平均**で、
+集合全体の分位点にはならない。
+
+**3 通りで検算した**（道具は `solution/tools/track3_reversal/check_merge_stats.py`）。
+
+| 検算 | 結果 |
+|---|---|
+| 同じデータセットを自分自身に混ぜる | **mean・std は最大差 0.000e+00**（count だけ 2 倍） |
+| 3 つの実物を混ぜた結果と、式で合成した値 | **最大差 3×10⁻¹⁸** |
+| `meta/stats.json` と生 parquet からの直接計算 | **mean 5×10⁻⁸・std 3×10⁻⁷・min/max 完全一致。ただし分位点は `q50` が最大 1.44 ずれる** |
+
+**`MEAN_STD` を使っているかぎり分位点のずれは無害である。`QUANTILES` に切り替えるなら
+統計を作り直すこと。**
+
+### 6.3 据え置きたいときは `meta/stats.json` を書き換える
+
+```bash
+python3 solution/tools/track3_reversal/check_merge_stats.py \
+    predict --provided <配布の stats.json か重みの normalizer> --ours <こちらの stats.json>
+python3 solution/tools/track3_reversal/check_merge_stats.py \
+    freeze  --merged <混ぜたデータセット> --source <配布のデータセット>
+```
+
+**`freeze` が書き換えるのは `observation.state` と `action` だけ**で、元の値は
+`meta/stats.json.bak` に残る。**混ぜた割合 20% で配布データの回転チャンネルが
+0.43 倍に縮む**ことを実測してある——縮む原因（こちらの接近の回転が配布の 4〜5 倍広い）は
+[30 の 8 節](30_reverse_grasp_pose.md) にある。
+
