@@ -474,7 +474,7 @@ OUT_MAX_ROT = np.array([0.5, 0.5, 0.5], dtype=np.float64)
 
 
 def rollout_tracking(env, init_state, ref_states, gripper_cmd, video_path=None,
-                     gain=1.0):
+                     gain=1.0, rot_limit=None):
     """基準経路（逆順の state 列）を**閉ループで追いかける**再生。
 
     記録された指令を反転して撃つ open-loop と違い、毎ステップ
@@ -497,7 +497,7 @@ def rollout_tracking(env, init_state, ref_states, gripper_cmd, video_path=None,
     inner = env.env
     n = len(ref_states) - 1
     for i in range(n):
-        a = osc_command(obs, ref_states[i + 1], gripper_cmd[i], gain)
+        a = osc_command(obs, ref_states[i + 1], gripper_cmd[i], gain, rot_limit)
         obs, _, _, _ = inner.step(a)
         if video_path is not None:
             frames.append(obs[f"{CAMERA}_image"][::-1])
@@ -510,13 +510,23 @@ def rollout_tracking(env, init_state, ref_states, gripper_cmd, video_path=None,
     return {"n_steps": n, "eef_pos": eef, "err_m": err}
 
 
-def osc_command(obs, target, grip, gain=1.0):
+def osc_command(obs, target, grip, gain=1.0, rot_limit=None):
     """「今の姿勢 → 目標姿勢」を OSC の指令 (7,) に直す。
 
     **回転は world 合成（`R_target @ R_now^T`）の軸角で出す。**軸角ベクトルの
     成分ごとの引き算は相対回転ではないので使えない（014 の実測）。
     差分は `output_max` で割って ±1 に収める（`control_delta=True` なので
     これがそのまま指令の単位になる）。
+
+    **`rot_limit` は 1 コマに出してよい回転指令の上限である**（既定 `None` ＝
+    上限 ±1、これまでと同じ）。**配布データの回転指令は ±0.375 に収まっている**のに
+    こちらは毎コマ ±1 を出しており、混ぜて学習すると回転チャンネルの 15% が
+    |z|>10 の外れ値になって**全ステップが勾配クリップに当たる**
+    （[reference/30 の 8 節](../../../docs/reference/30_reverse_grasp_pose.md)）。
+
+    **上限をかけるときは成分ごとに切らず、ベクトル全体を縮める。**成分ごとに切ると
+    回転軸そのものが変わり、目標と違う向きへ回り始める。全体を縮めれば
+    **軸は保ったまま遅くなるだけ**で、足りない分は次のコマで出る。
     """
     from robosuite.utils import transform_utils as T
 
@@ -526,7 +536,14 @@ def osc_command(obs, target, grip, gain=1.0):
     r_tgt = T.quat2mat(T.axisangle2quat(target[3:6]))
     r_cur = T.quat2mat(np.asarray(obs["robot0_eef_quat"], dtype=np.float64))
     aa_rel = T.quat2axisangle(T.mat2quat(r_tgt @ r_cur.T))
-    drot = np.clip(gain * np.asarray(aa_rel) / OUT_MAX_ROT, -1.0, 1.0)
+    drot = gain * np.asarray(aa_rel) / OUT_MAX_ROT
+    if rot_limit is None:
+        drot = np.clip(drot, -1.0, 1.0)
+    else:
+        lim = min(float(rot_limit), 1.0)
+        peak = float(np.abs(drot).max())
+        if peak > lim:
+            drot = drot * (lim / peak)
     return np.concatenate([dpos, drot, [grip]]).astype(np.float32)
 
 
@@ -540,6 +557,7 @@ def eef_axisangle(obs):
 
 def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
                    gain=1.0, tol=0.005, max_approach=60, grip_hold=10,
+                   rot_limit=None, rot_tol_deg=5.0,
                    grasp_pose=None, standoff=0.0, capture=False,
                    lift=0.0, release_i=None, settle=0, obj=None,
                    place_axis=None, level=False, cycles=None, max_tail=-1,
@@ -664,13 +682,30 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
             t["touch"].append(sorted(contacting_bodies(env, name)))
 
     def move_to(target, reach, gripcmd=-1.0):
-        """`target` へ `reach` 以内に入るまで寄る（既定は開いたまま）。コマ数を返す。"""
+        """`target` へ `reach` 以内に入るまで寄る（既定は開いたまま）。コマ数を返す。
+
+        **`rot_limit` を効かせているときは向きも揃うまで待つ。**位置だけで
+        打ち切ると、回転を遅くしたぶん**向きが合わないまま指を閉じる**。
+        並進は 1 コマで 2 割ほど詰まるので、先に着くのはいつも位置の側である。
+        """
+        from robosuite.utils import transform_utils as T
+
+        def arrived():
+            if float(np.linalg.norm(
+                    np.asarray(obs["robot0_eef_pos"]) - target[:3])) >= reach:
+                return False
+            if rot_limit is None:
+                return True
+            r_tgt = T.quat2mat(T.axisangle2quat(np.asarray(target[3:6], dtype=np.float64)))
+            r_cur = T.quat2mat(np.asarray(obs["robot0_eef_quat"], dtype=np.float64))
+            aa = np.asarray(T.quat2axisangle(T.mat2quat(r_tgt @ r_cur.T)))
+            return float(np.degrees(np.linalg.norm(aa))) < rot_tol_deg
+
         n = 0
         for _ in range(max_approach):
-            if float(np.linalg.norm(
-                    np.asarray(obs["robot0_eef_pos"]) - target[:3])) < reach:
+            if arrived():
                 break
-            step(osc_command(obs, target, gripcmd, gain))   # -1 = 開く / +1 = 閉じる
+            step(osc_command(obs, target, gripcmd, gain, rot_limit))   # -1 = 開く / +1 = 閉じる
             n += 1
         return n
 
@@ -698,7 +733,7 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
 
         # B: その場で閉じる（指が閉じ切るまで姿勢は保持）
         for _ in range(grip_hold):
-            step(osc_command(obs, gp, 1.0, gain))            # +1 = 閉じる
+            step(osc_command(obs, gp, 1.0, gain, rot_limit))            # +1 = 閉じる
         n["grip"] += grip_hold
 
         # L: 掴んだら**まず真上へ**。横へ動かすと、下の皿やトレイを擦って動かす。
@@ -726,7 +761,7 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
             if i < i_join and tgt[2] < z_safe:
                 tgt[2] = z_safe
                 n["floor"] += 1
-            step(osc_command(obs, tgt, grip[i], gain))
+            step(osc_command(obs, tgt, grip[i], gain, rot_limit))
         n["path"] += stop_i - i0
         per_cycle.append({"obj": cyc["obj"], "n_path": stop_i - i0})
         last_stop = stop_i
@@ -743,7 +778,7 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
             # 固定で待つと、本番の打ち切り 300 コマをそのぶん食う。
             hold = level_pose(obs, cyc["obj"], cyc["place_axis"], clearance=0.02)
             for _ in range(grip_hold):
-                step(osc_command(obs, hold, 1.0, gain))
+                step(osc_command(obs, hold, 1.0, gain, rot_limit))
                 n["settle"] += 1
                 if tilt_deg(obs[f"{cyc['obj']}_quat"], cyc["place_axis"]) < level_tol:
                     break
@@ -751,13 +786,13 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
             if cyc["obj"] is not None and contacting_bodies(env, cyc["obj"]):
                 break
             hold[2] -= 0.005
-            step(osc_command(obs, hold, 1.0, gain))
+            step(osc_command(obs, hold, 1.0, gain, rot_limit))
             n["settle"] += 1
         hold[:3] = np.asarray(obs["robot0_eef_pos"])         # 止めた所で開く
         opened_at.append(len(acts))
         placed.append(cyc["obj"])
         for _ in range(grip_hold):
-            step(osc_command(obs, hold, -1.0, gain))
+            step(osc_command(obs, hold, -1.0, gain, rot_limit))
         n["grip"] += grip_hold
 
     # 放したあとの残りの復路は**腕が初期姿勢へ戻るだけ**の区間である。最後に
@@ -768,7 +803,7 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
         end_i = (len(ref) - 1 if max_tail < 0
                  else min(len(ref) - 1, last_stop + max_tail))
         for i in range(last_stop, end_i):
-            step(osc_command(obs, ref[i + 1], -1.0, gain))
+            step(osc_command(obs, ref[i + 1], -1.0, gain, rot_limit))
             n["tail"] += 1
 
     if video_path is not None:

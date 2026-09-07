@@ -23,6 +23,11 @@
 #   LEVEL=1                            放す前に荷物を水平へ直す（傾いたまま置くと
 #                                      放したあとに自分で起き上がる）
 #   MAX_APPROACH=60                    接近の各段に許すコマ数（遠い場面では上げる）
+#   ROT_LIMIT=0.375                    1 コマに出してよい回転指令の上限（既定 ±1）。
+#                                      **配布データは ±0.375 に収まっている。**
+#                                      **コマ数は増えない**（缶 20 本で −11%）。
+#                                      MAX_APPROACH=200 と一緒に使うこと
+#   ROT_TOL_DEG=5                      ROT_LIMIT のとき接近を終える向きの許容[度]
 #   SYMMETRY=1|2|0                     掴み方として等価な回転（0=缶のような回転体）
 #   GRASP_STYLE=transfer|top-down      掴む姿勢を順方向から移すか、真上からの握りを作るか
 #   T3_INIT=0|0,2,5|0-49|all           --init-source t3 のとき使う init の行
@@ -55,6 +60,8 @@ run_in_container gripper_shift_sweep.py \
   --trace-release "${TRACE:-0}" \
   ${LEVEL:+--level-before-release} \
   --max-approach "${MAX_APPROACH:-60}" \
+  ${ROT_LIMIT:+--rot-limit "$ROT_LIMIT"} \
+  --rot-tol-deg "${ROT_TOL_DEG:-5}" \
   --object-symmetry "${SYMMETRY:-1}" \
   --grasp-style "${GRASP_STYLE:-transfer}" \
   --t3-init-index "${T3_INIT:-0}" \

@@ -102,20 +102,103 @@
 **C（`all111` の扱い）は 9/8 に片付けた。**手元の指標で `rp3000` に劣ることを
 [reference/19](../../reference/19_weights_catalog.md) の「9/7 の `pi05_proto20`」に書いた。
 
-## 4. 次の一手（JAIST・約 3.3 時間）
+## 4. JAIST で 1 本回す手順
 
-| 段 | どこ | 中身 | 大きさ |
+**打つのは 5 つだけである。**データを組むところは
+`solution/train/jaist_dataset_build.sh` に、起こすところは
+`solution/train/jaist_launch.sh` に畳んである。**どちらも何度打ってもよく、
+数が 1 つでも違えば原因と次の一手を出して止まる。**
+
+### 4.0 何を作るのか
+
+| | 本数 | コマ数 | 課題 |
 |---|---|---|---|
-| 1 | RTX6000 | `lerobot/libero_plus` を落とす | 15.8 GB |
-| 2 | RTX6000 | **課題ごとに均等に 3,000 本へ間引く**（40 課題は全部残る） | 約 3.3 GB |
-| 3 | RTX6000 | 逆向き ×7 と混ぜる（割合 50.3%） | 約 6.6 GB |
-| 4 | RTX6000 | 統計を **`rp3000` の値**に据え置く | — |
-| 5 | RTX6000 | HF の非公開へ上げる | 6.6 GB |
-| 6 | JAIST | 落とす ＋ `rp3000`（8.8 GB） | 15.4 GB |
-| 7 | JAIST | **batch 16・8,500 歩・action expert だけ** | **3.3 時間** |
+| `libero_plus` を課題ごとに 75 本へ間引いたもの | **3,000** | **501,403** | 40 |
+| 逆向き 389 本 × 7 | **2,723** | **474,425** | 3 |
+| **混ぜたもの** | **5,723** | **975,828** | **43** |
 
-**歩数の根拠。**割合 50.3% で 8,500 歩 × batch 16 ＝ 136,000 サンプル。
-うち逆向きに落ちるのが 68,400 回で、こちらの 67,775 コマを **1 コマ 1 回**見る量。
+**逆向きの割合 48.6%。**正規化統計は **`rp3000` 同梱の normalizer に据え置く**
+（＝`rp3000` が学習した尺度そのもの。配布側の見え方が 1 ビットも変わらない）。
+
+**歩数は 8,700。**割合 48.6% で 8,700 歩 × batch 16 ＝ 139,200 サンプル、
+うち逆向きに落ちるのが 67,700 回で、**こちらの 67,775 コマを 1 コマ 1 回**見る量である
+（根拠は [reference/29 の 7 節](../../reference/29_training_data_requirements.md)）。
+
+### 4.1 このマシン（RTX6000）で組む —— 約 40 分
+
+```bash
+cd /home/ubuntu/src/PARC2026_pre
+
+# ① 元データ（15 GB・取得済みなら飛ばされる）
+hf download lerobot/libero_plus --repo-type dataset \
+    --local-dir work/artifacts/libero_plus
+
+# ② 間引く → 7 倍にする → 混ぜる → 据え置く（1 本で通る）
+bash solution/train/jaist_dataset_build.sh
+```
+
+**最後に「HF へ上げる 1 行」が出る。**確かめてから手で打つ。
+
+```bash
+hf upload siruku6/jaist_mix work/artifacts/jaist_mix_75_x7 . \
+    --repo-type dataset --private
+```
+
+| 見るもの | 通す条件 |
+|---|---|
+| 間引いた本数 | **3000 501403 40** |
+| 7 倍した本数 | **2723 474425 3** |
+| 混ぜた本数 | **5723 975828 43** ／ **割合 48.6%** |
+| 据え置き | `meta/stats.json.bak` が出来ていること |
+
+### 4.2 JAIST で回す —— 約 3.4 時間
+
+```bash
+# ③ 落とす（データ 6.6 GB ＋ 出発点の重み 8.8 GB）
+hf download siruku6/jaist_mix --repo-type dataset --local-dir ~/data/jaist_mix
+hf download siruku6/pi05_full_runpod --local-dir ~/weights/rp3000
+
+# ④ 起こす（action expert 限定は script が外せないようにしてある）
+cd ~/src/PARC2026_pre
+RUN=pi05_t3rev DATASET=~/data/jaist_mix WEIGHTS=~/weights/rp3000 \
+    STEPS=8700 SAVE_FREQ=2900 \
+    bash solution/train/jaist_launch.sh
+```
+
+**`jaist_launch.sh` は最初の 20 歩まで待って、次の 2 つを突き合わせてから離席させる。**
+
+| 見るもの | 通す条件 | 違ったら |
+|---|---|---|
+| `num_learnable_params` | **693422112** | 全パラメータになっている。20 GB には載らない |
+| `dataset.num_episodes` | **5723** | 混ざっていない／落とし切れていない |
+| `loss`・`grdn`（20 歩目） | **NaN でない**・`grdn` が **100 未満** | 発散。`stats.json.bak` を戻して打ち直す |
+
+**`grdn` は 20 歩目で必ず見る。**`proto20` はここが 3.093 で、
+**全 2,000 歩がクリップに当たり続けた。**速度制限が効いていれば 1 前後に下がるはずで、
+**下がらなければ原因は回転以外にある**（＝この 1 本の主目的である）。
+
+```bash
+# ⑤ 見張る
+docker logs --tail 2 parc-pi05_t3rev 2>&1 | tr '\r' '\n' | grep step:
+```
+
+### 4.3 終わったら測る
+
+**このマシンへ持ち帰って評価する**（EGL が効く唯一の機械である）。
+
+```bash
+bash solution/tools/eval/run_final_eval.sh track3   # 4 課題 × 2 本
+bash solution/tools/eval/run_final_eval.sh track2   # 退化していないかの確認
+```
+
+比べる相手は **`rp3000`（track3 0.000・VAL72 0.8056）**と
+**`proto20`（track3 0.000・VAL72 0.5833）**である。
+
+| 出た結果 | 読み |
+|---|---|
+| track3 が動き、track2 が落ちない | **データの向きも量も正しい。**本番の規模へ進む |
+| track3 は 0.000 だが **track2 が落ちない** | **退化の原因は回転の外れ値だった。**次は量を増やす |
+| track3 は 0.000 で **track2 も落ちる** | **原因は回転以外。**出発点か、追加学習そのものを疑う |
 
 ## 5. 道具（全部このリポジトリに在る）
 

@@ -378,6 +378,19 @@ def parse_args():
                     help="接近の各段に許すコマ数の上限。**距離はタスクで違う**——"
                          "本は 30〜41 コマで着くが、腕の home から遠い場面では"
                          "足りない。上げても着いた回の結果は変わらない")
+    ap.add_argument("--rot-limit", type=float, default=None,
+                    help="1 コマに出してよい回転指令の上限（既定 None ＝ ±1）。"
+                         "**配布データの回転は ±0.375 に収まっている**のにこちらは"
+                         "毎コマ ±1 を出しており、混ぜて学習すると全ステップが"
+                         "勾配クリップに当たる（reference/30 の 8 節）。"
+                         "**0.375 にすると |z| の最大が 25.0 → 9.4 になり、"
+                         "配布データ自身の裾と同じになる。**缶 20 本の実測では"
+                         "コマ数がむしろ 11% 減り、接近誤差も 4.11 → 3.12 mm に"
+                         "なった（成分ごとの clip をやめて軸を保つため）。"
+                         "`--max-approach` は 200 に上げておくこと")
+    ap.add_argument("--rot-tol-deg", type=float, default=5.0,
+                    help="`--rot-limit` を効かせたとき、接近を終える向きの許容[度]。"
+                         "**位置だけで打ち切ると向きが合わないまま指を閉じる**")
     ap.add_argument("--lift", type=float, default=0.0,
                     help="掴んだ直後に**真上へ**上がる高さ[m]。0 で無効。"
                          "復路の頭は物を置いた高さなので、そのまま追うと荷物を"
@@ -746,11 +759,14 @@ def main():
                                        cycles=cycles,
                                        standoff=args.standoff,
                                        max_approach=args.max_approach,
+                                       rot_limit=args.rot_limit,
+                                       rot_tol_deg=args.rot_tol_deg,
                                        lift=args.lift, settle=args.settle,
                                        max_tail=args.max_tail,
                                        capture=bool(args.write_npz))
                 else:
-                    r = rollout_tracking(rev_env, rev_init, ref, grip, vid)
+                    r = rollout_tracking(rev_env, rev_init, ref, grip, vid,
+                                        rot_limit=args.rot_limit)
                 # **判定は逆向きを回した env で行う。**T3 env で回したならそのまま
                 # `check_success()` が T3 の goal。順方向 env で回したなら、本の姿勢を
                 # T3 env へ差し込んで判定する（順方向 env の同名 region は 7.5 倍狭い）。
