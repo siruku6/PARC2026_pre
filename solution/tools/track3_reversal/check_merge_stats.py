@@ -166,13 +166,24 @@ def command_freeze(args: argparse.Namespace) -> None:
             raise SystemExit(f"{target} に {key} が無い")
         if key not in source:
             raise SystemExit(f"{args.source} に {key} が無い")
-        before = np.asarray(raw[key]["std"], dtype=np.float64)
-        after = source[key]["std"]
-        if before.shape != after.shape:
-            raise SystemExit(f"{key} の形が違う: {before.shape} と {after.shape}")
-        ratio = before / after
-        print(f"  {key}: std の倍率 {ratio.min():.4f}〜{ratio.max():.4f} を 1.0 に戻す")
-        raw[key] = {stat: value.tolist() for stat, value in source[key].items()}
+        merged_std = np.asarray(raw[key]["std"], dtype=np.float64)
+        kept_std = source[key]["std"]
+        if merged_std.shape != kept_std.shape:
+            raise SystemExit(
+                f"{key} の形が違う: {merged_std.shape} と {kept_std.shape}")
+        # **配布データ側の見え方がどう戻るかで書く。**混ぜた値で正規化すると
+        # 配布データは kept/merged 倍に縮んで見える。それを 1.0 に戻す。
+        ratio = kept_std / merged_std
+        print(f"  {key}: 配布データの見え方が {ratio.min():.4f}〜{ratio.max():.4f} 倍に"
+              f"なっていたのを 1.0 に戻す"
+              f"（混ぜた std は配布の {1 / ratio.max():.4f}〜{1 / ratio.min():.4f} 倍だった）")
+        # **コマ数は混ぜた値を残す。**count は正規化には使われないが、
+        # **この後さらに混ぜるときの重みになる**ので、配布の値で上書きすると
+        # 次の合成が狂う。
+        kept = {stat: value.tolist() for stat, value in source[key].items()}
+        if "count" in raw[key]:
+            kept["count"] = raw[key]["count"]
+        raw[key] = kept
 
     target.with_suffix(".json.bak").write_text(original)
     target.write_text(json.dumps(raw, indent=4))

@@ -290,6 +290,16 @@ state 0.95〜1.04 倍**である（`rp3000` と `all111` の normalizer を突�
 「データが効かない」のか「学習が足りない」のか分けられなくなる）。
 **本番でどうするかは [020 の 9 節](020_reverse_dataset_regeneration.md) にある。**
 
+### 5.6 9/7 の実測——**予測と小数 4 桁まで一致した**
+
+| 段 | 出た値 |
+|---|---|
+| merge | **23,812 本 / 3,774,233 コマ / 114 タスク**（57 秒）。`video_path` は 3 桁で自己整合 |
+| 据え置き前の `verify` | **一致した**（mean・std ともに最大差 **0.000e+00**） |
+| 混ぜた action の std | `[0.3312 0.4253 0.4549 0.0765 0.0868 0.1829 0.9446]` |
+| **配布データの見え方** | **0.4261〜0.9918 倍**（4.2 節の予測 0.426〜0.992 と一致） |
+| 据え置き後の `verify` | **食い違いがある**＝据え置きが効いた証拠 |
+
 **smoke で loss が 1.0 を超えたら、据え置きをやめて混ぜた値で回し直す**
 （`stats.json.bak` を戻すだけでよい）。**そのときは Track1 の退化も合わせて報告すること。**
 
@@ -392,7 +402,8 @@ print(i['total_episodes'], i['total_frames'], i['total_tasks'])"
 python3 ~/tools/check_merge_stats.py verify --parts "$DATA" "$P/x11" --merged "$MERGED"
 # ② 配布データの値へ据え置く
 python3 ~/tools/check_merge_stats.py freeze --merged "$MERGED" --source "$DATA"
-#    action: std の倍率 0.426〜0.992 を 1.0 に戻す  と出ること（割合 20% のとき）
+#    action: 配布データの見え方が 0.4261〜0.9918 倍になっていたのを 1.0 に戻す
+#    （混ぜた std は配布の 1.0083〜2.3468 倍だった）——9/7 の実測
 # ③ もう一度 verify を打つと、こんどは action と state が「ちがう」と出る。
 #    **それが据え置きが効いた証拠である**（元の値は stats.json.bak にある）
 ```
@@ -448,7 +459,7 @@ bash solution/tools/eval/run_final_eval.sh track1     # 退化していないか
 ## 7. できあがりの条件
 
 1. `dataset.num_episodes` が **23812** と出たログ
-2. **`verify` が一致し、`freeze` が「0.426〜0.992 を 1.0 に戻す」と出たログ**（5 節）
+2. **`verify` が一致し、`freeze` が「0.4261〜0.9918 倍になっていたのを 1.0 に戻す」と出たログ**（5 節）
 3. 2,000 歩が終了コード 0 で終わり、loss が **0.3 前後**
 4. `run_final_eval.sh track3` の点（4 タスク × 2 本）と、`track1` の点
 
