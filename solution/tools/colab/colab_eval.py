@@ -157,7 +157,7 @@ POLICY_SPECS: dict[str, PolicySpec] = {spec.kind: spec for spec in (
         # 組み合わせにしてある（solution/train/Dockerfile.pi05 の v0.6.0 + [training,pi]）。
         lerobot_extra="pi",
         # **SmolVLA は step_5 だが π0.5 は step_2 である。**
-        # 実物: work/artifacts/model_weights_pi05_024000/
+        # 実物: work/artifacts/pi05_rp3000/
         normalizer_file="policy_preprocessor_step_2_normalizer_processor.safetensors",
         # **fp16 へ落ちる道が無い。** dtype を決めるのは policy_server.py の
         # `_build_pi05` で、bfloat16 でなければ float32 になる分岐しか無く、

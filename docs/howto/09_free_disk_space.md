@@ -13,7 +13,7 @@
 | 2 | [同じ中身かはパス名ではなく sha256 で判定する](#2-同じ中身かはパス名ではなく-sha256-で判定する) | 「HF に無い」と書いてあった 26 GB が、全部よそにあるコピーだった |
 | 3 | [ハードリンクは両方消して初めて空く](#3-ハードリンクは両方消して初めて空く) | 片方だけ消しても 1 バイトも空かない |
 | 4 | [docker はイメージとビルドキャッシュの両方を消す](#4-docker-はイメージとビルドキャッシュの両方を消す) | 片方だけだと、申告 9.54 GB に対して 1.1 GB しか空かなかった |
-| 5 | [HF の非公開容量は画面で消しても空かない](#5-hf-の非公開容量は画面で消しても空かない) | git 履歴に実体が残る。潰すしかない |
+| 5 | [HF の非公開容量は画面で消しても空かない](#5-hf-の非公開容量は画面で消しても空かない) | git 履歴に実体が残る。潰すか、**消さずに公開へ移す**か |
 | 6 | [消してよいものと残すもの](#6-消してよいものと残すもの) | 軸は「取り直せるか・作り直せるか」だけ |
 | 7 | [消す作業は script にして流す](#7-消す作業は-script-にして流す) | 既定は表示だけ、`CONFIRM=yes` で実行 |
 
@@ -67,12 +67,12 @@ stat -c '%i %h %s %n' <パス>     # 実体につく通し番号（inode）・�
 find work -samefile <パス>       # 同じ実体を指す別名を探す
 ```
 
-**リンク数（2 番目の値）が 2 以上なら、どこかに別名がある。** 2026-08-23 に実測した 2 組:
+**リンク数（2 番目の値）が 2 以上なら、どこかに別名がある。** 2026-09-08 に残っている 2 組:
 
 | 同じ実体を指す 2 つの名前 | inode | リンク数 |
 |---|---|---|
 | `work/artifacts/pi05_rp3000/model.safetensors` ＝ `work/train/pi05_full_runpod/003000/model.safetensors` | 805401061 | 2 |
-| `work/artifacts/model_weights_pi05_024000/model.safetensors` ＝ `work/train/pi05_full_local/checkpoints/024000/pretrained_model/model.safetensors` | 25474754 | 2 |
+| `work/artifacts/pi05_geo12k/model.safetensors` ＝ `work/train/geo_vggt_v2/checkpoints/012000/pretrained_model/model.safetensors` | 23704624 | 2 |
 
 **逆の場合もある。**sha256 が一致するのにリンク数が 1 なら、同じ中身を別の実体として
 2 つ持っている。こちらは片方消すだけでその分が空く。
@@ -117,6 +117,26 @@ HfApi().super_squash_history(repo_id='<user>/<repo>')"
 `outputs/` の採点ログにあることを確かめる。script は `work/admin/cleanup_hf.py`
 （`CONFIRM=yes` を付けないと何もせず、何をするかだけ表示する）。
 
+**消さずに枠を戻す道がある——公開へ移す。**枠を食うのは非公開リポジトリだけで、
+公開のぶんは 1 バイトも数えない（[../resources/huggingface.md](../resources/huggingface.md) 1 節）。
+**点が返って線を打ち切った重みは、消さずに公開のリポジトリへ移す。**
+
+**移すときに落とす必要は無い。**`CommitOperationCopy` に `src_repo_id` と `src_repo_type` を
+渡すとリポジトリをまたげて、**LFS はサーバ側で複製される**（`huggingface_hub` 1.27.0 の
+`_commit_api.py` 98〜101 行。同じ storage region の中だけ）。9.4 GB が 2 本でも数十秒である。
+**手順は「複製 → 複製先の sha256 を照合 → 元を消す → `super_squash_history`」の順で、
+照合が合うまで元を消さない**（`work/admin/move_trial1500_public.py` がこの形）。
+
+**戻り方が 2 通りあることに注意する。**
+
+| 何をしたか | 枠に映るまで |
+|---|---|
+| リポジトリを丸ごと消す | **即座**（2026-08-28 実測） |
+| ファイルを消して `super_squash_history` | **最大 36 時間**（出典: HF の [Storage limits](https://huggingface.co/docs/hub/storage-limits)・2026-08-28 確認） |
+
+**だから畳んだ直後に設定画面を見ても、消した分はまだ乗ったままである。**
+2026-09-08 に 18.75 GB を移したあとも、画面は移す前の 47 GB を出していた。
+
 **そもそも 9.4 GB を運び直さなくてよい場合がある**（候補どうしの違いが
 `policy_server.py` の 72 KB だけのとき）。
 [../knowledge/12_workbench_accidents.md](../knowledge/12_workbench_accidents.md) の
@@ -156,5 +176,10 @@ CONFIRM=yes bash work/admin/<script>.sh  # 実際に消す
   （イメージを消したあとに `RECLAIMABLE` が 9.541 GB へ動いた）の 2 回の結果からの推測で、
   順番を入れ替えて切り分けた実験はしていません。外れていた場合、4 節の「順番」は根拠を
   失いますが、「両方消す」という結論は変わりません。
+- 5 節の「非公開から公開へ切り替えると枠が戻る」が**即座に映るか**は確かめていません。
+  2026-09-05 に `pi05_camdrop2500` で「93.64 → 46.87 GB に戻った」と記録した値は、設定画面
+  ではなく `HfApi` で数えた合計です。**切り替えは LFS を消さないので、履歴の掃除を待つ
+  `super_squash_history` とは違って即座だと読んでいます。**外れていれば、公開へ移しても
+  最大 36 時間は画面の数字が動かないことになります。
 - 4 節の「申告 9.54 GB に対して実際に空いたのは約 1.1 GB」は 2026-08-23 の 1 回の測定です。
   そのあとビルドキャッシュ側も消えているため、同じ状態での再測定はできません。
