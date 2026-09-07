@@ -1,169 +1,209 @@
-# 020 逆向きデータ 389 本を、擦らない・落とさない作り方で作り直す
+# 020 本番学習用の逆向きデータ生成——2 因子を振って組む
 
-> **状態: 依頼中** ／ 受け側: 未定 ／ 更新: 2026-09-07
+> **状態: 依頼中（本番学習向け）** ／ 受け側: 未定 ／ 更新: 2026-09-07
 >
-> **判断は要らない。設定は確定していて、長いだけの作業である。**
-> 詰まったら「4. 落とし穴」を先に見ること。
+> **これは本番学習用である。**明日の手元評価用（`compe/t3` の 4 タスクだけを見る
+> もの）は **[023](023_local_eval_dataset.md)** で、そちらは**作れる組を全部作る**
+> 方針なので混同しないこと。
+>
+> **9/7 に生成方法を差し替えた。**それ以前の「順方向デモ 2〜3 本 × init 全 50 行を
+> そのまま全部書き出す」やり方は**もう使わない**（理由は 1 節）。
 
-## 1. なぜ作り直すか
+## 1. なぜ組み方を変えるのか
 
-いまある 389 本（`work/probe_017/reverse_lerobot_all`）は、**掴んだ物を横へ
-引きずって下の皿やトレイを動かし、空中で放して落としている。**どちらも直し方が
-決まり、実測で消えることを確かめた（[reference/31](../../reference/31_reverse_place_without_contact.md)）。
-**足すのは環境変数 2 つ（`LIFT=0.08 RELEASE=contact`）だけ**で、通る本数は
-変わらない。
+**1 本の逆向きは「順方向デモ 1 本 × 配布 init 1 行」の組から作られる。2 つの因子は
+直交していて、片方を増やしてももう片方は 1 つも増えない**
+（[reference/06](../../reference/06_training_data_composition.md)）。
 
-| | 直す前 | 直した後 |
-|---|---|---|
-| 他の物が動いた量（皿・トレイ） | 最大 21.0 mm | **0.9 mm** |
-| 放してから落ちた高さ（缶） | 36.9 mm | **2.6 mm** |
-| 同（赤マグ。`LEVEL=1` も足す） | 12.3 mm | **1.5 mm** |
-| 逆向き goal | 10/10 | 10/10（変わらない） |
+| 因子 | 何を決めるか | 手持ち | 旧方式で使っていた数 |
+|---|---|---|---|
+| **順方向デモ** | 運搬の軌道（人がどう掴んでどう運んだか） | 本 44・缶 44・赤マグ 34・two mugs 313 | **2〜3** |
+| **配布 init の行** | 物と邪魔な物の置き場所・向き | 4 タスクとも **50** | 50（全部） |
 
-**`LEVEL=1` は赤マグにだけ付ける。**缶に付けると最後の一手で 90° 回そうとして
-隣のケチャップを 116 mm 薙ぎ倒す（[reference/31 の 5 節](../../reference/31_reverse_place_without_contact.md)）。
+旧方式の 389 本は **3 × 50** で、**運搬の軌道が 3 通りしかない。**同時に 1 指示文
+あたり 150 本は、配布の同型タスク（1 シーン 34〜99 本・中央 49）の 3 倍である。
 
-**`MAX_TAIL=5` と `MAX_STEPS=300` は全タスクに付ける。**置いたあとに腕が初期姿勢
-へ戻る区間は goal にも学習にも要らず、**本番は 300 コマで打ち切られる**
-（[reference/31 の 6 節](../../reference/31_reverse_place_without_contact.md)）。
-物理は 1 本ごとに完全一致で変わらない。
+**配布 init がちょうど 50 行あるので、1 タスク 50 本にすると 2 つが同時に直る。**
 
-## 2. 作り直す手順
+- **置き場所は 50 通り全部**を 1 回ずつ使い切る（網羅は落ちない）
+- **運搬の軌道は最大 50 通り**入る（旧方式は 3 通り）
+- 本数は配布の中央値 49 本とほぼ一致する
 
-**3 タスクを別々に生成 → それぞれ LeRobot 形式へ変換 → 1 つに merge。**
-シムの画像（`parc2026-final`）に lerobot は入っておらず、lerobot の画像
-（`parc2026-train-pi05`）に LIBERO は入っていないので、**生成と変換は必ず
-別のコンテナに分かれる。**
+**本数を 3 分の 1 に減らしながら、動きの種類を最大 17 倍にできる。**
 
-### 2.0 置き場を作って、順方向デモの npz を持ってくる
+### 規模の選択肢
 
-```bash
-cd /home/ubuntu/src/PARC2026_pre
-mkdir -p work/probe_019
-cp work/probe_017/ep_data.npz work/probe_017/ep_soup.npz work/probe_019/
-cp work/probe_017_mug/ep_mug20.npz work/probe_019/
+| | 1 タスク | 4 タスク合計 | 学習全体での割合 | 置き場所 | 軌道の種類 |
+|---|---|---|---|---|---|
+| **A（推奨）** | **50** | 200 | **1.0%** | 50 通り × 1 回 | 最大 **50** |
+| B | 100 | 400 | 2.0% | 50 通り × **2 回** | 最大 50（各 2 回使用） |
+| C（旧方式） | 150 | 600 | 3.1% | 50 通り × 3 回 | **3** |
+
+**B の利点は「同じ置き場所を別の動きで 2 回見せられる」ことだけ**である。赤マグの
+ヨーの帯を別デモが埋めた実績（[reference/30 の 6 節](../../reference/30_reverse_grasp_pose.md)）を
+学習側でも再現したいなら B。**C は軌道の種類が最小のまま本数だけ多い。**
+
+## 2. 組み方——**試走で全部の組を測ってから選ぶ**
+
+### なぜ「全部測る」が成立するのか（コストの実測）
+
+**npz を書かない試走は、書き出しの 4.4 分の 1 で済む。**赤マグで実測した。
+
+| | env 構築（1 回） | 1 本あたり | npz |
+|---|---|---|---|
+| **試走**（`--write-npz` なし） | 72 秒 | **6.9 秒** | 書かない |
+| 書き出し（`--write-npz` あり） | 215 秒 | **31 秒** | **60 MB/本** |
+
+だから **(デモ × init) の全組を試走して成否と質を測り、選んだ 50 組だけ
+書き出す**のが一番安い。
+
+| 段 | 組数（デモ 25 本の場合） | 時間 | 出力 |
+|---|---|---|---|
+| **試走** | 25 × 50 = **1,250** | **約 2.5 時間 / タスク** | json だけ |
+| **書き出し** | **50** | 約 30 分 / タスク | **3 GB / タスク** |
+
+4 タスクで**試走 10 時間・書き出し 2 時間・npz 12 GB**（旧方式の 25 GB より軽い）。
+
+### 選び方は**割り当て問題**として解ける
+
+試走の json には 1 組ごとに `reverse_goal` / `n_steps` / `drop_mm` /
+`disturb_max_mm` が入っている。これで次の形になる。
+
+```
+init 50 個（各 1 回）  ←→  デモ D 個（各 ceil(50/D) 回まで）
+辺は「試走で通った組」だけ。辺の重み = 質のコスト
+  質のコスト = disturb_mm + drop_mm + max(0, n_steps - 250) など
 ```
 
-**`EP_NPZ` は `$OUT` からの相対で解決される**（コンテナに `$OUT` を `/out` として
-mount するため）。よそのディレクトリのファイルは指せない。
+**最小コストの完全割り当てを解けばよい**（`scipy.optimize.linear_sum_assignment`
+にデモを定員ぶん複製した 50×50 の行列を渡す）。これで
 
-### 2.1 生成（`parc2026-final`。3 回まわす）
+- 置き場所 50 通りを 1 回ずつ
+- デモの使用回数が均等
+- そのうえで**擦らない・落とさない・短い**組を優先
 
-**共通して渡すもの。**`T3_INIT=all` が配布 T3 の init 50 行すべてを使う指定で、
-これがデータ量を決める。
+が同時に満たせる。**通る組が 1 つも無い init は落ちる**ので、その数は必ず報告する。
+
+### 素朴なやり方との比較（なぜ割り当てにするか）
+
+| やり方 | 均等性 | 質の選択 | 落ちた組の扱い | コスト |
+|---|---|---|---|---|
+| **系統的**（init を並べ替えてデモを巡回で割当） | ○ 完全 | **×** | 別デモで撮り直し | 50 本ぶん |
+| **ランダム**（種固定で非復元抽出） | △ 近似 | **×** | 同上 | 50 本ぶん |
+| **試走 → 割り当て**（推奨） | ○ 完全 | **○** | 最初から避けられる | 試走 1,250 ＋ 50 本 |
+
+**系統的とランダムは「撮ってから落ちたと分かる」。**試走が安いのだから、
+先に全部測ってしまうほうが素直である。
+
+**並べ替えは系統的にする場合でも必須である。**配布 init の行に隠れた並び
+（ヨー順など）があると、巡回割り当てがそれと同期して「デモ 0 は必ず低ヨー」の
+ような偏りを作る。**種を固定して並べ替えてから巡回する。**
+
+## 3. デモをどの D 本にするか
+
+手持ち 34〜313 本から D 本を選ぶ。**先頭から D 本ではなく、散らばるように採る。**
+
+1. **「順再生で物が動いたか」でふるう**（[reference/30 の 5 節](../../reference/30_reverse_grasp_pose.md)）。
+   実測の通過率は赤マグ 70%（20 本中 14）、two mugs 50%（20 本中 10）
+2. 残ったものを**掴む位置と掴む向き**で見て、**最遠点選択**で D 本採る。
+   指標は [`compare_forward_demos.py`](../../../solution/tools/track3_reversal/compare_forward_demos.py)
+   が出す（掴む位置の散らばり 20〜25 mm、掴む向き 中央 7〜17°・最大 49°）
+
+**D は 50 まで増やせるが、通過率を掛けると本 30・缶 30・赤マグ 24・
+two mugs 150 が上限である。**D < 50 のときは各デモが 2 回以上使われる。
+
+## 4. 実装で足りないもの——**1 つだけ**
+
+いまの `gripper_shift_sweep.py` は **デモの集合 × init の集合**しか回せない
+（`--episodes` と `--t3-init-index` の直積）。**選んだ (デモ, init) の組だけを
+書き出す**口が無い。
+
+- 足すもの: `--pairs "2199:0,2202:1,..."`（組を明示して回す）
+- 試走側は今のままで足りる（直積がそのまま全組になる）
+
+## 5. 1 本の作り方は確定している
+
+**ここは変えない。**タスクごとの設定は次のとおりで、根拠は
+[reference/30](../../reference/30_reverse_grasp_pose.md)（掴む姿勢）と
+[reference/31](../../reference/31_reverse_place_without_contact.md)（運び方と置き方）。
 
 ```bash
 COMMON="MODE=phased INIT_SOURCE=t3 GRASP_FRAME=clamped STANDOFF=0.06 \
-        T3_INIT=all MAX_APPROACH=120 LIFT=0.08 RELEASE=contact SETTLE=20 \
+        MAX_APPROACH=120 LIFT=0.08 RELEASE=contact SETTLE=20 \
         MAX_TAIL=5 MAX_STEPS=300"
 R=solution/tools/track3_reversal/run_gripper_shift_sweep.sh
 ```
 
-| タスク | 順方向デモ | 掴み方 | 置き方 | 期待 |
-|---|---|---|---|---|
-| 本 | `4061,4062,4063` | `transfer`（既定）＋ `SYMMETRY=2` | — | 150/150 |
-| 缶 | `3696,3697` | `GRASP_STYLE=top-down` | — | 100/100 |
-| 赤マグ | `2206,2199,2202` | `transfer`（既定） | **`LEVEL=1`** | 139/150 |
+| タスク | `TASK` | 掴み方 | 置き方 |
+|---|---|---|---|
+| 本 | `book` | `transfer`（既定）＋ `SYMMETRY=2` | — |
+| 缶 | `soup` | **`GRASP_STYLE=top-down`** | — |
+| 赤マグ | `mug` | `transfer`（既定） | **`LEVEL=1`** |
+| two mugs | `twomugs` | `transfer`（既定） | **`LEVEL=1`** |
+
+**`LEVEL=1` を缶に付けてはいけない。**最後の一手で 90° 回そうとして隣のケチャップを
+116 mm 薙ぎ倒す（[reference/31 の 5 節](../../reference/31_reverse_place_without_contact.md)）。
+
+**`MAX_TAIL=5` と `MAX_STEPS=300` は全タスクに付ける。**置いたあとに腕が初期姿勢へ
+戻る区間は goal にも学習にも要らず、**本番は 300 コマで打ち切られる**
+（[reference/31 の 6 節](../../reference/31_reverse_place_without_contact.md)）。
+
+**`EP_NPZ` は `$OUT` からの相対でしか指せない**（コンテナに `$OUT` を `/out` として
+mount するため）。順方向デモの npz は `$OUT` の直下へコピーしておく。
+
+**`docker run` を直に叩くと拒否される。**必ずランナー（スクリプト）を通す。
+
+## 6. 変換と merge（ここも変えない）
 
 ```bash
-env OUT=$PWD/work/probe_019 TASK=book EP_NPZ=ep_data.npz SYMMETRY=2 \
-  WRITE_NPZ=reverse_npz_book $COMMON bash $R "0" "4061,4062,4063"
+# npz → LeRobot（parc2026-train-pi05。タスクごとに 1 回）
+N=solution/tools/track3_reversal/run_npz_to_lerobot.sh
+for t in book soup mug twomugs; do
+  env OUT=$PWD/work/probe_0NN bash $N reverse_npz_$t reverse_lerobot_$t local/t3_reverse_$t
+done
 
-env OUT=$PWD/work/probe_019 TASK=soup EP_NPZ=ep_soup.npz GRASP_STYLE=top-down \
-  WRITE_NPZ=reverse_npz_soup $COMMON bash $R "0" "3696,3697"
-
-env OUT=$PWD/work/probe_019 TASK=mug EP_NPZ=ep_mug20.npz LEVEL=1 \
-  WRITE_NPZ=reverse_npz_mug $COMMON bash $R "0" "2206,2199,2202"
+# 1 つに merge（2 つずつしか混ぜられないのでランナーが順に足す）
+env OUT=$PWD/work bash solution/tools/track3_reversal/run_lerobot_merge.sh \
+  probe_0NN/reverse_lerobot_all \
+  probe_0NN/reverse_lerobot_book probe_0NN/reverse_lerobot_soup \
+  probe_0NN/reverse_lerobot_mug probe_0NN/reverse_lerobot_twomugs
 ```
 
-**`--write-npz` は逆向き goal が立った回だけ書く。**落ちた回はディスクに残らない。
+`build` のあと `inspect` まで走る。**揃っていることと、学習が読めることは別である**
+——動画の符号化が壊れていても `build` は通り、`inspect` で初めて落ちる。
+変換で 67 分の 1 に縮むので、**変換が通ったら npz は消してよい。**
 
-**`docker run` を直に叩くと拒否される。**必ずこのランナー（スクリプト）を通す。
-
-### 2.2 確かめる — **本数だけ見て次へ進まない**
-
-`work/probe_019/gripper_shift_sweep.json` の各行に、今回から次の 2 つが入る。
-**この 2 つが直したかったものそのものなので、ここで見る。**
+## 7. 確かめること——**本数だけ見て次へ進まない**
 
 | 列 | 意味 | 通す目安 |
 |---|---|---|
 | `disturb_mm` | 掴む物**以外**が動いた量（物ごと） | 成功した回で 1 mm 未満 |
 | `drop_mm` | 放してから物が落ちた高さ | 数 mm |
+| `n_steps` | コマ数 | **300 以下**（超えた回は書かれない） |
+| `too_long` | 上限を超えたか | 全部 false であること |
 
-```bash
-python3 - <<'PY'
-import json
-d = json.load(open("work/probe_019/gripper_shift_sweep.json"))
-for r in d:
-    ok = [s for s in r["shifts"] if s["reverse_goal"]]
-    print(f"ep {r['episode']}: {len(ok)}/{len(r['shifts'])}  "
-          f"他の物 最大 {max((s['disturb_max_mm'] for s in ok), default=0):.1f} mm  "
-          f"落下 最大 {max((s['drop_mm'] for s in ok), default=0):.1f} mm")
-PY
-```
+割り当ての結果についても出す。**init 50 行のうち何行が埋まったか**、
+**デモの使用回数が均等か**、**落ちた init はどれか**。
 
-**json はタスクごとに上書きされる。**3 タスクぶん残したいなら、生成 1 回ごとに
-`cp work/probe_019/gripper_shift_sweep.json work/probe_019/sweep_<タスク>.json`
-しておく。
+## 8. これで解決しないこと
 
-### 2.3 LeRobot 形式へ変換（`parc2026-train-pi05`。3 回）
+**置き場所は 50 通りが天井である。**配布 init がそれしか無いため、A でも B でも
+「50 通りの置き方」を超えられない。超えるには init を自分で作る必要がある
+（[021](021_reverse_init_diversity.md)）。**この設計は 021 と直交していて、
+init が増えればそのまま行数が増えるだけである。**
 
-```bash
-N=solution/tools/track3_reversal/run_npz_to_lerobot.sh
-for t in book soup mug; do
-  env OUT=$PWD/work/probe_019 bash $N reverse_npz_$t reverse_lerobot_$t local/t3_reverse_$t
-done
-```
+## 9. 決めてほしいこと
 
-`build` のあと `inspect` まで走る。**揃っていることと、学習が読めることは別である**
-——動画の符号化が壊れていても `build` は通り、`inspect` で初めて落ちる。
+| # | 決めること | 選択肢 | 推奨 |
+|---|---|---|---|
+| 1 | **1 タスクの本数** | A=50 / B=100 / C=150 | **A** |
+| 2 | 試走を全組やるか | 全組（2.5 h/タスク）／ 割当だけ撮って落ちたら撮り直し | **全組** |
+| 3 | **検証用に init を取り分けるか** | 50 行のうち数行を学習から外す（[reference/13](../../reference/13_holdout_episodes.md)） | **要判断** |
 
-変換で 67 分の 1 に縮む（npz は画素のまま、変換後は動画）。npz は本 150 本で
-9.7 GB になるので、**変換が通ったら消してよい。**
+**3 は効きが大きい。**取り分けないと「未知の置き場所で動くか」を測る手段が
+無くなる。取り分けると学習に使える置き場所が減る。
 
-### 2.4 1 つに merge
-
-```bash
-env OUT=$PWD/work bash solution/tools/track3_reversal/run_lerobot_merge.sh \
-  probe_019/reverse_lerobot_all \
-  probe_019/reverse_lerobot_book probe_019/reverse_lerobot_soup \
-  probe_019/reverse_lerobot_mug
-```
-
-**`merge` は 2 つずつしか混ぜられない**ので、ランナーが順に足す。中間物は
-`_tmpN` に置かれて最後に消える。**入力は書き換えない。**
-
-### 2.5 出来上がりの目安
-
-| | 本数 | コマ数 |
-|---|---|---|
-| 本 | 150 | 26,443 |
-| 缶 | 100 | 17,141 |
-| 赤マグ | 139 | 24,191 |
-| **合計** | **389** | **67,775** |
-
-**コマ数は今回のほうが増える。**真上へ逃げる段と、下ろして触れるまで待つ段が
-足されるため（本タスクで 177 → 213 コマの例がある）。**本数が 389 から動いたら、
-そこは追うこと。**
-
-### 2.6 **two mugs はこの依頼に含まない**
-
-配布 T3 の 4 件目（two mugs）は、9/7 時点で**配布 init 1 行ぶんしか試していない**
-（[018](018_reverse_dataset_writeout_plan.md) の 4 節）。作り方そのものは同じで、
-`TASK=twomugs EP_NPZ=ep_twomugs20.npz LEVEL=1` に `MAX_TAIL=5` を付ければ回るが、
-**50 行へ広げると 300 コマを超える回が出る見込み**なので、まとめるのはそれが
-片付いてからにする。
-
-## 3. 済んだら
-
-- [reference/31 の 5 節](../../reference/31_reverse_place_without_contact.md) の
-  実測表に、**全 init での値**を足す（いまは init 5 行だけの値である）
-- [018](018_reverse_dataset_writeout_plan.md) の 4 節の表と、
-  [reference/30 の 8 節](../../reference/30_reverse_grasp_pose.md) の実績表を更新する
-- **古い 389 本（`work/probe_017/reverse_lerobot_all`）は消さずに残す。**
-  学習で比べるまで、どちらが良いかは分からない
-
-## 4. 落とし穴
+## 10. 落とし穴
 
 | 症状 | 原因と対処 |
 |---|---|
@@ -174,12 +214,16 @@ env OUT=$PWD/work bash solution/tools/track3_reversal/run_lerobot_merge.sh \
 | 缶で腕が横を向いてトレイの壁に当たる | `GRASP_STYLE=top-down` を渡し忘れている（[reference/30 の 4 節](../../reference/30_reverse_grasp_pose.md)） |
 | 落下や接触の原因が読めない | `TRACE=20` を足すと、放す前後を 1 コマずつ `grip` / `z` / `tilt` / `touch` で出す |
 | コマ数が 300 を超えて npz が書かれない | 表示に `goal=○/長` と出る。`MAX_TAIL` を短くするか、短い順方向デモを選ぶ |
+| json が上書きされる | タスクごとに `cp .../gripper_shift_sweep.json .../sweep_<タスク>.json` しておく |
 
-## 5. 関連
+## 11. 関連
 
 | 何 | どこ |
 |---|---|
-| **運び方と置き方**（今回足す 2 つの設定の理由と実測） | **[reference/31](../../reference/31_reverse_place_without_contact.md)** |
-| 掴む姿勢の決め方（`transfer` と `top-down` の使い分け） | [reference/30](../../reference/30_reverse_grasp_pose.md) |
+| **明日の手元評価用データセット**（作れる組を全部作る） | **[023](023_local_eval_dataset.md)** |
+| 数の関係（タスク・指示文・シーン・エピソード・コマ） | [reference/06](../../reference/06_training_data_composition.md) の末尾 |
+| 掴む姿勢の決め方（`transfer` / `top-down` / サイクル分割） | [reference/30](../../reference/30_reverse_grasp_pose.md) |
+| **運び方と置き方**（擦らない・落とさない・傾けない・300 コマ） | **[reference/31](../../reference/31_reverse_place_without_contact.md)** |
 | 1 本に何が要るか・npz の鍵 | [reference/29](../../reference/29_training_data_requirements.md) |
 | ここまでの段取り全体 | [018](018_reverse_dataset_writeout_plan.md) |
+| 初期配置を 50 通りより増やす | [021](021_reverse_init_diversity.md) |
