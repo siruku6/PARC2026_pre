@@ -60,6 +60,13 @@ echo "=== 前提の確認 ==="
     "別の RUN 名にするか、消してから打つ"
 grep -q "dataset-repo" "$CODE_DIR/train_pi05.py" || die "train_pi05.py が古い" \
     "hf download siruku6/pi05_code --local-dir ~/pi05_code を打ち直す"
+# **チェックポイントを作りすぎない歯止め。**1 個 9.35 GB を上げるので、
+# 20,000 歩 × save-freq 500 だと 40 個 ＝ 374 GB になる（9/8 に気付いた）
+NCKPT=$(( STEPS / SAVE_FREQ ))
+[ "$NCKPT" -gt 12 ] && die "チェックポイントが $NCKPT 個になる（1 個 9.35 GB ＝ 約 $((NCKPT * 9)) GB）" \
+    "SAVE_FREQ を大きくする。目安は $STEPS 歩なら SAVE_FREQ=$(( (STEPS + 7) / 8 ))" \
+    "どうしても要るなら SAVE_FREQ はそのままで、この行の 12 を上げる"
+echo "  チェックポイント $NCKPT 個（約 $((NCKPT * 9)) GB を上げる）"
 EPS=$(python3 -c "import json;print(json.load(open('$MERGED/meta/info.json'))['total_episodes'])")
 echo "  データ $EPS 本・据え置き済み・重みと道具は揃っている"
 
