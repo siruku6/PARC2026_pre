@@ -366,15 +366,17 @@ python3 -c "
 import json; i = json.load(open('$P/reverse_lerobot_all/meta/info.json'))
 print(i['total_episodes'], i['total_frames'], i['total_tasks'], i['fps'])"
 # 389 67775 3 20 と出ること
+# **`exit 1` にしないこと。**対話シェルで失敗すると**そのシェルが終わる**（9/7 に踏んだ）
 M() { python ~/tools/npz_to_lerobot.py merge \
         --base "$1" --base-repo-id local/a \
         --add  "$2" --add-repo-id  local/b \
-        --output "$3" --output-repo-id local/proto || exit 1; }
-M $P/reverse_lerobot_all $P/reverse_lerobot_all $P/x2      #   778 本
-M $P/x2  $P/x2                     $P/x4                   # 1,556 本
-M $P/x4  $P/x4                     $P/x8                   # 3,112 本
-M $P/x8  $P/x2                     $P/x10                  # 3,890 本
-M $P/x10 $P/reverse_lerobot_all    $P/x11                   # 4,279 本 / 745,525 コマ
+        --output "$3" --output-repo-id local/proto || return 1; }
+M $P/reverse_lerobot_all $P/reverse_lerobot_all $P/x2 && \
+M $P/x2  $P/x2                     $P/x4        && \
+M $P/x4  $P/x4                     $P/x8        && \
+M $P/x8  $P/x2                     $P/x10       && \
+M $P/x10 $P/reverse_lerobot_all    $P/x11
+#   778 → 1,556 → 3,112 → 3,890 → **4,279 本 / 745,525 コマ / 3 タスク**
 ```
 
 **`x11` が 4,279 本 / 745,525 コマ / 3 タスクであることを確かめてから次へ進む。**
@@ -531,6 +533,8 @@ bash solution/tools/eval/run_final_eval.sh track1     # 退化していないか
 | `~/pi05_code/train_pi05.py` が無い | **`siruku6/pi05_code` は入れ子である。**実体は `~/pi05_code/solution/train/train_pi05.py`。`CODE_DIR` はそこを指す（9/7 に踏んだ） |
 | `hf download` が `Repository not found` | **データセットのリポジトリには `--repo-type dataset` が要る**（9/7 に踏んだ） |
 | **ターミナルが落ちて `M: not found` / `find: No such file or directory`** | **シェル変数が消え、`/bin/sh` に落ちている。**作った物はディスクに残っているので**作り直さない**。`bash` に入って `. ~/env_pi05.sh` と `DATA` / `P` / `MERGED` / `CODE_DIR` を張り直し、`meta/info.json` の 3 行で出来ているものを確かめる（9/7 に踏んだ） |
+| **`M ... に中身がある` で止まり、直後にシェルまで終わる** | **`M()` の `|| exit 1` が対話シェルを終わらせていた。**`|| return 1` にし、`&&` で繋ぐ形に直した（9/7 に踏んだ） |
+| **`/opt/dlami/nvme` の中身が消えている**（`$HOME` は残っている） | **インスタンスが入れ替わると消える領域である**（[reference/27 の 3 節](../../reference/27_blackwell_environment.md)）。**`~/tools` と `~/pi05_code` は残るが、配布データ・`x11`・混ぜたもの・`rp3000` は作り直し**。合計 2 分＋ダウンロード |
 | **落ちるターミナルから長い学習を起こす** | **`nohup` は SIGHUP しか防がない。**プロセスグループごと殺されると落ちるので **`setsid nohup` で別セッションにする。**監視セルは Notebook のカーネルで動かす（ターミナルとは独立） |
 | `No module named 'scripted_demo'` | **`npz_to_lerobot.py` だけ渡しても動かない。**隣に `scripted_demo.py` を並べる（9/7 に踏んだ） |
 | **`merge` が `av.error.FileNotFoundError: .../file-000.mp4` で落ちる** | **配布 tar の動画の通し番号は 6 桁**（`file-000038.mp4`）だが、**`aggregate_datasets` はデータセット自身の `video_path` を見ず、lerobot に焼き込まれた 3 桁だけを使う**（`aggregate.py` の `aggregate_videos`）。**`link_video_index_width.py --root "$DATA"` で 3 桁の symlink を張る。**info.json は書き換えないので配布データを直接学習に使う道は壊れない。**出力側は 3 桁で書かれ info.json も 3 桁を宣言するので自己整合する**（9/7 に踏んだ） |
