@@ -67,6 +67,11 @@
 [../materials/slack_talks/](../materials/slack_talks/) である。**
 だから 3 件の中身をここへ写し、`open_items.md` からのリンクもここへ向け直した。
 
+**2026-09-09 に `plan/22` は別の文書に使われた**——
+[../plan/22_grasp_and_color_next_moves.md](../plan/22_grasp_and_color_next_moves.md)
+（把持の切り分けと色の弁別）。**「`plan/22` の出典」と書かれた古い記述を見たら、
+それはこの文書ではなく、上に書いた幻の出典のことである。**
+
 ### F79. 基盤モデルを MolmoAct2-LIBERO に差し替える下調べ
 
 **別チームの報告**——基盤を SmolVLA → MolmoAct2-LIBERO に替えただけで、
