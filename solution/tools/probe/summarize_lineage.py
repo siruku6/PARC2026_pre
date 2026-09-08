@@ -60,31 +60,33 @@ def load(root: Path) -> dict[str, dict]:
     return out
 
 
-def rank_of(reach: list[dict], target: str | None,
+def rank_of(reach: list[dict], target: str,
             support: tuple[str, ...] = ()) -> tuple[str, float, str]:
-    """(1 位の物, 対象の cos, 判定) を返す。
+    """(いちばん強い競合, 対象の cos, 判定) を返す。
 
-    **判定は「対象より強い競合が居るか」で決める。**順位ではなく勝ち負けで見るのは、
+    **判定は「対象より強い競合が居るか」で決める。**順位で見ないのは、
     **対象を支えている物（皿・トレイ）が同じ方向に立つ**ためである（`SUPPORT`）。
+
+    **1 列目は「いちばん強い競合」であって「1 位の物」ではない。**
+    1 位を出すと、支えが 1 位のときに「1 位=plate_1／判定=正」と同じ行で
+    矛盾する（9/9 に踏んだ）。
 
     **物の位置を記録していない npz では `reach` が空になる。**その場合は
     「測っていない」と分かる形で返す（推測で埋めない）。
     """
     if not reach:
         return "（物の位置を記録していない）", float("nan"), "-"
-    if target is None:
-        return reach[0]["object"], reach[0]["cos"], "-"
-    hit = [r for r in reach if r["object"] == target]
-    if not hit:
+    hit = next((r for r in reach if r["object"] == target), None)
+    if hit is None:
         return reach[0]["object"], float("nan"), "対象が無し"
-    target_cos = hit[0]["cos"]
-    rivals = [r for r in reach if r["object"] != target and r["object"] not in support]
+    rivals = [r for r in reach
+              if r["object"] != target and r["object"] not in support]
     best = max(rivals, key=lambda r: r["cos"], default=None)
     if best is None:
-        return reach[0]["object"], target_cos, "正（競合なし）"
-    if target_cos >= best["cos"]:
-        return reach[0]["object"], target_cos, f"正（差 {target_cos - best['cos']:+.3f}）"
-    return reach[0]["object"], target_cos, f"誤 ← {best['object']} {best['cos']:+.3f}"
+        return "（競合なし）", hit["cos"], "正"
+    margin = hit["cos"] - best["cos"]
+    verdict = f"正（差 {margin:+.3f}）" if margin >= 0 else f"誤（差 {margin:+.3f}）"
+    return f"{best['object']} {best['cos']:+.3f}", hit["cos"], verdict
 
 
 def main() -> None:
@@ -103,19 +105,18 @@ def main() -> None:
     print("=" * 100)
     for task in tasks:
         target = TARGET[task]
-        print(f"\n{SHORT[task]}   正解 = {target or '（複数あり・判定しない）'}")
-        print(f"  {'重み':20}{'1 位の物':26}{'対象 cos':>9}{'判定':>26}  その学習で変えたこと")
+        print(f"\n{SHORT[task]}   正解 = {target}")
+        print(f"  {'重み':20}{'いちばん強い競合':30}{'対象 cos':>9}{'判定':>18}  その学習で変えたこと")
         for name, note in ORDER:
             d = data.get(name)
             if not d or task not in d["tasks"]:
                 continue
-            top, cos, place = rank_of(d["tasks"][task]["reach"], target,
-                                      SUPPORT.get(task, ()))
-            hit = " ←当たり" if place.startswith("正") else ""
+            rival, cos, verdict = rank_of(d["tasks"][task]["reach"], target,
+                                          SUPPORT.get(task, ()))
             m = d["tasks"][task].get("motion") or {}
             extra = (f"  並進{m['reach_mm']:5.0f}mm 閉じる{m['grip_close_steps']:2d}/50"
                      if m else "")
-            print(f"  {name:20}{top:26}{cos:>+9.3f}{place:>26}{hit}{extra}  {note}")
+            print(f"  {name:20}{rival:30}{cos:>+9.3f}{verdict:>18}{extra}  {note}")
 
     print()
     print("=" * 100)
