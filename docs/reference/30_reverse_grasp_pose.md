@@ -344,29 +344,40 @@ OSC は 1 コマで指令の 2 割ほどしか動かないので、姿勢差が�
 [020](../talk/inter_sessions/020_reverse_dataset_regeneration.md) に全部展開して
 ある。**
 
+**【9/8 に直した】共通で `ROT_LIMIT=0.375 MAX_APPROACH=200 SETTLE=80` を付ける**
+（8 節と [31 の 8.1](31_reverse_place_without_contact.md)）。**`LEVEL=1` は赤マグと
+two mugs だけ**——本に付けると 10 mm 落ちる。
+
 ```bash
-# 本・マグ（立つ軸が一致する）
-TASK=mug EP_NPZ=ep_mug20.npz MODE=phased INIT_SOURCE=t3 \
-  GRASP_FRAME=clamped STANDOFF=0.06 T3_INIT=all MAX_APPROACH=120 \
-  LIFT=0.08 RELEASE=contact LEVEL=1 MAX_TAIL=5 WRITE_NPZ=reverse_npz_mug \
+COMMON='MODE=phased INIT_SOURCE=t3 GRASP_FRAME=clamped STANDOFF=0.06 T3_INIT=all
+        LIFT=0.08 RELEASE=contact SETTLE=80 MAX_TAIL=5 MAX_STEPS=300
+        ROT_LIMIT=0.375 MAX_APPROACH=200'
+
+# 本（LEVEL は付けない）
+env $COMMON TASK=book EP_NPZ=ep_data.npz WRITE_NPZ=reverse_npz_book \
+  bash solution/tools/track3_reversal/run_gripper_shift_sweep.sh "0" "4061,4062,4063"
+
+# 赤マグ（立つ軸が一致する。LEVEL=1）
+env $COMMON TASK=mug EP_NPZ=ep_mug20.npz LEVEL=1 WRITE_NPZ=reverse_npz_mug \
   bash solution/tools/track3_reversal/run_gripper_shift_sweep.sh "0" "2206,2199,2202"
 
-# 缶（立つ軸が食い違うので真上からの握りを作る）
-TASK=soup EP_NPZ=ep_soup.npz MODE=phased INIT_SOURCE=t3 \
-  GRASP_FRAME=clamped STANDOFF=0.06 T3_INIT=all MAX_APPROACH=120 \
-  GRASP_STYLE=top-down LIFT=0.08 RELEASE=contact MAX_TAIL=5 \
+# 缶（立つ軸が食い違うので真上からの握りを作る。LEVEL は付けない）
+env $COMMON TASK=soup EP_NPZ=ep_soup.npz GRASP_STYLE=top-down \
   WRITE_NPZ=reverse_npz_soup \
   bash solution/tools/track3_reversal/run_gripper_shift_sweep.sh "0" "3696,3697"
 
 # two mugs（1 本のデモが 2 回掴む。7 節）
-TASK=twomugs EP_NPZ=ep_twomugs20.npz MODE=phased INIT_SOURCE=t3 \
-  GRASP_FRAME=clamped STANDOFF=0.06 T3_INIT=all MAX_APPROACH=120 \
-  LIFT=0.08 RELEASE=contact LEVEL=1 MAX_TAIL=5 WRITE_NPZ=reverse_npz_twomugs \
+env $COMMON TASK=twomugs EP_NPZ=ep_twomugs20.npz LEVEL=1 \
+  WRITE_NPZ=reverse_npz_twomugs \
   bash solution/tools/track3_reversal/run_gripper_shift_sweep.sh "0" ""
 ```
 
+**3 つは同時に回せる。**16 コアの機械で 3 コンテナを並べても負荷は 3 前後で、
+**全部で 150 + 100 + 150 本が 1 時間強で揃う**（順に回すと 3 時間）。
+
 `MAX_APPROACH` は接近の各段に許すコマ数である。既定の 60 は本タスクの距離
 （約 200 mm）に合わせた値で、缶・マグは 300 mm 以上あるため足りない。
+**`ROT_LIMIT` と併せるときは 200 にする**（使い切らないので害は無い）。
 
 **`ROT_LIMIT` は 1 コマに出してよい回転指令の上限である**（既定は無し ＝ ±1）。
 **`ROT_LIMIT=0.375 MAX_APPROACH=200` を足すと 8 節の封筒に収まる。**

@@ -33,9 +33,15 @@ SRC="${SRC:-work/artifacts/libero_plus}"
 REV_DIR="${REV_DIR:-work/probe_017/reverse_lerobot_all}"
 NORM="${NORM:-work/artifacts/pi05_rp3000/policy_preprocessor_step_2_normalizer_processor.safetensors}"
 SUB="${SUB:-libero_plus_sub$PER_TASK}"
-REV_TAG="${REV_TAG:-rev_x$COPIES}"
+# **中間物の名前は逆向きデータごとに分ける。**混ぜる元が違うのに同じ `rev_x2` を
+# 使うと、前の版の中間物を黙って拾う（9/8 に踏みかけた）。
+PRE="${PRE:-rev_x}"
+REV_TAG="${REV_TAG:-$PRE$COPIES}"
 MIX="${MIX:-jaist_mix_${PER_TASK}_x$COPIES}"
-HF_REPO="${HF_REPO:-siruku6/jaist_mix}"
+# **リポジトリ名は MIX から作る。**固定にすると、版を変えたのに同じ場所へ上げて
+# **前の版を上書きする**（9/8 に出しかけた）。RUN 名も同じ理由で MIX から作る。
+HF_REPO="${HF_REPO:-siruku6/$MIX}"
+RUN_NAME="${RUN_NAME:-pi05_${MIX#jaist_}}"
 ART="$REPO/work/artifacts"
 
 # 期待値。**ここが違ったら止める。**
@@ -74,6 +80,9 @@ echo "  $SRC = $got  ✓"
 got=$(counts "$REV_DIR")
 [ -n "$got" ] || die "$REV_DIR が無い" \
     "逆向きデータを先に作るか、置き場を REV_DIR で渡すこと"
+# `$OUT`（= $REPO/work）からの相対で指す。**REV_DIR がどこにあっても効く。**
+REV_REL="${REV_DIR#work/}"
+src_of() { [ "$1" = 1 ] && echo "$REV_REL" || echo "artifacts/$PRE$1"; }
 REV_EP=$(echo "$got" | cut -d' ' -f1)
 REV_FR=$(echo "$got" | cut -d' ' -f2)
 REV_TK=$(echo "$got" | cut -d' ' -f3)
@@ -116,22 +125,24 @@ for h in reversed(have):
     if cur == n: break
 for a, b, c in steps: print(a, b, c)")
     [ -n "$plan" ] || echo "  1 倍なのでそのまま使う"
-    src_of() { [ "$1" = 1 ] && echo "probe_017/$(basename "$REV_DIR")" || echo "artifacts/rev_x$1"; }
     while read -r a b c; do
         [ -n "$a" ] || continue
-        if want "$ART/rev_x$c" "$((REV_EP * c)) $((REV_FR * c)) $REV_TK"; then
-            echo "  rev_x$c はもうある — 飛ばす"; continue
+        if want "$ART/$PRE$c" "$((REV_EP * c)) $((REV_FR * c)) $REV_TK"; then
+            echo "  $PRE$c はもうある — 飛ばす"; continue
         fi
+        [ -e "$ART/$PRE$c" ] && die "$ART/$PRE$c に別物が入っている（$(counts "$ART/$PRE$c")）" \
+            "**別の逆向きデータで作った中間物である。**REV_TAG を変えるか、消すこと:" \
+            "  rm -rf $ART/$PRE*"
         echo "  x$a + x$b -> x$c"
         OUT="$REPO/work" bash solution/tools/track3_reversal/run_lerobot_merge.sh \
-            "artifacts/rev_x$c" "$(src_of "$a")" "$(src_of "$b")" \
-            || die "逆向きの x$c で落ちた" "書きかけの $ART/rev_x$c を消してから打ち直すこと"
+            "artifacts/$PRE$c" "$(src_of "$a")" "$(src_of "$b")" \
+            || die "逆向きの x$c で落ちた" "書きかけの $ART/$PRE$c を消してから打ち直すこと"
     done <<< "$plan"
 fi
-[ "$COPIES" = 1 ] && REV_MIX="probe_017/$(basename "$REV_DIR")" || REV_MIX="artifacts/$REV_TAG"
-want "$ART/$REV_TAG" "$WANT_REV" || [ "$COPIES" = 1 ] \
+REV_MIX=$(src_of "$COPIES")
+[ "$COPIES" = 1 ] || want "$ART/$REV_TAG" "$WANT_REV" \
     || die "$ART/$REV_TAG の数が違う（出た: $(counts "$ART/$REV_TAG") ／ 期待: $WANT_REV）" \
-           "途中の rev_x* を消してから打ち直すこと"
+           "途中の $PRE* を消してから打ち直すこと"
 
 # ---------------------------------------------------------------- 4 混ぜる
 step "4/6 間引いた配布データと混ぜる"
@@ -139,10 +150,24 @@ WANT_MIX="$((SUB_EP + REV_EP * COPIES)) $((SUB_FR + REV_FR * COPIES)) $((40 + RE
 if want "$ART/$MIX" "$WANT_MIX"; then
     echo "  もうある: $WANT_MIX  — 飛ばす"
 else
+    # **align を先に打つ。**打たずに merge すると `Same features is expected` で落ちる。
+    # 食い違うのは列の「飾り」だけである——`video.crf` や `fps` のような、
+    # **lerobot の版で増えた注記**が、新しく書いた側にだけ付いている。
+    # align は形（dtype と shape）が違えばそこで止まるので、黙って壊れることはない。
+    echo "  列の飾りを揃える（align）"
+    docker run --rm \
+        -v "$REPO/solution/tools:/host/tools:ro" -v "$REPO/work:/data" \
+        --entrypoint python "${IMAGE:-parc2026-train-pi05}" \
+        /host/tools/scripted_demo/npz_to_lerobot.py align \
+            --base "/data/artifacts/$SUB" --add "/data/$REV_MIX" \
+        || die "align が落ちた" \
+               "**形（dtype と shape）が違う。**軸名の綴りなら align は通る。" \
+               "上の差分で shape が違う列を探すこと"
     OUT="$REPO/work" bash solution/tools/track3_reversal/run_lerobot_merge.sh \
         "artifacts/$MIX" "artifacts/$SUB" "$REV_MIX" \
         || die "混ぜるところで落ちた" \
-               "`align` の食い違いなら軸名ではなく形が違う。書きかけの $ART/$MIX を消すこと"
+               "書きかけの $ART/$MIX を消してから打ち直すこと:" \
+               "  rm -rf $ART/$MIX $ART/${MIX}_tmp*"
 fi
 want "$ART/$MIX" "$WANT_MIX" \
     || die "$ART/$MIX の数が違う（出た: $(counts "$ART/$MIX") ／ 期待: $WANT_MIX）" \
@@ -165,22 +190,36 @@ echo
 echo "  **据え置いた値は rp3000 が学習した尺度そのものである。**"
 echo "  元の値は $ART/$MIX/meta/stats.json.bak にある。"
 
-# ---------------------------------------------------------------- 6 上げる
-step "6/6 HF へ上げる"
+# ------------------------------------------------------ 6 上げる前に確かめる
+step "6/6 上げる前に 7 つ確かめる"
+# **「確かめてから流す」と書くだけでは何も確かめられない**（9/8 に指摘された）。
+# 上げてしまうと取り消しに手間がかかるので、**7 つを機械で見る。**
+python3 solution/train/verify_dataset.py "$ART/$MIX" --norm "$NORM" \
+    --expect "$WANT_MIX" --rev-tasks "$REV_TK" \
+    || die "上げる前の確認で落ちた" \
+           "上の ✗ の行を直すこと。**直らないまま上げないこと**"
+
+step "上げる"
 sz=$(du -sh "$ART/$MIX" | cut -f1)
 cat <<EOS
   出来上がり: $ART/$MIX（$sz）
 
-  **上げるのは手で打つ。**非公開リポジトリを作るので、確かめてから流したい。
+  **上げるのは手で打つ。**外へ出す操作なので、7 つ通ったことを見てから流す。
 
     hf upload $HF_REPO $ART/$MIX . --repo-type dataset --private
 
   JAIST 側:
 
     hf download $HF_REPO --repo-type dataset --local-dir ~/data/$MIX
-    RUN=pi05_t3rev DATASET=~/data/$MIX STEPS=$(python3 -c "
+    RUN=$RUN_NAME DATASET=~/data/$MIX STEPS=$(python3 -c "
 print(round($REV_FR / ($REV_FR * $COPIES / ($SUB_FR + $REV_FR * $COPIES)) / 16 / 100) * 100)") \\
+      SAVE_FREQ=$(python3 -c "
+st = round($REV_FR / ($REV_FR * $COPIES / ($SUB_FR + $REV_FR * $COPIES)) / 16 / 100) * 100
+print(max(1000, -(-st // 3)))") \\
       bash solution/train/jaist_launch.sh
+
+  **SAVE_FREQ を必ず渡すこと。**既定の 2000 だとチェックポイントが 4 個＋最終で
+  **45 GB** になり、JAIST の空き（22 GB）に入らない。上の値なら 2 個＋最終で 27 GB。
 
   歩数の根拠: 逆向き $REV_FR コマを **1 コマ 1 回**見る量
   （必要なサンプル数 ＝ こちらのコマ数 ÷ 割合 ${share}%、batch 16）。

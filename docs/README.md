@@ -4,6 +4,7 @@
 
 | 探しているもの | 行き先 |
 |---|---|
+| **いま手を動かしているタスク** | **[reference/32_current_tasks.md](reference/32_current_tasks.md)** ── 着手中のものだけ。候補の全体と枝分かれは [plan/22](plan/22_grasp_and_color_next_moves.md) |
 | **今なにをやるべきか（候補の `open_items.md`）** | **[talk/open_items.md](talk/open_items.md)** ── 1 行ごとに「何が決まるか・誰が・資源・所要・前提・打つもの」を持つ。**アイデアを思いついたらここへ足す** |
 | **手を動かす手順** | [howto/](howto/) |
 | **測った数字** | [strategy/05_実測結果.md](strategy/05_実測結果.md) |

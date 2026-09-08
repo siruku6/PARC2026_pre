@@ -8,6 +8,7 @@
 
 | 引きたいもの | ファイル |
 |---|---|
+| **いま手を動かしているタスク**（ここだけ事実ではなく作業の状態を持つ。設計は [../plan/22](../plan/22_grasp_and_color_next_moves.md)） | **[32_current_tasks.md](32_current_tasks.md)** |
 | **流した学習・重み・版・出した点** | **[19_weights_catalog.md](19_weights_catalog.md)（実験台帳）** |
 | モデルの正体（素の重み・中身の説明） | [01_base_model.md](01_base_model.md)・[09_model_explained.md](09_model_explained.md) |
 | 採点環境の構成と制限 | [02_evaluation_data.md](02_evaluation_data.md) |

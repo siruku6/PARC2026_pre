@@ -49,6 +49,7 @@
 | [17_track3_picks_the_wrong_object.md](17_track3_picks_the_wrong_object.md) | **Track3 で方策は順方向をやっている**（別の物を掴んでトレイへ入れた） | 3, 4 |
 | [18_local_eval_missed_the_gain.md](18_local_eval_missed_the_gain.md) | **手元の 72 行は、採点側で 2 トラックとも上がった重みを「効果なし」と読んだ** | 2, 3, 4 |
 | [19_infer_less_count_first.md](19_infer_less_count_first.md) | **推し量る前に数える。**配布物の中身・崖のある制約・期限が切れる資格情報の 3 件 | 2, 3 |
+| [20_probe_object_choice_without_rollout.md](20_probe_object_choice_without_rollout.md) | **対象物を選べているかはロールアウト無しで測れる。**系譜 6 点で何を得て何を失ったか・**色はほとんど見ていない**（元から） | 3, 4 |
 
 
 ## 成果物 2 —— 出来た skill の日本語版（確認用）
