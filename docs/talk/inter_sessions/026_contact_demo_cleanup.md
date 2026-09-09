@@ -727,12 +727,20 @@ disown
 
 **切ったあとの見かた。**
 
+**学習ログはファイルにも出ている。**`train_pi05.py` が標準出力を二重化して
+`$OUT/<RUN>.log` へ書く（`_log_path`）。**run のディレクトリの「中」ではなく「隣」に
+置いてある**——中に置くと `lerobot-train` が「出力先が空でない」と言って始まらないため。
+**コンテナを消しても残るので、`docker logs` よりこちらが確実である。**
+
 ```bash
-cat ~/launch_pi05_clean24k.log             # 起動時の確認（693422112 / 12396 本）
-docker logs -f parc-pi05_clean24k          # 進み具合
-docker logs --tail 2 parc-pi05_clean24k 2>&1 | tr '\r' '\n' | grep step:
-docker stop -t 60 parc-pi05_clean24k       # 止める
+tail -f work/train/pi05_clean24k.log | tr '\r' '\n'   # 進み具合（本命）
+grep step: work/train/pi05_clean24k.log | tr '\r' '\n' | tail -3
+cat ~/launch_pi05_clean24k.log                         # 起動時の確認（693422112 / 12396 本）
+docker stop -t 60 parc-pi05_clean24k                   # 止める
 ```
+
+**`tr '\r' '\n'` を挟むのは進捗バーのせいである。**tqdm が復帰文字で同じ行を
+上書きするので、そのまま読むと 1 行に見える。
 
 **`DATASET` は symlink ではなく実体を渡す。**`work/artifacts/libero_plus_clean` は
 `~/.cache/huggingface/parc_work/` への symlink なので、docker の `-v` に渡すと
