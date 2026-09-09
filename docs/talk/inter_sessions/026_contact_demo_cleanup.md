@@ -705,11 +705,33 @@ pick up the black bowl on the ramekin …
 v2 学習・3〜4 時間）が先、こちらは夜中」である。**1 枚を取り合うため。
 
 ```bash
+cd ~/src/PARC2026_pre
 RUN=pi05_clean24k WEIGHTS=base \
   DATASET=$HOME/.cache/huggingface/parc_work/libero_plus_clean \
   DATASET_REPO_ID=local/libero_plus_clean \
   STEPS=24000 LR=2.5e-5 SAVE_FREQ=8000 CAMERA_AUGMENT=0 FREEZE_CHECK=0 \
-  bash solution/train/jaist_launch.sh
+  setsid nohup bash solution/train/jaist_launch.sh \
+  < /dev/null > ~/launch_pi05_clean24k.log 2>&1 &
+disown
+```
+
+**ssh を切っても続く形にしてある。**学習そのものは `docker run -d` なので元から
+切れても走るが、**起こしたあとの確認（最初の 20 歩まで最大 30 分、前面で待つ）は
+切れると出力ごと消える。**だから 3 つ付けた。
+
+| 付けたもの | 何のためか |
+|---|---|
+| `setsid nohup … &` | ssh が切れたときの SIGHUP から外す |
+| `< /dev/null` | 背面のまま端末から読もうとして止まるのを防ぐ |
+| `> ~/launch_pi05_clean24k.log` | 確認の結果をファイルに残す |
+
+**切ったあとの見かた。**
+
+```bash
+cat ~/launch_pi05_clean24k.log             # 起動時の確認（693422112 / 12396 本）
+docker logs -f parc-pi05_clean24k          # 進み具合
+docker logs --tail 2 parc-pi05_clean24k 2>&1 | tr '\r' '\n' | grep step:
+docker stop -t 60 parc-pi05_clean24k       # 止める
 ```
 
 **`DATASET` は symlink ではなく実体を渡す。**`work/artifacts/libero_plus_clean` は
