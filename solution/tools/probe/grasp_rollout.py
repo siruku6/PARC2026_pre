@@ -69,7 +69,14 @@ LIBERO の `:objects` は**同じ型の物を 1 行にまとめて書く**
 | `target_moved_mm` | 対象が水平にどれだけ動いたか |
 | `others_moved_mm` | **`:goal` に出てこない物**が動いた最大量。**キットと同じ 3 軸の L1**（1 mm 超で失格） |
 | `grip_close_steps` | 指を閉じる指令を出した歩数 |
-| `min_dist_mm` | 手先が対象へいちばん近づいた距離。**掴みに行ったかどうか** |
+| `min_dist_mm` | 手先が対象へいちばん近づいた距離。**物ごとに基準が違うので単独では読めない**（下） |
+| `lifted` | **`lift_mm` > 30 かつ他の物が 5 mm 以内。**掴んで持ち上げた |
+| `knocked` | `lift_mm` > 30 だが他の物が動いた。**薙ぎ倒して跳ねただけ** |
+
+**`min_dist_mm` を「近づけたか」の物差しにしてはいけない**（**9/10 に踏んだ**）。
+`robot0_eef_pos` は指の間ではなく手首寄りで、`<物>_pos` は body の原点である。
+**掴めている記録での実測は 黄本 96.4 mm・缶 10.1 mm・赤マグ 118.4 mm** と 10 倍違う。
+**「近づけたか」は `divergence.py` の `reach_at_close_mm`（記録が掴んだ姿勢までの距離）で見る。**
 
 ## 使い方
 
@@ -92,6 +99,10 @@ from _016_libero_env import SETTLE_STEPS, make_eval_env  # noqa: E402
 from dump_t3_obs import CAMERAS, T3_ASSETS, instruction_of  # noqa: E402
 
 LIFT_THRESHOLD_MM = 30.0
+# **`lift_mm` だけでは「掴んだ」と言えない**（9/10 に踏んだ）。腕が場面を薙ぎ倒すと
+# 対象が跳ねて 40〜80 mm 上がる。**そのとき他の物は 280〜680 mm 動いている。**
+# キットの衝突判定は 1 mm なので、それより緩い線を引いて「掴んだ」から外す。
+KNOCK_MM = 5.0
 # **`:goal` で「物を置く」ことを表す述語。**LIBERO のパーサは小文字で返す。
 # 一覧は `track3_reversal/gripper_shift_sweep.py` の `PLACEMENT` と同じ。
 PLACEMENT = {"on", "in", "at", "infrontof", "behind",
@@ -285,7 +296,9 @@ def rollout(env, client, instruction: str, targets: list[str], hide: list[str],
         "grip_close_steps": grip_close,
         "min_dist_mm": round(min_dist_mm[name], 1),
         "done": bool(done),
-        "lifted": bool(lift_mm[name] > LIFT_THRESHOLD_MM),
+        # **上がっただけでは掴んだことにしない。**他の物が動いていたら薙ぎ倒しである。
+        "lifted": bool(lift_mm[name] > LIFT_THRESHOLD_MM and others_mm <= KNOCK_MM),
+        "knocked": bool(lift_mm[name] > LIFT_THRESHOLD_MM and others_mm > KNOCK_MM),
     } for name in tracked]
 
 
@@ -372,7 +385,10 @@ def main() -> None:
               f"{row['lift_mm']:>10.1f}{row['min_dist_mm']:>9.1f}"
               f"{row['grip_close_steps']:>8}")
     lifted = sum(1 for r in results if r["lifted"])
-    print(f"\n  持ち上げた: {lifted} / {len(results)} 本")
+    knocked = sum(1 for r in results if r["knocked"])
+    print(f"\n  掴んで持ち上げた: {lifted} / {len(results)} 本"
+          f"（**薙ぎ倒して上がっただけ: {knocked} 本**——"
+          f"他の物が {KNOCK_MM:g} mm を超えて動いた回は数えない）")
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(results, indent=1, ensure_ascii=False))

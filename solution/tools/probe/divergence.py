@@ -153,6 +153,7 @@ def model_rollout(env, client, instruction: str, init_state, steps: int,
         observation, _reward, _done, _info = env.step([0, 0, 0, 0, 0, 0, -1])
 
     frame0 = np.asarray(observation["agentview_image"])[::-1, ::-1].copy()
+    start_positions = object_positions(observation)
     eef, axisangle, actions = [], [], []
     target_dist_mm, done = [], False
     for _ in range(steps):
@@ -173,6 +174,7 @@ def model_rollout(env, client, instruction: str, init_state, steps: int,
         "actions": np.asarray(actions),
         "target_dist_mm": np.asarray(target_dist_mm),
         "frame0": frame0,
+        "start_positions": start_positions,
         "done": bool(done),
     }
 
@@ -183,6 +185,33 @@ def eef_axisangle_of(observation: dict) -> np.ndarray:
 
     quat = np.asarray(observation["robot0_eef_quat"], dtype=np.float64)
     return np.asarray(T.quat2axisangle(quat), dtype=np.float64)
+
+
+def recorded_grasp_distance_mm(recorded: dict, run: dict, target: str) -> dict | None:
+    """**記録が指を閉じた瞬間の「手先から対象まで」の距離。**掴める距離の実測値である。
+
+    **これが無いと「近づいた／近づいていない」の線が引けない。**推測で 20〜30 mm と
+    書いていたが、`robot0_eef_pos` は指の間ではなく手首寄りなので当てにならない。
+
+    **物はまだ初期位置にある。**逆向きデータは「開いたまま掴む姿勢へ寄せる → その場で
+    閉じる」の順なので、閉じる瞬間まで対象は動いていない（生成側の段 A → B）。
+    だから復元直後の位置と引き算すればよい。
+    """
+    close = first_over(recorded["action"][:, 6].astype(np.float64), 0.0)
+    origin = run["start_positions"].get(target)
+    if close is None or origin is None:
+        return None
+    path = recorded["state"][:, :3].astype(np.float64)
+    reach = np.linalg.norm(path - origin, axis=1) * 1000
+    return {
+        "close_step": close,
+        "n": int(len(path)),
+        # 閉じた瞬間の距離。**掴める距離の実測値**
+        "at_close_mm": round(float(reach[close]), 1),
+        # episode 全体での最接近。**閉じる番号の取り違えを見つけるため**
+        "min_mm": round(float(reach.min()), 1),
+        "min_step": int(reach.argmin()),
+    }
 
 
 def compare(recorded: dict, run: dict) -> dict:
@@ -300,7 +329,16 @@ def main() -> None:
                 best = int(np.argmin([r["off_mm_median"] for r in rows]))
                 row, recorded = rows[best], candidates[best]
                 row["off_mm_median_all"] = [r["off_mm_median"] for r in rows]
+                # **「掴んだ姿勢へどれだけ近づけたか」は候補全部の最小で取る**
+                # （9/10 に直した）。経路の当てはまりで選んだ 1 本から読むと、
+                # 同じ回でも選ばれた本が違うだけで 5.5 mm と 66.6 mm に変わった。
+                # **どれか 1 本の掴む姿勢に入れていれば掴める見込みがある。**
+                reaches = [r["reach_at_close_mm"] for r in rows
+                           if r["reach_at_close_mm"] is not None]
+                row["reach_at_close_mm"] = min(reaches) if reaches else None
                 row["spread_mm"] = path_spread_mm(candidates)
+                row["recorded_grasp_dist_mm"] = recorded_grasp_distance_mm(
+                    recorded, run, target)
                 row["frame0_absdiff"] = round(float(np.abs(
                     run["frame0"].astype(np.int16)
                     - recorded["front"][0].astype(np.int16)).mean()), 2)
@@ -320,6 +358,11 @@ def main() -> None:
                       f"（記録 {row['recorded_rot_cmd_p95']:.3f}"
                       f"・封筒 {ROT_ENVELOPE}）", flush=True)
                 print(f"     対象への最接近 {row['target_dist_min_mm']:6.1f} mm"
+                      f"（**記録**: 閉じた距離 {(row['recorded_grasp_dist_mm'] or {}).get('at_close_mm')}"
+                      f" / 最接近 {(row['recorded_grasp_dist_mm'] or {}).get('min_mm')}"
+                      f" @ {(row['recorded_grasp_dist_mm'] or {}).get('min_step')}"
+                      f" 閉じたのは {(row['recorded_grasp_dist_mm'] or {}).get('close_step')}"
+                      f"/{(row['recorded_grasp_dist_mm'] or {}).get('n')} 歩目）"
                       f"   掴む瞬間の姿勢まで {row['reach_at_close_mm']} mm"
                       f"   閉じる {row['grip_close_steps']:3d}"
                       f"   1 コマ目の画素差 {row['frame0_absdiff']:5.2f}",
