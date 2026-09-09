@@ -40,6 +40,12 @@ def _parse_args() -> argparse.Namespace:
                         default="displacement", help="どの物差しで外すか")
     parser.add_argument("--keep-out", type=Path, default=None, metavar="JSON",
                         help="残すエピソード番号の一覧を書く先")
+    parser.add_argument("--boost-instruction", action="append", default=None,
+                        metavar="TEXT",
+                        help="**掃除で痩せる課題**。この指示文の残ったぶんだけを"
+                             "別の一覧に書き出す（あとでコピーして本数を戻すため）")
+    parser.add_argument("--boost-out", type=Path, default=None, metavar="JSON",
+                        help="--boost-instruction の残ったぶんを書く先")
     return parser.parse_args()
 
 
@@ -142,12 +148,32 @@ def main() -> None:
     _print_worst_objects(rows, args.baseline, args.threshold)
     _print_per_task(rows, args.baseline, args.threshold, args.rule)
 
+    survivors = [row for row in rows
+                 if not _is_dropped(row, args.baseline, args.threshold, args.rule)]
+
     if args.keep_out:
-        keep = sorted(number for row in rows
-                      if not _is_dropped(row, args.baseline, args.threshold, args.rule)
-                      for number in row["episodes"])
+        keep = sorted(number for row in survivors for number in row["episodes"])
         args.keep_out.write_text(json.dumps({"episodes": keep}))
+        instructions = {row["instruction"] for row in survivors}
         print(f"\n=== 残す {len(keep)} 本の番号を書いた: {args.keep_out} ===")
+        print(f"  残る指示文 {len(instructions)} / "
+              f"{len({row['instruction'] for row in rows})}")
+
+    if args.boost_out:
+        wanted = set(args.boost_instruction or [])
+        unknown = wanted - {row["instruction"] for row in rows}
+        if unknown:
+            raise SystemExit(f"その指示文は判定表に無い: {sorted(unknown)}")
+        boost = sorted(number for row in survivors
+                       if row["instruction"] in wanted for number in row["episodes"])
+        args.boost_out.write_text(json.dumps({"episodes": boost}))
+        print(f"\n=== 痩せる課題で残った {len(boost)} 本の番号を書いた: {args.boost_out} ===")
+        for instruction in sorted(wanted):
+            count = sum(len(row["episodes"]) for row in survivors
+                        if row["instruction"] == instruction)
+            before = sum(len(row["episodes"]) for row in rows
+                         if row["instruction"] == instruction)
+            print(f"  {before:>4} → {count:>4} 本（3 倍で {count * 3}）  {instruction[:52]}")
 
 
 if __name__ == "__main__":

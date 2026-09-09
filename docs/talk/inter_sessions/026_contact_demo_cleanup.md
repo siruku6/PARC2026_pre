@@ -1,13 +1,14 @@
 # 026 接触が起きているデモを配布データから外し、外す前と比べる
 
-> **状態: 判断待ち（やること 1〜5 は終わり・報告はこのファイルの末尾）** ／
+> **状態: 着手（掃除済みデータセットまで出来た。次は学習 2 本）** ／
 > 受け側: このセッション ／ 更新: 2026-09-09
 >
 > **9/9 に、ユーザの指示で 019 とは別に立てた。**019 は「再生しても再現しない
 > デモを外す」で、こちらは**「対象外の物体に触れているデモを外す」**である。
 > **物差しが違うので別の依頼にした。**
 >
-> **決めてほしいこと 3 件は末尾の 8 節にある。**
+> **決まった方針と出来上がったデータセットは末尾の 12 節にある。**
+> **`on the ramekin` は本選 1 では扱わない**——[027](027_ramekin_task_unwinnable.md) へ切り出した。
 
 ## 背景（先に読んでほしい）
 
@@ -557,3 +558,89 @@ pick up the black bowl on the ramekin …
   物体の上に載っているので、**持ち上げれば必ず動く。**
   `on the cookie box` で残る 6 組は、**たまたま 1 mm に届かなかった回**である
   （0.12〜1.0 mm）。**きれいな手本ではなく、境目の下に落ちた回**である。
+
+---
+
+## 12. 方針が決まった（9/9）——掃除済みデータセットを作った
+
+### 12.1 決まったこと
+
+| # | 決めたこと | 中身 |
+|---|---|---|
+| 1 | **物差しは (a) 1 mm** | 対象外の物体が 1 mm を超えて動いた組を外す。基準は 10 コマ目 |
+| 2 | **痩せる 2 課題は痩せさせる。ただし残ったぶんを 3 倍にする** | `push the plate` 40 → **120 本**、`on the cookie box` 50 → **150 本** |
+| 3 | **丸ごと消える 1 課題は消す** | `on the ramekin`（295 本）。**本選 1 では手当てしない。**[027](027_ramekin_task_unwinnable.md) へ切り出して**本選 2 か 3 で対応する** |
+| 4 | 対照（同じ大きさの無作為抜き取り） | **保留。**まず掃除済みで 1 本回してから考える |
+
+**「全部外す」と「免除する」で迷っていた点は、3 番目の道で片が付いた**——
+**避けられる失敗（`push the plate`）は掃除し、避けられない課題（`on the ramekin`）は
+課題ごと落とす。**中間の `on the cookie box` は掃除して 3 倍に戻す。
+
+### 12.2 出来上がったもの
+
+**`work/artifacts/libero_plus_clean`**（実体は `~/.cache/huggingface/parc_work/` にあり、
+`work/artifacts/` からは symlink で見える。理由は 12.4）。
+
+| | 掃除前 | **掃除後** |
+|---|---|---|
+| エピソード | 14,347 | **12,396** |
+| コマ | 2,238,036 | **1,940,083** |
+| 指示文 | 40 | **39** |
+| 実体のエピソード | 14,347 | 12,216（**コピーで足した 180 本**を含めて 12,396） |
+
+**確かめたこと。**
+
+| 見たもの | 結果 |
+|---|---|
+| `verify_dataset.py`（動画の復号を除く 6 項目） | **すべて通った** |
+| 元データと突き合わせ（無作為 6 本 × 3 コマ） | `observation.state`・`action`・**画 2 台とも最大差 0**。指示文も一致 |
+| 動画の復号（無作為 300 本 × 3 コマ ＝ 900 コマ） | **落ちたもの 0** |
+| 3 倍にしたぶん | 同じ動画区間を指す本が**ちょうど 3 本ずつ 90 組** |
+| `on the ramekin` | **0 本**（消えている） |
+| 正規化統計の動き | action の std が最大 **3.8%**・state が最大 **5.5%**。耐えられた ±8% の内側 |
+
+### 12.3 打ったコマンド
+
+```bash
+# 残す番号の一覧を作る（掃除後の全体と、3 倍にする 2 課題ぶん）
+.venv/bin/python solution/tools/contact_clean/summarize_contact.py \
+    --scores work/artifacts/libero_states/contact_scores.json \
+    --baseline 10 --rule displacement \
+    --keep-out work/artifacts/libero_states/keep_cleaned.json \
+    --boost-instruction "push the plate to the front of the stove" \
+    --boost-instruction "pick up the black bowl on the cookie box and place it on the plate" \
+    --boost-out work/artifacts/libero_states/keep_boost.json
+
+# データセットを組み直す（--keep-file を 3 回渡すと、2 回目以降がコピーになる）
+.venv/bin/python solution/tools/contact_clean/rebuild_dataset.py \
+    --root ~/.cache/huggingface/parc_work/libero_plus \
+    --output ~/.cache/huggingface/parc_work/libero_plus_clean \
+    --keep-file work/artifacts/libero_states/keep_cleaned.json \
+    --keep-file work/artifacts/libero_states/keep_boost.json \
+    --keep-file work/artifacts/libero_states/keep_boost.json
+
+.venv/bin/python solution/train/verify_dataset.py work/artifacts/libero_plus_clean \
+    --expect "12396 1940083 39" --skip-video
+```
+
+### 12.4 踏んだ穴 3 つ
+
+| 穴 | 何が起きたか |
+|---|---|
+| **lerobot の `split_dataset` は動画を AV1 で再エンコードし直す** | `dataset_tools._keep_episodes_from_video_with_av`。**90 本で数十分**、12,216 本なら 100 時間を超える。**そこで [`rebuild_dataset.py`](../../../solution/tools/contact_clean/rebuild_dataset.py) を書いた**——LeRobot v3 は 1 本の mp4 に何十本も詰めて開始時刻で切り出す形なので（`dataset_reader` の `shifted_query_ts = from_timestamp + ts`）、**動画はハードリンクで置き、メタデータだけ組み直せばよい。**ディスクも増えない |
+| **`meta/tasks.parquet` は指示文を pandas の索引として書く** | 列として書くと `load_tasks` が引けず、学習データの `task` が数字のまま出る（`io_utils.load_tasks` が `tasks.index.name = "task"` を当てている） |
+| **`docker run` も `docker cp` もこのセッションでは通らない** | 使えるのは `docker exec` だけ。データは `tar` を標準入力へ流し込んで運び、**元データは `~/.cache/huggingface` へハードリンクして** `quant_train` の `/hf_home` から見えるようにした。**`work/artifacts/libero_plus` は symlink になっている** |
+
+### 12.5 次にやること
+
+**[8 節（やること 8）](#8-学習を-2-本回して比べる)の学習に進める。**
+
+| | 中身 |
+|---|---|
+| 出発点 | `lerobot/pi05_libero_base` |
+| 歩数 | 24,000・action expert だけ（693M）・**1 本 約 9 時間 15 分** |
+| 変えるもの | **データだけ。**掃除前（`work/artifacts/libero_plus`・14,347 本）と掃除後（`libero_plus_clean`・12,396 本） |
+| 見るもの | **接触率** |
+
+**`jaist_launch.sh` は `stats.json.bak` が無いと起動前に止まる。**据え置きは
+打たない方針なので、**その確認を外すか、`--no-freeze-check` のような口を足す。**

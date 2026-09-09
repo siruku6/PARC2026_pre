@@ -450,11 +450,15 @@ def command_subset(args: argparse.Namespace) -> None:
     **配布データを混ぜる目的は「忘れないように繋ぎ止める」ことなので、
     全部は要らない。**課題を 1 つも落とさずに本数だけ減らす。
 
-    **選び方は「課題ごとに、通し番号で等間隔」である。**先頭から N 本取ると
-    データセットの並び順の偏りをそのまま拾う。
+    **選び方は 2 通りある。**既定は「課題ごとに、通し番号で等間隔」である
+    （先頭から N 本取ると、データセットの並び順の偏りをそのまま拾う）。
+    **`--keep-file` を渡すと、そのファイルに書かれた番号だけを残す。**
+    接触が起きているデモを外すときのように、**残す相手が計算で決まっている**
+    場合に使う（`solution/tools/contact_clean/`）。
 
     Reads:
       - <root>/meta/episodes/*.parquet
+      - <keep_file> … `{"episodes": [番号, …]}` の JSON（渡したときだけ）
     Generates:
       - <output>/ … 選んだ本数だけのデータセット
     """
@@ -469,23 +473,37 @@ def command_subset(args: argparse.Namespace) -> None:
     frame["task"] = frame["tasks"].apply(
         lambda cell: cell if isinstance(cell, str) else str(cell[0]))
 
-    chosen: list[int] = []
-    for _, group in frame.groupby("task"):
-        indices = sorted(group["episode_index"].astype(int).tolist())
-        count = min(args.per_task, len(indices))
-        if count == len(indices):
-            picks = indices
-        elif count == 1:
-            picks = [indices[len(indices) // 2]]
-        else:
-            picks = [indices[round(rank * (len(indices) - 1) / (count - 1))]
-                     for rank in range(count)]
-        chosen.extend(picks)
-    chosen = sorted(set(chosen))
+    if args.keep_file:
+        chosen = sorted(set(int(x) for x in
+                            json.loads(args.keep_file.read_text())["episodes"]))
+        # **無い番号を渡されたら黙って減らさない。**元データを取り違えていても
+        # split_dataset は通ってしまい、本数が合わないことに後で気付く。
+        missing = set(chosen) - set(frame["episode_index"].astype(int))
+        if missing:
+            raise SystemExit(
+                f"{args.keep_file} の番号 {len(missing)} 件が {args.root} に無い"
+                f"（例 {sorted(missing)[:5]}）。元データセットの取り違えを疑うこと")
+        how = f"{args.keep_file.name} が指す {len(chosen)} 本"
+    else:
+        chosen = []
+        for _, group in frame.groupby("task"):
+            indices = sorted(group["episode_index"].astype(int).tolist())
+            count = min(args.per_task, len(indices))
+            if count == len(indices):
+                picks = indices
+            elif count == 1:
+                picks = [indices[len(indices) // 2]]
+            else:
+                picks = [indices[round(rank * (len(indices) - 1) / (count - 1))]
+                         for rank in range(count)]
+            chosen.extend(picks)
+        chosen = sorted(set(chosen))
+        how = f"課題 {frame['task'].nunique()} 種 × 1 課題あたり最大 {args.per_task} 本"
 
     kept = frame[frame["episode_index"].isin(chosen)]
     print(f"=== {args.root} から {len(frame)} 本中 {len(chosen)} 本を選ぶ ===")
-    print(f"  課題 {frame['task'].nunique()} 種 × 1 課題あたり最大 {args.per_task} 本")
+    print(f"  選び方 {how}")
+    print(f"  課題 {frame['task'].nunique()} 種 → {kept['task'].nunique()} 種")
     print(f"  コマ数 {int(frame['length'].sum()):,} → {int(kept['length'].sum()):,}")
 
     name = args.output.name
@@ -561,6 +579,9 @@ def _parse_args() -> argparse.Namespace:
     subset.add_argument("--repo-id", default="local/source", metavar="REPO_ID")
     subset.add_argument("--per-task", type=int, default=75,
                         help="1 課題あたり何本残すか（既定 75）")
+    subset.add_argument("--keep-file", type=Path, default=None, metavar="JSON",
+                        help="残すエピソード番号の一覧（`{\"episodes\": [...]}`）。"
+                             "渡すと --per-task は使わない")
     return parser.parse_args()
 
 
