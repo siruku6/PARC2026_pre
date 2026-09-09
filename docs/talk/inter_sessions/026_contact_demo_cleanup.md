@@ -670,15 +670,32 @@ pick up the black bowl on the ramekin …
 コマンドがそのまま残っている）。**`--dataset.image_transforms` は付いておらず、
 `episodes` は `None`** である。
 
-### 打つコマンド
+**設定は `train_config.json` で 1 つずつ突き合わせた**
+（`~/.cache/huggingface/hub/models--siruku6--pi05_stage1_24000/snapshots/*/train_config.json`。
+**重み本体は落ちていないが、この 1 ファイルだけは手元にある**）。
+`seed 42`・`n_action_steps 10`・`empty_cameras 1`・`image_transforms.enable false`
+まで一致を確認した。
+
+### 打つコマンド —— **夜中に回す**（9/9・ユーザの判断）
+
+**GPU の順番は「[reference/32](../../reference/32_current_tasks.md) の D（Track3 の
+v2 学習・3〜4 時間）が先、こちらは夜中」である。**1 枚を取り合うため。
 
 ```bash
 RUN=pi05_clean24k WEIGHTS=base \
-  DATASET=$PWD/work/artifacts/libero_plus_clean \
+  DATASET=$HOME/.cache/huggingface/parc_work/libero_plus_clean \
   DATASET_REPO_ID=local/libero_plus_clean \
   STEPS=24000 LR=2.5e-5 SAVE_FREQ=8000 CAMERA_AUGMENT=0 FREEZE_CHECK=0 \
   bash solution/train/jaist_launch.sh
 ```
+
+**`DATASET` は symlink ではなく実体を渡す。**`work/artifacts/libero_plus_clean` は
+`~/.cache/huggingface/parc_work/` への symlink なので、docker の `-v` に渡すと
+解決のされ方が版で変わりうる。
+
+**先に空きを確かめること。**このコマンドは 3 個＋最終で約 36 GB 使う。
+**D の学習（`SAVE_FREQ=2000` で 4 個 ＝ 36 GB）と同時には置けない**ので、
+**D のチェックポイントを間引いてから起こす**（`solution/train/prune_checkpoints.sh`）。
 
 **`jaist_launch.sh` に 3 つ足した**（9/9）。
 
