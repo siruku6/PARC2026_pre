@@ -66,6 +66,11 @@ sys.path.insert(0, str(REPO / "solution/tools/viz"))
 from instruction_variants import VARIANTS  # noqa: E402
 
 
+# **統計を持たない重み（`pi05_libero_base`）が前後処理を借りる先。**
+# ここ 1 か所に置く（プローブ 2 本とそのラッパで既定値が 3 重になっていた）。
+FALLBACK_NORM = REPO / "work/artifacts/pi05_rp3000"
+
+
 def relative_l2(a: np.ndarray, b: np.ndarray) -> float:
     """`a` を基準にした相対差。**0 なら完全一致。**"""
     denom = float(np.linalg.norm(a))
@@ -145,6 +150,47 @@ def candidates(blob, task: str) -> dict[str, np.ndarray]:
     return out
 
 
+def open_probe_weights(weights: Path, fallback: Path | None, device: str,
+                       load_mode: str = "lowmem", tokenizer: str = "auto"):
+    """系譜のどの重みでも読めるように開く。**踏んだ穴 3 つをここ 1 か所で吸収する。**
+
+    | 穴 | 直し方 |
+    |---|---|
+    | **統計を同梱していない重みがある**（`pi05_libero_base`） | 前後処理と列の名前を `fallback` から借りる。**判定は `.safetensors` の有無**——json は持っているので json で見ると空の統計で組まれて入力が壊れる |
+    | **`model.` 接頭辞が無い重みがある** | lowmem の streamer が `copied: 0 / unknown: 812` になる。**本体の loader は 812 個を remap して通す**ので切り替える |
+    | tokenizer が手元に無い | 重み同梱の `vlm/tokenizer.json` を使う（HF はオフライン） |
+
+    返すのは `(policy, preprocessor, postprocessor, device, tally)` である。
+    """
+    from infer_pi05_once import load_policy, resolve_device
+    from safetensors import safe_open
+
+    device = resolve_device(device)
+    if tokenizer == "auto":
+        for root in (weights, fallback):
+            if root and (root / "vlm/tokenizer.json").is_file():
+                tokenizer = str(root / "vlm")
+                break
+    borrowed = None
+    if not list(weights.glob("policy_preprocessor_step_*normalizer*.safetensors")):
+        borrowed = fallback
+        print(f"  **前後処理と列の名前を借りる: {borrowed}**"
+              f"（この重みは正規化統計を同梱していない）")
+    with safe_open(weights / "model.safetensors", framework="np") as handle:
+        has_prefix = any(key.startswith("model.") for key in handle.keys())
+    if not has_prefix and load_mode == "lowmem":
+        load_mode = "builtin"
+        print("  **本体の loader に切り替える**（`model.` 接頭辞が無い重みである）")
+    print(f"=== {weights} を {device} で読む（tokenizer {tokenizer}）===", flush=True)
+    policy, pre, post, tally = load_policy(weights, device, load_mode=load_mode,
+                                           tokenizer=tokenizer,
+                                           processor_root=borrowed,
+                                           features_from=borrowed)
+    if tally:
+        print(f"  重みの突き合わせ: {tally}")
+    return policy, pre, post, device, tally
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -153,52 +199,18 @@ def main() -> None:
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--load-mode", default="lowmem", choices=("lowmem", "builtin"))
     ap.add_argument("--tokenizer", default="auto")
-    ap.add_argument("--fallback-norm", type=Path,
-                    default=REPO / "work/artifacts/pi05_rp3000",
+    ap.add_argument("--fallback-norm", type=Path, default=FALLBACK_NORM,
                     help="統計を持たない重み（base）のために借りる先")
     ap.add_argument("--tasks", nargs="*", default=None)
     ap.add_argument("--json-out", type=Path, default=None)
     args = ap.parse_args()
 
     import torch
-    from infer_pi05_once import _build_batch, load_policy, resolve_device
+    from infer_pi05_once import _build_batch
 
-    device = resolve_device(args.device)
-    tokenizer = args.tokenizer
-    if tokenizer == "auto":
-        for root in (args.weights, args.fallback_norm):
-            if root and (root / "vlm/tokenizer.json").is_file():
-                tokenizer = str(root / "vlm")
-                break
-    # **前後処理を持たない重みは借りる。**`pi05_libero_base` は正規化統計を
-    # 同梱していないので、そのままでは組み立てられない。
-    # **`policy_preprocessor.json` の有無では判定できない。**`pi05_libero_base` は
-    # json は持っているが**統計の safetensors が無い**（stats が空のまま組まれる）。
-    proc_root = None
-    features_from = None
-    load_mode = args.load_mode
-    if not list(args.weights.glob("policy_preprocessor_step_*normalizer*.safetensors")):
-        proc_root = args.fallback_norm
-        features_from = args.fallback_norm
-        print(f"  **前後処理と列の名前を借りる: {proc_root}**"
-              f"（この重みは正規化統計を同梱していない）")
-    # **`model.` 接頭辞が無い重みは lowmem の streamer で写せない**（9/8 に踏んだ。
-    # `copied: 0 / unknown: 812` になる）。**本体の loader は 812 個を remap して
-    # 通す**ので、そちらへ切り替える。ピークは 18 GB 級だが 1 点だけである。
-    from safetensors import safe_open
-    with safe_open(args.weights / "model.safetensors", framework="np") as f:
-        has_prefix = any(k.startswith("model.") for k in f.keys())
-    if not has_prefix and load_mode == "lowmem":
-        load_mode = "builtin"
-        print("  **本体の loader に切り替える**（`model.` 接頭辞が無い重みである）")
-    print(f"=== {args.weights} を {device} で読む（tokenizer {tokenizer}）===", flush=True)
-    policy, pre, post, tally = load_policy(args.weights, device,
-                                           load_mode=load_mode,
-                                           tokenizer=tokenizer,
-                                           processor_root=proc_root,
-                                           features_from=features_from)
-    if tally:
-        print(f"  重みの突き合わせ: {tally}")
+    policy, pre, post, device, _tally = open_probe_weights(
+        args.weights, args.fallback_norm, args.device,
+        load_mode=args.load_mode, tokenizer=args.tokenizer)
     mean, std, origin = action_std_mean(args.weights, args.fallback_norm)
     print(f"  行動の逆正規化: {origin}")
 

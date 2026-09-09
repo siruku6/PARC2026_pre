@@ -51,57 +51,36 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
+# **序盤だけを見てはいけない。**逆向きデータの先頭は「開いたまま接近」なので、
+# 掴む瞬間（中盤）を外すと「掴む気があるか」が測れない。
+OFFSET_PERCENTS = (0, 25, 50, 75)
 # **`infer_pi05_once` は viz の下にある。**`lineage_probe.py` と同じ解決をする。
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(REPO / "solution/tools/viz"))
 
+from lineage_probe import (FALLBACK_NORM, action_std_mean,  # noqa: E402
+                           head_direction, open_probe_weights)
 
-def relative_l2(pred: np.ndarray, ref: np.ndarray) -> float:
+
+def relative_error(pred: np.ndarray, ref: np.ndarray) -> float:
+    """記録に対する相対誤差。**分母は記録側**である。
+
+    `lineage_probe.relative_l2` は**分母が第 1 引数**で、指示文を変えたときの
+    変化量を測るためのものである。**同じ名前にすると片方を消したときに
+    もう片方の数が黙って変わる**ので、名前を分けてある。
+    """
     denom = float(np.linalg.norm(ref))
     return float(np.linalg.norm(pred - ref) / denom) if denom else float("nan")
 
 
-def action_mean_std(weights: Path, fallback: Path | None):
-    """行動の逆正規化に使う mean / std を、その重み自身から取る。
-
-    **重みごとに尺度が違う**ので共通の尺度で戻してはいけない。
-    統計を持たない重み（`pi05_libero_base`）だけ `fallback` から借りる。
-    """
-    from safetensors.numpy import load_file
-    for root in [weights, fallback]:
-        if root is None:
-            continue
-        for name in ("policy_postprocessor_step_0_unnormalizer_processor.safetensors",
-                     "policy_preprocessor_step_2_normalizer_processor.safetensors"):
-            path = root / name
-            if not path.is_file():
-                continue
-            blob = load_file(str(path))
-            mean = next(v for k, v in blob.items() if k.endswith("action.mean"))
-            std = next(v for k, v in blob.items() if k.endswith("action.std"))
-            return mean.reshape(-1), std.reshape(-1), str(path)
-    raise SystemExit("行動の統計が見つからない")
-
-
-def translation_direction(act: np.ndarray) -> np.ndarray:
-    """50 歩の並進を積んだ向き（単位ベクトル）。"""
-    total = act[:, :3].sum(axis=0)
-    norm = float(np.linalg.norm(total))
-    return total / norm if norm else total
-
-
-def compare(pred: np.ndarray, ref: np.ndarray, mean, std) -> dict:
+def compare(pred: np.ndarray, ref: np.ndarray, mean: np.ndarray) -> dict:
     """予測と記録を、4 つの数で比べる。"""
     chance = np.broadcast_to(mean[: ref.shape[1]], ref.shape)
-    d_pred, d_ref = translation_direction(pred), translation_direction(ref)
-    grip_pred, grip_ref = np.sign(pred[:, 6]), np.sign(ref[:, 6])
     return {
-        "rel_l2": relative_l2(pred, ref),
-        "rel_l2_chance": relative_l2(chance, ref),
-        "cos_translation": float(d_pred @ d_ref),
-        "grip_agree": float((grip_pred == grip_ref).mean()),
-        "reach_mm_pred": float(np.abs(pred[:, :3]).sum() * 1000),
-        "reach_mm_ref": float(np.abs(ref[:, :3]).sum() * 1000),
+        "rel_l2": relative_error(pred, ref),
+        "rel_l2_chance": relative_error(chance, ref),
+        "cos_translation": float(head_direction(pred) @ head_direction(ref)),
+        "grip_agree": float((np.sign(pred[:, 6]) == np.sign(ref[:, 6])).mean()),
     }
 
 
@@ -112,21 +91,20 @@ def pick_frames(dataset, per_task: int, offsets: tuple[int, ...]) -> list[int]:
     掴む瞬間（中盤）を外すと「掴む気があるか」が測れない。
     """
     meta = dataset.meta
-    by_task: dict[str, list[int]] = {}
-    for episode_index in range(meta.total_episodes):
-        row = meta.episodes[episode_index]
+    by_task: dict[str, list[dict]] = {}
+    for row in meta.episodes:
         task = row["tasks"][0] if isinstance(row["tasks"], (list, np.ndarray)) else row["tasks"]
-        by_task.setdefault(str(task), []).append(episode_index)
+        by_task.setdefault(str(task), []).append(row)
 
     picked: list[int] = []
-    for task, episodes in by_task.items():
-        for episode_index in episodes[:per_task]:
-            start = int(dataset.episode_data_index["from"][episode_index])
-            end = int(dataset.episode_data_index["to"][episode_index])
-            length = end - start
+    for _task, rows in by_task.items():
+        for row in rows[:per_task]:
+            # **境界は `meta.episodes` の列から取る**（lerobot 0.6.0 に
+            # `episode_data_index` は無い）。
+            start = int(row["dataset_from_index"])
+            length = int(row["dataset_to_index"]) - start
             for fraction in offsets:
-                index = start + min(int(length * fraction / 100), length - 1)
-                picked.append(index)
+                picked.append(start + min(int(length * fraction / 100), length - 1))
     return picked
 
 
@@ -138,64 +116,45 @@ def main() -> None:
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--load-mode", default="lowmem", choices=("lowmem", "builtin"))
     ap.add_argument("--tokenizer", default="auto")
-    ap.add_argument("--fallback-norm", type=Path, default=REPO / "work/artifacts/pi05_rp3000")
+    ap.add_argument("--fallback-norm", type=Path, default=FALLBACK_NORM)
     ap.add_argument("--episodes-per-task", type=int, default=2)
-    ap.add_argument("--offsets", default="0,25,50,75",
-                    help="エピソードの何 %% の位置を引くか（コンマ区切り）")
     ap.add_argument("--json-out", type=Path, default=None)
     args = ap.parse_args()
 
+    import json as json_module
+
     import torch
     from lerobot.datasets.lerobot_dataset import LeRobotDataset
-    from infer_pi05_once import load_policy, resolve_device
 
-    device = resolve_device(args.device)
-
-    tokenizer = args.tokenizer
-    if tokenizer == "auto":
-        for root in (args.weights, args.fallback_norm):
-            if root and (root / "vlm/tokenizer.json").is_file():
-                tokenizer = str(root / "vlm")
-                break
-
-    # **統計を持たない重みは借りる**（判定は `.safetensors` の有無で行う。
-    # `pi05_libero_base` は json だけ持っていて、統計が空のまま組まれる）。
-    proc_root = features_from = None
-    load_mode = args.load_mode
-    if not list(args.weights.glob("policy_preprocessor_step_*normalizer*.safetensors")):
-        proc_root = features_from = args.fallback_norm
-        print(f"  **前後処理と列の名前を借りる: {proc_root}**")
-    from safetensors import safe_open
-    with safe_open(args.weights / "model.safetensors", framework="np") as handle:
-        has_prefix = any(key.startswith("model.") for key in handle.keys())
-    if not has_prefix and load_mode == "lowmem":
-        load_mode = "builtin"
-        print("  **本体の loader に切り替える**（`model.` 接頭辞が無い重みである）")
-
-    print(f"=== {args.weights} を {device} で読む ===", flush=True)
-    policy, pre, _post, tally = load_policy(args.weights, device,
-                                            load_mode=load_mode,
-                                            tokenizer=tokenizer,
-                                            processor_root=proc_root,
-                                            features_from=features_from)
-    if tally:
-        print(f"  重みの突き合わせ: {tally}")
-    mean, std, origin = action_mean_std(args.weights, args.fallback_norm)
-    print(f"  行動の逆正規化: {origin}")
-
-    chunk_size = policy.config.chunk_size
-    max_action_dim = policy.config.max_action_dim
+    # **重みを読む前に、安く落ちるものを先に落とす。**読み込みは 1〜2 分かかるので、
+    # パスの打ち間違いで 2 分待たされるのは避ける（`run_final_eval.sh` の 8/28 の教訓）。
+    config = json_module.loads((args.weights / "config.json").read_text())
+    chunk_size = int(config["chunk_size"])
+    max_action_dim = int(config["max_action_dim"])
 
     # **学習と同じ引き方で action を 50 コマぶん引く。**
+    dataset = LeRobotDataset("local", root=str(args.dataset))
+    fps = dataset.meta.fps
     dataset = LeRobotDataset("local", root=str(args.dataset),
-                             delta_timestamps={"action": [i / 20.0 for i in range(chunk_size)]})
+                             delta_timestamps={"action": [i / fps for i in range(chunk_size)]})
     print(f"  データセット: {dataset.meta.total_episodes} 本 / "
-          f"{dataset.meta.total_frames} コマ / fps {dataset.meta.fps}")
-
-    offsets = tuple(int(x) for x in args.offsets.split(","))
-    indices = pick_frames(dataset, args.episodes_per_task, offsets)
+          f"{dataset.meta.total_frames} コマ / fps {fps}")
+    indices = pick_frames(dataset, args.episodes_per_task, OFFSET_PERCENTS)
     print(f"  測るコマ: {len(indices)} 個"
-          f"（課題ごと {args.episodes_per_task} 本 × 位置 {offsets} %）")
+          f"（課題ごと {args.episodes_per_task} 本 × 位置 {OFFSET_PERCENTS} %）")
+
+    policy, pre, _post, device, _tally = open_probe_weights(
+        args.weights, args.fallback_norm, args.device,
+        load_mode=args.load_mode, tokenizer=args.tokenizer)
+    mean, std, origin = action_std_mean(args.weights, args.fallback_norm)
+    if mean is None:
+        raise SystemExit("**行動の統計が見つからない。**`--fallback-norm` を確かめること")
+    print(f"  行動の逆正規化: {origin}")
+
+    # **noise は 1 度だけ作る。**固定した同じ値を全コマで使う（flow matching）。
+    generator = torch.Generator(device="cpu").manual_seed(0)
+    noise = torch.randn((1, chunk_size, max_action_dim), generator=generator)
+    noise = noise.to(device=device, dtype=torch.float32)
 
     results = []
     for count, index in enumerate(indices, 1):
@@ -208,9 +167,6 @@ def main() -> None:
             "task": [task],
         }
         batch = pre(batch)
-        generator = torch.Generator(device="cpu").manual_seed(0)
-        noise = torch.randn((1, chunk_size, max_action_dim), generator=generator)
-        noise = noise.to(device=device, dtype=torch.float32)
         with torch.inference_mode():
             predicted = policy.predict_action_chunk(batch, noise=noise)
         predicted = predicted[0, :, :7].to(torch.float32).cpu().numpy()
@@ -218,7 +174,7 @@ def main() -> None:
         recorded = item["action"][:, :7].to(torch.float32).cpu().numpy()
 
         row = {"index": index, "task": task}
-        row.update(compare(predicted, recorded, mean, std))
+        row.update(compare(predicted, recorded, mean))
         results.append(row)
         print(f"  [{count:3d}/{len(indices)}] rel_l2 {row['rel_l2']:.3f} "
               f"(何も学ばない予測 {row['rel_l2_chance']:.3f})  "
