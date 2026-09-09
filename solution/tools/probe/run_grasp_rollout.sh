@@ -58,7 +58,7 @@ trap cleanup EXIT
 # **推論の設定値を評価と同じ形で渡せるようにする**（`run_final_eval.sh` と同じ一覧）。
 # これが無いと、説明しようとしている評価とは別の設定の方策を測ることになる。
 policy_environment=()
-for name in PARC_N_ACTION_STEPS PARC_NUM_INFERENCE_STEPS PARC_SAMPLES \
+for name in PARC_N_ACTION_STEPS PARC_NUM_INFERENCE_STEPS PARC_SAMPLES PARC_RESET_SEED \
             PARC_EMA_ALPHA PARC_BLEND_STEPS PARC_SEED PARC_NORMALIZE_INSTRUCTION \
             PARC_GAIN_TRANSLATION PARC_GAIN_ROTATION PARC_GEO_IMAGE_SIZE; do
     if [ -n "${!name:-}" ]; then policy_environment+=(-e "$name=${!name}"); fi

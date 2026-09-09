@@ -824,6 +824,15 @@ class MyPolicy(BasePolicy):
         seed_text = os.environ.get("PARC_SEED", "0")
         self._seed = int(seed_text) if seed_text else None
         self._episode_index = 0
+        # **`/reset` が受け取った種を使うか。既定は使わない**（＝提出時の挙動を変えない）。
+        #
+        # **なぜ opt-in にするか。**既定の引きは `PARC_SEED + 内部のリセット回数`で、
+        # **「その run の何本目か」で決まる。**測りには向かない——**同じ課題・同じ
+        # 初期状態でも、前に何本回したかで引きが変わる**（9/10 に踏んだ。最接近が
+        # 43.7 mm と 183.4 mm になった）。一方これを既定にすると、キットが送ってくる
+        # 種で引きが決まり、**過去に出した版の点と対応が取れなくなる。**
+        # **だから測るときだけ `PARC_RESET_SEED=1` を渡す。**
+        self._use_reset_seed = os.environ.get("PARC_RESET_SEED", "") == "1"
 
         # chunk を何回引くか。1 なら素の挙動。
         # 版 3.4.0 で 3 にして本番で測ったが、0.166 → 0.168（0.04 本ぶん）で
@@ -1361,7 +1370,7 @@ class MyPolicy(BasePolicy):
             return "off"
         return "on+embed" if self._normalizer.uses_embeddings else "on"
 
-    def reset(self, instruction: str = "") -> None:
+    def reset(self, instruction: str = "", seed: int | None = None) -> None:
         # **エピソードごとには何も出さない。** 指示文も、寄せた決め方も、点数も。
         #
         # 版 3.5.0 は点数まで出していた。**それが漏れになっていた。** 採点 8 本の
@@ -1385,14 +1394,21 @@ class MyPolicy(BasePolicy):
         # **種を渡されているときだけ、このエピソードの乱数を固定する。**
         # 既定（`PARC_SEED` 無し）では何もしない＝提出時の挙動は変わらない。
         # 何のためかは `__init__` の `PARC_SEED` の注記にある。
+        #
+        # **既定の引きは「この run の何本目か」で決まる**（`_episode_index`）。
+        # **`PARC_RESET_SEED=1` のときだけ、呼ぶ側が渡した種をそのまま使う**ので、
+        # **同じ課題・同じ初期状態がいつでも同じ引きになる**（測りに要る）。
         if self._seed is not None:
             import torch
 
-            seed = self._seed + self._episode_index
-            torch.manual_seed(seed)
+            if self._use_reset_seed and seed is not None:
+                draw = self._seed + int(seed)
+            else:
+                draw = self._seed + self._episode_index
+            torch.manual_seed(draw)
             if torch.cuda.is_available():
-                torch.cuda.manual_seed_all(seed)
-            np.random.seed(seed % (2**32))
+                torch.cuda.manual_seed_all(draw)
+            np.random.seed(draw % (2**32))
         self._episode_index += 1
 
         # chunk のキャッシュを捨てる。忘れると前エピソードの action を出し続ける。
@@ -1497,11 +1513,15 @@ def health():
 async def reset_policy(request: Request):
     body = await request.body()
     instruction = ""
+    seed = None
     if body:
         import json
         data = json.loads(body)
         instruction = data.get("instruction", "")
-    _policy.reset(instruction=instruction)
+        # **呼ぶ側が種を送ってくる**（`pipeline/remote_policy.py` の `reset`）。
+        # 使うかどうかは `PARC_RESET_SEED` が決める。**既定は使わない。**
+        seed = data.get("seed")
+    _policy.reset(instruction=instruction, seed=seed)
     return {"status": "ok"}
 
 
