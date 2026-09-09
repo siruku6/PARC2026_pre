@@ -941,7 +941,7 @@ PY
 **(a) 送るファイルにカメラ拡張が入っているか**（このマシンで打つ）
 
 ```bash
-grep -c "camera.viewpoint.augment" /home/ubuntu/lab/PARC2026_pre/solution/train/train_pi05.py
+grep -c "camera.viewpoint.augment" /home/ubuntu/src/PARC2026_pre/solution/train/train_pi05.py
 ```
 
 **期待する出力: `2`。** `0` なら送るファイルが古い。**Pod のイメージ `:v2` に
@@ -951,7 +951,7 @@ grep -c "camera.viewpoint.augment" /home/ubuntu/lab/PARC2026_pre/solution/train/
 **(b) Hugging Face の非公開の枠がいくら空いているか**（このマシンで打つ）
 
 ```bash
-cd /home/ubuntu/lab/PARC2026_pre && python3 - <<'PY'
+cd /home/ubuntu/src/PARC2026_pre && python3 - <<'PY'
 from huggingface_hub import HfApi
 api = HfApi()
 total = 0
@@ -973,7 +973,7 @@ PY
 **(c) ログインできているか**（このマシンで打つ）
 
 ```bash
-cd /home/ubuntu/lab/PARC2026_pre && hf auth whoami
+cd /home/ubuntu/src/PARC2026_pre && hf auth whoami
 ```
 
 **期待する出力: `user=siruku6`。**違うなら `hf auth login` をやり直す。
@@ -996,7 +996,7 @@ Pod を作ったあと、管理画面の **`Estimated time left` が 20 時間�
 **最初の重みが出るのは学習開始から 4 時間 16 分後**なので、それまでに消せば間に合う。
 
 ```bash
-cd /home/ubuntu/lab/PARC2026_pre && python3 -c \
+cd /home/ubuntu/src/PARC2026_pre && python3 -c \
   "from huggingface_hub import HfApi; HfApi().delete_repo('siruku6/parc2026-submission')"
 ```
 
@@ -1029,7 +1029,7 @@ ssh root@<IP> -p <port> -i ~/.ssh/id_ed25519
 ### 4. 学習スクリプトを送る（このマシンで打つ）
 
 ```bash
-cd /home/ubuntu/lab/PARC2026_pre/solution/train && \
+cd /home/ubuntu/src/PARC2026_pre/solution/train && \
 tar czf - --exclude='__pycache__' experiments train.py train_pi05.py | \
 ssh -p <port> -i ~/.ssh/id_ed25519 root@<IP> 'tar xzf - -C /opt/pi05 --no-same-owner'
 ```

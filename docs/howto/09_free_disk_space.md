@@ -20,7 +20,7 @@
 ## 1. まず 4 か所を測る
 
 ```bash
-cd /home/ubuntu/lab/PARC2026_pre
+cd /home/ubuntu/src/PARC2026_pre
 df -h /                                     # 全体の空き
 du -sh work/* | sort -h | tail              # 学習の成果物
 du -sh ~/.cache/huggingface/* | sort -h     # 上流の重みと学習データ

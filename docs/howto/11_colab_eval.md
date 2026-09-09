@@ -108,7 +108,7 @@ Colab の接続が保たない。**しかもこの 195 秒は下限である** �
 
 ```bash
 # π0.5（Track2）—— 手元の 36 件評価と同じ集合を渡す
-cd /home/ubuntu/lab/PARC2026_pre
+cd /home/ubuntu/src/PARC2026_pre
 python3 solution/tools/colab/collect_colab_files.py \
     --val-tasks compe/val/EVAL_TASKS.csv
 open work/colab_upload

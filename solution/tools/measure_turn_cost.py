@@ -12,7 +12,7 @@
     python3 measure_turn_cost.py --date 08-28    # 日を指定（JST の月-日）
     python3 measure_turn_cost.py --ctx           # context の大きさ別の速さ（全セッション）
 
-ログの置き場は `~/.claude/projects/<スラッグ>/*.jsonl`。**既定は lab のもの。**
+ログの置き場は `~/.claude/projects/<スラッグ>/*.jsonl`。**既定は src のもの。**
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 JST = timedelta(hours=9)
-_DEFAULT_LOGS = Path.home() / ".claude/projects/-home-ubuntu-lab"
+_DEFAULT_LOGS = Path.home() / ".claude/projects/-home-ubuntu-src"
 
 
 def _load(path: str) -> list[dict]:

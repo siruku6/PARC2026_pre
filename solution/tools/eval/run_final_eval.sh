@@ -9,7 +9,7 @@
 #
 # 先に配布キットのイメージを 1 度だけ作る（30〜60 分・30 GB 前後）。
 #
-#   cd /home/ubuntu/lab/b_PARC2026_final && docker build -t parc2026-final .
+#   cd /home/ubuntu/src/b_PARC2026_final && docker build -t parc2026-final .
 #
 # 使い方
 #

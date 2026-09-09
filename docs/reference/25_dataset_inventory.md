@@ -103,7 +103,7 @@ EOF
 
 ```bash
 # 抽出コマンド
-ls -1 /home/ubuntu/lab/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_10/*.bddl \
+ls -1 /home/ubuntu/src/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_10/*.bddl \
   | sed 's|.*/||' | sed 's|\.bddl$||' \
   | grep -E "^(KITCHEN|LIVING_ROOM|STUDY)_SCENE[0-9]+" \
   | grep -v "_add_" | grep -v "_view_" | grep -v "_language_" | grep -v "_level" | grep -v "copy" | grep -v "_sample" \
@@ -111,7 +111,7 @@ ls -1 /home/ubuntu/lab/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/li
   | wc -l
 # 結果: 10
 
-ls -1 /home/ubuntu/lab/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_90/*.bddl \
+ls -1 /home/ubuntu/src/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_90/*.bddl \
   | sed 's|.*/||' | sed 's|\.bddl$||' \
   | wc -l
 # 結果: 90
@@ -189,7 +189,7 @@ ls -1 /home/ubuntu/lab/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/li
 
 **Track3 の根拠（詳細）:**
 
-運営の検査スクリプト `/home/ubuntu/lab/b_PARC2026_final/scripts/check_no_leaks.py` にある禁止語:
+運営の検査スクリプト `/home/ubuntu/src/b_PARC2026_final/scripts/check_no_leaks.py` にある禁止語:
 
 ```python
 r"(KITCHEN|LIVING_ROOM|STUDY)_SCENE\d+"
@@ -375,7 +375,7 @@ for r in ['IPEC-COMMUNITY/libero_spatial_no_noops_1.0.0_lerobot',
 EOF
 
 # 重なりを数える（H は ~/.cache/huggingface/hub）
-cd ~/lab/PARC2026_pre && H=~/.cache/huggingface/hub
+cd ~/src/PARC2026_pre && H=~/.cache/huggingface/hub
 python3 solution/tools/analysis/count_dataset_overlap.py \
   --meta libero_spatial=$(ls -d $H/datasets--IPEC-COMMUNITY--libero_spatial_no_noops_1.0.0_lerobot/snapshots/*/)meta \
   --meta libero_object=$(ls -d $H/datasets--IPEC-COMMUNITY--libero_object_no_noops_1.0.0_lerobot/snapshots/*/)meta \
@@ -423,7 +423,7 @@ EOF
 
 ```bash
 # libero_10 の元タスク（variant を除く）
-ls -1 /home/ubuntu/lab/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_10/*.bddl \
+ls -1 /home/ubuntu/src/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_10/*.bddl \
   | sed 's|.*/||' | sed 's|\.bddl$||' \
   | grep -E "^(KITCHEN|LIVING_ROOM|STUDY)_SCENE[0-9]+" \
   | grep -v "_add_" | grep -v "_view_" | grep -v "_language_" | grep -v "_level" | grep -v "copy" | grep -v "_sample" \
@@ -431,7 +431,7 @@ ls -1 /home/ubuntu/lab/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/li
   | wc -l
 
 # libero_90 の元タスク（variant なし）
-ls -1 /home/ubuntu/lab/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_90/*.bddl | wc -l
+ls -1 /home/ubuntu/src/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_90/*.bddl | wc -l
 ```
 
 ### SCENE 名タスクの一覧を出力
@@ -454,8 +454,8 @@ def get_true_base_tasks(path):
         base_tasks.append(f)
     return sorted(base_tasks)
 
-libero_10_path = Path('/home/ubuntu/lab/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_10')
-libero_90_path = Path('/home/ubuntu/lab/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_90')
+libero_10_path = Path('/home/ubuntu/src/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_10')
+libero_90_path = Path('/home/ubuntu/src/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_90')
 
 libero_10_base = get_true_base_tasks(libero_10_path)
 libero_90_base = get_true_base_tasks(libero_90_path)

@@ -66,7 +66,7 @@ EOF
 ## 公開された順位（8/17 に判明）
 
 **出典は運営が公開した順位表（上位 100 位まで）。**手元の控えは
-`/home/ubuntu/lab/tmp/リーダーボード.txt`。**他の参加者のアカウント名は
+`/home/ubuntu/src/tmp/リーダーボード.txt`。**他の参加者のアカウント名は
 このリポジトリには持ち込まない**方針にしたので、ここには順位とスコアだけを残す。
 
 | | |
@@ -107,7 +107,7 @@ EOF
 python3 - <<'EOF'
 import re, pathlib
 lines = [l.strip() for l in
-         pathlib.Path("/home/ubuntu/lab/tmp/リーダーボード.txt").read_text().splitlines()]
+         pathlib.Path("/home/ubuntu/src/tmp/リーダーボード.txt").read_text().splitlines()]
 rows, rank, name = [], None, None
 for line in lines[1:]:
     if not line or line == "picture":

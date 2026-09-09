@@ -16,9 +16,9 @@
 #       --log work/train/<run-name>/prune.log >/dev/null 2>&1 &
 #
 #   # 3. cron から1分ごとに1回だけ点検させる（常駐プロセスを持たない形）
-#   * * * * * /home/ubuntu/lab/PARC2026_pre/solution/train/prune_checkpoints.sh \
-#       /home/ubuntu/lab/PARC2026_pre/work/train/<run-name> 2 --once \
-#       --log /home/ubuntu/lab/PARC2026_pre/work/train/<run-name>/prune.log
+#   * * * * * /home/ubuntu/src/PARC2026_pre/solution/train/prune_checkpoints.sh \
+#       /home/ubuntu/src/PARC2026_pre/work/train/<run-name> 2 --once \
+#       --log /home/ubuntu/src/PARC2026_pre/work/train/<run-name>/prune.log
 #
 # 引数:
 #   $1              run ディレクトリ（この下の checkpoints/ を見る）

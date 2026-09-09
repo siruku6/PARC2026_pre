@@ -151,12 +151,12 @@ for directory in logs quant_sweep sha256 episode_lists patch build_430 admin tie
     [ -d "$work/$directory" ] && cp -a "$work/$directory" "$ROOT/files/work/" || true
 done
 
-# lab/ は git リポジトリではない。ここのファイルはどこにも控えが無い。
-mkdir -p "$ROOT/files/lab"
-lab="$(dirname "$REPOSITORY_ROOT")"
-[ -f "$lab/NOW.md" ] && cp "$lab/NOW.md" "$ROOT/files/lab/"
-[ -d "$lab/.claude" ] && cp -a "$lab/.claude" "$ROOT/files/lab/dot-claude"
-[ -d "$lab/tmp" ] && cp -a "$lab/tmp" "$ROOT/files/lab/tmp"
+# src/ は git リポジトリではない。ここのファイルはどこにも控えが無い。
+mkdir -p "$ROOT/files/src"
+src="$(dirname "$REPOSITORY_ROOT")"
+[ -f "$src/NOW.md" ] && cp "$src/NOW.md" "$ROOT/files/src/"
+[ -d "$src/.claude" ] && cp -a "$src/.claude" "$ROOT/files/src/dot-claude"
+[ -d "$src/tmp" ] && cp -a "$src/tmp" "$ROOT/files/src/tmp"
 
 # 全プロジェクト共通の Claude 設定。言い回し集と memory はここにしか無い。
 mkdir -p "$ROOT/files/home-claude"

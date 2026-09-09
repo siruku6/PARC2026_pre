@@ -58,7 +58,7 @@ Total Score    = (1/N) · Σ successᵢ · (1 − collision penaltyᵢ) · smoot
 ```
 grep -rn "weights\|references\|use_total_score_as_overall" --include=*.py pipeline/ evaluate.py
 ```
-（`/home/ubuntu/lab/b_PARC2026_final` で実行）。ヒットするのは `total_score.py` の定義と読み込みだけで、
+（`/home/ubuntu/src/b_PARC2026_final` で実行）。ヒットするのは `total_score.py` の定義と読み込みだけで、
 `scoring_config` を実際に使っているのは `rollout.py` の `collision` だけである。`Scorer.score_track()` の
 `overall_score` は `mean_success_rate` そのもので、重み付き合成は行われない。**つまり配布キットは
 Total Score を計算できない。**運営側は `use_total_score_as_overall` を true にして差し替えていると読める。
@@ -143,7 +143,7 @@ python3 -c "import json;r=[json.loads(l) for l in open('work/final_eval/0828_224
 ```
 awk '/POST \/reset/{if(n!="")printf "%s ",n; n=0} /POST \/act/{n++} END{print n}' <ログ>
 ```
-（`/home/ubuntu/lab/b_PARC2026_final/outputs/submission_logs/track*/` の各 `.txt`。
+（`/home/ubuntu/src/b_PARC2026_final/outputs/submission_logs/track*/` の各 `.txt`。
 `RemotePolicyClient.get_action()` が 1 歩ごとに `POST /act` を 1 回投げるので、
 `POST /reset` で区切った `POST /act` の本数がその回の歩数になる。）
 
