@@ -205,7 +205,7 @@ docker stop <コンテナID>       # --rm を付けているのでコンテナ�
 `crontab -e`(初回はエディタの選択を聞かれる)で次の1行を足して保存する。
 
 ```cron
-* * * * * /home/ubuntu/lab/PARC2026_pre/solution/train/prune_checkpoints.sh /home/ubuntu/lab/PARC2026_pre/work/train/pi05_full_local 2 --once --log /home/ubuntu/lab/PARC2026_pre/work/train/pi05_full_local/prune.log
+* * * * * /home/ubuntu/src/PARC2026_pre/solution/train/prune_checkpoints.sh /home/ubuntu/src/PARC2026_pre/work/train/pi05_full_local 2 --once --log /home/ubuntu/src/PARC2026_pre/work/train/pi05_full_local/prune.log
 ```
 
 [cron を使用した時間指定](https://qiita.com/nemutas/items/3f5816eabbf0eda5e6a9)

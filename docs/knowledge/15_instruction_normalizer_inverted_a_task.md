@@ -103,7 +103,7 @@
 ## 確かめ直すコマンド
 
 ```bash
-cd /home/ubuntu/lab/PARC2026_pre
+cd /home/ubuntu/src/PARC2026_pre
 python - <<'PY'
 import sys, types, pathlib, csv
 for name in ("msgpack","fastapi","uvicorn","torch"):
@@ -113,12 +113,12 @@ src = pathlib.Path("solution/policy_server.py").read_text()
 ns = {"__name__": "x"}
 exec(compile(src[:src.index("class MyPolicy")], "policy_server.py", "exec"), ns)
 N = ns["InstructionNormalizer"]()
-base = "/home/ubuntu/lab/b_PARC2026_final/compe"
+base = "/home/ubuntu/src/b_PARC2026_final/compe"
 for t in ("t1", "t2"):
     for r in csv.DictReader(open(f"{base}/{t}/T{t[1]}_TASKS.csv")):
         print(t, "%.3f" % N.normalize(r["instruction"])[2], N.normalize(r["instruction"])[1])
 PY
-grep -h ":language" /home/ubuntu/lab/b_PARC2026_final/compe/t3/assets/bddl_files/libero_t3/*.bddl
+grep -h ":language" /home/ubuntu/src/b_PARC2026_final/compe/t3/assets/bddl_files/libero_t3/*.bddl
 ```
 
 **`policy_server.py` は `msgpack` を import するので、そのまま読み込むと止まる。**

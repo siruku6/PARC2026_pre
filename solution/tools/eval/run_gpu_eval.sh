@@ -81,7 +81,7 @@ echo "===== 0/6 前提を確かめる ====="
 if [ ! -x "$POLICY_PYTHON" ]; then
     echo "エラー: 方策側の python が無い: $POLICY_PYTHON" >&2
     echo "  学習に使った venv を POLICY_PYTHON で指すこと。" >&2
-    echo "  例: POLICY_PYTHON=~/lab/PARC2026_pre/.venv/bin/python bash $0" >&2
+    echo "  例: POLICY_PYTHON=~/src/PARC2026_pre/.venv/bin/python bash $0" >&2
     exit 1
 fi
 

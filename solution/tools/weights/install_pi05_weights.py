@@ -17,14 +17,14 @@
 
     # 学習の最終チェックポイントを取り込む
     python3 solution/tools/weights/install_pi05_weights.py \\
-        work/train/pi05_full_local/checkpoints/024000/pretrained_model
+        work/train/<実行名>/checkpoints/<ステップ数>/pretrained_model
 
     # 名前を明示する（既定は model_weights_pi05_<ステップ数>）
     python3 solution/tools/weights/install_pi05_weights.py <ckpt> --name pi05_24k
 
 出来たディレクトリはそのまま評価に渡せる。
 
-    WEIGHTS=$PWD/work/artifacts/model_weights_pi05_024000 LABEL=pi05_24k \\
+    WEIGHTS=$PWD/work/artifacts/pi05_rp3000 LABEL=pi05_rp3000 \\
     POLICY_IMAGE=parc2026-train-pi05 \\
         bash solution/tools/eval/run_docker_eval.sh --check
 

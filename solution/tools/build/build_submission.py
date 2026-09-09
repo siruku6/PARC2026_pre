@@ -18,7 +18,7 @@ Omnicampus へ出す zip は `policy_server.py` が**ルート直下**に来る�
 本物のディレクトリを退避させずに済ませるため**である。
 
     python3 solution/tools/build/build_submission.py \\
-        --weights work/artifacts/model_weights_pi05_024000 \\
+        --weights work/artifacts/pi05_rp3000 \\
         --output work/submission_pi05.zip
 
 Reads:
