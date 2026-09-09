@@ -79,7 +79,7 @@
 |---|---|
 | v2 を組む | **済**（`work/artifacts/jaist_mix_v2_x8`・6.34 GB・43 課題・992,843 コマ・検査 7 項目通過） |
 | **HF へ上げる** | **済**——**`siruku6/jaist_mix_v2`（非公開・新規）**。**既存の `siruku6/jaist_mix`（v1）は触っていない**ので取り違えが起きない。`verify_upload.py` で 41 個・6.34 GB の一致を確認した |
-| **JAIST で起こす** | **待ち**（下のコマンド。**起こすのは人間側**） |
+| **JAIST で起こす** | **済**（9/9・**10,000 歩**・3 時間 52 分）。**重みは手元に無く HF `siruku6/pi05_t3rev_v2` だけにある**（`checkpoints/{002000,004000,006000,008000,010000}`・57.75 GB・非公開）。**測るには先に落とす**——`hf download siruku6/pi05_t3rev_v2 --include 'checkpoints/010000/pretrained_model/*' --local-dir work/artifacts/pi05_t3rev_v2` |
 | 測り直す | D が終わったら E と A を打ち直す |
 
 ```bash
