@@ -3,6 +3,15 @@
 #
 #   RUN=pi05_proto22 STEPS=8500 bash solution/train/jaist_launch.sh
 #
+# **ssh を切るなら背面に置く。**学習そのものは `docker run -d` なので切っても走り続けるが、
+# **この後の確認（最初の 20 歩まで最大 30 分待つ）は前面で走る**ので、切れると
+# その出力が失われる。ログをファイルへ落として背面に置くこと:
+#
+#   RUN=pi05_proto22 STEPS=8500 \
+#       nohup bash solution/train/jaist_launch.sh > ~/launch_pi05_proto22.log 2>&1 &
+#
+# 進み具合は `docker logs -f parc-$RUN`、確認の結果は `~/launch_$RUN.log`。
+#
 # **Blackwell とは起こし方が違う。**あちらは素の python、こちらは docker である
 # （[howto/07](../../docs/howto/07_train_pi05_local.md)）。
 #

@@ -55,18 +55,12 @@
 
 | # | 次にやること | 何が決まるか | 費用 |
 |---|---|---|---|
-<<<<<<< HEAD
-| **D** | **v2（回転を封筒内に収めた逆向きデータ）で 1 本学習する** | **回転目標が学べる形になれば手首が掴む姿勢に届くのか。****見る数は `off_mm_median` と `rot_deg_median` である** | 学習 3〜4 時間 |
+| **D-1** | **v2（回転を封筒内に収めた逆向きデータ）で 1 本学習する** | **回転目標が学べる形になれば手首が掴む姿勢に届くのか。****見る数は `off_mm_median` と `rot_deg_median` である** | 学習 3〜4 時間 |
+| **D-2** | **同じ v2 を、`pi05_full_local` と同じ学習率・歩数で回す**（**2.5e-5・24,000 歩**） | **低い学習率で伝わっていなかっただけなのか** | 学習 9〜10 時間 |
 | C | `PARC_N_ACTION_STEPS=50` で 1 本 | 計画の後半の切り捨てが効いているか | env 変数 1 つ |
-=======
-| **A** | **T3 の bddl から候補になりうる物体を消した版で `proto20` と `rp3000` を 300 歩回す** | **迷いか、把持そのものか** | このマシン・数時間 |
-| **B** | **逆向きデータの 1 行を重みへ入れ直し、記録されている 50 歩を再現できるか見る**（**学習しない**） | **モデル側か、入力の通り道か** | **GPU 0**・30 分 |
-| **C** | **`PARC_N_ACTION_STEPS=50` で track3 を 1 本回す**（A と同時） | 計画の後半が切り捨てられていることが原因か | このマシン・1 時間 |
-| **D** | **接触が起きているデモを外した学習データで、`pi05_libero_base` から 24,000 歩を 2 本回す**（掃除前と掃除後） | **Track2 の衝突を学習データ側で減らせるか**（`F60`）。**A〜C とは別の筋**で、こちらは Track1・Track2 に効く | **1 本 9 時間 15 分 × 2。**GPU を占有するので A・C とは取り合う |
->>>>>>> 4e8e43c77d88ae96f30a2fa1314ac405a48f37b5
 
 **D が本命である。**A・B・E は「データを直せば届く見込み」を残した。
-**条件は `t3rev` と 1 変数だけ違える**（設計と見る数は
+**データは同じ v2 で、学習率と歩数だけが違う 2 本を回す**（設計と見る数は
 [plan/22 の 5.3](../plan/22_grasp_and_color_next_moves.md#53-v2-で-1-本学習する手-d本命)）。
 
 ### D はどこまで進んだか（2026-09-09）
@@ -79,11 +73,25 @@
 | 測り直す | D が終わったら E と A を打ち直す |
 
 ```bash
-# JAIST 側
+# JAIST 側。落とすのは 1 度だけ
 hf download siruku6/jaist_mix_v2 --repo-type dataset --local-dir ~/data/jaist_mix_v2_x8
+
+# D-1 t3rev と 1 変数（5e-6・8,000 歩）。3〜4 時間
 RUN=pi05_t3rev_v2 DATASET=~/data/jaist_mix_v2_x8 STEPS=8000 SAVE_FREQ=2000 \
-    bash solution/train/jaist_launch.sh
+    nohup bash solution/train/jaist_launch.sh > ~/launch_pi05_t3rev_v2.log 2>&1 &
+
+# D-2 pi05_full_local と同じ学習率・歩数（2.5e-5・24,000 歩）。9〜10 時間
+RUN=pi05_t3rev_v2_hi DATASET=~/data/jaist_mix_v2_x8 STEPS=24000 SAVE_FREQ=6000 LR=2.5e-5 \
+    nohup bash solution/train/jaist_launch.sh > ~/launch_pi05_t3rev_v2_hi.log 2>&1 &
 ```
+
+**`nohup … &` を付ける理由。**学習そのものは `docker run -d` なので **ssh を切っても走り続ける**が、
+**起こしたあとの確認（最初の 20 歩まで最大 30 分待つ）は前面で走る。**
+切れるとその出力が失われるので、**ログをファイルへ落として背面に置く。**
+**進み具合は `docker logs -f parc-<RUN>`**、確認の結果は `~/launch_<RUN>.log`。
+
+**2 本は同時に走らせない。**JAIST は 20 GB で、1 本で 16.3 GB 使う
+（[19](19_weights_catalog.md) の `pi05_t3rev` の行）。**D-1 を見てから D-2 を起こす。**
 
 **D の後は E をそのまま打ち直せばよい。**
 `bash solution/tools/probe/run_divergence.sh <新しい重み>` で、
