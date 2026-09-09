@@ -12,6 +12,7 @@
 #   TASKS=""     bddl の stem を空白区切りで（省略すると 4 課題すべて）
 #   MODES="full stripped"   full=配布のまま／stripped=競合する物を消す
 #   KEEP_LANDMARKS=1        指示文が名指しする物を残す（既定は消す）
+#   RECORD=1                mp4 を <出力>/videos へ残す（**既定は録らない**）
 #   PARC_*                  推論の設定値。**評価と同じ設定で測るために渡す**
 #   MUJOCO_GL=egl           このマシンは EGL が通る（描画が 16 倍速い）
 set -euo pipefail
@@ -94,6 +95,7 @@ docker run --rm --gpus all --network "$NETWORK" --ulimit core=0 \
         ${EPISODES:+--episodes "$EPISODES"} ${STEPS:+--steps "$STEPS"} \
         ${TASKS:+--tasks $TASKS} ${MODES:+--modes $MODES} \
         ${KEEP_LANDMARKS:+--keep-landmarks} \
+        ${RECORD:+--video-dir /out/videos} \
     2>&1 | tee "$OUT/rollout.log"
 
 docker run --rm -v "$OUT:/out" --entrypoint chown "$KIT_IMAGE" \

@@ -199,8 +199,27 @@ def displacement_mm(now: np.ndarray, start: np.ndarray) -> float:
     return float(np.abs(now - start).sum() * 1000)
 
 
+def write_video(path: Path, frames: list, fps: int = 20) -> None:
+    """mp4 に落とす。**モデルへ渡るのと同じ向き**（180 度回転後）で書く。
+
+    評価環境の生画像は上下が逆で、回して初めて学習データと揃う
+    （`reference/10`）。**見るときも同じ向きにしないと、
+    「モデルには何が見えていたのか」を判断できない。**
+    """
+    import cv2
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    height, width = frames[0].shape[:2]
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"),
+                             fps, (width, height))
+    for frame in frames:
+        writer.write(cv2.cvtColor(frame[::-1, ::-1], cv2.COLOR_RGB2BGR))
+    writer.release()
+
+
 def rollout(env, client, instruction: str, targets: list[str], hide: list[str],
-            init_state, steps: int, episode: int) -> list[dict]:
+            init_state, steps: int, episode: int,
+            video_path: Path | None = None) -> list[dict]:
     """1 本回して、対象ごとに掴む段の数を返す。
 
     **順番が効く。**復元 → 場外へ移す → 空撃ち → **ここで初期位置を記録** → 本番。
@@ -230,11 +249,14 @@ def rollout(env, client, instruction: str, targets: list[str], hide: list[str],
     others_mm = 0.0
     grip_close = 0
     done = False
+    frames = [np.asarray(observation["agentview_image"])] if video_path else None
     for _ in range(steps):
         action = client.get_action(observation)
         if action[6] > 0:
             grip_close += 1
         observation, _reward, done, _info = env.step(action.tolist())
+        if frames is not None:
+            frames.append(np.asarray(observation["agentview_image"]))
 
         eef = np.asarray(observation["robot0_eef_pos"])
         now = object_positions(observation)
@@ -249,6 +271,10 @@ def rollout(env, client, instruction: str, targets: list[str], hide: list[str],
             others_mm = max(others_mm, displacement_mm(now[name], origin))
         if done:
             break
+
+    if frames:
+        write_video(video_path, frames)
+        print(f"    動画: {video_path}  {len(frames)} コマ")
 
     final = object_positions(observation)
     return [{
@@ -276,6 +302,8 @@ def main() -> None:
     ap.add_argument("--modes", nargs="*", default=["full", "stripped"],
                     choices=("full", "stripped"),
                     help="full=配布のまま／stripped=競合する物を消す")
+    ap.add_argument("--video-dir", type=Path, default=None,
+                    help="mp4 を書く先。**指定しないと録らない**")
     ap.add_argument("--keep-landmarks", action="store_true",
                     help="指示文が名指しする物を残す（**既定は消す。**残すと T3 では"
                          "1 つも消えない）")
@@ -318,9 +346,11 @@ def main() -> None:
                         print("    **1 つも移していない。**full と同じ条件である")
                 print(f"    {instruction}")
                 for episode in range(args.episodes):
+                    video = (args.video_dir / f"{bddl.stem}__{mode}__ep{episode}.mp4"
+                             if args.video_dir else None)
                     for row in rollout(env, client, instruction, targets, hide,
                                        inits[episode % len(inits)], args.steps,
-                                       episode):
+                                       episode, video):
                         row.update({"task": bddl.stem, "mode": mode,
                                     "episode": episode})
                         results.append(row)
