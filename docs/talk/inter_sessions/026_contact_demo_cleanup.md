@@ -141,7 +141,21 @@
 
 ## やること
 
-### 1. 本家 hdf5 から `states` を抜く —— **実行中**
+> **1〜7 は 9/9 に実行済みである。残っているのは 8（学習）だけ。**
+> **打ち直す必要は無い**——出来上がっているものは次のとおりで、結果は
+> このファイルの「報告」以降（1〜13 節）にある。
+>
+> | 何 | どこ | 中身 |
+> |---|---|---|
+> | 1 の出力 | `work/artifacts/libero_states/` | 40 課題 / 2,000 デモ / 338,575 コマ |
+> | **2 の対応表** | **`work/artifacts/libero_states/demo_map.json`** | 1,681 組 ↔ 本家デモ（**100% 対応**） |
+> | 3・4 の判定 | `work/artifacts/libero_states/contact_scores.json` | 1 組 1 行・物差し 2 つ |
+> | 6 の残す一覧 | 同 `keep_cleaned.json` / `keep_boost.json` | 12,216 本 / 90 本 |
+> | **7 の掃除済みデータ** | **`work/artifacts/libero_plus_clean`** | **12,396 本 / 1,940,083 コマ / 39 課題** |
+>
+> **各段のコマンドは報告の 1 節と 12.3 節にそのまま置いてある。**
+
+### 1. 本家 hdf5 から `states` を抜く —— **済（9/9）**
 
 ```bash
 cd /home/ubuntu/src/PARC2026_pre
@@ -152,9 +166,18 @@ cd /home/ubuntu/src/PARC2026_pre
 **1 課題ぶんを落とす → 抜く → hdf5 を消す、を 40 回まわす。**
 どの時点でもディスクは 2.1 GB しか使わない。何度打ってもよい（済んだ課題は飛ばす）。
 
-### 2. 1,681 組と本家デモの対応表を作り、**カバー率を出す**
+### 2. 1,681 組と本家デモの対応表を作り、**カバー率を出す** —— **済（9/9）**
 
-**両側から「前 6 次元がすべて 0 のコマ」を落としてから突き合わせる**（前提の 4）。
+```bash
+.venv/bin/python solution/tools/contact_clean/map_demos.py \
+    --dataset work/artifacts/libero_plus --states work/artifacts/libero_states \
+    --out work/artifacts/libero_states/demo_map.json
+```
+
+**中でやっていること。**配布データの `action` 列をエピソードごとに突き合わせて
+**同じものを 1 組にまとめ**（14,347 本 → 1,681 組）、本家 hdf5 の 2,000 デモの
+`actions` と**行動列そのものを鍵にして**引き当てる。**両側から「前 6 次元が
+すべて 0 のコマ」を落としてから突き合わせる**（前提の 4）。
 
 **出すもの。** 1 組 1 行の表——`libero_plus` の指示文 / 代表エピソード番号 /
 その組に属するエピソード番号の一覧 / 本家の `<スイート>/<課題>` と `demo_<番号>` /
