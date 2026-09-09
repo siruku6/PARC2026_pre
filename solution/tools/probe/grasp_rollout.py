@@ -39,12 +39,24 @@ LIBERO の `:objects` は**同じ型の物を 1 行にまとめて書く**
 （`plate_1 plate_2 - plate`）ので、行ごとに消すと**片方だけ残る。**
 **9/9 にこれを踏んだ**——`yellow_book_1` が残ったまま「消した」と表示していた。
 
-## init ファイルは要らない。ただし乱数は評価と揃える
+## 消し方 —— **bddl は書き換えない。配布 init のまま、競合を場外へ移す**
 
-`make_eval_env`（`_016_libero_env.py`）で開く。**据え置き（棚・caddy・コンロ）の位置は
-`qpos` に入らず `reset()` の乱数で決まる**ので、キットと同じ `seed` で開かないと
-別の場面を測ることになる。**配布 init は物の数が変わると使えない**（`set_state_from_flattened`
-が落ちる）ので、`reset()` に `:init` 領域からサンプルさせる。
+**`env.reset()` の無作為サンプルは T3 では使えない**（**9/9 に踏んだ**）。
+缶がトレイに食い込んだ状態で置かれ、**物理が押し出して 5 m/s で吹き飛ぶ**
+（y が 20 歩で 0.26 → 1.51 m へ動き、`lift_mm` が「203.5 mm 持ち上げた」と出た。
+**手先は 30 cm 離れたままである**）。配布 init が `pruned` と名乗っているのは、
+**妥当な初期状態だけを選り分けてある**からである。
+
+**だから配布 init を使う。**すると物の数を変えられないので（`set_state_from_flattened`
+が次元で落ちる）、**bddl から消すのではなく、復元したあとに競合を机の下へ移す。**
+
+| 手順 | 理由 |
+|---|---|
+| `make_eval_env` で開く | **据え置き（棚・caddy・コンロ）の位置は `qpos` に入らず `reset()` の乱数で決まる。**キットと同じ `seed` で開かないと別の場面を測る |
+| `set_init_state(配布 init[k])` | 妥当な初期状態を復元する |
+| **競合の自由関節を机の下（z = −2 m）へ移す** | 物の数を変えずに場面から除く。**画からも消える** |
+| **空撃ち 10 歩**（キットと同じ） | 物は少し浮いた位置に置かれるので落ちて落ち着く |
+| **ここで初期位置を記録する** | 空撃ちの前に取ると、落ちたぶんを「動いた」と数えてしまう |
 
 ## 掴めたかの判定
 
@@ -76,6 +88,7 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+from _016_libero_env import SETTLE_STEPS, make_eval_env  # noqa: E402
 from dump_t3_obs import CAMERAS, T3_ASSETS, instruction_of  # noqa: E402
 
 LIFT_THRESHOLD_MM = 30.0
@@ -138,37 +151,29 @@ def named_in_instruction(problem: dict, name: str) -> bool:
     return bool(set(name.rsplit("_", 1)[0].split("_")) & words)
 
 
-def strip_bddl(source: Path, destination: Path, keep: set[str]) -> list[str]:
-    """`keep` 以外の物を消した bddl を書き、消した名前を返す。
+# 場外へ移す距離（水平）。**床の下（z を下げる）ではいけない**——床に押し戻されて
+# 机の高さ近くへ戻ってくる（9/9 に踏んだ。z=−2 m にしたのに z=0.009 で立っていた）。
+HIDE_OFFSET_M = 3.0
 
-    **同じ型の物が 1 行に並ぶ宣言**（`plate_1 plate_2 - plate`）を扱うため、
-    行を消すのではなく**行の中の名前を選び直す。**
+
+def hide_objects(env, names: list[str]) -> None:
+    """物を水平に 3 m 以上離して場面から除く（画にも入らない）。
+
+    **bddl を書き換えないのが要点である。**物の数が変わると配布 init を
+    `set_state_from_flattened` で復元できなくなる（次元が合わない）。
+    LIBERO の物は `<名前>_joint0` という自由関節を持つので、その `qpos` を書き換える。
+
+    **下へ落とすのではなく横へ動かす。**床があるので下げても戻ってくる。
     """
-    text = source.read_text()
-    removed = [name for name in names_of(parse_bddl(source)) if name not in keep]
-    dropped = set(removed)
-
-    lines = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        words = stripped.split()
-        # `:init` / `:goal` の述語。第 1 引数が消す物なら行ごと落とす。
-        if len(words) >= 2 and words[0].startswith("(") and words[1] in dropped:
-            continue
-        # `:objects` の宣言。**残す名前だけを書き直す。**
-        if " - " in stripped and not stripped.startswith("("):
-            names, _, kind = stripped.partition(" - ")
-            survivors = [n for n in names.split() if n not in dropped]
-            if not survivors:
-                continue
-            indent = line[: len(line) - len(line.lstrip())]
-            lines.append(f"{indent}{' '.join(survivors)} - {kind}")
-            continue
-        lines.append(line)
-
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text("\n".join(lines) + "\n")
-    return removed
+    sim = env.sim
+    for index, name in enumerate(names):
+        start, end = sim.model.get_joint_qpos_addr(f"{name}_joint0")
+        pose = sim.data.qpos[start:end].copy()
+        pose[0] += HIDE_OFFSET_M + 0.4 * index
+        sim.data.qpos[start:end] = pose
+        v_start, v_end = sim.model.get_joint_qvel_addr(f"{name}_joint0")
+        sim.data.qvel[v_start:v_end] = 0.0
+    sim.forward()
 
 
 def object_positions(observation: dict) -> dict[str, np.ndarray]:
@@ -179,18 +184,46 @@ def object_positions(observation: dict) -> dict[str, np.ndarray]:
             and not key.endswith("_to_robot0_eef_pos")}
 
 
+def load_inits(stem: str):
+    """配布 init（`pruned_init`）を読む。**torch の保存形式である。**"""
+    import torch
+
+    path = T3_ASSETS / "init_files/libero_t3" / f"{stem}.pruned_init"
+    if not path.is_file():
+        raise SystemExit(f"**配布 init が無い: {path}**")
+    return torch.load(str(path), weights_only=False)
+
+
 def displacement_mm(now: np.ndarray, start: np.ndarray) -> float:
     """キットの衝突判定と同じ **3 軸の L1**（`pipeline/rollout.py`）。"""
     return float(np.abs(now - start).sum() * 1000)
 
 
-def rollout(env, client, instruction: str, targets: list[str],
-            steps: int, episode: int) -> list[dict]:
-    """1 本回して、対象ごとに掴む段の数を返す。"""
+def rollout(env, client, instruction: str, targets: list[str], hide: list[str],
+            init_state, steps: int, episode: int) -> list[dict]:
+    """1 本回して、対象ごとに掴む段の数を返す。
+
+    **順番が効く。**復元 → 場外へ移す → 空撃ち → **ここで初期位置を記録** → 本番。
+    空撃ちの前に記録すると、浮いた位置から落ちたぶんを「動いた」と数えてしまう。
+    """
     client.reset(instruction=instruction, seed=episode)
-    observation = env.reset()
+    env.reset()
+    observation = env.set_init_state(init_state)
+    if hide:
+        hide_objects(env, hide)
+    for _ in range(SETTLE_STEPS):
+        observation, _reward, _done, _info = env.step([0, 0, 0, 0, 0, 0, -1])
+
     start = object_positions(observation)
     tracked = [name for name in targets if name in start]
+    # **場外へ移したものが本当に消えているかを確かめる。**
+    for name in hide:
+        if name not in start:
+            continue
+        away = float(np.linalg.norm(start[name][:2] - start[tracked[0]][:2]))
+        if away < HIDE_OFFSET_M - 0.5:
+            raise SystemExit(f"**{name} を場外へ移せていない**"
+                             f"（対象から水平 {away:.2f} m）")
 
     lift_mm = {name: 0.0 for name in tracked}
     min_dist_mm = {name: float("inf") for name in tracked}
@@ -211,7 +244,7 @@ def rollout(env, client, instruction: str, targets: list[str],
             min_dist_mm[name] = min(min_dist_mm[name],
                                     float(np.linalg.norm(now[name] - eef) * 1000))
         for name, origin in start.items():
-            if name in targets:
+            if name in targets or name in hide:
                 continue
             others_mm = max(others_mm, displacement_mm(now[name], origin))
         if done:
@@ -250,8 +283,6 @@ def main() -> None:
 
     from pipeline.remote_policy import RemotePolicyClient
 
-    from _016_libero_env import make_eval_env
-
     bddls = sorted((T3_ASSETS / "bddl_files/libero_t3").glob("*.bddl"))
     if args.tasks:
         bddls = [b for b in bddls if b.stem in args.tasks]
@@ -266,38 +297,32 @@ def main() -> None:
         problem = parse_bddl(bddl)
         targets = targets_of(problem)
         keep = keep_set(problem, targets, args.keep_landmarks)
+        competitors = [n for n in names_of(problem) if n not in keep]
         instruction = instruction_of(bddl)
+        inits = load_inits(bddl.stem)
 
-        for mode in args.modes:
-            if mode == "stripped":
-                path = Path("/out/stripped") / bddl.name
-                removed = strip_bddl(bddl, path, keep)
-                landmarks = [n for n in removed if named_in_instruction(problem, n)]
+        env = make_eval_env(str(bddl), camera_size=args.camera_size,
+                            camera_names=list(CAMERAS))
+        try:
+            for mode in args.modes:
+                hide = competitors if mode == "stripped" else []
                 print(f"\n=== {bddl.stem}  [{mode}]"
-                      f"\n    残す {sorted(keep)}\n    消す {removed}")
-                if landmarks:
-                    print(f"    **指示文が名指ししている物を消した: {landmarks}**"
-                          f"（判定は lift_mm で行うので掴む段の測りは成り立つ）")
-                if not removed:
-                    print("    **1 つも消えていない。**full と同じ条件である")
-            else:
-                path = bddl
-                print(f"\n=== {bddl.stem}  [{mode}]  物 {len(names_of(problem))} 個")
-            print(f"    対象 {targets}\n    {instruction}")
-
-            env = make_eval_env(str(path), camera_size=args.camera_size,
-                                camera_names=list(CAMERAS))
-            try:
-                # **消したはずの物が env に残っていないかを確かめる。**
-                # 宣言が 1 行にまとまっていると、行ごとに消すと片方だけ残る（9/9 に踏んだ）。
-                present = set(object_positions(env.reset()))
-                if mode == "stripped" and not present <= keep:
-                    raise SystemExit(f"**消し損ねた: {sorted(present - keep)}**"
-                                     f"（{path} を見ること）")
+                      f"\n    対象 {targets}"
+                      f"\n    場外へ移す {hide or 'なし'}")
+                if mode == "stripped":
+                    landmarks = [n for n in hide if named_in_instruction(problem, n)]
+                    if landmarks:
+                        print(f"    **指示文が名指ししている物を移した: {landmarks}**"
+                              f"（判定は lift_mm で行うので掴む段の測りは成り立つ）")
+                    if not hide:
+                        print("    **1 つも移していない。**full と同じ条件である")
+                print(f"    {instruction}")
                 for episode in range(args.episodes):
-                    for row in rollout(env, client, instruction, targets,
-                                       args.steps, episode):
-                        row.update({"task": bddl.stem, "mode": mode, "episode": episode})
+                    for row in rollout(env, client, instruction, targets, hide,
+                                       inits[episode % len(inits)], args.steps,
+                                       episode):
+                        row.update({"task": bddl.stem, "mode": mode,
+                                    "episode": episode})
                         results.append(row)
                         print(f"    ep{episode} {row['target']:22s}"
                               f" 持ち上げ {row['lift_mm']:6.1f} mm"
@@ -306,8 +331,8 @@ def main() -> None:
                               f"  他が動いた {row['others_moved_mm']:6.1f} mm"
                               f"  done {row['done']}"
                               f"  {'**持ち上げた**' if row['lifted'] else ''}", flush=True)
-            finally:
-                env.close()
+        finally:
+            env.close()
 
     print()
     print("=" * 100)
