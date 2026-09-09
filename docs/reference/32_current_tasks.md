@@ -59,12 +59,29 @@
 | C | `PARC_N_ACTION_STEPS=50` で 1 本 | 計画の後半の切り捨てが効いているか | env 変数 1 つ |
 
 **D が本命である。**A・B・E は「データを直せば届く見込み」を残した。
-**v2 は組み終わっていて（`work/artifacts/jaist_mix_v2_x8`・6.0 GB・検査 7 項目通過）、
-まだ 1 度も学習に使っていない。**
+**条件は `t3rev` と 1 変数だけ違える**（設計と見る数は
+[plan/22 の 5.3](../plan/22_grasp_and_color_next_moves.md#53-v2-で-1-本学習する手-d本命)）。
 
-**D の後は E をそのまま打ち直せばよい**——
+### D はどこまで進んだか（2026-09-09）
+
+| 手順 | 状態 |
+|---|---|
+| v2 を組む | **済**（`work/artifacts/jaist_mix_v2_x8`・6.34 GB・43 課題・992,843 コマ・検査 7 項目通過） |
+| **HF へ上げる** | **済**——**`siruku6/jaist_mix_v2`（非公開・新規）**。**既存の `siruku6/jaist_mix`（v1）は触っていない**ので取り違えが起きない。`verify_upload.py` で 41 個・6.34 GB の一致を確認した |
+| **JAIST で起こす** | **待ち**（下のコマンド。**起こすのは人間側**） |
+| 測り直す | D が終わったら E と A を打ち直す |
+
+```bash
+# JAIST 側
+hf download siruku6/jaist_mix_v2 --repo-type dataset --local-dir ~/data/jaist_mix_v2_x8
+RUN=pi05_t3rev_v2 DATASET=~/data/jaist_mix_v2_x8 STEPS=8000 SAVE_FREQ=2000 \
+    bash solution/train/jaist_launch.sh
+```
+
+**D の後は E をそのまま打ち直せばよい。**
 `bash solution/tools/probe/run_divergence.sh <新しい重み>` で、
-**v2 の記録と比べるなら `PAIRS` に `work/probe_rot2/...` を渡す。**
+**v2 の記録と比べるなら `PAIRS` に `work/probe_rot2/...` を渡す**
+（[plan/22 の 5.3](../plan/22_grasp_and_color_next_moves.md#53-v2-で-1-本学習する手-d本命) にコマンドがある）。
 
 ## 3. これが終わったら次に来るもの
 

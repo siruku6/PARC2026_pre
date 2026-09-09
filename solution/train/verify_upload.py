@@ -46,7 +46,9 @@ def main() -> int:
     api = HfApi()
     info = (api.model_info if args.repo_type == "model" else api.dataset_info)(
         args.repo, files_metadata=True)
-    prefix = f"{args.step}/" if args.step else ""
+    # **`.` は `hf upload` の第 3 引数でリポジトリの根を表す。**そのまま繋ぐと
+    # `./` になって 1 つも一致しない（9/9 に踏んだ。上がっているのに NG と出た）。
+    prefix = "" if args.step in ("", ".") else f"{args.step}/"
     remote = {
         s.rfilename[len(prefix):]: (s.size or 0)
         for s in info.siblings if s.rfilename.startswith(prefix)
