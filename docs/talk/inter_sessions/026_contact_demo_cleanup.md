@@ -1,6 +1,6 @@
 # 026 接触が起きているデモを配布データから外し、外す前と比べる
 
-> **状態: 着手（掃除済みデータセットまで出来た。次は学習 2 本）** ／
+> **状態: 着手（掃除済みデータセットまで出来た。次は学習 1 本）** ／
 > 受け側: このセッション ／ 更新: 2026-09-09
 >
 > **9/9 に、ユーザの指示で 019 とは別に立てた。**019 は「再生しても再現しない
@@ -633,7 +633,8 @@ pick up the black bowl on the ramekin …
 
 ### 12.5 次にやること
 
-**[8 節（やること 8）](#8-学習を-2-本回して比べる)の学習に進める。**
+**[8 節（やること 8）](#8-学習を-2-本回して比べる)の学習に進める。
+ただし回すのは 1 本でよい——掃除前の 1 本は 8/14 に済んでいる（13 節）。**
 
 | | 中身 |
 |---|---|
@@ -644,3 +645,55 @@ pick up the black bowl on the ramekin …
 
 **`jaist_launch.sh` は `stats.json.bak` が無いと起動前に止まる。**据え置きは
 打たない方針なので、**その確認を外すか、`--no-freeze-check` のような口を足す。**
+
+---
+
+## 13. 追記（9/9）——**掃除前の 1 本はもう存在する。回すのは 1 本でよい**
+
+**「24,000 歩を 2 本」と書いていたが、片方は 8/14 に回してある。**
+`pi05_full_local`（[reference/19](../../reference/19_weights_catalog.md) の学習の記録）である。
+
+| | `pi05_full_local`（8/14・**掃除前**） | **これから回す 1 本（掃除後）** |
+|---|---|---|
+| 出発点 | `lerobot/pi05_libero_base` rev `a217bfd3` | **同じ** |
+| データ | `lerobot/libero_plus`（**14,347 本すべて**。`episodes: None`） | **`libero_plus_clean`（12,396 本）** |
+| 歩数 | 24,000 | 同じ |
+| batch | 16 | 同じ |
+| 学習率 | **2.5e-5 → 2.5e-6** | 同じ |
+| 動かす範囲 | action expert だけ（693M） | 同じ |
+| カメラ拡張 | **なし**（この旗は 8/26 に足したもので、8/14 の実行には入っていない） | **なし** |
+| 機械 | JAIST H100-20C | 同じ |
+| 所要 | **9 時間 31 分** | 同程度 |
+| 重み | `work/artifacts/model_weights_pi05_024000`・HF `siruku6/pi05_stage1_24000` | — |
+
+**出典は `work/train/pi05_full_local.log` の 1〜2 行目**（`lerobot-train` の
+コマンドがそのまま残っている）。**`--dataset.image_transforms` は付いておらず、
+`episodes` は `None`** である。
+
+### 打つコマンド
+
+```bash
+RUN=pi05_clean24k WEIGHTS=base \
+  DATASET=$PWD/work/artifacts/libero_plus_clean \
+  DATASET_REPO_ID=local/libero_plus_clean \
+  STEPS=24000 LR=2.5e-5 SAVE_FREQ=8000 CAMERA_AUGMENT=0 FREEZE_CHECK=0 \
+  bash solution/train/jaist_launch.sh
+```
+
+**`jaist_launch.sh` に 3 つ足した**（9/9）。
+
+| 渡すもの | 何をするか |
+|---|---|
+| `WEIGHTS=base` | `--init-from` を付けず、`train_pi05.py` の既定（`pi05_libero_base` rev `a217bfd3`）から始める |
+| `CAMERA_AUGMENT=0` | `--camera-viewpoint-augment` を外す。**8/14 の 1 本と揃えるため** |
+| `FREEZE_CHECK=0` | 「正規化が据え置かれているか」の確認を飛ばす。**base から始める学習には据え置く相手が無い**（ユーザ承認・9/9） |
+
+**`SAVE_FREQ=8000` にするのは容量のためである。**1 個 約 9 GB で、空きは 52 GB。
+8,000 なら 3 個＋最終で 36 GB に収まる。
+
+### まだ足りないもの —— **掃除前の側の接触率を測っていない**
+
+**比べるのは接触率だが、`pi05_full_local` ではそれを測っていない。**
+**重みは HF `siruku6/pi05_stage1_24000` にあるので落として測り直す**（約 9 GB）。
+**測り方は両方で揃える**——`object_disp.jsonl` を出す評価を同じ集合で回し、
+`solution/tools/eval/` の集計で衝突率を出す。
