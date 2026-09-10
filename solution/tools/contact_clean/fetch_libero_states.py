@@ -7,7 +7,11 @@
 hdf5 には MuJoCo の状態がまるごと（`states`・79〜のベクトル）記録されていて、
 そこから全物体の姿勢が読める。**再生をやり直す必要が無く、記録そのものを読む。**
 
-**hdf5 は画像込みで 33.8 GB あるが、要るのは `states` と `actions` だけである。**
+**hdf5 は画像込みで 33.8 GB あるが、要るのは画像以外だけである。**
+**`model_file`（デモごとの MuJoCo XML）も写す**——据え置き（fixture）の位置は
+`qpos` に無く XML 側に書かれているので、**`states` を復元しても fixture は復らない。**
+しかも `reset()` はそのたびに fixture を引き直す（実測 最大 18.7 mm）。
+**デモを再生し直すなら、そのデモの XML が要る。**1 課題 50 デモで 50 通りとも違う。
 1 課題ぶんを落とす → 抜き出す → hdf5 を消す、を 40 回まわす。**使うディスクは
 どの時点でも 2.1 GB を超えない。**
 
@@ -18,7 +22,8 @@ hdf5 には MuJoCo の状態がまるごと（`states`・79〜のベクトル）
 Reads:
   - Hugging Face `yifengzhu-hf/LIBERO-datasets` の `<suite>/<task>_demo.hdf5`
 Generates:
-  - <out>/<suite>/<task>_demo.npz … デモごとの `states` と `actions`
+  - <out>/<suite>/<task>_demo.npz … デモごとの `states`・`actions`・`model_file`・
+    `init_state`・手先の観測（`ee_pos`・`ee_ori`・`gripper_states`）
   - <out>/index.json … 課題ごとのデモ数・コマ数・bddl の名前
 """
 from __future__ import annotations
@@ -67,8 +72,10 @@ def _list_task_files(suites: list[str]) -> list[tuple[str, int]]:
 def _extract_one(hdf5_path: Path, npz_path: Path) -> dict:
     """1 課題ぶんの hdf5 から、デモごとの `states` と `actions` を npz へ写す。
 
-    **画像（`obs/agentview_rgb` ほか）は写さない。**接触の判定に要らず、
-    大きさの 99% を占めるためである。
+    **画像（`obs/agentview_rgb`・`obs/eye_in_hand_rgb`）は写さない。**接触の判定にも
+    再生にも要らず、大きさの 99% を占めるためである。**それ以外は写す**——
+    再生し直すときに何が足りなかったかを後から気づいても、33.8 GB を落とし直す
+    ことになるためである。
 
     Parameters
     ----------
@@ -95,10 +102,20 @@ def _extract_one(hdf5_path: Path, npz_path: Path) -> dict:
         arrays: dict[str, np.ndarray] = {}
         total_frames = 0
         for name in demo_names:
-            states = np.asarray(data[name]["states"], dtype=np.float64)
-            actions = np.asarray(data[name]["actions"], dtype=np.float32)
+            demo = data[name]
+            states = np.asarray(demo["states"], dtype=np.float64)
+            actions = np.asarray(demo["actions"], dtype=np.float32)
             arrays[f"{name}/states"] = states
             arrays[f"{name}/actions"] = actions
+            # 再生し直すのに要るもの。**XML は fixture の位置を持っている。**
+            arrays[f"{name}/model_file"] = np.asarray(str(demo.attrs["model_file"]))
+            arrays[f"{name}/init_state"] = np.asarray(demo.attrs["init_state"],
+                                                      dtype=np.float64)
+            # 手先の観測。**参照軌道を組むのに使う**（順運動学を書かずに済む）。
+            for key in ("ee_pos", "ee_ori", "gripper_states"):
+                if key in demo["obs"]:
+                    arrays[f"{name}/{key}"] = np.asarray(demo["obs"][key],
+                                                         dtype=np.float32)
             total_frames += int(actions.shape[0])
         bddl_name: str = str(data.attrs["bddl_file_name"])
         problem = json.loads(data.attrs["problem_info"])
