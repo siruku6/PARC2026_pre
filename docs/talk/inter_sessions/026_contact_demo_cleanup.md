@@ -704,7 +704,7 @@ pick up the black bowl on the ramekin …
 
 ### 打つコマンド —— **夜中に回す**（9/9・ユーザの判断）
 
-**GPU の順番は「[reference/32](../../reference/32_current_tasks.md) の D（Track3 の
+**GPU の順番は「[reference/32](../now.md) の D（Track3 の
 v2 学習・3〜4 時間）が先、こちらは夜中」である。**1 枚を取り合うため。
 
 ```bash
@@ -1168,7 +1168,7 @@ python3 solution/tools/eval/compare_runs_by_task.py \
 
 **`clean24k` は 3 本版で 73.6%・5 本版で 64.8% だが、この 8.8 pt は差ではない。**
 **`/reset` に渡した seed はサーバーが捨てており、乱数は「サーバー内部のリセット何回目か」で
-決まる**（[reference/32](../../reference/32_current_tasks.md) の 9/10 の注記）。
+決まる**（[reference/32](../now.md) の 9/10 の注記）。
 **本数を 3 から 5 に変えると初期状態の列そのものが変わる。**
 **読めるのは同じ本数どうしの対だけである。**だから 2 本を対で回した。
 

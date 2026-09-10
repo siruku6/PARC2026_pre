@@ -42,7 +42,7 @@ Track3 に学習データが 1 件も無いので、**順方向デモを時刻�
 | 2 | **それでも掴めない。**手先が対象へ 59 mm より近づいた回が 1 度も無い | [knowledge/21](../../knowledge/21_track3_stops_short_of_the_object.md) |
 | 3 | **序盤で経路を外れる。**学習データと同じ初期状態から回しても、記録の経路の 1〜4% しか辿れない | [knowledge/21 の 3.5](../../knowledge/21_track3_stops_short_of_the_object.md) |
 | 4 | **学習する範囲（action expert だけ）は原因ではない** | [025 の 1.5 節](025_reverse_data_state_and_next.md) |
-| 5 | **実行歩数を 16 → 50 に上げても直らない**（4 つの数すべてで悪化） | [reference/32](../../reference/32_current_tasks.md) |
+| 5 | **実行歩数を 16 → 50 に上げても直らない**（4 つの数すべてで悪化） | [reference/32](../now.md) |
 | 6 | **`ROT_LIMIT=0.375` は `\|z\|>10` の外れ値を消したが、上限ちょうどの値に積み替えただけだった** | **[reference/33](../../reference/33_gradient_norm_and_action_saturation.md)（2026-09-10 の実測。この依頼の根拠）** |
 
 ---
@@ -325,7 +325,7 @@ PY
 
 | こちらの主張 | 実際 | なぜ間違えたか |
 |---|---|---|
-| **`grdn` が 1.0 でクリップされているので、実効の学習率が 1/3 になっている**（[reference/32](../../reference/32_current_tasks.md) の D-2 の節に 9/10 まで書いてあった） | **ならない。**クリップはノルムをちょうど 1.0 に揃えるので、v2 が受け取る勾配は 1.00 で、切られていない `clean24k`（0.81）より**大きい** | 「クリップ＝縮める」と読み、**揃える操作だと確かめていなかった。**AdamW が勾配の大きさを打ち消すことも見ていなかった |
+| **`grdn` が 1.0 でクリップされているので、実効の学習率が 1/3 になっている**（[reference/32](../now.md) の D-2 の節に 9/10 まで書いてあった） | **ならない。**クリップはノルムをちょうど 1.0 に揃えるので、v2 が受け取る勾配は 1.00 で、切られていない `clean24k`（0.81）より**大きい** | 「クリップ＝縮める」と読み、**揃える操作だと確かめていなかった。**AdamW が勾配の大きさを打ち消すことも見ていなかった |
 | **`ROT_LIMIT=0.375` で外れ値を消せば `grdn` は 1 前後に落ちる**（[025 の 4.4.3 節](025_reverse_data_state_and_next.md)） | **2.5〜7.8 → 1.4 までしか落ちなかった** | 外れ値を「消す」ことと「切る」ことを同じだと思っていた。**切ると値は上限の 1 点に集まる** |
 
 ---
@@ -357,4 +357,4 @@ PY
 | 課題ごとの生成の環境変数 | [reference/30 の 9 節](../../reference/30_reverse_grasp_pose.md)・[reference/31 の 8 節](../../reference/31_reverse_place_without_contact.md) |
 | 混合データセットの組み方・検査 | [reference/29](../../reference/29_training_data_requirements.md)・[025 の 4.4 節](025_reverse_data_state_and_next.md) |
 | 掴めない症状の実測（A〜E） | [knowledge/21](../../knowledge/21_track3_stops_short_of_the_object.md) |
-| いま走っている学習と次の予定 | [reference/32](../../reference/32_current_tasks.md) |
+| いま走っている学習と次の予定 | [reference/32](../now.md) |

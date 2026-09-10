@@ -6,7 +6,7 @@
 
 | 探しているもの | 行き先 |
 |---|---|
-| **いま手を動かしているタスク** | **[reference/32_current_tasks.md](reference/32_current_tasks.md)** ── 着手中のものだけ。候補の全体は [plan/22](plan/22_grasp_and_color_next_moves.md) |
+| **いま手を動かしているタスク** | **[talk/now.md](talk/now.md)** ── 着手中のものだけ。候補の全体は [plan/22](plan/22_grasp_and_color_next_moves.md) |
 | **今なにをやるべきか** | **[talk/open_items.md](talk/open_items.md)** ── アイデアを思いついたらここへ足す |
 | **流した学習・重み・版・出した点** | **[reference/19_weights_catalog.md](reference/19_weights_catalog.md)（実験台帳）** |
 | **次にどこを直して学習するか** | **[reference/11_training_schedule.md](reference/11_training_schedule.md)** |

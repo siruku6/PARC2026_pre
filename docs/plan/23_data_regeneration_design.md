@@ -4,7 +4,7 @@
 >
 > **「接触が起きているデモを外す」（手 F・`pi05_clean24k`）が否定されたあとの次の手を設計する。**
 > **否定された経緯と数字は [reference/19 の 【9/10】](../reference/19_weights_catalog.md)、
-> 手の状態は [reference/32](../reference/32_current_tasks.md) にある。**
+> 手の状態は [reference/32](../talk/now.md) にある。**
 > **`on the ramekin` 1 課題ぶんの作り直しは別に立っている**——この文書はそれを 40 課題へ広げたものである。
 
 - [1. なぜこの文書が要るか](#1-なぜこの文書が要るか)
@@ -371,7 +371,7 @@ SkillMimicGen（arXiv:2410.18907・60 本の人のデモから 24,000 本・前�
 
 | 事実 | 出典 |
 |---|---|
-| 掃除（引き算）が Track2・Track1 のどちらも動かさなかったこと | [reference/19 の 【9/10】](../reference/19_weights_catalog.md)・[reference/32](../reference/32_current_tasks.md) |
+| 掃除（引き算）が Track2・Track1 のどちらも動かさなかったこと | [reference/19 の 【9/10】](../reference/19_weights_catalog.md)・[reference/32](../talk/now.md) |
 | 手先 2 cm 超で成功率 0.833 → 0.535・衝突率 0.139 → 0.319 | [plan/21 の 3 節](21_initiative_priority_second_opinion.md)・[reference/21 の 2 節](../reference/21_weakness_map.md) |
 | 学習データの手先のずれが中央値 1.00 cm・3 cm 超 0.2% | [reference/06](../reference/06_training_data_composition.md) |
 | Base でも 16.7% が衝突・取り戻せる 36 本の中央値 4.44 mm・`cookies_1` が 20 本・18 本中 8 本は 1 mm 未満 | [plan/16 の 3.1・3.2](16_finals_initiative_priority.md) |

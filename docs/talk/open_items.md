@@ -13,10 +13,10 @@
 > **コマンドは表に書かない。**1 行で終わるものは notes の「段取り」に、
 > 複数行になるものは `howto/` に節を作って、そこを指す。
 
-**[reference/32_current_tasks.md](../reference/32_current_tasks.md) との違い**（**9/9 に直した。
+**[now.md](now.md) との違い**（**9/9 に直した。
 それまでここは既に存在しない `NOW.md` を指していた**）**。**
-32 は**いま手を動かしているもの**だけを持つ。**この一覧は、まだ道に乗っていない候補の置き場**である。
-候補を選んだら 32 へ 1 行移し、この一覧の状態を「32 へ移した」にする。
+now.md は**いま手を動かしているもの**だけを持つ。**この一覧は、まだ道に乗っていない候補の置き場**である。
+候補を選んだら now.md へ 1 行移し、この一覧の状態を「now.md へ移した」にする。
 
 **順番の根拠は [../plan/16_finals_initiative_priority.md](../plan/16_finals_initiative_priority.md) と、
 8/31 に別の読みで組み直した [../plan/21_initiative_priority_second_opinion.md](../plan/21_initiative_priority_second_opinion.md) にある。**
