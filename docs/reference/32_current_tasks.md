@@ -127,6 +127,14 @@ rev `a217bfd3` から始めている**ので、揃えるには 3 つ変える必
 
 ### 打つコマンド
 
+> **【9/10】1 度目は 18 歩目で落ちた。**`--shm-size` を渡していなかったので
+> コンテナの `/dev/shm` が 64 MB になり、DataLoader の worker が
+> `unable to allocate shared memory(shm) ... Resource temporarily unavailable` で死んだ。
+> **`jaist_launch.sh` に `--shm-size=8g` を足した**ので、**打ち直せばよい**
+> （落ちたコンテナは消してある。`work/train/pi05_v2_base24k` は作られていない）。
+> **それ以前の 3 本も 64 MB で走っていた**——足りるかどうかが際どく、運で通っていた。
+
+
 ```bash
 cd ~/src/PARC2026_pre
 RUN=pi05_v2_base24k WEIGHTS=base \

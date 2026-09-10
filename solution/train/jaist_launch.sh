@@ -100,7 +100,14 @@ AUG_ARGS=()
 WEIGHT_MOUNT=()
 [ "$WEIGHTS" = base ] || WEIGHT_MOUNT=(-v "$WEIGHTS:/weights:ro")
 
+# **`--shm-size` を渡さないと 64 MB になり、DataLoader の worker が落ちる。**
+# `num_workers=8` が共有メモリ越しにバッチを渡すので 64 MB では足りない
+# （9/10 に `pi05_v2_base24k` が 18 歩目で
+# `unable to allocate shared memory(shm) ... Resource temporarily unavailable` で死んだ）。
+# **それ以前の 3 本も 64 MB で走っていた**——足りるかどうかが際どく、運で通っていた。
+# ホストの `/dev/shm` は 58 GB あるので 8 GB 取っても余る。
 docker run -d --gpus all --name "parc-$RUN" \
+    --shm-size=8g \
     --user "$(id -u):$(id -g)" \
     -v "$REPO/solution/train:/opt/pi05:ro" \
     -v "$DATASET:/data:ro" "${WEIGHT_MOUNT[@]}" \
