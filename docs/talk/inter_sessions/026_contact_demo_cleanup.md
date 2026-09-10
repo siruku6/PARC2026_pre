@@ -821,6 +821,9 @@ hf upload siruku6/pi05_clean24k \
     --repo-type model --private
 ```
 
+**`hf` は `~/.local/bin/hf`（1.30.0）を使う。**リポジトリの `.venv/bin/hf` は
+shebang が別の機械のパス（`/home/ubuntu/lab/...`）を指していて動かない。
+
 ## 14.4 RTX6000 側でやること
 
 **機械は `eng003sasaki01`。**持ち込みは 8/26 に済んでいて、重み・`vendor/`・
