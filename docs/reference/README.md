@@ -20,6 +20,7 @@
 | **逆向きエピソードの掴む姿勢の決め方**（順方向から移せる条件・「立つ軸」の測り方・真上からの握り・順方向デモのふるい・**1 本のデモが何度も掴むときのサイクル分割**） | **[30_reverse_grasp_pose.md](30_reverse_grasp_pose.md)** |
 | **逆向きエピソードの運び方と置き方**（下の皿やトレイを擦らない・空中で放して落とさない・傾けたまま置かない・**打ち切り 300 コマに収める**） | **[31_reverse_place_without_contact.md](31_reverse_place_without_contact.md)** |
 | 学習の条件と、次にどこを直すか | [11_training_schedule.md](11_training_schedule.md) |
+| **学習ログの `grdn` の読み方と、指令が上限ちょうどに積み上がると何が起きるか**（AdamW ではクリップされても更新量は変わらない・v2 の行動指令の分布の実測・複製の倍率と正規化の尺度） | **[33_gradient_norm_and_action_saturation.md](33_gradient_norm_and_action_saturation.md)** |
 | LoRA をどこに当てるか | [12_lora_targets.md](12_lora_targets.md) |
 | 検証用に取り分けたエピソード | [13_holdout_episodes.md](13_holdout_episodes.md) |
 | 学習後に変えてよい設定 | [07_chunk_params.md](07_chunk_params.md) |
