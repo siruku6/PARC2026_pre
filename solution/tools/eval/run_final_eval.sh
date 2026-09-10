@@ -22,6 +22,10 @@
 #   RECORD=1          各タスクの 1 本目を mp4 に残す（成功／失敗が名前に入る）
 #   WEIGHTS           測る重み。既定は 4.2.0 の重み（work/artifacts/pi05_rp3000）
 #   LABEL             出力先の名前に足す語
+#   SERVER_PY         起こす policy_server.py。既定は solution/ のもの。
+#                     **提出物を検証するときは zip から取り出した方を渡す**——
+#                     版としきい値は zip の中身が正であり、solution/ は
+#                     組んだ後に戻していることがある（[howto/02](../../../docs/howto/02_build_submission.md)）。
 #   PARC_*            推論の設定値。空なら policy_server.py の既定が効く
 #   MUJOCO_GL=osmesa  描画のやり方。**JAIST サーバの vGPU は OpenGL に対応しないので
 #                     osmesa（CPU 描画）のままにする。** 会社の RTX6000（Pass-Through の
@@ -30,7 +34,7 @@
 #                     **存在確認にしか使わない**（pipeline は評価イメージの中にある）
 #
 # Reads:
-#   - solution/policy_server.py
+#   - $SERVER_PY（既定 solution/policy_server.py）
 #   - work/artifacts/<重み>/**
 # Generates:
 #   - work/final_eval/<日時>_<トラック>_<LABEL>/results/*.json・server.log
@@ -50,6 +54,7 @@ esac
 TRACK_EPISODES="${TRACK_EPISODES:-2}"
 MAX_STEPS="${MAX_STEPS:-300}"
 WEIGHTS="${WEIGHTS:-$REPOSITORY_ROOT/work/artifacts/pi05_rp3000}"
+SERVER_PY="${SERVER_PY:-$REPOSITORY_ROOT/solution/policy_server.py}"
 KIT_IMAGE="${KIT_IMAGE:-parc2026-final}"
 POLICY_IMAGE="${POLICY_IMAGE:-parc2026-train-pi05}"
 MUJOCO_GL="${MUJOCO_GL:-osmesa}"
@@ -148,7 +153,7 @@ done
 
 echo "-- 方策サーバーを起動する（重みの読み込みに 1〜2 分）"
 docker run -d --name "$POLICY_HOST" --gpus all --network "$NETWORK" \
-    -v "$REPOSITORY_ROOT/solution/policy_server.py:/app/policy_server.py:ro" \
+    -v "$SERVER_PY:/app/policy_server.py:ro" \
     -v "$REPOSITORY_ROOT/solution/geometry_graft.py:/app/geometry_graft.py:ro" \
     -v "$REPOSITORY_ROOT/work/artifacts/vendor/vggt:/app/vendor/vggt:ro" \
     -v "$WEIGHTS:/app/model_weights:ro" \

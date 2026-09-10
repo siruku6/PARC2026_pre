@@ -230,6 +230,30 @@ docker stop -t 60 parc-pi05_v2_base24k                    # 止める
 **v2 の記録と比べるなら `PAIRS` に `work/probe_rot2/...` を渡す**
 （[plan/22 の 5.3](../plan/22_grasp_and_color_next_moves.md#53-v2-で-1-本学習する手-d本命) にコマンドがある）。
 
+### 提出（2026-09-11）—— **版 14.0.0 を Track3 のみへ**
+
+| 決めたこと | 値 | 根拠 |
+|---|---|---|
+| 版 | **`14.0.0`**（メジャーは重みを指す。13.0.0 の次） | [19](19_weights_catalog.md) の「版番号だけから引きたいとき」 |
+| 重み | `pi05_v2_base24k` の `024000` | sha256 `734bac4b…` で JAIST 側と一致 |
+| **`_MIN_LEXICAL`** | **0.65 → 0.99**（**寄せる経路を閉じた**） | **Track3 の two mugs の 1 文が 0.50〜0.60 で「皿から下ろす」→「皿に載せる」へ寄る。**0.65 でも 4 文は無事だが、**未知の言い換えに対して閉じる方を採った**（ユーザの判断） |
+| 出すトラック | **Track3 のみ**（課題 ID 1009） | Track1/2 は [knowledge/22](../knowledge/22_reverse_data_interferes_with_same_objects.md) の −24 ポイントを払わない |
+| zip | 542 エントリ・9,378 MB・sha256 `05518404…` | `vendor/vggt` は入っていない（幾何の接ぎ木を含まない重みなので 41 個ぶん少ない） |
+
+**リポジトリの既定は `4.6.0` / `0.65` に戻してある。**14.0.0 の設定は zip と記録だけに残す
+——`0.99` を既定にすると Track1/2 で正規化が効かなくなり、版 3.5.0 で得た分を失う。
+
+**提出前の関門が 2 つある。**
+
+```bash
+python3 solution/tools/suite/check_track3_instructions.py        # 指示文が反転しないか
+SERVER_PY=<zip から出した policy_server.py>   MUJOCO_GL=egl TRACK_EPISODES=4 WEIGHTS=$PWD/work/artifacts/pi05_v2_base24k   LABEL=zip14 bash solution/tools/eval/run_final_eval.sh track3   # zip の中身で回す
+```
+
+**`SERVER_PY` は 9/11 に足した口である**——`run_final_eval.sh` は
+`solution/policy_server.py` を直に mount していたので、**組んだ後に戻したリポジトリの
+コードを測ってしまい、提出物そのものを検証できなかった。**
+
 ## 3. これが終わったら次に来るもの
 
 **D の結果で行き先が変わる。**
