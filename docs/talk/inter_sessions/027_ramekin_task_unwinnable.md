@@ -135,3 +135,23 @@ Panda）に言葉で指示して机の上の物を操作させる方策を作り
 | 掃除の本体と、判定のしかた | [026](026_contact_demo_cleanup.md) |
 | 採点の衝突判定 | `pipeline/rollout.py`（`threshold_m` 0.001・3 軸の絶対値の和） |
 | 手元の評価集合の作り方 | [reference/13](../../reference/13_holdout_episodes.md)・[howto/04](../../howto/04_proxy_eval.md) |
+
+---
+
+## 追記（2026-09-10）——**この課題は本番の Track2 8 行に入っている**
+
+**掃除で学習データを 0 本にしたので、ここは落ちる見込みである。**
+
+| どこ | 行 |
+|---|---|
+| **キットの `compe/t2/T2_TASKS.csv`** | **7 行目**（`pick_up_the_black_bowl_on_the_ramekin_and_place_it_on_the_plate_view_0_0_100_0_0_initstate_136`） |
+| `compe/val/TRACK1_VAL29.csv` | 8 行目（`_light_29`） |
+
+**`pi05_clean24k` を出すなら、この 1 行ぶんは捨てる覚悟が要る。**
+**もともと接触の規則のもとでは成功しようがない課題**なので（上の 2 節）、
+**失うのは「衝突で失格になる回」であって「成功していた回」ではない**——
+とはいえ**学習データが無ければ、ゴールにすら着かなくなる。**
+そのぶん `object_disp.jsonl` の変位は増えうる。
+
+**測るときは Track1 の合計を 2 通り出す**（29 行と、この行を除いた 28 行）。
+[026 の 14.6](026_contact_demo_cleanup.md) に書いた。
