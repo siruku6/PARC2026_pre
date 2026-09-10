@@ -19,12 +19,13 @@ case "$W" in /*) ;; *) W="$REPO/$W" ;; esac
 case "$OUT" in /*) ;; *) OUT="$REPO/$OUT" ;; esac
 mkdir -p "$OUT"
 
-# **既定は v1 の 3 課題**。`proto20` はこのデータで学習しているので、
-# 「学習データそのものと同じ初期状態」を並べるにはこちらを使う。
-# v2 を見るなら PAIRS で `work/probe_rot2/...` を渡す。
-: "${PAIRS:=take_the_yellow_book_off_the_shelf_and_put_it_on_the_table=work/probe_017/reverse_npz
-take_the_alphabet_soup_out_of_the_tray_and_place_it_on_the_table=work/probe_017/reverse_npz_soup
-take_the_red_mug_off_the_left_plate_and_put_it_on_the_table=work/probe_017_mug/reverse_npz_mug}"
+# **既定は v2 の 3 課題**（`work/probe_rot2/*`）。
+# **v1（`work/probe_017*`）は 9/11 に消した**——v1 で学習した重みはもう測らないと決めた
+# （[knowledge/22](../../../docs/knowledge/22_reverse_data_interferes_with_same_objects.md)）。
+# **v1 を並べ直すなら生成からやり直しになる。**
+: "${PAIRS:=take_the_yellow_book_off_the_shelf_and_put_it_on_the_table=work/probe_rot2/book/reverse_npz_book
+take_the_alphabet_soup_out_of_the_tray_and_place_it_on_the_table=work/probe_rot2/soup/reverse_npz_soup
+take_the_red_mug_off_the_left_plate_and_put_it_on_the_table=work/probe_rot2/mug/reverse_npz_mug}"
 
 if [ ! -d "$W/vlm" ]; then
     echo "$W に vlm/ が無い。方策サーバーは 5 秒で落ちる" >&2

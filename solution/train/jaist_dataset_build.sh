@@ -30,7 +30,8 @@ cd "$REPO" || exit 1
 COPIES="${COPIES:-7}"
 PER_TASK="${PER_TASK:-75}"
 SRC="${SRC:-work/artifacts/libero_plus}"
-REV_DIR="${REV_DIR:-work/probe_017/reverse_lerobot_all}"
+# **v1（`work/probe_017/reverse_lerobot_all`）は 9/11 に消した。**既定は v2 である。
+REV_DIR="${REV_DIR:-work/artifacts/reverse_lerobot_v2}"
 NORM="${NORM:-work/artifacts/pi05_rp3000/policy_preprocessor_step_2_normalizer_processor.safetensors}"
 SUB="${SUB:-libero_plus_sub$PER_TASK}"
 # **中間物の名前は逆向きデータごとに分ける。**混ぜる元が違うのに同じ `rev_x2` を
