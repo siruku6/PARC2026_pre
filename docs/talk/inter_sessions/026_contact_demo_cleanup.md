@@ -933,6 +933,40 @@ MUJOCO_GL=egl TASKS_CSV=compe/val/TRACK1_VAL29.csv TRACK_EPISODES=3 \
 **`push the plate to the front of the stove`（120 本まで痩せた課題）は
 `TRACK1_VAL29.csv` の 19 行目に居る。**こちらも 1 行ずつ見る。
 
+## 14.7 **掃除が効いたタスクは、測る集合に入っている**（9/10 の問い）
+
+**`TRACK2_VAL72.csv` の元タスク 12 件のうち、掃除で何かが外れたのは 5 件である。**
+下は物差し (a)（基準コマ 10・境目 1 mm）で数えた、指示文ごとの外れ方である。
+
+| 元タスク（`TRACK2_VAL72` の 12 件） | 外れた組 | 学習データの本数 |
+|---|---|---|
+| **`pick_up_the_black_bowl_on_the_cookie_box_...`** | **38 / 44（86%）** | **385 → 150**（残り 50 本を 3 倍） |
+| **`pick_up_the_black_bowl_next_to_the_cookie_box_...`** | **28 / 47（60%）** | **445 → 175**（3 倍はしていない） |
+| `put_the_bowl_on_the_plate` | 9 / 49（18%） | 480 → 400 |
+| `STUDY_SCENE1_pick_up_the_book_...` | 2 / 36（6%） | 255 → 235 |
+| `pick_up_the_tomato_sauce_...` | 2 / 42（5%） | 350 → 340 |
+| `turn_on_the_stove` | 0 / 50 | 変わらない |
+| `pick_up_the_black_bowl_between_the_plate_and_the_ramekin_...` | 0 / 43 | 変わらない |
+| `put_the_cream_cheese_in_the_bowl` | 0 / 40 | 変わらない |
+| `open_the_middle_drawer_of_the_cabinet` | 0 / 43 | 変わらない |
+| `pick_up_the_milk_...` | 0 / 44 | 変わらない |
+| `pick_up_the_alphabet_soup_...` | 0 / 44 | 変わらない |
+| `pick_up_the_chocolate_pudding_...` | 0 / 50 | 変わらない |
+
+**そして重いほうの 2 件は、8/28 に衝突で落ちていた当の 2 件である。**
+[plan/16 の 3.2](../../plan/16_finals_initiative_priority.md) が、
+**衝突 49 本のうち 22 本がクッキー箱の 2 タスク**、
+**取り戻せる 36 本のうち 20 本が `cookies_1`** と出している。
+**掃除がいちばん強く当たった所と、点を落としていた所が重なっている。**
+
+**ただし効きは 72 行のうち 12 行に集まっている。**クッキー箱の 2 タスク × 6 条件で、
+**216 本のうち 36 本**である。**残り 7 件（42 行）は学習データが 1 本も変わっていない**
+——そこは良くなりようがなく、動けば雑音か副作用である。
+**だから合計だけを見ないこと。**`compare_runs_by_task.py` でタスクごとに並べる。
+
+**外れた 5 件のうち下の 3 件（`put_the_bowl_on_the_plate`・本・トマトソース）は
+外れた組が 2 桁に届かない**ので、ここも雑音と区別できない。
+
 ## 14.7 出そろったら見るもの
 
 ```bash
