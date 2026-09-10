@@ -767,3 +767,124 @@ docker stop -t 60 parc-pi05_clean24k                   # 止める
 **重みは HF `siruku6/pi05_stage1_24000` にあるので落として測り直す**（約 9 GB）。
 **測り方は両方で揃える**——`object_disp.jsonl` を出す評価を同じ集合で回し、
 `solution/tools/eval/` の集計で衝突率を出す。
+
+---
+
+# 14. 追記（9/10）——学習が終わった。**RTX6000 で測るための下ごしらえ**
+
+## 14.1 出来た重み
+
+**24,000 歩を 9 時間 14 分で走り切った**（終了コード 0）。
+
+| | |
+|---|---|
+| 置き場所 | `work/train/pi05_clean24k/checkpoints/{008000,016000,024000}` |
+| 大きさ | 1 個 8.8 GB（`pretrained_model` だけ。全部で 33 GB） |
+| 最後の loss | **0.225**（`grdn` 0.887） |
+| ログ | `work/train/pi05_clean24k.log` |
+
+**`train_config.json` を読んで、対照（`pi05_full_local`）と揃っていることを確かめた。**
+
+| | 値 | 対照と |
+|---|---|---|
+| 出発点 | `lerobot/pi05_libero_base` rev `a217bfd3` | 同じ |
+| 歩数・batch・`seed` | 24,000・16・42 | 同じ |
+| 学習率 | 2.5e-5 | 同じ |
+| `n_action_steps`・`empty_cameras` | 10・1 | 同じ |
+| `image_transforms.enable` | `false`（カメラ拡張なし） | 同じ |
+| データ | **`local/libero_plus_clean`（12,396 本）** | **ここだけが違う**（14,347 本） |
+
+## 14.2 対照は HF にあり、**`vlm/` まで入っている**
+
+**`siruku6/pi05_stage1_24000`（公開・9.37 GB・14 個）**である。
+`model.safetensors` と正規化の 4 ファイルに加えて `vlm/` の 4 ファイルが入っているので、
+**落としてそのまま `WEIGHTS` に渡せる。**
+
+## 14.3 JAIST 側でやること
+
+**1. `vlm/` を隣に置く —— 済（9/10）。**
+学習が出したチェックポイントには入っておらず、**無いと評価が 5 秒で落ちる**
+（[howto/03](../../howto/03_gpu_eval.md) の RTX6000 の表）。`pi05_rp3000` から
+**symlink ではなく copy** した。
+
+```bash
+cp -r work/artifacts/pi05_rp3000/vlm \
+      work/train/pi05_clean24k/checkpoints/024000/pretrained_model/vlm
+```
+
+**2. HF へ上げる —— 未（ユーザの判断待ち）。**
+RTX6000 へ渡す道はこれしかない（`pi05_t3rev_v2` も同じ道を通した）。
+
+```bash
+hf upload siruku6/pi05_clean24k \
+    work/train/pi05_clean24k/checkpoints/024000/pretrained_model . \
+    --repo-type model --private
+```
+
+## 14.4 RTX6000 側でやること
+
+**機械は `eng003sasaki01`。**持ち込みは 8/26 に済んでいて、重み・`vendor/`・
+方策イメージが揃っている（[howto/03](../../howto/03_gpu_eval.md)）。
+
+| # | やること | 確かめ方 |
+|---|---|---|
+| 1 | `PARC2026_pre` を `git pull` する | **採点器の差し替えが古いと指標が 14 個しか出ない** |
+| 2 | 隣に `b_PARC2026_final` があるか見る | 無ければ `KIT_ROOT=<実際の場所>` を渡す。**無いと `set -e` でいきなり終わる** |
+| 3 | イメージ 2 つを確かめる | `docker image inspect parc2026-final parc2026-train-pi05`。サーバ版は初回に自動で派生する |
+| 4 | `id -nG` に `docker` があるか見る | 無ければセッションが古い（[knowledge/16](../../knowledge/16_docker_group_needs_session_restart.md)） |
+| 5 | 重みを 2 つ落とす | 下のコマンド。**合計 18.2 GB** |
+
+```bash
+cd ~/src/PARC2026_pre
+hf download siruku6/pi05_clean24k     --local-dir work/artifacts/pi05_clean24k
+hf download siruku6/pi05_stage1_24000 --local-dir work/artifacts/pi05_full_local
+ls work/artifacts/pi05_clean24k/vlm work/artifacts/pi05_full_local/vlm   # 4 個ずつ
+```
+
+## 14.5 測り方 —— **2 本を同じ集合で回す**
+
+**見るのは接触率である**（026 の「やること 8」）。**`TRACK2_VAL72.csv` で測る**——
+12 課題 × 6 条件の 72 行で、[plan/16 の 3 節](../../plan/16_finals_initiative_priority.md)
+が 8/28 に `pi05_rp3000` を同じ形で回している（216 本・64 分・合計点 0.6523・衝突率 0.2269）。
+**だから 3 本目の比較相手が無料で付いてくる。**
+
+```bash
+cd ~/src/PARC2026_pre
+
+# 掃除後（これから測る）
+MUJOCO_GL=egl TASKS_CSV=compe/val/TRACK2_VAL72.csv TRACK_EPISODES=3 \
+  WEIGHTS=$PWD/work/artifacts/pi05_clean24k LABEL=clean24k \
+  bash solution/tools/eval/run_final_eval.sh track2
+
+# 掃除前（対照。まだ 1 度も測っていない）
+MUJOCO_GL=egl TASKS_CSV=compe/val/TRACK2_VAL72.csv TRACK_EPISODES=3 \
+  WEIGHTS=$PWD/work/artifacts/pi05_full_local LABEL=full_local \
+  bash solution/tools/eval/run_final_eval.sh track2
+```
+
+**推論の設定は何も渡さない。**`policy_server.py` の既定が `PARC_N_ACTION_STEPS=16`・
+`PARC_EMA_ALPHA=0.3` で、8/28 の回と同じである（[policy_server.py:687](../../../solution/policy_server.py#L687)・
+[:785](../../../solution/policy_server.py#L785)）。**渡すと逆にずれる。**
+
+**同時に流さないこと。**方策サーバが 2 つ立って GPU を取り合う。
+
+| | |
+|---|---|
+| 1 本あたり | **216 ロールアウト・約 64 分**（8/28 の実測） |
+| 2 本で | **約 2 時間 10 分** |
+| 出る場所 | `work/final_eval/<日時>_track2_<LABEL>/results/` |
+
+## 14.6 出そろったら見るもの
+
+```bash
+python3 solution/tools/eval/summarize_object_disp.py work/final_eval/<...>_clean24k
+python3 solution/tools/eval/compare_object_disp.py \
+    work/final_eval/<...>_full_local work/final_eval/<...>_clean24k
+python3 solution/tools/eval/compare_runs_by_task.py \
+    work/final_eval/<...>_full_local work/final_eval/<...>_clean24k
+```
+
+**いちばん見たいのは `cookies_1` である。**8/28 に「取り戻せる 36 本のうち 20 本が
+`cookies_1`」と出ており（[plan/16 の 3.2](../../plan/16_finals_initiative_priority.md)）、
+**掃除で `on the cookie box` の 44 組すべてを外したのはまさにこの物体である**（026 の 5.1）。
+**ここが動かなければ、掃除は接触率に効いていない。**
