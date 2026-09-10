@@ -57,7 +57,7 @@
 | # | 次にやること | 何が決まるか | 費用 |
 |---|---|---|---|
 | ~~**D-1**~~ | **終わった**（2026-09-10・`pi05_t3rev_v2/010000`・10,000 歩・3 時間 51 分） | **回転は直った**（指令 p95 0.25 → **0.39**・封筒 0.375）**が掴めない。****掴んで持ち上げた回は 0/20**（`lift>30` の 2 本は薙ぎ倒し）。記録が掴んだ姿勢まで 中央 160.4 → **145.4 mm**・30 mm 以内 **0/12**（[knowledge/21 の 3.6](../knowledge/21_track3_stops_short_of_the_object.md#36-v2-で学習しても掴めない--そして620-cm-手前は物差しが間違っていた910-に足した)） | 済 |
-| **D-2** | **同じ v2 を、`pi05_full_local` と同じ学習率・歩数で回す**（**2.5e-5・24,000 歩**） | **低い学習率で伝わっていなかっただけなのか** | 学習 9〜10 時間 |
+| **D-2** | **v2 を、24,000 歩の 2 本と同じ土俵で回す**（`pi05_libero_base` から・2.5e-5・24,000 歩・カメラ拡張なし）。**run 名は `pi05_v2_base24k`** | **v2 のデータは、`clean24k`／`full_local` と並べたときどこに来るか。**（**「低い学習率で伝わっていなかっただけか」には、この 1 本では答えられない**——下の表） | 学習 9〜10 時間 |
 | ~~C~~ | **終わった**（2026-09-10。上の表） | **原因ではない**（[plan/22 の 3.3](../plan/22_grasp_and_color_next_moves.md#33-実行歩数を-10-から-50-へ上げて-1-本回す)） | 済 |
 | **F** | **学習は終わった**（9/10・24,000 歩・9 時間 14 分・loss 0.225・HF `siruku6/pi05_clean24k`）。**残るは RTX6000 での評価** | **Track2 の衝突を学習データ側で減らせるか**（`F60`・[026](../talk/inter_sessions/026_contact_demo_cleanup.md) の 14 節）。**A〜E とは別の筋**で、こちらは Track1・Track2 に効く | **RTX6000 で約 4 時間**（Track2 216 本 ＋ Track1 87 本 を 2 本の重みで） |
 
@@ -96,17 +96,80 @@ JAIST とは取り合わない**（[026 の 14 節](../talk/inter_sessions/026_c
 | **JAIST で起こす** | **済**（9/9・**10,000 歩**・3 時間 52 分）。**重みは手元に無く HF `siruku6/pi05_t3rev_v2` だけにある**（`checkpoints/{002000,004000,006000,008000,010000}`・57.75 GB・非公開）。**測るには先に落とす**——`hf download siruku6/pi05_t3rev_v2 --include 'checkpoints/010000/pretrained_model/*' --local-dir work/artifacts/pi05_t3rev_v2` |
 | 測り直す | D が終わったら E と A を打ち直す |
 
+### D-2 は **`pi05_libero_base` から始める**（9/10・ユーザの指示で変えた）
+
+**元の書き方では `work/artifacts/pi05_rp3000` から続いていた**——`jaist_launch.sh` の
+`WEIGHTS` の既定がそれで、D-1 もそこから続けている。**24,000 歩の 2 本
+（`pi05_full_local`・`pi05_clean24k`）はどちらも `lerobot/pi05_libero_base`
+rev `a217bfd3` から始めている**ので、揃えるには 3 つ変える必要がある。
+
+| 変えるもの | 元（D-1 と同じ） | **これから（24,000 歩の 2 本と同じ）** |
+|---|---|---|
+| 出発点 | `work/artifacts/pi05_rp3000` | **`lerobot/pi05_libero_base` rev `a217bfd3`** |
+| カメラ拡張 | あり | **なし** |
+| 正規化の統計 | **`rp3000` の normalizer へ据え置き** | **v2 自身の統計** |
+
+**正規化を戻す理由。**据え置きが要るのは**統計を持っている重みから続けるとき**だけで、
+`pi05_libero_base` は持っていないから**最初の学習が尺度を決める**
+（[29 の 6 節](29_training_data_requirements.md)）。**据え置いたままだと、v2 の分布と
+合わない尺度で学ぶことになる**——`action` の std で最大 2.1 倍、平均はもっと開いている。
+
+**元のデータセットは触っていない。**ハードリンクで写しを作り、そちらの
+`stats.json` だけを v2 自身の統計に戻した。**ディスクは増えていない。**
+
+| 置き場所 | `meta/stats.json` | 誰が使うか |
+|---|---|---|
+| `~/data/jaist_mix_v2_x8` | `rp3000` へ据え置き（`.bak` に原本） | **D-1 の再現** |
+| **`~/data/jaist_mix_v2_x8_base`** | **v2 自身**（`.original` に控え） | **D-2** |
+
+> **写しには `stats.json.bak` を置いていない。**`FREEZE_CHECK=1` のまま起こすと
+> 止まるので、**据え置いていないことに気づかず走らせる事故が起きない。**
+
+### 打つコマンド
+
 ```bash
-# JAIST 側。落とすのは 1 度だけ
-hf download siruku6/jaist_mix_v2 --repo-type dataset --local-dir ~/data/jaist_mix_v2_x8
+cd ~/src/PARC2026_pre
+RUN=pi05_v2_base24k WEIGHTS=base \
+  DATASET=$HOME/data/jaist_mix_v2_x8_base \
+  DATASET_REPO_ID=local/jaist_mix_v2_base \
+  STEPS=24000 LR=2.5e-5 SAVE_FREQ=8000 CAMERA_AUGMENT=0 FREEZE_CHECK=0 \
+  setsid nohup bash solution/train/jaist_launch.sh \
+  < /dev/null > ~/launch_pi05_v2_base24k.log 2>&1 &
+disown
+```
 
-# D-1 t3rev と 1 変数（5e-6・8,000 歩）。3〜4 時間
-RUN=pi05_t3rev_v2 DATASET=~/data/jaist_mix_v2_x8 STEPS=8000 SAVE_FREQ=2000 \
-    nohup bash solution/train/jaist_launch.sh > ~/launch_pi05_t3rev_v2.log 2>&1 &
+**名前を `pi05_t3rev_v2_hi` から `pi05_v2_base24k` に変えた**（9/10・ユーザの指示）。
+`_hi` は「学習率が高い」の意味で、`pi05_t3rev_v2` の続きに見えてしまう。
+**いまは `pi05_clean24k` と同じ土俵の 1 本なので、そちらに揃えた名前にしてある。**
 
-# D-2 pi05_full_local と同じ学習率・歩数（2.5e-5・24,000 歩）。9〜10 時間
-RUN=pi05_t3rev_v2_hi DATASET=~/data/jaist_mix_v2_x8 STEPS=24000 SAVE_FREQ=6000 LR=2.5e-5 \
-    nohup bash solution/train/jaist_launch.sh > ~/launch_pi05_t3rev_v2_hi.log 2>&1 &
+### **これで何と 1 変数になるかが変わった**
+
+| 相手 | 違うところ |
+|---|---|
+| **`pi05_clean24k`（F）** | **データだけ**（v2 6,176 本 対 掃除後 12,396 本） |
+| **`pi05_full_local`（8/14）** | **データだけ**（v2 対 掃除前 14,347 本） |
+| ~~`pi05_t3rev_v2`（D-1）~~ | **出発点・学習率・歩数・カメラ拡張・正規化の 5 つ。もう 1 変数ではない** |
+
+**だから「低い学習率で伝わっていなかっただけなのか」には、この 1 本では答えられない。**
+**代わりに答えられるのは「v2 のデータを 24,000 歩の土俵に載せるとどうなるか」で、
+`pi05_clean24k` と横に並べられる。**
+
+**前提の確認（9/10）。**
+
+| 見るもの | 値 |
+|---|---|
+| `~/data/jaist_mix_v2_x8_base` | **在る**（6,176 本・992,843 コマ・43 課題。ハードリンク） |
+| `meta/stats.json` | **v2 自身の統計に戻してある**（元の `.bak` と一致を確認） |
+| `work/train/pi05_v2_base24k` | **無い** |
+| GPU | **0 MiB / 20480 MiB** |
+| `work/train` の空き | **81 GB**（`SAVE_FREQ=8000` で 3 個 × 11 GB ＝ 33 GB） |
+
+**切ったあとの見かた。**
+
+```bash
+tail -f work/train/pi05_v2_base24k.log | tr '\r' '\n'   # 進み具合
+cat ~/launch_pi05_v2_base24k.log                          # 起動時の確認
+docker stop -t 60 parc-pi05_v2_base24k                    # 止める
 ```
 
 **`nohup … &` を付ける理由。**学習そのものは `docker run -d` なので **ssh を切っても走り続ける**が、
