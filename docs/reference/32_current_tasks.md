@@ -97,16 +97,40 @@ JAIST とは取り合わない**（[026 の 14 節](../talk/inter_sessions/026_c
 | 測り直す | D が終わったら E と A を打ち直す |
 
 ```bash
-# JAIST 側。落とすのは 1 度だけ
-hf download siruku6/jaist_mix_v2 --repo-type dataset --local-dir ~/data/jaist_mix_v2_x8
+# D-2 学習率と歩数だけを上げる（2.5e-5・24,000 歩）。9 時間 15 分の見込み
+cd ~/src/PARC2026_pre
+RUN=pi05_t3rev_v2_hi DATASET=$HOME/data/jaist_mix_v2_x8 \
+  STEPS=24000 SAVE_FREQ=6000 LR=2.5e-5 \
+  setsid nohup bash solution/train/jaist_launch.sh \
+  < /dev/null > ~/launch_pi05_t3rev_v2_hi.log 2>&1 &
+disown
+```
 
-# D-1 t3rev と 1 変数（5e-6・8,000 歩）。3〜4 時間
-RUN=pi05_t3rev_v2 DATASET=~/data/jaist_mix_v2_x8 STEPS=8000 SAVE_FREQ=2000 \
-    nohup bash solution/train/jaist_launch.sh > ~/launch_pi05_t3rev_v2.log 2>&1 &
+**渡さないものが 3 つある。**`WEIGHTS`（既定の `work/artifacts/pi05_rp3000` から続ける。
+D-1 と同じ）・`CAMERA_AUGMENT`（既定の 1。**D-1 も入れて回している**）・
+`FREEZE_CHECK`（既定の 1。`meta/stats.json.bak` があるので通る）。
+**D-1 と 1 変数で比べるためなので、この 3 つを触ってはいけない。**
 
-# D-2 pi05_full_local と同じ学習率・歩数（2.5e-5・24,000 歩）。9〜10 時間
-RUN=pi05_t3rev_v2_hi DATASET=~/data/jaist_mix_v2_x8 STEPS=24000 SAVE_FREQ=6000 LR=2.5e-5 \
-    nohup bash solution/train/jaist_launch.sh > ~/launch_pi05_t3rev_v2_hi.log 2>&1 &
+**起こす前に確かめること（9/10 に確認済み）。**
+
+| 見るもの | 9/10 の値 |
+|---|---|
+| `~/data/jaist_mix_v2_x8` | **在る**（6.0 GB・6,176 本・992,843 コマ・43 課題） |
+| `meta/stats.json.bak` | **在る**（`FREEZE_CHECK` が通る） |
+| `work/train/pi05_t3rev_v2_hi` | **無い**（在ると起こす前に止まる） |
+| GPU | **0 MiB / 20480 MiB** |
+| `work/train` の空き | **81 GB**（4 個 × 11 GB ＝ 44 GB 使う。残り 37 GB） |
+
+> **狭くなるなら `pi05_clean24k` の途中を消せる。**`008000` と `016000` は
+> **HF に上げていない**ので消すと戻せないが、**`024000` は
+> `siruku6/pi05_clean24k` に上げてあるので消しても取り戻せる**（22 GB 空く）。
+
+**切ったあとの見かた。**
+
+```bash
+tail -f work/train/pi05_t3rev_v2_hi.log | tr '\r' '\n'   # 進み具合
+cat ~/launch_pi05_t3rev_v2_hi.log                          # 起動時の確認
+docker stop -t 60 parc-pi05_t3rev_v2_hi                    # 止める
 ```
 
 **`nohup … &` を付ける理由。**学習そのものは `docker run -d` なので **ssh を切っても走り続ける**が、
