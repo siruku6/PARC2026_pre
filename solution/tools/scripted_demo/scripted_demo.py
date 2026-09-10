@@ -306,6 +306,10 @@ class EpisodeRecord:
     disturb_steps: int = 0
     disturb_direction: np.ndarray = field(default_factory=lambda: np.zeros(3))
     ee_positions: list[np.ndarray] = field(default_factory=list)
+    # **その歩までの「対象外の物体のずれの最大」**（m）。毎歩ぶん残す。
+    # `max_displacement` は最後の 1 つしか持たないので、動画に焼いたり
+    # 「どの歩で 1 mm を超えたか」を見るのに足りない。
+    displacements: list[float] = field(default_factory=list)
     # 画像はステップ数ぶんに切った「眺め」で、複製ではない（`attach_images`）。
     front: np.ndarray | None = None
     wrist: np.ndarray | None = None
@@ -689,6 +693,7 @@ class _Rollout:
             moved = float(np.abs(current - self._watched_origin).sum(axis=1).max())
             self.record.max_displacement = max(self.record.max_displacement,
                                                moved)
+        self.record.displacements.append(self.record.max_displacement)
         return self.record.steps < self.max_steps
 
     def attach_images(self) -> None:
