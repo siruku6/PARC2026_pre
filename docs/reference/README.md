@@ -23,6 +23,7 @@
 | LoRA をどこに当てるか | [12_lora_targets.md](12_lora_targets.md) |
 | 検証用に取り分けたエピソード | [13_holdout_episodes.md](13_holdout_episodes.md) |
 | 学習後に変えてよい設定 | [07_chunk_params.md](07_chunk_params.md) |
+| **迷った場面だけ引き直しを早める仕掛け**（ばらつきの測り方・しきい値を測らずに決める・秒数の見積もり・**待ち行列の `maxlen` の罠**） | **[32_adaptive_replanning.md](32_adaptive_replanning.md)** |
 | 観測がどう渡るか | [10_observation_interface.md](10_observation_interface.md) |
 | 摂動のカテゴリ（3 本の分担は [20](20_track2_perturbation_categories.md) の冒頭） | [05](05_perturbation_categories.md)・[20](20_track2_perturbation_categories.md)・[21](21_weakness_map.md) |
 | 見た目の振れ幅 | [08_appearance_spread.md](08_appearance_spread.md) |

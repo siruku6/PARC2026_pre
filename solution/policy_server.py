@@ -173,7 +173,7 @@
 #          50 ステップで選ぶと**捨てる区間が選択を奪う**（作った例で再現した）。
 #          版 3.4.0 で samples=3 に差が出なかったのは、**n=2 のとき距離の 96% が
 #          実行しない行動から来ていた**ためという疑いが濃い。
-__version__ = "4.6.0"
+__version__ = "14.0.0"
 
 import argparse
 import math
@@ -843,8 +843,56 @@ class MyPolicy(BasePolicy):
         # **外れを 16 ステップぶん引きずるのは n が大きいときだけ**で、そこは未測定。
         # π0.5 は n=16 なので、軸を開け直して測る。
         self._samples = int(os.environ.get("PARC_SAMPLES", "1"))
+
+        # ------------------------------------------------------------------
+        # adaptive replanning（版 14.0.0）。**既定は切ってある。**
+        #
+        # **何をするか。** `samples` 本引いたときの「互いの離れ具合」は、その場面で
+        # モデルがどれだけ迷っているかの目安になる。**迷っている場面だけ、引き直す
+        # までの歩数を縮める**（16 → 8）。迷っていない場面は 16 のままで、
+        # 推論の回数を無駄に増やさない。
+        #
+        # **離れ具合は既に計算している。** medoid は `torch.cdist` で総当たりの
+        # 距離を出して、その合計が最小の 1 本を選んでいる（`_install_chunk_sampler`）。
+        # **同じ行列の平均を取れば、それが散らばりである。**推論は 1 回も増えない。
+        #
+        # **しきい値は測らずに、そのエピソードの中で目盛りを作る。**
+        # 記事が報告している 0.669 / 1.570 は**別のモデルの、別の行動の単位**で
+        # 決めた値なので持ち込めない。代わりに
+        # **「このエピソードでこれまでに見た散らばりの中央値より大きいか」**で判定する。
+        # こうするとモデルの出力の単位が何であっても自動的に合う。
+        #
+        # **`PARC_ADAPTIVE_MIN_SAMPLES` 回ぶん溜まるまでは切り替えない。**
+        # 目盛りが 1〜2 点で決まってしまうのを避けるためである。
+        #
+        # **秒数の見立て**（採点ログ 14 本から出した `/act` 1 回 0.083 秒 ＋
+        # 引き直し 1 回 0.447 秒）。Track3 は `/act` 2,400 なので、
+        # 全部 8 歩になる最悪でも約 602 秒で、**上限 3,600 秒に 6 倍の余裕**がある。
+        # 1 回の推論の秒数は切り替えても変わらない（K=3 の約 1.34 秒）。
+        self._adaptive_enabled = os.environ.get(
+            "PARC_ADAPTIVE_CADENCE", "0"
+        ) not in ("0", "", "false")
+        self._adaptive_cadence = int(os.environ.get("PARC_ADAPTIVE_CADENCE_HIGH", "8"))
+        self._adaptive_min_samples = int(
+            os.environ.get("PARC_ADAPTIVE_MIN_SAMPLES", "3")
+        )
+        # このエピソードで見た散らばり。中央値を取るために全部持つ（1 本 300 歩・
+        # 16 歩ごとなら 19 個ぶんなので、量は問題にならない）。
+        self._adaptive_history: list[float] = []
+        self._adaptive_switches = 0
+        self._adaptive_fell_back = False
+        # 切り替えから戻す先。**`samples=1` でも起動行が読むので必ず持たせる。**
+        self._default_cadence = self._n_action_steps
+        self._last_disagreement = 0.0
+
         if self._samples > 1:
             self._install_chunk_sampler()
+        elif self._adaptive_enabled:
+            # **1 本しか引かないと散らばりが測れない。**黙って効かないより落とす。
+            raise SystemExit(
+                "PARC_ADAPTIVE_CADENCE を立てるなら PARC_SAMPLES を 2 以上にすること"
+                f"（いまは {self._samples}）"
+            )
 
         # RTC（Real-Time Chunking）。**既定は切ってある。**
         # `blend_steps` が「出た行動を後からならす」のに対し、RTC は
@@ -893,6 +941,7 @@ class MyPolicy(BasePolicy):
             f"gain=({self._gain_translation},{self._gain_rotation})  "
             f"seed={self._seed if self._seed is not None else 'off'}  "
             f"rtc={f'on(horizon={self._rtc_horizon})' if self._rtc_enabled else 'off'}  "
+            f"adaptive={f'on({self._default_cadence}->{self._adaptive_cadence})' if self._adaptive_enabled else 'off'}  "
             f"normalize={self._normalize_mode()}  "
             f"quant_serve={quant_mode or 'off'}"
             + (f"({os.environ.get('QUANT_SERVE_SCOPE', 'vision_only')})" if quant_mode else ""),
@@ -1149,16 +1198,55 @@ class MyPolicy(BasePolicy):
         policy = self._policy
         torch = self._torch
         count = self._samples
+        # **距離を測る窓は固定する。** 歩数を切り替えても窓が動くと、
+        # 散らばりの目盛りがエピソードの途中で変わってしまう。
         horizon = self._n_action_steps
 
         def pick_medoid(chunks):
-            """引いた複数の chunk から、他との距離の総和が最小の 1 本を返す。"""
+            """引いた複数の chunk から、他との距離の総和が最小の 1 本を返す。
+
+            **同時に、その総当たり距離から「散らばり」を出して控える。**
+            adaptive replanning はこの値だけを使う（推論は 1 回も増えない）。
+            """
             # 距離は姿勢 6 次元だけで測る。グリッパは ±1 に振れるため、
             # 含めるとそこだけで距離が決まってしまう。
             # さらに、実行するステップ数までに切る（上の docstring を参照）。
             flat = chunks[:, :, :horizon, _POSE_DIMS].reshape(count, -1)
-            distances = torch.cdist(flat, flat).sum(dim=1)
+            pairwise = torch.cdist(flat, flat)
+            distances = pairwise.sum(dim=1)
+            # 散らばり＝総当たり距離の平均（対角の 0 を除く）。
+            # `count * (count - 1)` で割るので、K が変わっても目盛りが揃う。
+            self._last_disagreement = float(
+                pairwise.sum() / (count * (count - 1))
+            )
             return chunks[int(distances.argmin())]
+
+        def apply_adaptive_cadence() -> None:
+            """散らばりを見て、次に消費する歩数を決める。
+
+            **`select_action` は `predict_action_chunk` が返った後に
+            `config.n_action_steps` を読む**（同梱 lerobot の
+            `modeling_pi05.py` の `select_action`）。だから**ここで代入すれば、
+            その回の消費歩数がそれになる。**待ち行列を自分で持つ必要が無い。
+
+            判定は「このエピソードでこれまでに見た散らばりの中央値より大きいか」。
+            **溜まるまでは既定の歩数のままにする**（目盛りが 1〜2 点で決まるのを避ける）。
+            """
+            value = self._last_disagreement
+            history = self._adaptive_history
+            if len(history) >= self._adaptive_min_samples:
+                ordered = sorted(history)
+                middle = len(ordered) // 2
+                if len(ordered) % 2:
+                    median = ordered[middle]
+                else:
+                    median = 0.5 * (ordered[middle - 1] + ordered[middle])
+                if value > median:
+                    policy.config.n_action_steps = self._adaptive_cadence
+                    self._adaptive_switches += 1
+                else:
+                    policy.config.n_action_steps = self._default_cadence
+            history.append(value)
 
         if self._kind == "pi05":
             original_predict = policy.predict_action_chunk
@@ -1176,7 +1264,15 @@ class MyPolicy(BasePolicy):
                 chunks = torch.stack(
                     [original_predict(batch, **kwargs).clone() for _ in range(count)]
                 )
-                return pick_medoid(chunks)
+                picked = pick_medoid(chunks)
+                # **一度も採点環境で走っていない道なので、落ちても 0 点にしない。**
+                # 例外が出たら歩数を既定へ戻し、以降は切り替えをやめる。
+                if self._adaptive_enabled and not self._adaptive_fell_back:
+                    try:
+                        apply_adaptive_cadence()
+                    except Exception as error:  # noqa: BLE001
+                        self._fall_back_from_adaptive(error)
+                return picked
 
             policy.predict_action_chunk = sampled_predict
             return
@@ -1190,6 +1286,22 @@ class MyPolicy(BasePolicy):
             return pick_medoid(chunks)
 
         policy._get_action_chunk = sampled_chunk
+
+    def _fall_back_from_adaptive(self, error: Exception) -> None:
+        """切り替えで例外が出たら、以降は既定の歩数へ戻す。
+
+        **一度も採点環境で走っていない道なので、落ちても 0 点にしない。**
+        `_adaptive_fell_back` を立てると `sampled_predict` が二度と呼ばなくなる。
+        medoid（K 本引いて真ん中を選ぶ）はそのまま生き続ける。
+        """
+        self._adaptive_enabled = False
+        self._adaptive_fell_back = True
+        self._policy.config.n_action_steps = self._default_cadence
+        print(
+            f"[parc] adaptive cadence 失敗のため既定の歩数へ戻す: "
+            f"{type(error).__name__}: {error}",
+            flush=True,
+        )
 
     def _install_rtc(self) -> None:
         """継ぎ目を「後からならす」のでなく「つながるように生成させる」ようにする。
@@ -1411,6 +1523,15 @@ class MyPolicy(BasePolicy):
             np.random.seed(draw % (2**32))
         self._episode_index += 1
 
+        # **歩数を既定へ戻すのは `self._policy.reset()` より先でなければならない。**
+        # 同梱 lerobot の `reset()` は待ち行列を
+        # `deque(maxlen=self.config.n_action_steps)` で作り直す（`modeling_pi05.py`）。
+        # **前エピソードの最後が 8 歩だと `maxlen=8` の行列ができ、次に 16 歩ぶん
+        # 入れたとき先頭 8 歩が黙って捨てられる**——腕が chunk の途中から動き出す。
+        # 順番を入れ替えるだけで防げるので、ここに置く。
+        if self._samples > 1:
+            self._policy.config.n_action_steps = self._default_cadence
+
         # chunk のキャッシュを捨てる。忘れると前エピソードの action を出し続ける。
         self._policy.reset()
         self._previous_action = None
@@ -1418,6 +1539,9 @@ class MyPolicy(BasePolicy):
         # RTC の持ち物も捨てる。**前エピソードの計画を手がかりにしてはいけない。**
         self._rtc_queue.clear()
         self._rtc_previous_tail = None
+        # **散らばりの目盛りもエピソードごとに捨てる。** 課題が違えば散らばりの
+        # 大きさも違うので、前のエピソードの中央値を持ち越すと判定がずれる。
+        self._adaptive_history.clear()
 
     def _build_batch(self, obs: dict[str, np.ndarray]) -> dict:
         """評価パイプラインの観測を、モデルが期待する batch へ変換する。"""

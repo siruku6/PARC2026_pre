@@ -144,6 +144,7 @@ OUT=$PWD/work/probe_018 TASK=mug EP_NPZ=ep_check.npz \
 
 | 何 | どこ |
 |---|---|
+| **対になる依頼——目当て以外の物を動かしたデモを外す** | **[025](025_collision_episode_exclusion.md)**（**再生は 1 回で、こちらのラベルと 025 のラベルの両方が取れる。**実施するときは同じ走りに相乗りさせる） |
 | 順方向デモのふるい（実測と、goal 述語が使えない理由） | [reference/30 の 5 節](../../reference/30_reverse_grasp_pose.md) |
 | 逆向きデータの作り方全体 | [018](018_reverse_dataset_writeout_plan.md) |
 | 学習データ 14,347 本の内訳 | [reference/06](../../reference/06_training_data_composition.md) |

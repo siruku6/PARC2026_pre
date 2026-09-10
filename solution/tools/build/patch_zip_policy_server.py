@@ -52,6 +52,8 @@ _INTERESTING = (
     r'"PARC_SEED", "[^"]*"',
     r'"PARC_NORMALIZE_INSTRUCTION", "[^"]*"',
     r'"PARC_RTC", "[^"]*"',
+    r'"PARC_ADAPTIVE_CADENCE", "[^"]*"',
+    r'"PARC_ADAPTIVE_CADENCE_HIGH", "[^"]*"',
 )
 
 _TARGET = "policy_server.py"
