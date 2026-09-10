@@ -151,24 +151,33 @@ def _prealign(sd, rollout, target: np.ndarray, gripper: float) -> int:
 
 
 def _replay_one(sd, env, init_state: np.ndarray, actions: np.ndarray,
-                seed: int, method: str, ee_pos0: np.ndarray | None) -> dict:
+                seed: int, method: str, ee_pos0: np.ndarray | None,
+                record_images: bool = False) -> tuple[dict, object]:
     """記録された行動を 1 本撃ち、採点と同じ規則で成否を付ける。
 
     **変位は 2 つ出す。**採点は**ゴールが立った時点で打ち切る**ので、
     採否に効くのは `disp_at_goal_mm` のほうである。`disp_full_mm` は撃ち切るまでの
     最大で、**学習データとして全コマ入れるなら**こちらを見る。
 
+    Parameters
+    ----------
+    record_images : bool
+        観測画像も溜めるか。**描画は 1 歩の 6% しか足さない**ので、
+        生成では溜めたうえで**合格した回だけ書き出す**のがいちばん安い。
+
     Returns
     -------
     result : dict
         `goal_step`（届かなければ -1）・`disp_at_goal_mm`・`disp_full_mm`・
         `steps`・`eef0`。
+    rollout : scripted_demo._Rollout
+        書き出しに使う。画像は `attach_images()` のあと `record.front` にある。
     """
     env.seed(seed)
     budget = int(actions.shape[0]) + MAX_EXTRA_STEPS
     if method == "prealign":
         budget += PREALIGN_STEPS
-    rollout = sd._Rollout(env, init_state, budget, record_images=False)
+    rollout = sd._Rollout(env, init_state, budget, record_images=record_images)
     eef0 = rollout.eef_position.copy()
     prealign_steps = 0
     if method == "prealign" and ee_pos0 is not None:
@@ -200,7 +209,7 @@ def _replay_one(sd, env, init_state: np.ndarray, actions: np.ndarray,
             # **方策が引き継ぐ時点で腕がどれだけずれているか [cm]。**
             # ここが 2 cm を割ると、作っても被覆は増えない（`docs/plan/23` の 5 節の門 6）。
             "eef_offset_cm": round(100.0 * offset, 3),
-            "eef0": [round(float(value), 5) for value in eef0]}
+            "eef0": [round(float(value), 5) for value in eef0]}, rollout
 
 
 def _run_item(item: dict, seed: int, method: str) -> list[dict]:
@@ -221,8 +230,8 @@ def _run_item(item: dict, seed: int, method: str) -> list[dict]:
                 key = f"demo_{demo}/ee_pos"
                 ee_pos0 = bundle[key][0] if key in bundle.files else None
                 started = time.perf_counter()
-                result = _replay_one(sd, env, states[0], actions, seed, method,
-                                     ee_pos0)
+                result, _ = _replay_one(sd, env, states[0], actions, seed,
+                                        method, ee_pos0)
                 rows.append({"suite": item["suite"], "task": item["task"],
                              "instruction": item["instruction"],
                              "demo": demo, "initstate": item["initstate"],
