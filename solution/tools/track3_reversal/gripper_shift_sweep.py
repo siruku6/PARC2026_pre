@@ -418,8 +418,12 @@ def parse_args():
     ap.add_argument("--max-tail", type=int, default=-1,
                     help="最後に放したあと手を引く区間の上限コマ数。**-1 で全部"
                          "辿る（既定）・0 で落とす。**この区間は腕が初期姿勢へ"
-                         "戻るだけで、goal は既に立っているので採点に効かず、"
-                         "**学習データにも要らない**（実測で 44〜92 コマある）")
+                         "戻るだけで goal 自体には効かないが、`chunk_size=50` の"
+                         "教師として release 手前 50 コマぶんの答えを穴埋めせず"
+                         "持たせるのに要る（29_training_data_requirements.md）。"
+                         "`--max-steps` の 300 枠には数えない——本番の rollout は"
+                         "`done` で打ち切られ、tail は一度も実行されない"
+                         "（実測でこの区間は 44〜92 コマある）")
     ap.add_argument("--standoff", type=float, default=0.0,
                     help="掴む姿勢の手前（グリッパの進入軸に沿って）に置く待機点の"
                          "距離[m]。0 で無効。物を押さずに近づくために使う")
@@ -788,12 +792,23 @@ def main():
                         book_end - book_start)) * 1000, 1)
                     row["forward_goal_undone"] = not bool(env.check_success())
                 rows.append(row)
-                too_long = (args.max_steps > 0
-                            and int(r["n_steps"]) > args.max_steps)
+                # **300 は本番の `max_steps_per_episode`——release までに goal に
+                # 届く必要のある長さである。**tail（放したあと初期姿勢へ戻る区間）
+                # は本番の rollout では `done` で打ち切られて一度も実行されない
+                # （`pipeline/rollout.py` の `if done: break`）ので、300 の枠は
+                # release までの長さ（`n_steps - n_tail`）にだけ掛ける。tail は
+                # 300 を超えて残ってよい——むしろ `chunk_size=50` の教師として、
+                # release 手前 50 コマぶんの答えを穴埋めせず持たせるために要る
+                # （`docs/reference/29_training_data_requirements.md` 7.3）。
+                n_pre_tail = int(r["n_steps"]) - int(r["n_tail"])
+                too_long = (args.max_steps > 0 and n_pre_tail > args.max_steps)
                 row["too_long"] = too_long
+                row["n_pre_tail"] = n_pre_tail
                 if args.write_npz and rev_goal and too_long:
-                    print(f"    !! {r['n_steps']} コマは打ち切り "
-                          f"{args.max_steps} を超えるので書かない", flush=True)
+                    print(f"    !! release まで {n_pre_tail} コマは打ち切り "
+                          f"{args.max_steps} を超えるので書かない"
+                          f"（全体 {r['n_steps']} コマ、tail {r['n_tail']} コマ含む）",
+                          flush=True)
                 if args.write_npz and rev_goal and not too_long:
                     # **通った回だけ書く。**落ちた回は学習に入れない方針なので、
                     # 100 MB 級の npz をディスクに残す意味が無い。

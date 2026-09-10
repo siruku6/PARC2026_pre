@@ -472,6 +472,36 @@ def legacy_prepare(actions, gripper_mode="keep", skip_gripper=False):
 OUT_MAX_POS = np.array([0.05, 0.05, 0.05], dtype=np.float64)
 OUT_MAX_ROT = np.array([0.5, 0.5, 0.5], dtype=np.float64)
 
+# --- 接近を「時刻を決めた軌道」で作るための値（028）-------------------------
+#
+# **なぜ要るか。** 接近を「目標を固定して比例制御で寄る」形で作ると、遠いあいだ
+# 指令が上限に張り付く。`OUT_MAX_POS` が 0.05 m なので、**目標が 5 cm より遠いと
+# 必ず ±1.000 が出る。**接近の距離は本タスクで約 20 cm、缶とマグは 30 cm 以上ある。
+# その結果、逆向きデータは並進の **20.24%** が ±1.000（配布データに存在しない値）に、
+# 回転の **28.81%** が ±0.375 ちょうどに積み上がった（配布は 6.40% と 0.54%）。
+# **1 点に積み上がった値は学習で解けない**（reference/33）。
+#
+# **通過点を先に作って 1 コマに 1 点ずつ渡せば、各コマの目標が近いので上限に届かない。**
+
+# 1 コマに出してよい指令の上限。配布データの端（並進 0.9375・回転 0.375）より内側に取る。
+APPROACH_LIMIT_POS = float(os.environ.get("APPROACH_LIMIT_POS", "0.85"))
+APPROACH_LIMIT_ROT = float(os.environ.get("APPROACH_LIMIT_ROT", "0.30"))
+
+# 最小ジャーク（加速度の変化が最も小さい軌道）の速度の山は、平均速度の 1.875 倍になる。
+# **台形（加速 → 一定 → 減速）を使ってはいけない**——一定速度の区間が、そのまま
+# 別の 1 点への積み上がりになる（028 の 4.3 節）。
+MIN_JERK_PEAK_RATIO = 1.875
+
+# **指令 1 単位あたりに実際に動く量。**比例制御が上限を出し続けた区間では腕が
+# 遅れ続けるので、`OUT_MAX_POS` そのものではなくこの応答量で通過点の間隔を決める。
+# **並進は配布データからの最小二乗で 11.25 mm/単位。回転は同じ応答比を置いた暫定値で、
+# 回して測り直す**（028 の 5.1 節の 4）。
+APPROACH_RESPONSE_POS_M = float(os.environ.get("APPROACH_RESPONSE_POS_M", "0.01125"))
+APPROACH_RESPONSE_ROT_RAD = float(os.environ.get("APPROACH_RESPONSE_ROT_RAD", "0.1125"))
+
+# 距離が 0 に近くても、いきなり目標を渡さずにこれだけは刻む。
+APPROACH_MIN_WAYPOINTS = int(os.environ.get("APPROACH_MIN_WAYPOINTS", "4"))
+
 
 def rollout_tracking(env, init_state, ref_states, gripper_cmd, video_path=None,
                      gain=1.0, rot_limit=None):
@@ -545,6 +575,150 @@ def osc_command(obs, target, grip, gain=1.0, rot_limit=None):
         if peak > lim:
             drot = drot * (lim / peak)
     return np.concatenate([dpos, drot, [grip]]).astype(np.float32)
+
+
+def _approach_waypoints(
+    current_pose: np.ndarray,
+    target_pose: np.ndarray,
+    limit_pos: float = APPROACH_LIMIT_POS,
+    limit_rot: float = APPROACH_LIMIT_ROT,
+    response_pos_m: float = APPROACH_RESPONSE_POS_M,
+    response_rot_rad: float = APPROACH_RESPONSE_ROT_RAD,
+    min_waypoints: int = APPROACH_MIN_WAYPOINTS,
+) -> list[np.ndarray]:
+    """接近区間の指令が上限に張り付かないよう、通過点の列を先に作る。
+
+    **学習データとして使える逆向きデモを作るための関数である。**比例制御で
+    「着くまで寄る」と遠いあいだ指令が上限の 1 点に積み上がり、その分布は
+    配布データに存在しないので学習で解けない（reference/33）。ここで返した
+    通過点を 1 コマに 1 点ずつ渡せば、各コマの目標が近いので上限に届かない。
+
+    **刻み数は「1 コマに出してよい上限」から決まる。**最小ジャークの速度の山は
+    平均の `MIN_JERK_PEAK_RATIO` 倍なので、山のところで上限に収まるように取る。
+    **並進と回転で別々に出して、多いほうを使う**——少ないほうに合わせると、
+    もう一方が上限を超える。
+
+    Parameters
+    ----------
+    current_pose : np.ndarray
+        いまの姿勢 (6,)。前 3 つが位置 [m]、後ろ 3 つが軸角。
+    target_pose : np.ndarray
+        目標の姿勢 (6,)。同じ形。
+    limit_pos, limit_rot : float
+        1 コマに出してよい並進・回転の指令の上限。配布データの端より内側に取る。
+    response_pos_m, response_rot_rad : float
+        指令 1 単位あたりに実際に動く量。**実測で当て直す値である。**
+    min_waypoints : int
+        距離が 0 に近いときでも刻む数。
+
+    Returns
+    -------
+    waypoints : list[np.ndarray]
+        通過点 (6,) の列。**最後の要素は `target_pose` と同じ姿勢である。**
+        現在の姿勢そのものは入らない（次のコマの目標から始まる）。
+    """
+    from robosuite.utils import transform_utils as T
+
+    current = np.asarray(current_pose, dtype=np.float64)
+    target = np.asarray(target_pose, dtype=np.float64)
+
+    delta_pos = target[:3] - current[:3]
+    distance_m = float(np.linalg.norm(delta_pos))
+
+    # **回転は world 合成の軸角で測る**（`osc_command` と同じ規約）。
+    # 軸角ベクトルの成分ごとの引き算は相対回転ではない（014 の実測）。
+    rot_current = T.quat2mat(T.axisangle2quat(current[3:6]))
+    rot_target = T.quat2mat(T.axisangle2quat(target[3:6]))
+    axis_angle_rel = np.asarray(T.quat2axisangle(T.mat2quat(rot_target @ rot_current.T)))
+    angle_rad = float(np.linalg.norm(axis_angle_rel))
+
+    steps_pos = np.ceil(MIN_JERK_PEAK_RATIO * distance_m / (limit_pos * response_pos_m))
+    steps_rot = np.ceil(MIN_JERK_PEAK_RATIO * angle_rad / (limit_rot * response_rot_rad))
+    num_waypoints = max(int(steps_pos), int(steps_rot), min_waypoints)
+
+    waypoints: list[np.ndarray] = []
+    for index in range(1, num_waypoints + 1):
+        ratio = index / num_waypoints
+        # 最小ジャークの重み。0 → 1 へ、両端で速度も加速度も 0 になる形。
+        weight = 10.0 * ratio ** 3 - 15.0 * ratio ** 4 + 6.0 * ratio ** 5
+        position = current[:3] + delta_pos * weight
+        if angle_rad * weight < 1e-9:
+            orientation = current[3:6].copy()
+        else:
+            rot_at = T.quat2mat(T.axisangle2quat(axis_angle_rel * weight)) @ rot_current
+            orientation = np.asarray(T.quat2axisangle(T.mat2quat(rot_at)))
+        waypoints.append(np.concatenate([position, orientation]))
+    return waypoints
+
+
+def _resample_segment(
+    start_pose: np.ndarray,
+    end_pose: np.ndarray,
+    limit_pos: float = APPROACH_LIMIT_POS,
+    limit_rot: float = APPROACH_LIMIT_ROT,
+    response_pos_m: float = APPROACH_RESPONSE_POS_M,
+    response_rot_rad: float = APPROACH_RESPONSE_ROT_RAD,
+) -> list[np.ndarray]:
+    """記録された軌跡の 1 区間を、腕が 1 コマで追える間隔に割り直す。
+
+    **復路の指令が上限に張り付くのを止めるための関数である。**復路は記録された
+    姿勢を 1 コマ 1 点で渡しているので接近とは形が違うが、**記録の軌跡が
+    1 コマで 7.8〜15.8 mm 動いており、腕が追える 9.56 mm を超えている。**
+    超えたぶんは差として溜まり、指令が上限に張り付く。中間点を挿し込めば、
+    要求される速さが上限の内側に収まる。
+
+    **最小ジャークは使わない。**記録の軌跡は自分の速度の形を既に持っているので、
+    区間ごとに加速と減速を挟むと**記録に無い停止が 1 コマおきに入る。**
+    ここは区間の中を等分するだけにして、速度の形は記録のものを残す。
+    （区間ごとの刻み数が `ceil` で変わるので、指令が 1 点に積み上がることはない。）
+
+    Parameters
+    ----------
+    start_pose, end_pose : np.ndarray
+        記録された連続する 2 コマの姿勢 (6,)。前 3 つが位置 [m]、後ろ 3 つが軸角。
+    limit_pos, limit_rot : float
+        1 コマに出してよい並進・回転の指令の上限。
+    response_pos_m, response_rot_rad : float
+        指令 1 単位あたりに実際に動く量。
+
+    Returns
+    -------
+    targets : list[np.ndarray]
+        渡す目標 (6,) の列。**最後の要素は `end_pose` である。**
+        割る必要が無ければ `[end_pose]` の 1 個だけを返す。
+    """
+    from robosuite.utils import transform_utils as T
+
+    start = np.asarray(start_pose, dtype=np.float64)
+    end = np.asarray(end_pose, dtype=np.float64)
+
+    delta_pos = end[:3] - start[:3]
+    distance_m = float(np.linalg.norm(delta_pos))
+
+    rot_start = T.quat2mat(T.axisangle2quat(start[3:6]))
+    rot_end = T.quat2mat(T.axisangle2quat(end[3:6]))
+    axis_angle_rel = np.asarray(T.quat2axisangle(T.mat2quat(rot_end @ rot_start.T)))
+    angle_rad = float(np.linalg.norm(axis_angle_rel))
+
+    num_steps = max(
+        int(np.ceil(distance_m / (limit_pos * response_pos_m))),
+        int(np.ceil(angle_rad / (limit_rot * response_rot_rad))),
+        1,
+    )
+    if num_steps == 1:
+        return [end.copy()]
+
+    targets: list[np.ndarray] = []
+    for index in range(1, num_steps + 1):
+        ratio = index / num_steps
+        position = start[:3] + delta_pos * ratio
+        if angle_rad * ratio < 1e-9:
+            orientation = end[3:6].copy()
+        else:
+            rot_at = T.quat2mat(T.axisangle2quat(axis_angle_rel * ratio)) @ rot_start
+            orientation = np.asarray(T.quat2axisangle(T.mat2quat(rot_at)))
+        targets.append(np.concatenate([position, orientation]))
+    return targets
 
 
 def eef_axisangle(obs):
@@ -684,6 +858,11 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
     def move_to(target, reach, gripcmd=-1.0):
         """`target` へ `reach` 以内に入るまで寄る（既定は開いたまま）。コマ数を返す。
 
+        **【9/10 に変えた】通過点を先に作って 1 コマに 1 点ずつ渡す形にした**
+        （`_approach_waypoints`・028）。**それまでは目標を固定した比例制御だったので、
+        遠いあいだ指令が上限の 1 点に積み上がっていた。**配り終えたあとだけ、
+        残った誤差を比例制御で詰める。
+
         **`rot_limit` を効かせているときは向きも揃うまで待つ。**位置だけで
         打ち切ると、回転を遅くしたぶん**向きが合わないまま指を閉じる**。
         並進は 1 コマで 2 割ほど詰まるので、先に着くのはいつも位置の側である。
@@ -701,11 +880,22 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
             aa = np.asarray(T.quat2axisangle(T.mat2quat(r_tgt @ r_cur.T)))
             return float(np.degrees(np.linalg.norm(aa))) < rot_tol_deg
 
+        # **通過点を先に作り、1 コマに 1 点ずつ渡す**（028）。目標を固定して
+        # 比例制御で寄ると、遠いあいだ指令が上限の 1 点に積み上がる。
+        current_pose = np.concatenate([
+            np.asarray(obs["robot0_eef_pos"], dtype=np.float64), eef_axisangle(obs)])
         n = 0
-        for _ in range(max_approach):
-            if arrived():
+        for waypoint in _approach_waypoints(current_pose, target):
+            if n >= max_approach or arrived():
                 break
-            step(osc_command(obs, target, gripcmd, gain, rot_limit))   # -1 = 開く / +1 = 閉じる
+            step(osc_command(obs, waypoint, gripcmd, gain, rot_limit))  # -1 = 開く / +1 = 閉じる
+            n += 1
+
+        # **配り終えたら、残った誤差だけ比例制御で詰める。**ここは差が小さいので
+        # 上限に当たらない。`osc_command` の `np.clip` と `rot_limit` はそのまま
+        # 残してあるので、**当たったら通過点の設計が間違っているという合図になる。**
+        while n < max_approach and not arrived():
+            step(osc_command(obs, target, gripcmd, gain, rot_limit))
             n += 1
         return n
 
@@ -756,14 +946,41 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
             above = np.where(z_path >= z_safe)[0]
             # 復路が一度も上がってこないなら、いちばん高い所までを床の対象にする
             i_join = i0 + int(above[0] if len(above) else np.argmax(z_path))
+        # **【9/10 に変えた】記録の 1 区間を、腕が追える間隔に割り直して渡す**
+        # （`_resample_segment`・028）。**記録の軌跡は 1 コマ 7.8〜15.8 mm 動いていて、
+        # 腕が追える 9.56 mm を超えている。**そのままだと差が溜まって指令が上限に
+        # 張り付く（実測で復路の 21.45% が ±1.000、22.94% が ±0.375 ちょうど）。
+        n_path_before = n["path"]
+
+        # **合流の段差に橋を架ける。**上昇が終わった所と記録の軌跡の頭は同じ姿勢では
+        # ないので、いきなり `ref[i0+1]` を渡すと 1 コマ目から差が大きく、指令が
+        # 上限に張り付く（**実測で復路の最初の 10% は並進 83%・回転 100% が飽和し、
+        # 40% 以降はゼロだった**——残っていた飽和はここだけだった）。
+        if stop_i > i0:
+            join_target = ref[i0].copy()
+            if i0 < i_join:
+                join_target[2] = max(join_target[2], z_safe)
+            current_pose = np.concatenate([
+                np.asarray(obs["robot0_eef_pos"], dtype=np.float64), eef_axisangle(obs)])
+            for tgt in _approach_waypoints(current_pose, join_target):
+                step(osc_command(obs, tgt, grip[i0], gain, rot_limit))
+                n["path"] += 1
+
         for i in range(i0, stop_i):
-            tgt = ref[i + 1].copy()
-            if i < i_join and tgt[2] < z_safe:
-                tgt[2] = z_safe
-                n["floor"] += 1
-            step(osc_command(obs, tgt, grip[i], gain, rot_limit))
-        n["path"] += stop_i - i0
-        per_cycle.append({"obj": cyc["obj"], "n_path": stop_i - i0})
+            seg_start, seg_end = ref[i].copy(), ref[i + 1].copy()
+            floored = i < i_join and seg_end[2] < z_safe
+            if i < i_join:
+                # **床を張るのは高さだけ。**コマは飛ばさない（姿勢の変化を飛ばすと
+                # OSC の回転が追いつかず、荷物を傾けたまま運ぶ）。
+                seg_start[2] = max(seg_start[2], z_safe)
+                seg_end[2] = max(seg_end[2], z_safe)
+            for tgt in _resample_segment(seg_start, seg_end):
+                step(osc_command(obs, tgt, grip[i], gain, rot_limit))
+                n["path"] += 1
+                if floored:
+                    n["floor"] += 1
+        # **`n_path` は割り直したあとの実コマ数である**（以前は記録の区間数だった）。
+        per_cycle.append({"obj": cyc["obj"], "n_path": n["path"] - n_path_before})
         last_stop = stop_i
         if rel is None:
             continue
@@ -777,8 +994,14 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
             # **水平になったら止める。**回す量は 10° 前後で数コマしか要らないのに
             # 固定で待つと、本番の打ち切り 300 コマをそのぶん食う。
             hold = level_pose(obs, cyc["obj"], cyc["place_axis"], clearance=0.02)
-            for _ in range(grip_hold):
-                step(osc_command(obs, hold, 1.0, gain, rot_limit))
+            # **【9/10 に変えた】ここも通過点で寄る**（028）。10° 前後を 10 コマの
+            # 比例制御で回すと、遠いあいだ回転指令が上限に張り付く。**コマ数の budget を
+            # `grip_hold` の固定値から「実際に要る通過点の数」に変えた**——水平に
+            # なったら止める判定はそのまま残してあるので、早く終わる回は早く終わる。
+            current_pose = np.concatenate([
+                np.asarray(obs["robot0_eef_pos"], dtype=np.float64), eef_axisangle(obs)])
+            for tgt in _approach_waypoints(current_pose, hold):
+                step(osc_command(obs, tgt, 1.0, gain, rot_limit))
                 n["settle"] += 1
                 if tilt_deg(obs[f"{cyc['obj']}_quat"], cyc["place_axis"]) < level_tol:
                     break
@@ -796,15 +1019,33 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
         n["grip"] += grip_hold
 
     # 放したあとの残りの復路は**腕が初期姿勢へ戻るだけ**の区間である。最後に
-    # 放した時点で goal は既に立っているので採点に効かず、**学習データにも要ら
-    # ない。**本番は 300 コマで打ち切られるので、two mugs ではここ（実測 44〜92
-    # コマ）を落とすのがいちばん安い。`max_tail` は 0 で落とす・`-1` で全部辿る。
+    # 放した時点で goal は既に立っているので、この区間の出来自体は採点に効かない
+    # （本番の `pipeline/rollout.py` は `if done: break` で release 直後に打ち切る
+    # ので、ここは一度も実行されない）。**が、学習データからは要らないとは言えない**
+    # ——`chunk_size=50` なので、release 手前 50 コマは「そこから 50 歩先」の答えに
+    # tail の続きを要求する。tail を削ると、その 50 コマ分の教師がパディングか穴に
+    # なる（29_training_data_requirements.md 7.3）。だから既定は `-1`（全部辿る）で、
+    # `--max-steps` の 300 枠にも数えない（`gripper_shift_sweep.py` 側で計算）。
+    # `max_tail` を 0 にすると tail 自体が消え、この穴埋めが失われる。
     if opened_at and last_stop is not None:
         end_i = (len(ref) - 1 if max_tail < 0
                  else min(len(ref) - 1, last_stop + max_tail))
+        # **ここにも合流の段差がある。**release/settle は `ref` を辿らず、実際に
+        # 接触するまで下ろした独自の動きなので、腕は `ref[last_stop]`（記録上の
+        # place 直前の姿勢）とは違う所で止まっている。path の入口と同じ理由で
+        # 橋を架ける（実測で ep4062 の 3 本・tail 先頭 3 コマが並進 ±1.000 だった）。
+        if end_i > last_stop:
+            join_target = ref[last_stop].copy()
+            current_pose = np.concatenate([
+                np.asarray(obs["robot0_eef_pos"], dtype=np.float64), eef_axisangle(obs)])
+            for tgt in _approach_waypoints(current_pose, join_target):
+                step(osc_command(obs, tgt, -1.0, gain, rot_limit))
+                n["tail"] += 1
         for i in range(last_stop, end_i):
-            step(osc_command(obs, ref[i + 1], -1.0, gain, rot_limit))
-            n["tail"] += 1
+            # 復路と同じ理由で割り直す（実測でこの区間の 13.33% が ±1.000 だった）。
+            for tgt in _resample_segment(ref[i], ref[i + 1]):
+                step(osc_command(obs, tgt, -1.0, gain, rot_limit))
+                n["tail"] += 1
 
     if video_path is not None:
         write_video(frames, video_path)

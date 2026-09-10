@@ -47,10 +47,20 @@ QUIET='^\[libero\]|WARNING|warn|is not|^\[Mj|NVIDIA|license|License|Copyright|^=
 run_in_container() {
   local script="$1"; shift
   mkdir -p "$OUT"
+  # **接近の通過点の設定（`APPROACH_*`）をコンテナへ渡す。**`replay_video_probe.py` は
+  # これを `os.environ` から読むので、**渡さないとホストで振っても既定値のまま走る。**
+  # 「振ったつもりで振れていない」は結果を静かに嘘にするので、ここで通す。
+  local approach_env=()
+  local name
+  for name in APPROACH_LIMIT_POS APPROACH_LIMIT_ROT APPROACH_RESPONSE_POS_M \
+              APPROACH_RESPONSE_ROT_RAD APPROACH_MIN_WAYPOINTS; do
+    [[ -n "${!name:-}" ]] && approach_env+=(-e "$name=${!name}")
+  done
   docker run --rm \
     -v "$T3R:/app:ro" -v "$OUT:/out" \
     -e LIBERO_ROOT=/workspace/LIBERO-plus -e MUJOCO_GL=egl \
     -e PYTHONPATH=/app:/workspace/LIBERO-plus:/workspace:/workspace/compe \
+    ${approach_env[@]+"${approach_env[@]}"} \
     -w /workspace \
     parc2026-final python -u "/app/$script" "$@" 2>&1 | grep -vE "$QUIET"
   # コンテナが root で書いた出力を、ホスト側の所有に戻す
