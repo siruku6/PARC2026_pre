@@ -1256,6 +1256,42 @@ class _Rollout:
                 break
         self.phases.append((label, self.record.steps - used, 0.0))
 
+    def hold_at(self, label: str, gripper: float, count: int,
+                yaw_target: float | None = None) -> None:
+        """**いまの姿勢を閉ループで保ったまま**、指だけ動かす。
+
+        **`hold` との違いは、指令が厳密な 0 にならないことである。**
+        あちらは `np.zeros(7)` を送るので、指を閉じる区間ぶんだけ
+        **指令が 0 の 1 点に積み上がる**——配布データの停止コマは 0.96% なのに、
+        `hold` だけで 14.4% になった。1 点に集中した教師信号は flow matching が
+        出せないので、上限の 1 点と同じ理由で学習が解けない
+        （`docs/reference/33_gradient_norm_and_action_saturation.md`）。
+
+        **測って外した。使わないこと。**指令の形は直る（停止コマ 14.40% →
+        1.71%・停止の塊 3.4 → 2.2 個/本）が、**掴めなくなる**——指が縁を挟む
+        あいだ、閉じる反力で腕が押されるのを毎歩打ち消しに行くので、
+        **制御が振動して器を押しのける**（並進の符号反転が 0.38% → 2.30%）。
+        50 配置で 246/250 だった成否が、10 配置で 2/10・3/10 に落ちた。
+        **手を止める区間は本当に止めるしかない。**
+
+        残した理由は 2 つある。**同じ案を次のセッションが思いつくため**と、
+        **押し付けずに保つ場面（掴んでいない区間の整定）には使えるため**である。
+        """
+        used = self.record.steps
+        target = self.eef_position.copy()
+        for _ in range(count):
+            action = np.zeros(7)
+            action[:3] = self._velocity_command(target - self.eef_position,
+                                                BRAKE_WITHIN_STOP)
+            if yaw_target is not None:
+                turn = (yaw_target - self.finger_azimuth + 90.0) % 180.0 - 90.0
+                action[5] = float(np.clip(turn / 12.0, -1.0, 1.0))
+            action[6] = gripper
+            if not self._take_step(action):
+                break
+        self.phases.append((label, self.record.steps - used,
+                            float(np.linalg.norm(target - self.eef_position))))
+
     def hold(self, label: str, gripper: float, count: int) -> None:
         """腕を止めたまま指だけ動かす。"""
         used = self.record.steps
@@ -1393,6 +1429,8 @@ def _run_rim_pick_place(rollout: _Rollout, step: RimPickPlace,
                    budget=int(round(plan.budget_descend / step.descend_speed)),
                    brake_distance=BRAKE_WITHIN_STOP,
                    speed_cap=step.descend_speed)
+    # **ここは `hold_at` を使わない。**閉ループで保つと閉じる反力に対して
+    # 振動し、器を押しのけて掴めなくなる（`hold_at` の説明）。
     rollout.hold(f"{target} 掴む", GRIPPER_CLOSE, plan.close_steps)
 
     here = rollout.eef_position.copy()
@@ -1403,7 +1441,7 @@ def _run_rim_pick_place(rollout: _Rollout, step: RimPickPlace,
                    [[here[0], here[1], here[2] + step.lift_dz]],
                    GRIPPER_CLOSE, blend_radius=0.0, tolerance=0.006,
                    budget=int(round(plan.budget_lift / step.lift_speed)),
-                   speed_cap=step.lift_speed)
+                   speed_cap=step.lift_speed, yaw_target=azimuth)
 
     # **手首ではなく、掴んだ物の中心を置き先へ合わせる。**
     base = (rollout.site_position(step.place_site)
@@ -1417,9 +1455,10 @@ def _run_rim_pick_place(rollout: _Rollout, step: RimPickPlace,
                     [place_xy[0], place_xy[1], plan.carry_z]],
                    GRIPPER_CLOSE, blend_radius=plan.blend_radius,
                    budget=plan.budget_lift + plan.budget_move,
-                   smoothing=plan.smoothing)
+                   smoothing=plan.smoothing, yaw_target=azimuth)
     rollout.move_to(f"{target} 置く", [place_xy[0], place_xy[1], plan.place_z],
-                    GRIPPER_CLOSE, tolerance=0.004, budget=plan.budget_descend)
+                    GRIPPER_CLOSE, tolerance=0.004, budget=plan.budget_descend,
+                    yaw_target=azimuth)
     rollout.hold(f"{target} 落ち着かせる", GRIPPER_CLOSE, plan.settle_steps)
     rollout.hold(f"{target} 離す", GRIPPER_OPEN, plan.open_steps)
     rollout.follow(f"{target} 逃げる",
