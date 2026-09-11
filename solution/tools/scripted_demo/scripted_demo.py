@@ -89,6 +89,22 @@ GRIPPER_CLOSE = 1.0
 BRAKE_WITHIN_STOP = 0.012     # 止まる点。短く詰める
 BRAKE_WITHIN_PASS = 0.045     # 通過してから止まる点。長くかけて速度を残さない
 
+# 指の開き [m]。**実測**（`solution/tools/probe/gripper_frame.py`）。
+# **掴む対象の水平の張り出しがこの半分を超えると、縁をまたぐしかない。**
+FINGER_SPAN = 0.0481
+
+# 掴む方位を選ぶとき、**これだけ空いていれば十分**とみなす距離 [m]。
+# **余裕をひたすら最大にすると、腕が遠回りして歩数が伸びる**——実測で
+# 余裕 8.8 cm の方位を選んだ結果、同じ丼の課題が 151 歩から 273 歩になり、
+# 上限 300 歩に当たってゴールに届かなくなった。**一定以上は同点にして、
+# 残りは「ロボットの基部に近い側」で決める。**
+GRASP_CLEARANCE_ENOUGH = 0.030
+
+# 方位を選ぶとき、fixture から最低これだけ離れていることを求める [m]。
+# **fixture は採点の衝突判定の対象外**（観測に `_pos` を持たない）だが、
+# ぶつけると腕が逸れて、そのあとの動きが全部狂う。
+FIXTURE_MARGIN = 0.020
+
 # 観測の作り。**学習データ（`lerobot/libero_plus`）の宣言に合わせる。**
 CAMERAS = ("agentview", "robot0_eye_in_hand")
 IMAGE_SIZE = 256
@@ -130,6 +146,68 @@ class PickPlace:
     grasp_dz: float
     approach_dz: float = 0.16
     hover_dz: float = 0.11
+
+
+@dataclass
+class RimPickPlace:
+    """**指より広い物**を、縁をまたいで掴んで置く 1 まとまり。
+
+    **なぜ `PickPlace` と別なのか。**あちらは物体の真上から降りて掴む前提で、
+    **物体の幅が指の開きより狭いときだけ成り立つ。**丼は水平の張り出しが
+    5.65 cm あり、指は 4.81 cm しか開かない（実測）。だから手首は丼の軸から
+    5.65 cm 外へ出し、**縁の壁を 2 本の指で挟む**しかない。
+
+    **この「外へ出す向き」が自由変数である。**丼は Z 軸まわりに回転対称なので
+    どの方位からまたいでも掴めるのに、**方位によって隣の物との余裕が
+    数 mm から 10 cm まで変わる。**`pick up the black bowl next to the cookie box`
+    では丼とクッキー箱の隙間が 3.42 cm しかなく、箱の側からまたぐと
+    外側の指の余裕は 2 mm ほどになる——人の手本を再生すると
+    **1 mm を超えた 6 本すべてで指が箱に触れていた**
+    （`solution/tools/contact_clean/contact_phase.py`）。
+    **空いている方位は 209 度あるので、選べば当たらない。**
+
+    Attributes
+    ----------
+    target : str
+        掴む物体の観測名。**Z 軸まわりに回転対称な物にだけ使える**
+        （方位を勝手に選ぶので、向きに意味がある物では壊れる）。
+    place_site : str | None
+        置く先の基準にする site。`place_object` と**どちらか一方**を指定する。
+    place_object : str | None
+        置く先の基準にする物体の観測名。**動く物（皿など）はこちらを使う**
+        ——site は初期配置ごとにずれるが、物体の位置は観測から正確に読める。
+    place_offset : tuple[float, float]
+        基準から見た、置く先の水平方向のずれ。
+    grasp_dz : float
+        物体の原点から見て、どの高さで縁を挟むか。**縁の上端より下、
+        パッドの背丈（1.6 cm）が縁にかかる高さに取る。**
+    approach_dz : float
+        降りる前に構える高さ。**ここで手首を回しきる。**
+    lift_dz : float
+        掴んだあと、**真上へ**上げる高さ。
+    lift_speed : float
+        持ち上げるときの指令の上限。**1.0 のまま上げると隣の物へ押し付ける。**
+    grasp_radius : float | None
+        手首を物体の軸から何 m 外へ出すか。**None なら当たり判定から実測する。**
+    clearance_band : tuple[float, float]
+        物体の原点から見て、どの高さの帯で方位の空き具合を見るか。
+    """
+
+    target: str
+    place_site: str | None = None
+    place_object: str | None = None
+    place_offset: tuple[float, float] = (0.0, 0.0)
+    grasp_dz: float = 0.042
+    approach_dz: float = 0.14
+    lift_dz: float = 0.10
+    lift_speed: float = 0.45
+    grasp_radius: float | None = None
+    clearance_band: tuple[float, float] = (-0.02, 0.10)
+
+    def __post_init__(self) -> None:
+        if (self.place_site is None) == (self.place_object is None):
+            raise ValueError(
+                "place_site と place_object は**どちらか一方だけ**を指定する")
 
 
 @dataclass
@@ -183,7 +261,7 @@ class TaskPlan:
     ----------
     suite : str
         `libero_10` など、bddl の置き場所。
-    steps : list[PickPlace | TurnKnob]
+    steps : list[PickPlace | RimPickPlace | TurnKnob]
         前から順に実行する。**動きの種類ごとに実行の中身が違う**
         （`_RUNNERS` で引く）。
     carry_z : float
@@ -220,7 +298,7 @@ class TaskPlan:
     """
 
     suite: str
-    steps: list[PickPlace | TurnKnob]
+    steps: list[PickPlace | RimPickPlace | TurnKnob]
     carry_z: float
     place_z: float
     retreat_z: float
@@ -275,6 +353,97 @@ TASK_PLANS: dict[str, TaskPlan] = {
         carry_z=1.14,
         place_z=1.072,
         retreat_z=1.16,
+    ),
+    # ---- 丼の 5 課題。**評価で失点の 65% を出している家族である**
+    # （`docs/plan/24_contact_avoidance_redesign.md`）。丼は Z 軸まわりに
+    # 回転対称なので、**縁をまたぐ方位を実行時に選べる**——`RimPickPlace` が
+    # 余裕のいちばん大きい方位を選ぶので、ここに方位は書かない。
+    # 高さは実測（丼 当たる高さ 0.8864〜0.9508・原点 z 0.8984、
+    # クッキー箱の上端 0.9507、皿 0.8751〜0.9380）。
+    "pick_up_the_black_bowl_next_to_the_cookie_box_and_place_it_on_the_plate": TaskPlan(
+        suite="libero_spatial",
+        # 隙間 3.46 cm・空いている方位 209 度。**指が箱に当たるのが 15/15**
+        steps=[RimPickPlace(
+            "akita_black_bowl_1", place_object="plate_1",
+            grasp_radius=0.040,   # 人の手本の実測（半径 中央 4.0〜4.5 cm）
+            grasp_dz=0.042,       # 手先 0.940。パッド 1.6 cm が縁にかかる
+            approach_dz=0.2,
+            lift_dz=0.14,   # 載っている台から確実に離す
+            lift_speed=0.35)],
+        carry_z=1.05,     # 丼の底が 0.996。クッキー箱の上端 0.9507 を越える
+        place_z=0.972,    # 丼の底が 0.918。皿の縁の上端 0.9380 の内側へ降りる
+        retreat_z=1.08,
+        blend_radius=0.030,
+        budget_move=60,   # 出発から丼まで 35 cm ある（45 歩では届かなかった）
+        budget_descend=30,
+    ),
+    "pick_up_the_black_bowl_next_to_the_ramekin_and_place_it_on_the_plate": TaskPlan(
+        suite="libero_spatial",
+        # 隙間 1.96 cm・空いている方位 314 度
+        steps=[RimPickPlace(
+            "akita_black_bowl_1", place_object="plate_1",
+            grasp_radius=0.040,   # 人の手本の実測（半径 中央 4.0〜4.5 cm）
+            grasp_dz=0.042,       # 手先 0.940。パッド 1.6 cm が縁にかかる
+            approach_dz=0.2,
+            lift_dz=0.14,   # 載っている台から確実に離す
+            lift_speed=0.35)],
+        carry_z=1.05,     # 丼の底が 0.996。クッキー箱の上端 0.9507 を越える
+        place_z=0.972,    # 丼の底が 0.918。皿の縁の上端 0.9380 の内側へ降りる
+        retreat_z=1.08,
+        blend_radius=0.030,
+        budget_move=60,   # 出発から丼まで 35 cm ある（45 歩では届かなかった）
+        budget_descend=30,
+    ),
+    "pick_up_the_black_bowl_between_the_plate_and_the_ramekin_and_place_it_on_the_plate": TaskPlan(
+        suite="libero_spatial",
+        # 皿との隙間 1.17 cm・空いている方位 125 度
+        steps=[RimPickPlace(
+            "akita_black_bowl_1", place_object="plate_1",
+            grasp_radius=0.040,   # 人の手本の実測（半径 中央 4.0〜4.5 cm）
+            grasp_dz=0.042,       # 手先 0.940。パッド 1.6 cm が縁にかかる
+            approach_dz=0.2,
+            lift_dz=0.14,   # 載っている台から確実に離す
+            lift_speed=0.35)],
+        carry_z=1.05,     # 丼の底が 0.996。クッキー箱の上端 0.9507 を越える
+        place_z=0.972,    # 丼の底が 0.918。皿の縁の上端 0.9380 の内側へ降りる
+        retreat_z=1.08,
+        blend_radius=0.030,
+        budget_move=60,   # 出発から丼まで 35 cm ある（45 歩では届かなかった）
+        budget_descend=30,
+    ),
+    "pick_up_the_black_bowl_on_the_cookie_box_and_place_it_on_the_plate": TaskPlan(
+        suite="libero_spatial",
+        # **箱の上に載っている。**方位では直らないので、真上へゆっくり上げる
+        steps=[RimPickPlace(
+            "akita_black_bowl_1", place_object="plate_1",
+            grasp_radius=0.040,   # 人の手本の実測（半径 中央 4.0〜4.5 cm）
+            grasp_dz=0.042,       # 手先 0.940。パッド 1.6 cm が縁にかかる
+            approach_dz=0.2,
+            lift_dz=0.14,   # 載っている台から確実に離す
+            lift_speed=0.35)],
+        carry_z=1.12,     # **台の上から掴むので手先がもともと高い。**丼の底 1.066
+        place_z=0.972,    # 丼の底が 0.918。皿の縁の上端 0.9380 の内側へ降りる
+        retreat_z=1.08,
+        blend_radius=0.030,
+        budget_move=60,   # 出発から丼まで 35 cm ある（45 歩では届かなかった）
+        budget_descend=30,
+    ),
+    "pick_up_the_black_bowl_on_the_ramekin_and_place_it_on_the_plate": TaskPlan(
+        suite="libero_spatial",
+        # **ラメキンの上に載っている。**手本 20/20 が汚れ、damage の 50% が運搬中
+        steps=[RimPickPlace(
+            "akita_black_bowl_1", place_object="plate_1",
+            grasp_radius=0.040,   # 人の手本の実測（半径 中央 4.0〜4.5 cm）
+            grasp_dz=0.042,       # 手先 0.940。パッド 1.6 cm が縁にかかる
+            approach_dz=0.2,
+            lift_dz=0.14,   # 載っている台から確実に離す
+            lift_speed=0.35)],
+        carry_z=1.12,     # **台の上から掴むので手先がもともと高い。**丼の底 1.066
+        place_z=0.972,    # 丼の底が 0.918。皿の縁の上端 0.9380 の内側へ降りる
+        retreat_z=1.08,
+        blend_radius=0.030,
+        budget_move=60,   # 出発から丼まで 35 cm ある（45 歩では届かなかった）
+        budget_descend=30,
     ),
 }
 
@@ -528,6 +697,136 @@ class _Rollout:
         """物体の位置。"""
         return np.asarray(self.obs[f"{name}_pos"])
 
+    @functools.cached_property
+    def _pad_geoms(self) -> tuple[int, int]:
+        """指のパッドの geom 番号。**指の向きはここから測る。**
+
+        `robot0_eef_quat` からも手首の回転は読めるが、**指がその回転の
+        どの軸に並ぶかは実装依存**なので、パッドの実座標から測る。
+        """
+        sim = self.env.env.sim
+        pads = tuple(i for i in range(sim.model.ngeom)
+                     if (sim.model.geom_id2name(i) or "").endswith("_pad_collision"))
+        if len(pads) != 2:
+            raise RuntimeError(
+                f"指のパッドが 2 つ見つからない（{len(pads)} 個）。"
+                "**掴む向きを選ぶには 2 つ要る**")
+        return pads       # type: ignore[return-value]
+
+    @property
+    def finger_azimuth(self) -> float:
+        """指が並ぶ向き [度]。**180 度回しても同じ向きである**（指は 2 本）。"""
+        sim = self.env.env.sim
+        first, second = self._pad_geoms
+        axis = sim.data.geom_xpos[second] - sim.data.geom_xpos[first]
+        return float(np.degrees(np.arctan2(axis[1], axis[0])))
+
+    def object_extent(self, name: str) -> float:
+        """物体の水平の張り出し [m]。**原点から測り直す。**
+
+        `geom_size` をそのまま読むと**geom 1 つの幅**しか出ない。丼のように
+        本体が小さな箱の集まりでできている物では、それは全体の幅にならない
+        （丼は geom 1 つ 3.1 cm だが、全体では 5.65 cm 張り出す）。
+        """
+        sim = self.env.env.sim
+        centre = self.object_position(name)
+        geoms = [i for i in range(sim.model.ngeom)
+                 if sim.model.geom_contype[i]
+                 and (sim.model.geom_id2name(i) or "").startswith(name)]
+        if not geoms:
+            raise RuntimeError(f"{name} の当たり判定が無い")
+        return max(
+            float(np.linalg.norm(sim.data.geom_xpos[i][:2] - centre[:2])
+                  + max(sim.model.geom_size[i][0], sim.model.geom_size[i][1]))
+            for i in geoms)
+
+    def choose_grasp_azimuth(self, target: str, radius: float,
+                             z_low: float, z_high: float
+                             ) -> tuple[float, float]:
+        """縁をまたぐ方位を選ぶ。**回転対称な物にだけ使える。**
+
+        **選べる理由。**丼は Z 軸まわりに回転対称なので、どの方位から縁を
+        またいでも同じように掴める。**だから方位は自由変数である。**
+
+        **選ばないと当たる理由。**手首は物体の軸から `radius` 外へ出て、
+        **外側の指はさらに 2.4 cm 外へ張り出す。**隣の物との隙間が 3.42 cm
+        しかない場面では、隣の側からまたぐと余裕が数 mm になる。
+
+        **測る余裕は 2 種類に分ける。**
+        採点の衝突判定は「観測に `_pos` を持ち、`obj_of_interest` でない物体」
+        だけを見る（`pipeline/rollout.py`）。**fixture は判定の対象外**なので、
+        こちらを最大化するのは筋が悪い。**判定される物体との余裕を最大化し、
+        fixture は「`FIXTURE_MARGIN` 以上離れていること」という条件にする。**
+
+        **余裕は頭打ちにする。**`GRASP_CLEARANCE_ENOUGH` を超えたぶんは
+        同点として扱い、**ロボットの基部に近い方位**を選ぶ。そうしないと
+        腕が遠回りして歩数が伸び、時間の点を落とす（実測 151 → 273 歩）。
+
+        Returns
+        -------
+        tuple[float, float]
+            選んだ方位 [度] と、そのときの**判定される物体との余裕** [m]。
+        """
+        sim = self.env.env.sim
+        centre = self.object_position(target)
+        watched = tuple(key[:-4] for key in self._watched_keys)
+        ignore = ("robot0", "gripper0", target, "table", "floor", "wall") + watched
+        base = np.asarray(sim.data.body_xpos[sim.model.body_name2id("robot0_base")]) \
+            if "robot0_base" in sim.model.body_names else np.zeros(3)
+        toward_base = float(np.degrees(np.arctan2(*(base[:2] - centre[:2])[::-1])))
+
+        best: tuple[float, float, float] | None = None
+        for degree in range(0, 360, 5):
+            angle = np.radians(float(degree))
+            direction = np.array([np.cos(angle), np.sin(angle), 0.0])
+            # 手首・外側の指・内側の指。**外側の指がいちばん外へ張り出す。**
+            points = [centre + offset * direction
+                      for offset in (radius, radius + 0.5 * FINGER_SPAN,
+                                     radius - 0.5 * FINGER_SPAN)]
+            scored = min(_horizontal_clearance(sim, point, z_low, z_high,
+                                               keep=watched)
+                         for point in points)
+            allowed = min(_horizontal_clearance(sim, point, z_low, z_high,
+                                                skip=ignore)
+                          for point in points)
+            gap = abs((degree - toward_base + 180.0) % 360.0 - 180.0)
+            # 条件を満たすものを優先し、次に余裕、最後に**基部へ近い側**。
+            # **余裕は `GRASP_CLEARANCE_ENOUGH` で頭打ちにする**——それ以上は
+            # 当たらないことに変わりが無く、遠い方位を選ぶと歩数だけ増える。
+            key = (1.0 if allowed >= FIXTURE_MARGIN else 0.0,
+                   min(scored, GRASP_CLEARANCE_ENOUGH), -gap)
+            if best is None or key > best[0:3]:
+                best = key + (float(degree),)      # type: ignore[assignment]
+        assert best is not None
+        return float(best[3]), float(best[1])      # type: ignore[index]
+
+    def turn_wrist(self, label: str, azimuth: float, gripper: float,
+                   budget: int = 45, tolerance: float = 4.0) -> None:
+        """指の並ぶ向きだけを回す。**腕は動かさない。**
+
+        `action[5]` は向きの差分指令で、**1 歩あたり 3.1 度しか回らない**
+        （実測。`probe/gripper_frame.py`）。だから**降りる前に回しきる**——
+        降りながら回すと、回り切る前に指が隣の物へ当たる。
+
+        **指は 2 本で対称なので、誤差は ±90 度に折り返す。** 折り返さないと
+        180 度回すのに 58 歩使って、同じ形の掴みにしかならない。
+        """
+        used = self.record.steps
+        for _ in range(budget):
+            error = (azimuth - self.finger_azimuth + 90.0) % 180.0 - 90.0
+            if abs(error) < tolerance:
+                break
+            action = np.zeros(7)
+            action[5] = float(np.clip(error / 12.0, -1.0, 1.0))
+            action[6] = gripper
+            if not self._take_step(action):
+                break
+        left = abs((azimuth - self.finger_azimuth + 90.0) % 180.0 - 90.0)
+        # **`phases` の 3 つめは m で表示される**ので、度をそのまま入れると
+        # 1.6 度が「163 cm」と読める。残りは名前のほうへ書く。
+        self.phases.append((f"{label}・残り {left:.1f} 度",
+                            self.record.steps - used, 0.0))
+
     def site_position(self, name: str) -> np.ndarray:
         """site の位置。**ゴール判定の枠は初期配置ごとに数 mm ずれる。**"""
         return np.asarray(self.env.env.sim.data.get_site_xpos(name))
@@ -724,7 +1023,8 @@ class _Rollout:
                blend_radius: float, tolerance: float = 0.006,
                budget: int = 90, full_speed_within: float = BRAKE_WITHIN_STOP,
                smoothing: float = 1.0,
-               brake_distance: float = BRAKE_WITHIN_PASS) -> None:
+               brake_distance: float = BRAKE_WITHIN_PASS,
+               speed_cap: float = 1.0) -> None:
         """中継点を**止まらずに**繋いで通る。**運ぶ区間に使う。**
 
         `blend_radius` まで近づいたら、そこへ着く前に次の中継点へ目標を
@@ -736,6 +1036,10 @@ class _Rollout:
         blend_radius : float
             途中の中継点をどれだけ手前で見切るか。**大きいほど滑らかだが、
             角が内側に膨らむ。** 障害物の際を通るときは小さくする。
+        speed_cap : float
+            指令の上限。**1.0 が既定で、絞らない。**縁を挟んだ物を真上へ
+            上げるときのように、**速く動かすと隣の物へ押し付ける区間だけ**
+            絞る。
         brake_distance : float
             最後の 1 点の手前、どれだけの距離をかけて減速するか。
             **途中で止まらない代わりに、終点には速度を残したまま着く。**
@@ -755,7 +1059,7 @@ class _Rollout:
                 index += 1
                 continue
             action = np.zeros(7)
-            action[:3] = self._smoothed(
+            action[:3] = speed_cap * self._smoothed(
                 self._velocity_command(
                     delta, brake_distance if is_last else full_speed_within),
                 smoothing)
@@ -863,6 +1167,90 @@ def _run_pick_place(rollout: _Rollout, step: PickPlace, plan: TaskPlan) -> None:
                    smoothing=plan.smoothing)
 
 
+def _run_rim_pick_place(rollout: _Rollout, step: RimPickPlace,
+                        plan: TaskPlan) -> None:
+    """**縁をまたいで**掴み、**掴んだ物の中心**を置き先の中心へ合わせて置く。
+
+    ```
+    出発 ─▶ 選んだ方位の真上   ← 何にも当たらない高さ
+            ↻ 手首を回す        ← **降りる前に回しきる**
+            ▼ 真下へ降りる      ← 縁を 2 本の指で挟む
+              掴む
+            ▲ 真上へゆっくり    ← **横へ動かすと隣の物へ押し付ける**
+          ──弧──▶ 置く手前
+            ▼ 置く              ← **手首ではなく、掴んだ物の中心**を合わせる
+              離す
+            ▲ 逃げる
+    ```
+
+    **`PickPlace` と違うのは 3 か所だけである。**
+
+    | 違い | なぜ |
+    |---|---|
+    | 掴む位置を**方位から決める** | 物体が指より広く、縁をまたぐしかないため。**方位は自由変数** |
+    | 掴んだあと**真上へゆっくり上げる** | 横へ動かすと隣の物へ押し付ける。実測で damage の 85〜88% が掴む区間 |
+    | 置く位置を**掴んだ物の中心**で合わせる | 縁をまたぐと物の中心が手首から 5.65 cm 外れる。合わせないと皿の縁に落ちる |
+    """
+    target = step.target
+    centre = rollout.object_position(target)
+    radius = (step.grasp_radius if step.grasp_radius is not None
+              else rollout.object_extent(target))
+    azimuth, clearance = rollout.choose_grasp_azimuth(
+        target, radius,
+        centre[2] + step.clearance_band[0], centre[2] + step.clearance_band[1])
+    angle = np.radians(azimuth)
+    direction = np.array([np.cos(angle), np.sin(angle), 0.0])
+
+    wrist = centre + radius * direction
+    rollout.follow(f"{target} 掴む所の上へ",
+                   [[wrist[0], wrist[1], centre[2] + step.approach_dz]],
+                   GRIPPER_OPEN, blend_radius=0.0, tolerance=0.006,
+                   budget=plan.budget_move, smoothing=plan.smoothing)
+    rollout.turn_wrist(f"{target} 手首を {azimuth:.0f} 度へ"
+                       f"（余裕 {clearance * 100:.1f} cm）", azimuth, GRIPPER_OPEN)
+
+    # **寄っている間に物体が動いていることがある**ので位置を取り直す。
+    centre = rollout.object_position(target)
+    wrist = centre + radius * direction
+    rollout.move_to(f"{target} 縁を挟む位置へ",
+                    [wrist[0], wrist[1], centre[2] + step.grasp_dz],
+                    GRIPPER_OPEN, tolerance=0.004, budget=plan.budget_descend)
+    rollout.hold(f"{target} 掴む", GRIPPER_CLOSE, plan.close_steps)
+
+    here = rollout.eef_position.copy()
+    # **指令を絞るぶん、同じ距離に歩数が要る。**絞ったまま同じ budget で
+    # 走らせると上がりきらず、そのあとの運搬が低い所を通る（実測で
+    # 10 cm 上げるつもりが 4.5 cm しか上がらなかった）。
+    rollout.follow(f"{target} 真上へ上げる",
+                   [[here[0], here[1], here[2] + step.lift_dz]],
+                   GRIPPER_CLOSE, blend_radius=0.0, tolerance=0.006,
+                   budget=int(round(plan.budget_lift / step.lift_speed)),
+                   speed_cap=step.lift_speed)
+
+    # **手首ではなく、掴んだ物の中心を置き先へ合わせる。**
+    base = (rollout.site_position(step.place_site)
+            if step.place_site is not None
+            else rollout.object_position(step.place_object))
+    held = rollout.object_position(target)[:2] - rollout.eef_position[:2]
+    place_xy = base[:2] + np.asarray(step.place_offset) - held
+
+    rollout.follow(f"{target} 運ぶ",
+                   [[here[0], here[1], plan.carry_z],
+                    [place_xy[0], place_xy[1], plan.carry_z]],
+                   GRIPPER_CLOSE, blend_radius=plan.blend_radius,
+                   budget=plan.budget_lift + plan.budget_move,
+                   smoothing=plan.smoothing)
+    rollout.move_to(f"{target} 置く", [place_xy[0], place_xy[1], plan.place_z],
+                    GRIPPER_CLOSE, tolerance=0.004, budget=plan.budget_descend)
+    rollout.hold(f"{target} 落ち着かせる", GRIPPER_CLOSE, plan.settle_steps)
+    rollout.hold(f"{target} 離す", GRIPPER_OPEN, plan.open_steps)
+    rollout.follow(f"{target} 逃げる",
+                   [[place_xy[0], place_xy[1], plan.retreat_z]],
+                   GRIPPER_OPEN, blend_radius=plan.blend_radius,
+                   tolerance=0.01, budget=plan.budget_lift,
+                   smoothing=plan.smoothing)
+
+
 def _run_turn_knob(rollout: _Rollout, step: TurnKnob, plan: TaskPlan) -> None:
     """コンロの火力つまみを掴んで回し、離して逃げる。
 
@@ -892,7 +1280,9 @@ def _run_turn_knob(rollout: _Rollout, step: TurnKnob, plan: TaskPlan) -> None:
 
 
 # **動きの種類ごとに実行の中身を引く。** 種類が増えても `run_episode` は変わらない。
-_RUNNERS: dict[type, Any] = {PickPlace: _run_pick_place, TurnKnob: _run_turn_knob}
+_RUNNERS: dict[type, Any] = {PickPlace: _run_pick_place,
+                             RimPickPlace: _run_rim_pick_place,
+                             TurnKnob: _run_turn_knob}
 
 
 def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
@@ -1038,6 +1428,40 @@ def _resolve_plan(task: str, smoothing: float | None = None,
     if blend_radius is not None:
         plan = replace(plan, blend_radius=blend_radius)
     return plan
+
+
+def _horizontal_clearance(sim: Any, point: np.ndarray, z_low: float,
+                          z_high: float, keep: tuple[str, ...] = (),
+                          skip: tuple[str, ...] = ()) -> float:
+    """点から、当たり判定のある geom の面までの**水平距離の最小値** [m]。
+
+    **箱を円で近似している。**方位を選ぶだけなら十分である——うまく選べば
+    余裕は数 mm と数 cm の違いになるので、mm の精度は要らない。
+
+    `keep` を渡すとその名前で始まる geom **だけ**を見る。渡さないときは
+    `skip` で始まるものを除いて全部見る。**採点で判定される物体と、
+    判定されない fixture を別々に測るために 2 通り要る。**
+    """
+    best = float("inf")
+    for index in range(sim.model.ngeom):
+        if not sim.model.geom_contype[index]:
+            continue
+        name = sim.model.geom_id2name(index) or ""
+        if not name:
+            continue
+        if keep:
+            if not name.startswith(keep):
+                continue
+        elif name.startswith(skip):
+            continue
+        position = sim.data.geom_xpos[index]
+        half = float(sim.model.geom_size[index][2])
+        if position[2] + half < z_low or position[2] - half > z_high:
+            continue
+        radius = float(max(sim.model.geom_size[index][0],
+                           sim.model.geom_size[index][1]))
+        best = min(best, float(np.linalg.norm(position[:2] - point[:2])) - radius)
+    return best
 
 
 def _collidable_geoms(sim: Any) -> list[tuple[str, float, float, float]]:
