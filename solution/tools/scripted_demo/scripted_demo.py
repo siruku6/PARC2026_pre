@@ -192,7 +192,8 @@ class RimPickPlace:
     lift_speed : float
         持ち上げるときの指令の上限。**1.0 のまま上げると隣の物へ押し付ける。**
     grasp_radius : float | None
-        手首を物体の軸から何 m 外へ出すか。**None なら当たり判定から実測する。**
+        手首を物体の軸から何 m 外へ出すか。**None なら `rim_radius` が
+        掴む高さの「縁の壁の中心」を測る**（張り出しではない）。
     clearance_band : tuple[float, float]
         物体の原点から見て、どの高さの帯で方位の空き具合を見るか。
     """
@@ -389,11 +390,10 @@ TASK_PLANS: dict[str, TaskPlan] = {
         # 隙間 3.46 cm・空いている方位 209 度。**指が箱に当たるのが 15/15**
         steps=[RimPickPlace(
             "akita_black_bowl_1", place_object="plate_1",
-            grasp_radius=0.040,   # 人の手本の実測（半径 中央 4.0〜4.5 cm）
-            grasp_dz=0.042,       # 手先 0.940。パッド 1.6 cm が縁にかかる
-            approach_dz=0.2,
-            lift_dz=0.14,   # 載っている台から確実に離す
-            lift_speed=0.35)],
+            grasp_dz=0.042,       # 手先 0.940。パッド 1.6 cm が縁の壁にかかる
+            approach_dz=0.15,
+            lift_dz=0.10,
+            lift_speed=1.0)],    # 台に載っていないので絞る理由が無い
         carry_z=1.05,     # 丼の底が 0.996。クッキー箱の上端 0.9507 を越える
         place_z=0.972,    # 丼の底が 0.918。皿の縁の上端 0.9380 の内側へ降りる
         retreat_z=1.08,
@@ -411,11 +411,10 @@ TASK_PLANS: dict[str, TaskPlan] = {
         # 隙間 1.96 cm・空いている方位 314 度
         steps=[RimPickPlace(
             "akita_black_bowl_1", place_object="plate_1",
-            grasp_radius=0.040,   # 人の手本の実測（半径 中央 4.0〜4.5 cm）
-            grasp_dz=0.042,       # 手先 0.940。パッド 1.6 cm が縁にかかる
-            approach_dz=0.2,
-            lift_dz=0.14,   # 載っている台から確実に離す
-            lift_speed=0.35)],
+            grasp_dz=0.042,       # 手先 0.940。パッド 1.6 cm が縁の壁にかかる
+            approach_dz=0.15,
+            lift_dz=0.10,
+            lift_speed=1.0)],    # 台に載っていないので絞る理由が無い
         carry_z=1.05,     # 丼の底が 0.996。クッキー箱の上端 0.9507 を越える
         place_z=0.972,    # 丼の底が 0.918。皿の縁の上端 0.9380 の内側へ降りる
         retreat_z=1.08,
@@ -433,11 +432,10 @@ TASK_PLANS: dict[str, TaskPlan] = {
         # 皿との隙間 1.17 cm・空いている方位 125 度
         steps=[RimPickPlace(
             "akita_black_bowl_1", place_object="plate_1",
-            grasp_radius=0.040,   # 人の手本の実測（半径 中央 4.0〜4.5 cm）
-            grasp_dz=0.042,       # 手先 0.940。パッド 1.6 cm が縁にかかる
-            approach_dz=0.2,
-            lift_dz=0.14,   # 載っている台から確実に離す
-            lift_speed=0.35)],
+            grasp_dz=0.042,       # 手先 0.940。パッド 1.6 cm が縁の壁にかかる
+            approach_dz=0.15,
+            lift_dz=0.10,
+            lift_speed=1.0)],    # 台に載っていないので絞る理由が無い
         carry_z=1.05,     # 丼の底が 0.996。クッキー箱の上端 0.9507 を越える
         place_z=0.972,    # 丼の底が 0.918。皿の縁の上端 0.9380 の内側へ降りる
         retreat_z=1.08,
@@ -455,10 +453,9 @@ TASK_PLANS: dict[str, TaskPlan] = {
         # **箱の上に載っている。**方位では直らないので、真上へゆっくり上げる
         steps=[RimPickPlace(
             "akita_black_bowl_1", place_object="plate_1",
-            grasp_radius=0.040,   # 人の手本の実測（半径 中央 4.0〜4.5 cm）
-            grasp_dz=0.042,       # 手先 0.940。パッド 1.6 cm が縁にかかる
-            approach_dz=0.2,
-            lift_dz=0.14,   # 載っている台から確実に離す
+            grasp_dz=0.042,       # 手先 0.940。パッド 1.6 cm が縁の壁にかかる
+            approach_dz=0.20,
+            lift_dz=0.14,         # 載っている台から確実に離す
             lift_speed=0.35)],
         carry_z=1.12,     # **台の上から掴むので手先がもともと高い。**丼の底 1.066
         place_z=0.972,    # 丼の底が 0.918。皿の縁の上端 0.9380 の内側へ降りる
@@ -477,10 +474,9 @@ TASK_PLANS: dict[str, TaskPlan] = {
         # **ラメキンの上に載っている。**手本 20/20 が汚れ、damage の 50% が運搬中
         steps=[RimPickPlace(
             "akita_black_bowl_1", place_object="plate_1",
-            grasp_radius=0.040,   # 人の手本の実測（半径 中央 4.0〜4.5 cm）
-            grasp_dz=0.042,       # 手先 0.940。パッド 1.6 cm が縁にかかる
-            approach_dz=0.2,
-            lift_dz=0.14,   # 載っている台から確実に離す
+            grasp_dz=0.042,       # 手先 0.940。パッド 1.6 cm が縁の壁にかかる
+            approach_dz=0.20,
+            lift_dz=0.14,         # 載っている台から確実に離す
             lift_speed=0.35)],
         carry_z=1.12,     # **台の上から掴むので手先がもともと高い。**丼の底 1.066
         place_z=0.972,    # 丼の底が 0.918。皿の縁の上端 0.9380 の内側へ降りる
@@ -508,6 +504,10 @@ class EpisodeRecord:
     steps: int = 0
     goal_reached: bool = False
     max_displacement: float = 0.0
+    # **どの物体をいつ動かしたか。**`max_displacement` だけでは「衝突した」しか
+    # 分からず、**打つ手が決まらない**（掴む前か、運搬中か、どの物か）。
+    object_displacements: dict[str, float] = field(default_factory=dict)
+    first_violation: tuple[str, int] | None = None
     collision_threshold_m: float = 0.001
     states: list[np.ndarray] = field(default_factory=list)
     actions: list[np.ndarray] = field(default_factory=list)
@@ -794,6 +794,44 @@ class _Rollout:
             float(np.linalg.norm(sim.data.geom_xpos[i][:2] - centre[:2])
                   + max(sim.model.geom_size[i][0], sim.model.geom_size[i][1]))
             for i in geoms)
+
+    def rim_radius(self, name: str, height: float) -> float:
+        """その高さで、**縁の壁の中心**が物体の軸から何 m の所にあるか。
+
+        **ここを外すと掴めない。**丼の縁の壁は半径 3.78〜5.65 cm の間にあり、
+        厚みは 1.87 cm ある（実測。`probe/_bowl_profile.py`）。指の開きは
+        4.81 cm なので、**手首を壁の中心 4.71 cm に置くと、内側の指は 2.31 cm・
+        外側の指は 7.11 cm から閉じ始め、壁のどちら側にも 1.46 cm ずつで届く。**
+        左右が同時に当たるので、閉じる力が打ち消し合う。
+
+        **手首を内側へ置くと壊れる。**4.0 cm に置くと外側の指が 0.75 cm で
+        壁に届くのに、内側の指はまだ 1.43 cm 手前にある。**片側だけで押すので
+        掴めず、丼を内側へ押しのける**——実測で 1.6 cm 押して掴み損ねた
+        （50 配置のうち 16 本がこれで、接触は 0 のままゴールに届かなかった）。
+
+        **「いちばん外の輪」の中心を返す。** 外周（中心＋半径）がいちばん
+        大きい geom を選び、その**中心までの距離**を返す。
+        """
+        sim = self.env.env.sim
+        centre = self.object_position(name)
+        best: tuple[float, float] | None = None
+        for index in range(sim.model.ngeom):
+            if not sim.model.geom_contype[index]:
+                continue
+            if not (sim.model.geom_id2name(index) or "").startswith(name):
+                continue
+            position = sim.data.geom_xpos[index]
+            half = float(sim.model.geom_size[index][2])
+            if not (position[2] - half <= height <= position[2] + half):
+                continue
+            distance = float(np.linalg.norm(position[:2] - centre[:2]))
+            width = float(max(sim.model.geom_size[index][0],
+                              sim.model.geom_size[index][1]))
+            if best is None or distance + width > best[0]:
+                best = (distance + width, distance)
+        if best is None:
+            raise RuntimeError(f"{name} に高さ {height:.4f} を覆う当たり判定が無い")
+        return best[1]
 
     def choose_grasp_azimuth(self, target: str, radius: float,
                              z_low: float, z_high: float
@@ -1089,9 +1127,18 @@ class _Rollout:
         self.record.steps += 1
         if len(self._watched_keys):
             current = np.stack([self.obs[key] for key in self._watched_keys])
-            moved = float(np.abs(current - self._watched_origin).sum(axis=1).max())
+            each = np.abs(current - self._watched_origin).sum(axis=1)
+            moved = float(each.max())
             self.record.max_displacement = max(self.record.max_displacement,
                                                moved)
+            for position, key in enumerate(self._watched_keys):
+                name = key[:-4]
+                value = float(each[position])
+                if value > self.record.object_displacements.get(name, 0.0):
+                    self.record.object_displacements[name] = value
+                if (self.record.first_violation is None
+                        and value > self.record.collision_threshold_m):
+                    self.record.first_violation = (name, self.record.steps)
         self.record.displacements.append(self.record.max_displacement)
         return self.record.steps < self.max_steps
 
@@ -1300,8 +1347,10 @@ def _run_rim_pick_place(rollout: _Rollout, step: RimPickPlace,
     """
     target = step.target
     centre = rollout.object_position(target)
+    # **縁の壁の中心を、掴む高さで測る。**張り出し（外周）ではない——外周に
+    # 手首を置くと内側の指が壁に乗ってしまう（`rim_radius` の説明）。
     radius = (step.grasp_radius if step.grasp_radius is not None
-              else rollout.object_extent(target))
+              else rollout.rim_radius(target, centre[2] + step.grasp_dz))
     azimuth, clearance = rollout.choose_grasp_azimuth(
         target, radius,
         centre[2] + step.clearance_band[0], centre[2] + step.clearance_band[1])
@@ -1823,6 +1872,7 @@ def command_verify(args: argparse.Namespace) -> None:
     failures: list[tuple[int, int, bool]] = []
     measured: list[dict[str, float]] = []
     saved_actions: list[np.ndarray] = []
+    culprits: dict[str, list[tuple[int, int, float]]] = {}
     for index, state in enumerate(init_states):
         record = run_episode(env, state, plan, args.max_steps,
                              verbose=args.verbose and index == 0,
@@ -1836,6 +1886,11 @@ def command_verify(args: argparse.Namespace) -> None:
             saved_actions.append(np.asarray(record.actions, dtype=np.float32))
         if not record.success:
             failures.append((index, record.steps, record.collided))
+            if record.collided and record.first_violation is not None:
+                name, when = record.first_violation
+                culprits[name] = culprits.get(name, [])
+                culprits[name].append((when, record.steps,
+                                       record.object_displacements[name]))
         else:
             measured.append(smoothness(record.ee_positions))
 
@@ -1855,6 +1910,14 @@ def command_verify(args: argparse.Namespace) -> None:
           f"（上限 {args.max_steps}）")
     if failures:
         print(f"  失敗（番号, ステップ数, 衝突）: {failures[:20]}")
+    if culprits:
+        print("  **何をいつ動かしたか**（1 mm を超えた最初の歩／全体の歩数）")
+        for name, hits in sorted(culprits.items(), key=lambda x: -len(x[1])):
+            share = statistics.median(h[0] / max(h[1], 1) for h in hits)
+            print(f"    {name:<32}{len(hits):>3} 本  "
+                  f"最初の歩 中央 {int(statistics.median(h[0] for h in hits)):>3}"
+                  f"（本の {100 * share:.0f}% 地点）  "
+                  f"変位 中央 {1000 * statistics.median(h[2] for h in hits):.1f} mm")
     if measured:
         middle = {key: statistics.median(m[key] for m in measured)
                   for key in ("avg_jerk", "rms_jerk", "sparc", "path_length")}
