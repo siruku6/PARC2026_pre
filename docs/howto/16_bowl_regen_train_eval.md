@@ -250,7 +250,7 @@ cat work/final_eval/<日時>_track2_bowl5/score_composite.md
 |---|---|---|
 | 衝突率が下がらない | 手本が転移していない | **本数か学習の刻みの問題。**0.17 エポックしか回っていない（[plan/23 の 2.3](../plan/23_data_regeneration_design.md)）ので、5 課題を重み付けして厚くする |
 | 衝突率は下がるが `done` が落ちた | 作り直した手本が別の失敗を教えた | **指令の形を疑う**（停止コマ 14.4%）。[reference/35](../reference/35_command_profile_and_ruckig.md) の Ruckig を入れて作り直す |
-| どちらも良いが合計点が動かない | 5 課題では全体が動かない | **[plan/24 の 6 節](../plan/24_contact_avoidance_redesign.md)の第 1 段・第 2 段へ広げる** |
+| どちらも良いが合計点が動かない | 5 課題では全体が動かない | **[plan/24 の 8 節](../plan/24_contact_avoidance_redesign.md#8-広げる順序転移が確認できてから)の第 1 段・第 2 段へ広げる** |
 
 ---
 

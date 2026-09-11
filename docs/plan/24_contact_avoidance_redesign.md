@@ -387,3 +387,79 @@ bddl の書き方のまま足すと、**41 番目の課題**になって誰も�
 | **推論側で接触を避ける後段補正** | 提出インターフェース（`submission_template/policy_server.py`）が方策へ渡すと**明記しているのは画像とロボット自身の状態だけ**である。物体の位置は手元の評価ハーネスでは届くが、**仕様に無いものに依存する手は採らない** |
 | しきい値が厳しいことへの対処 | 失点の超過は**5 mm 以上が 65%**。しきい値の問題ではない |
 | 汚い手本を外す（手 F） | [reference/19](../reference/19_weights_catalog.md) の 9/10 で否定済み。引き算は正解を教えない |
+
+---
+
+## 8. 広げる順序——**転移が確認できてから**
+
+### 8.1 残りの失点はどう並んでいるか
+
+**再現**（`solution/tools/eval/tier_contact_loss.py`・2.1 節と同じ 6 回・1,154 本）:
+
+```bash
+python3 solution/tools/eval/tier_contact_loss.py --detail
+```
+
+| 段 | 家族 | 本 | `done` | 成功 | **接触の失点** | 未達の余地 | 追加の手間 |
+|---|---|---|---|---|---|---|---|
+| **今回の 5 課題** | 5 | 236 | 92.8% | 37.7% | **11.3 pt** | 1.5 pt | **済** |
+| **第 1 段**（同じ丼） | 9 | 224 | 81.7% | 75.0% | **1.3 pt** | 3.6 pt | **計画を足すだけ** |
+| **第 2 段**（カゴ課題） | 12 | 398 | 89.7% | 79.4% | **3.6 pt** | 3.6 pt | **雛形 1 つ** |
+| 第 3 段（機構が別） | 9 | 296 | 72.6% | 68.2% | 1.1 pt | 7.0 pt | 4 通り別々 |
+
+**群の切り方は課題名ではなく `obj_of_interest` である**（同じ道具立てなら
+1 つの雛形で書けるので、そこで手間が決まる）。
+**今回の 5 課題は、この 6 回では 4 家族ぶんしか出ていない**
+（`next_to_the_ramekin` が当たっていない）。本数・失点はその 4 家族のものである。
+
+**2 つの数を分けて見ること。**「接触の失点」は接触を消せば取れるぶん
+（`done ∧ collided`）、「未達の余地」は**接触を消しても取れない**ぶん（`¬done`）で、
+どちらも全 1,154 本を分母にしている。**第 3 段は接触が 1.1 pt しかない。**
+そこに `RimPickPlace` 系の手を入れても点は動かない——落ちているのは接触ではない。
+
+### 8.2 段ごとの中身
+
+**第 1 段は `akita_black_bowl_1` を掴む残り 9 家族である。**丼は今回と同じ物なので、
+`rim_radius` も `choose_grasp_azimuth` も**そのまま効く**。`TASK_PLANS` に
+9 行足すだけで、新しい機構は要らない。
+
+| 本 | 接触 | 家族 |
+|---|---|---|
+| 72 | 11.1% | `put_the_bowl_on_the_plate` |
+| 10 | 20.0% | `pick_up_the_black_bowl_next_to_the_plate_and_place_it_on_the_plate` |
+| 10 | 20.0% | `put_the_bowl_on_the_stove` |
+| 10 | 10.0% | `pick_up_the_black_bowl_in_the_top_drawer_of_the_wooden_cabinet_…` |
+| 82 | 2.4% | `put_the_cream_cheese_in_the_bowl` |
+| 10 | 0.0% | `from_table_center` / `on_the_stove` / `on_the_wooden_cabinet` / `KITCHEN_SCENE4_…bottom_drawer…` |
+
+**第 2 段は `basket_1` へ入れる 12 家族で、置き先が全部同じである。**
+掴む相手だけが違うので、**雛形 1 つに物体名を差し替えれば 12 家族が書ける。**
+**失点は 2 つの「両方入れる」課題に集中している**——
+`LIVING_ROOM_SCENE2_put_both_…` は接触 80%・90% で成功 0% である
+（先に入れた物をあとの動作で押している。**1 個目を置く位置を選べば直るはず**）。
+
+| 本 | 接触 | 家族 |
+|---|---|---|
+| 10 | **90.0%** | `LIVING_ROOM_SCENE2_put_both_the_cream_cheese_box_and_the_butter_in_the_basket` |
+| 10 | **80.0%** | `LIVING_ROOM_SCENE2_put_both_the_alphabet_soup_and_the_tomato_sauce_in_the_basket` |
+| 10 | 60.0% | `pick_up_the_bbq_sauce_and_place_it_in_the_basket` |
+| 10 | 50.0% | `pick_up_the_cream_cheese_and_place_it_in_the_basket` |
+| 82 | 13.4% | `pick_up_the_tomato_sauce_and_place_it_in_the_basket` |
+| 残り 7 家族 | 0〜10% | milk / alphabet_soup / chocolate_pudding / butter / ketchup / orange_juice / salad_dressing |
+
+### 8.3 進め方——**3 段めの門で止める**
+
+1. **今回の 5 課題で学習と対照評価を回す**（[howto/16](../howto/16_bowl_regen_train_eval.md)。いま着手できる）
+2. **転移が確認できたら**、第 1 段（ほぼ無料）→ 第 2 段（雛形 1 つ）
+3. **転移が確認できなければ、広げても意味がない**——
+   問題はデータではなく**学習・転移の段**にあることになる
+
+**2 と 3 を分ける判断は [howto/16 の 8 節](../howto/16_bowl_regen_train_eval.md#8-どう読むか)である**
+（丼 5 課題の衝突率が 60.6% から下がり、かつ `done` が 92.8% を保つこと）。
+
+**なぜ門を置くか。**このリポジトリはデータ側の介入を 3 回試して 3 回とも外している
+（[knowledge/22](../knowledge/22_reverse_data_interferes_with_same_objects.md)・
+[talk/open_items](../talk/open_items.md) の F60）。
+**「良い手本を作れば方策が真似る」という鎖は、この課題ではまだ 1 度も通っていない。**
+5 課題で通らないものが 26 家族で通ることはない。
+**広げる手間（第 2 段で雛形 1 つ＋12 家族ぶんの生成と検証）を先に払わない。**
