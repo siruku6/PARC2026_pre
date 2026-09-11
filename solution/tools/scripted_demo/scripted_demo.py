@@ -189,6 +189,9 @@ class RimPickPlace:
         ため、ここまでは回しながら降り、ここから下は真下へまっすぐ降りる。
     lift_dz : float
         掴んだあと、**真上へ**上げる高さ。
+    descend_speed : float
+        **縁を挟む位置へ降りるときの指令の上限。**台の上に載っている物では、
+        勢いよく降りると指が器に当たった衝撃で器が台の上を滑る。
     lift_speed : float
         持ち上げるときの指令の上限。**1.0 のまま上げると隣の物へ押し付ける。**
     grasp_radius : float | None
@@ -206,6 +209,7 @@ class RimPickPlace:
     approach_dz: float = 0.14
     hover_dz: float = 0.07
     lift_dz: float = 0.10
+    descend_speed: float = 1.0
     lift_speed: float = 0.45
     grasp_radius: float | None = None
     clearance_band: tuple[float, float] = (-0.02, 0.10)
@@ -455,6 +459,7 @@ TASK_PLANS: dict[str, TaskPlan] = {
             "akita_black_bowl_1", place_object="plate_1",
             grasp_dz=0.042,       # 手先 0.940。パッド 1.6 cm が縁の壁にかかる
             approach_dz=0.20,
+            descend_speed=0.35,   # 器に当たった衝撃で台の上を滑る
             lift_dz=0.14,         # 載っている台から確実に離す
             lift_speed=0.35)],
         carry_z=1.12,     # **台の上から掴むので手先がもともと高い。**丼の底 1.066
@@ -476,6 +481,7 @@ TASK_PLANS: dict[str, TaskPlan] = {
             "akita_black_bowl_1", place_object="plate_1",
             grasp_dz=0.042,       # 手先 0.940。パッド 1.6 cm が縁の壁にかかる
             approach_dz=0.20,
+            descend_speed=0.35,   # 器に当たった衝撃で台の上を滑る
             lift_dz=0.14,         # 載っている台から確実に離す
             lift_speed=0.35)],
         carry_z=1.12,     # **台の上から掴むので手先がもともと高い。**丼の底 1.066
@@ -1381,9 +1387,12 @@ def _run_rim_pick_place(rollout: _Rollout, step: RimPickPlace,
     if left > 6.0:
         rollout.turn_wrist(f"{target} 手首の残りを詰める", azimuth,
                            GRIPPER_OPEN, budget=30, tolerance=5.0)
-    rollout.move_to(f"{target} 縁を挟む位置へ（余裕 {clearance * 100:.1f} cm）",
-                    [wrist[0], wrist[1], centre[2] + step.grasp_dz],
-                    GRIPPER_OPEN, tolerance=0.004, budget=plan.budget_descend)
+    rollout.follow(f"{target} 縁を挟む位置へ（余裕 {clearance * 100:.1f} cm）",
+                   [[wrist[0], wrist[1], centre[2] + step.grasp_dz]],
+                   GRIPPER_OPEN, blend_radius=0.0, tolerance=0.004,
+                   budget=int(round(plan.budget_descend / step.descend_speed)),
+                   brake_distance=BRAKE_WITHIN_STOP,
+                   speed_cap=step.descend_speed)
     rollout.hold(f"{target} 掴む", GRIPPER_CLOSE, plan.close_steps)
 
     here = rollout.eef_position.copy()
