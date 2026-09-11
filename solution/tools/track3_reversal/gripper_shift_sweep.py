@@ -529,10 +529,25 @@ def measure(rev_env, rev_goals, r, rev_goal, starts, obj_pos_start=None):
         # **1 mm 未満は数えない。**シムの整定でこの程度は常に動く。
         row["disturb_mm"] = {n: v for n, v in moved.items() if v >= 1.0}
         row["disturb_max_mm"] = max(moved.values(), default=0.0)
+    # **放した瞬間と終わりの傾き。**「置いたあとに倒れていないか」は goal では
+    # 見えない——`On(物, 領域)` は箱の中に居るかだけを見るので、**倒れたまま
+    # 箱の中に居れば ○ になる。**学習データとしては倒れた回を入れたくないので、
+    # 数字で残す（`--level-before-release` を付けるかの判断もこれで決める）。
+    if "trace" in r and r.get("release_frames"):
+        tilts = {}
+        for k, name in enumerate(r.get("release_objs", [])):
+            tr = r["trace"][name]
+            t0 = min(int(r["release_frames"][k]), len(tr["tilt"]) - 1)
+            tilts[name] = {"release": round(float(tr["tilt"][t0]), 1),
+                           "end": round(float(tr["tilt"][-1]), 1)}
+        row["tilt_deg"] = tilts
+        row["tilt_end_max_deg"] = round(
+            max(v["end"] for v in tilts.values()), 1)
     if "n_extra" in r:                          # phased のときだけ付く
         row.update(n_extra=int(r["n_extra"]), n_approach=int(r["n_approach"]),
                    n_standoff=int(r["n_standoff"]), n_reach=int(r["n_reach"]),
                    n_lift=int(r["n_lift"]), n_floor=int(r["n_floor"]),
+                   n_backoff=int(r.get("n_backoff", 0)),
                    n_settle=int(r["n_settle"]), n_cycles=int(r["n_cycles"]),
                    n_path=int(r["n_path"]), n_tail=int(r["n_tail"]),
                    per_cycle=r.get("per_cycle"),
@@ -823,7 +838,13 @@ def main():
                     row["settle_frames"] = settle_frames(r)
                 if row.get("drop_mm") is not None:
                     extra += f"  落下 {row['drop_mm']:5.1f} mm"
-                if args.trace_release and "obj_z" in r:
+                if "tilt_end_max_deg" in row:
+                    rel = max(v["release"] for v in row["tilt_deg"].values())
+                    extra += (f"  傾き 放す{rel:5.1f}°→終{row['tilt_end_max_deg']:5.1f}°")
+                # **`"obj_z"` を見ていたので、この窓は黙って閉じていた**（9/11 に直した）。
+                # `rollout_phased` はその名前の値をもう返しておらず、`--trace-release`
+                # は何を渡しても 1 行も出さないままだった。見るのは `trace` である。
+                if args.trace_release and "trace" in r:
                     print_release_trace(r, args.trace_release)
                 if "disturb_max_mm" in row:
                     extra += (f"  他の物 {row['disturb_max_mm']:5.1f} mm "

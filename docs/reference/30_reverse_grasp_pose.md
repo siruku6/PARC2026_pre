@@ -360,12 +360,17 @@ OSC は 1 コマで指令の 2 割ほどしか動かないので、姿勢差が�
 ある。**
 
 **【9/8 に直した】共通で `ROT_LIMIT=0.375 MAX_APPROACH=200 SETTLE=80` を付ける**
-（8 節と [31 の 8.1](31_reverse_place_without_contact.md)）。**`LEVEL=1` は赤マグと
-two mugs だけ**——本に付けると 10 mm 落ちる。
+（8 節と [31 の 10.1](31_reverse_place_without_contact.md)）。**`LEVEL=1` は赤マグと
+two mugs だけ**——本に付けると release までが 8〜12 コマ伸びて落下も増える
+（[31 の 6.2](31_reverse_place_without_contact.md)）。
+
+**【9/10 に変えた】`MAX_TAIL=-1`（全部辿る）にする。**`chunk_size=50` の教師として
+release 手前 50 コマぶんの答えが要るためで、`--max-steps` の 300 枠には数えない
+（[31 の 8.1](31_reverse_place_without_contact.md)）。
 
 ```bash
 COMMON='MODE=phased INIT_SOURCE=t3 GRASP_FRAME=clamped STANDOFF=0.06 T3_INIT=all
-        LIFT=0.08 RELEASE=contact SETTLE=80 MAX_TAIL=5 MAX_STEPS=300
+        LIFT=0.08 RELEASE=contact SETTLE=80 MAX_TAIL=-1 MAX_STEPS=300
         ROT_LIMIT=0.375 MAX_APPROACH=200'
 
 # 本（LEVEL は付けない）

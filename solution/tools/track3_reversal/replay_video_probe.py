@@ -484,7 +484,15 @@ OUT_MAX_ROT = np.array([0.5, 0.5, 0.5], dtype=np.float64)
 # **通過点を先に作って 1 コマに 1 点ずつ渡せば、各コマの目標が近いので上限に届かない。**
 
 # 1 コマに出してよい指令の上限。配布データの端（並進 0.9375・回転 0.375）より内側に取る。
-APPROACH_LIMIT_POS = float(os.environ.get("APPROACH_LIMIT_POS", "0.85"))
+# **【9/11 に上げた】並進 0.85 → 0.9375（＝配布データの端そのもの）。**
+# 0.85 は封筒の内側を取りすぎていた——できたデータは並進が **±0.9375 以上 0.00%**
+# （配布は 6.40%、本タスクの 3 本では 10.9%）で、**配布データより遅い側に外れていた。**
+# 「端に 1 コマも乗せない」ではなく「配布と同じ程度に収める」が目標である。
+# 端まで上げても実測は **±1.000 が 0.00%・±0.9375 以上も 0.00%** のままで、
+# release までの長さが 240/246/222 → **236/236/219** コマに縮む。
+# **`osc_command` の `np.clip` は残す**——ここに当たったら通過点の設計が
+# 間違っているという合図である（0.9375 は目標、1.000 は警報）。
+APPROACH_LIMIT_POS = float(os.environ.get("APPROACH_LIMIT_POS", "0.9375"))
 APPROACH_LIMIT_ROT = float(os.environ.get("APPROACH_LIMIT_ROT", "0.30"))
 
 # 最小ジャーク（加速度の変化が最も小さい軌道）の速度の山は、平均速度の 1.875 倍になる。
@@ -494,9 +502,19 @@ MIN_JERK_PEAK_RATIO = 1.875
 
 # **指令 1 単位あたりに実際に動く量。**比例制御が上限を出し続けた区間では腕が
 # 遅れ続けるので、`OUT_MAX_POS` そのものではなくこの応答量で通過点の間隔を決める。
-# **並進は配布データからの最小二乗で 11.25 mm/単位。回転は同じ応答比を置いた暫定値で、
-# 回して測り直す**（028 の 5.1 節の 4）。
-APPROACH_RESPONSE_POS_M = float(os.environ.get("APPROACH_RESPONSE_POS_M", "0.01125"))
+#
+# **【9/11 に測り直した】028 の 5.1 節の 4 が「回して測り直す」と書いていた宿題である。**
+# 1 コマの実変位を指令のノルムで割った中央値で測る（成分ごとの最小二乗は、
+# 動いていないコマに引っ張られて低く出る）:
+#
+#   配布データ（ep4061-4063 の順方向）  **12.94 mm/単位** ／ **0.1153 rad/単位**
+#   自作データ（try5 の逆向き 3 本）    **12.55 mm/単位** ／ **0.1197 rad/単位**
+#
+# **並進の 11.25 は 14% 低すぎた。**低く見積もると通過点を刻みすぎ、そのぶん
+# エピソードが伸びて遅くなる（実測で復路が 4.2 mm/コマ。配布は中央 8.2・最大 15.8）。
+# **回転の 0.1125 は当たっていた**ので触らない（配布の 1 コマ最大 1.96° に対し、
+# 上限 0.30 × 0.1125 rad = 1.93°/コマ で封筒とちょうど揃う）。
+APPROACH_RESPONSE_POS_M = float(os.environ.get("APPROACH_RESPONSE_POS_M", "0.0128"))
 APPROACH_RESPONSE_ROT_RAD = float(os.environ.get("APPROACH_RESPONSE_ROT_RAD", "0.1125"))
 
 # 距離が 0 に近くても、いきなり目標を渡さずにこれだけは刻む。
@@ -721,6 +739,75 @@ def _resample_segment(
     return targets
 
 
+def _warp_reference(
+    ref: np.ndarray,
+    i0: int,
+    stop_i: int,
+    start_pose: np.ndarray,
+) -> np.ndarray:
+    """記録の復路を、**いま腕がいる姿勢から始まるように歪めて**返す。
+
+    **合流の段差そのものを消すための関数である。**掴む姿勢は順方向の
+    「実際に挟んだコマ」（`clamp`）から作るのに、復路の入口 `ref[i0]` は
+    順方向の「放したコマ」（`open`）の姿勢である。**この 2 つは同じ物を
+    掴んでいるのに向きが違う**——順方向はその間に物を持ち替えずに運んで
+    いるので、差は運搬中に手首が回った角そのものになる（本タスクの実測で
+    **63 / 55 / 62 度**）。
+
+    そのまま `ref[i0]` へ橋を架けると、腕は掴んだ直後に **+68 度**回して
+    から、復路をなぞりながら **−63 度**巻き戻す。**行って戻るだけの回転**で、
+    実測では復路の頭 70 コマが 126 mm しか進まずに終わっていた
+    （荷物を大きく振り回すので見た目にも悪い）。
+
+    そこで**橋を架ける代わりに軌跡のほうを動かす。**入口では
+    「記録 → いまの姿勢」のずれを丸ごと足し、**置くコマ（`stop_i`）へ向けて
+    なめらかに 0 へ引く。**置く姿勢は記録のままなので、goal の判定は変わらない。
+    要る正味の回転は実測で **68+63 → 40 / 8 / 34 度**に落ちる。
+
+    **重みは最小ジャークの形にする。**両端で微分が 0 になるので、入口にも
+    出口にも速度の飛びが入らない（線形に引くと出口で折れる）。
+
+    Parameters
+    ----------
+    ref : np.ndarray
+        記録の基準経路 (T, 8) か (T, 6)。前 3 つが位置 [m]、次の 3 つが軸角。
+    i0, stop_i : int
+        歪める区間。`i0` が復路の入口、`stop_i` が置くコマ。
+    start_pose : np.ndarray
+        いま腕がいる姿勢 (6,)。ここが歪めたあとの `ref[i0]` になる。
+
+    Returns
+    -------
+    warped : np.ndarray
+        `ref` と同じ形の複製。`i0..stop_i` の外は元のまま。
+    """
+    from robosuite.utils import transform_utils as T
+
+    out = np.array(ref, dtype=np.float64, copy=True)
+    if stop_i <= i0:
+        return out
+
+    start = np.asarray(start_pose, dtype=np.float64)
+    delta_pos = start[:3] - out[i0, :3]
+    # **回転は world 合成の軸角で測る**（`osc_command`・`_approach_waypoints` と同じ）。
+    rot_ref0 = T.quat2mat(T.axisangle2quat(out[i0, 3:6]))
+    rot_start = T.quat2mat(T.axisangle2quat(start[3:6]))
+    axis_angle_fix = np.asarray(T.quat2axisangle(T.mat2quat(rot_start @ rot_ref0.T)))
+    angle_fix = float(np.linalg.norm(axis_angle_fix))
+
+    span = stop_i - i0
+    for index in range(i0, stop_i + 1):
+        ratio = (index - i0) / span
+        # 1 → 0 へ、両端で速度も加速度も 0 になる形（最小ジャークの裏返し）。
+        weight = 1.0 - (10.0 * ratio ** 3 - 15.0 * ratio ** 4 + 6.0 * ratio ** 5)
+        out[index, :3] = ref[index, :3] + delta_pos * weight
+        if angle_fix * weight >= 1e-9:
+            rot_at = T.quat2mat(T.axisangle2quat(axis_angle_fix * weight)) @ \
+                T.quat2mat(T.axisangle2quat(ref[index, 3:6]))
+            out[index, 3:6] = np.asarray(T.quat2axisangle(T.mat2quat(rot_at)))
+    return out
+
+
 def eef_axisangle(obs):
     """obs の eef クォータニオンを軸角にする（`observation.state[3:6]` と同じ形）。"""
     from robosuite.utils import transform_utils as T
@@ -754,6 +841,8 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
       C 復路 — 掴んだ後は**記録どおりの時刻逆向き**で基準経路を追う
       D 設置 — `release_i` を渡すと、そこで復路を止めて**触れるまで下ろしてから**
                放す（後述）。放したあとは残りの復路で手を引く
+      E 後退 — 開いたら、まず**進入軸に沿ってまっすぐ引く**（`standoff` と同じ
+               距離）。これが無いと、引き上げる腕が置いた物を叩いて倒す
 
     A と B で入るコマは**デモに無い余分なコマ**だが、学習データを作るのが目的なので
     問題にならない。指令も観測も動画も同じ列に入る。
@@ -900,7 +989,7 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
         return n
 
     n = {"standoff": 0, "reach": 0, "grip": 0, "lift": 0, "floor": 0,
-         "settle": 0, "path": 0, "tail": 0}
+         "settle": 0, "path": 0, "tail": 0, "backoff": 0}
     approach_err, opened_at, placed, last_stop = [], [], [], None
     per_cycle = []
 
@@ -940,34 +1029,36 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
         i0 = int(cyc["start_i"])
         rel = cyc["release_i"]
         stop_i = (len(ref) - 1) if rel is None else max(int(rel), i0)
+        # **【9/10 に変えた】記録の 1 区間を、腕が追える間隔に割り直して渡す**
+        # （`_resample_segment`・028）。**記録の軌跡は 1 コマ 7.8〜15.8 mm 動いていて、
+        # 腕が追える 12.1 mm を超えている区間がある。**そのままだと差が溜まって
+        # 指令が上限に張り付く（実測で復路の 21.45% が ±1.000）。
+        n_path_before = n["path"]
+
+        # **【9/11 に変えた】合流の段差に橋を架けるのをやめ、軌跡のほうを歪める**
+        # （`_warp_reference`）。**橋は「行って戻るだけの回転」を作っていた**
+        # ——掴む姿勢は順方向の `clamp`（机で掴んだ向き）から作るのに、復路の入口
+        # `ref[i0]` は順方向の `open`（棚に置いた向き）なので 63 / 55 / 62 度違う。
+        # 橋でそこへ寄せてから復路が同じだけ巻き戻すので、**復路の頭 70 コマが
+        # 126 mm しか進まないまま荷物を 68 度振り回していた**（実測）。
+        # 歪めれば入口の段差は 0 になり、要る正味の回転は 40 / 8 / 34 度に落ちる。
+        path_ref = ref
+        if stop_i > i0:
+            current_pose = np.concatenate([
+                np.asarray(obs["robot0_eef_pos"], dtype=np.float64), eef_axisangle(obs)])
+            path_ref = _warp_reference(ref, i0, stop_i, current_pose)
+
+        # **床を張る区間は、歪めたあとの高さで決める。**歪める前の `ref` で決めると、
+        # 入口が持ち上がったぶんだけ「もう上にいるのに床を張る」区間が残る。
         i_join = i0
         if z_safe is not None and stop_i > i0:
-            z_path = ref[i0:stop_i, 2]
+            z_path = path_ref[i0:stop_i, 2]
             above = np.where(z_path >= z_safe)[0]
             # 復路が一度も上がってこないなら、いちばん高い所までを床の対象にする
             i_join = i0 + int(above[0] if len(above) else np.argmax(z_path))
-        # **【9/10 に変えた】記録の 1 区間を、腕が追える間隔に割り直して渡す**
-        # （`_resample_segment`・028）。**記録の軌跡は 1 コマ 7.8〜15.8 mm 動いていて、
-        # 腕が追える 9.56 mm を超えている。**そのままだと差が溜まって指令が上限に
-        # 張り付く（実測で復路の 21.45% が ±1.000、22.94% が ±0.375 ちょうど）。
-        n_path_before = n["path"]
-
-        # **合流の段差に橋を架ける。**上昇が終わった所と記録の軌跡の頭は同じ姿勢では
-        # ないので、いきなり `ref[i0+1]` を渡すと 1 コマ目から差が大きく、指令が
-        # 上限に張り付く（**実測で復路の最初の 10% は並進 83%・回転 100% が飽和し、
-        # 40% 以降はゼロだった**——残っていた飽和はここだけだった）。
-        if stop_i > i0:
-            join_target = ref[i0].copy()
-            if i0 < i_join:
-                join_target[2] = max(join_target[2], z_safe)
-            current_pose = np.concatenate([
-                np.asarray(obs["robot0_eef_pos"], dtype=np.float64), eef_axisangle(obs)])
-            for tgt in _approach_waypoints(current_pose, join_target):
-                step(osc_command(obs, tgt, grip[i0], gain, rot_limit))
-                n["path"] += 1
 
         for i in range(i0, stop_i):
-            seg_start, seg_end = ref[i].copy(), ref[i + 1].copy()
+            seg_start, seg_end = path_ref[i].copy(), path_ref[i + 1].copy()
             floored = i < i_join and seg_end[2] < z_safe
             if i < i_join:
                 # **床を張るのは高さだけ。**コマは飛ばさない（姿勢の変化を飛ばすと
@@ -1018,6 +1109,28 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
             step(osc_command(obs, hold, -1.0, gain, rot_limit))
         n["grip"] += grip_hold
 
+        # E: **開いたら、まず進入軸に沿ってまっすぐ引く**（`standoff` と同じ距離）。
+        #
+        # **これが無いと、引き上げる腕が置いた物を叩いて倒す。**A0 は「直進で
+        # 掴む姿勢へ向かうと途中で物を横から押す」ので手前へ回り込むが、**帰りは
+        # その対称の動きが無く、指を物に掛けたまま復路へ折れていた。**
+        # 実測（ep4061・`LEVEL=1`）: 本は t=219 で机に着いて t=241 まで 22 コマ
+        # tilt 0.0° で**完全に静止していた**のに、tail の 12 コマ目 t=242 で
+        # tilt が 9.1° に跳ね、z が 2 mm 浮いて、t=266 に 90.0°（横倒し）になった。
+        # **物が不安定だったのではなく、腕が当てていた。**
+        #
+        # 引く向きは**グリッパ自身の進入軸**（eef ローカル z の逆向き）に取る。
+        # 真上ではない——寝た物や棚の中では、真上へ逃げると天面や棚板に当たる。
+        # ここは放したあとなので `--max-steps` の 300 枠には入らない（tail に数える）。
+        if standoff > 0:
+            from robosuite.utils import transform_utils as T
+
+            r_now = T.quat2mat(np.asarray(obs["robot0_eef_quat"], dtype=np.float64))
+            back = np.concatenate([
+                np.asarray(obs["robot0_eef_pos"], dtype=np.float64)
+                - r_now[:, 2] * standoff, eef_axisangle(obs)])
+            n["backoff"] += move_to(back, tol * 3)
+
     # 放したあとの残りの復路は**腕が初期姿勢へ戻るだけ**の区間である。最後に
     # 放した時点で goal は既に立っているので、この区間の出来自体は採点に効かない
     # （本番の `pipeline/rollout.py` は `if done: break` で release 直後に打ち切る
@@ -1028,12 +1141,40 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
     # `--max-steps` の 300 枠にも数えない（`gripper_shift_sweep.py` 側で計算）。
     # `max_tail` を 0 にすると tail 自体が消え、この穴埋めが失われる。
     if opened_at and last_stop is not None:
-        end_i = (len(ref) - 1 if max_tail < 0
-                 else min(len(ref) - 1, last_stop + max_tail))
         # **ここにも合流の段差がある。**release/settle は `ref` を辿らず、実際に
         # 接触するまで下ろした独自の動きなので、腕は `ref[last_stop]`（記録上の
-        # place 直前の姿勢）とは違う所で止まっている。path の入口と同じ理由で
-        # 橋を架ける（実測で ep4062 の 3 本・tail 先頭 3 コマが並進 ±1.000 だった）。
+        # place 直前の姿勢）とは違う所で止まっている。**ここは橋を架ける**
+        # （実測で ep4062 の 3 本・tail 先頭 3 コマが並進 ±1.000 だった）。
+        #
+        # **path と違って `_warp_reference` は使えない**（9/11 に試して戻した）。
+        # path の段差は「向きの行って戻り」だったが、**ここの段差はほぼ鉛直の
+        # 位置差である**——`ref[last_stop]` は「デモが立っている本を掴んだ高さ」で、
+        # こちらが放したのは「机に着くまで下ろした高さ」なので、実測で **99 mm** 低い。
+        # 記録の tail はそこから一度さらに下がって上がる形なので、軌跡ごと 99 mm
+        # 下げると**腕を机に 9 cm 押し込む**（実測で ep4062 の tail 先頭 17 コマが
+        # z 指令 −1.000 に張り付き、腕は 1 mm/コマしか動かなかった）。
+        # **橋はここでは無駄ではない**——放したあと真上へ引く動きそのものである。
+        #
+        # **ただし橋の行き先は前へ送る**（9/11）。`ref[last_stop]` は「デモの手が
+        # 物を掴んでいた位置」なので、そこへ橋を架けると**開いた指を、いま置いた
+        # 物のある所へ戻す。**E 段で 6 cm 引いた意味が消え、実測では ep4061 の本が
+        # 橋の途中（t=252）で叩かれて 90 度倒れた。**E 段で引いた分だけ物から離れて
+        # いる記録コマまで入口を送る**——閾値は「いま実際に離れている距離」なので、
+        # 物ごとの大きさを決め打ちしなくてよい。
+        if last_stop < len(ref) - 1 and placed and placed[-1] is not None:
+            p_obj = np.asarray(obs[f"{placed[-1]}_pos"], dtype=np.float64)
+            d_safe = float(np.linalg.norm(
+                np.asarray(obs["robot0_eef_pos"], dtype=np.float64) - p_obj))
+            far = np.where(np.linalg.norm(
+                ref[last_stop:, :3] - p_obj, axis=1) >= d_safe)[0]
+            # 一度も離れないなら、いちばん離れる所を採る（tail を空にはしない）
+            last_stop += int(far[0] if len(far)
+                             else np.argmax(np.linalg.norm(
+                                 ref[last_stop:, :3] - p_obj, axis=1)))
+        # **`max_tail` は入口を送ったあとから数える。**送る前から数えると、
+        # 送った分だけ tail が短くなって `chunk_size=50` の穴埋めが足りなくなる。
+        end_i = (len(ref) - 1 if max_tail < 0
+                 else min(len(ref) - 1, last_stop + max_tail))
         if end_i > last_stop:
             join_target = ref[last_stop].copy()
             current_pose = np.concatenate([
@@ -1051,13 +1192,17 @@ def rollout_phased(env, init_state, ref_states, gripper_cmd, video_path=None,
         write_video(frames, video_path)
     out = {"n_steps": len(acts), "eef_pos": np.asarray(eef),
            "n_cycles": len(cycles),
+           # **`backoff` は `n_extra` に数える。**放したあとの動きだが、
+           # `n_pre_tail`（＝本番の 300 枠）から外すと two mugs のような
+           # 複数サイクルで枠の計算が狂う。**枠に数える側が安全である。**
            "n_extra": (n["standoff"] + n["reach"] + n["grip"] + n["lift"]
-                       + n["settle"]),
+                       + n["settle"] + n["backoff"]),
            "n_approach": n["standoff"] + n["reach"],
            # **どちらの段で足りなかったかを分けて残す。**片方が上限に張り付いた
            # ときだけ `max_approach` を上げればよく、闇雲に伸ばさずに済む。
            "n_standoff": n["standoff"], "n_reach": n["reach"],
            "n_lift": n["lift"], "n_floor": n["floor"], "n_settle": n["settle"],
+           "n_backoff": n["backoff"],
            # **どの段がコマを食っているかを段ごとに残す。**打ち切り 300 に
            # 収める作業は、この内訳を見ないと当てずっぽうになる。
            "n_path": n["path"], "n_tail": n["tail"], "per_cycle": per_cycle,
