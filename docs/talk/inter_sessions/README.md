@@ -104,6 +104,7 @@ IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \
 
 | # | 何を | 状態 |
 |---|---|---|
+| **[031](031_instruction_text_rewriting.md)** | **指示文の書き換えが適切かを判定する**（採点器が送る 16 文 → モデルが見る文の対応表を出典付きで作り、語の単位で何が変わったかと 3 段階の分類を付ける。**しきい値 0.65 と 0.99 が併存していて、決める根拠が「1 件の誤りを見つけた」しか無い**） | **依頼中（9/12）。**穴と道具は [knowledge/23](../../knowledge/23_self_made_demos_need_the_instruction_the_model_sees.md) |
 | [002](002_robot_init_pose_coverage.md) | ロボット初期姿勢の振り方を、作業空間を覆う形に作り直す | 進行中 |
 | **[006](006_track3_reverse_direction.md)** | **Track3 の逆向きタスクを試作する**（**方針は 8/30 に決まった**——広く覆う・初日に時間反転と scripted の両方を 1 タスクで試す） | **依頼中**（`open_items.md` の `F27`） |
 | [010](010_blackwell_investigation_plan.md) | Blackwell の調査計画を作る | **報告済み**（`howto/14` を全面的に書き直した。実行は 011 へ） |
