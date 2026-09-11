@@ -7,6 +7,17 @@
 > **本選 1 の残り 8 日では手当てせず、この課題を学習データから外したまま進める**
 > （ユーザの判断）。**本選 2 か 3 で拾う。**
 
+> **【9/12 追記】自作した手本を足すなら、先に
+> [knowledge/23](../../knowledge/23_self_made_demos_need_the_instruction_the_model_sees.md) を読むこと。**
+> **`record` が残す指示文は bddl の言い方で、配布データの言い方とは違う。**
+> `policy_server.py` は採点で来た文を配布データの 40 種へ寄せてからモデルへ渡すので、
+> **寄せた先の言い方で入っていない手本は評価で 1 度も引かれない。**
+> 学習は通り、損失も下がり、エラーも出ない。**沈黙して失敗する。**
+>
+> **この課題は作り直す側なので、そのまま当たる。**
+> `pick the akita black bowl on the ramekin and place it on the plate` は
+> `pick up the black bowl on the ramekin and place it on the plate` へ寄せて入れること。
+
 ## 背景（先に読んでほしい）
 
 **このコンペで何をしているか。** PARC2026 である。ロボットアーム（Franka Emika

@@ -2,6 +2,22 @@
 
 > **状態: 依頼中** ／ 受け側: RTX6000（`eng003sasaki01`）のセッション ／ 更新: 2026-09-10
 
+> **【9/12 追記】逆向きデータを組み直したら、指示文を検査すること**——
+> [knowledge/23](../../knowledge/23_self_made_demos_need_the_instruction_the_model_sees.md)。
+>
+> **いまの `reverse_lerobot_v2`・`jaist_mix_v2_x8` は検査を通っている**（9/12 実測）。
+> 3 文とも Track3 の bddl と完全一致で、**正規化のしきい値 0.65 を超えないので
+> 採点器の文がそのまま届く。**
+> **だから「配布データの 40 種に無いから直す」と判断してはいけない**——
+> それをやると正しいものを壊す。**組み直したあとに検査を回して、
+> 同じ 3 文が保たれていることを確かめること。**
+>
+> ```bash
+> IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \
+>     solution/tools/scripted_demo/check_dataset_instructions.py \
+>     <組み直したデータセット> --grader-texts work/regen/grader_texts.txt
+> ```
+
 **この 1 枚で作業が終わるように書いた。**やることは 1 つ——
 `replay_video_probe.py` の接近区間が**上限ちょうどの指令を並べるのをやめさせ**、
 逆向きデータを作り直して、`jaist_mix_v2_x8` と同じ形の混合データセットに組み直す。

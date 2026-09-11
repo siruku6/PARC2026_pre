@@ -250,7 +250,7 @@ damage の 42〜50% が運搬中に出ているのは、**持ち上げきる前�
 一度に足すと、**点が動いたときにどちらが効いたか読めない。**
 このリポジトリはデータ側の介入を 3 回試して 3 回とも外している
 （[knowledge/22](../knowledge/22_reverse_data_interferes_with_same_objects.md)・
-[talk/open_items](../talk/open_items.md) の F60）。**未検証の仮説を 2 つ重ねない。**
+[reference/19 の 【9/10】](../reference/19_weights_catalog.md)）。**未検証の仮説を 2 つ重ねない。**
 
 **1,009 本に足りないのは指令の形ではない。**あれは配布データの人の手本の
 行動列をそのまま撃ち直したもの（manifest の 5,999 回すべてが `open_loop`）なので、
@@ -374,6 +374,8 @@ bddl の書き方のまま足すと、**41 番目の課題**になって誰も�
 **既にあった 1,009 本がこれを踏んでいた。**38 種のうち配布データと一致するのは
 14 種だけで、**本数では 62%（626 本）が評価で渡らない文の下に入っていた。**
 
+**この規則は [knowledge/23](../knowledge/23_self_made_demos_need_the_instruction_the_model_sees.md) に切り出した**——自作データを足す作業すべてに当たるので、ここだけに置かない。
+
 `npz_to_lerobot.py build --normalize-instructions` を足して直した。
 **寄せる実装は `policy_server.py` のものをそのまま呼ぶ**——書き写すと必ず
 片方が古くなる。
@@ -459,7 +461,7 @@ python3 solution/tools/eval/tier_contact_loss.py --detail
 
 **なぜ門を置くか。**このリポジトリはデータ側の介入を 3 回試して 3 回とも外している
 （[knowledge/22](../knowledge/22_reverse_data_interferes_with_same_objects.md)・
-[talk/open_items](../talk/open_items.md) の F60）。
+[reference/19 の 【9/10】](../reference/19_weights_catalog.md)）。
 **「良い手本を作れば方策が真似る」という鎖は、この課題ではまだ 1 度も通っていない。**
 5 課題で通らないものが 26 家族で通ることはない。
 **広げる手間（第 2 段で雛形 1 つ＋12 家族ぶんの生成と検証）を先に払わない。**

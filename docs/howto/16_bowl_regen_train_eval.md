@@ -301,6 +301,15 @@ sed -n "/指示文を学習データ/,/^Map/p" work/regen/logs/rebuild_batch1.lo
 
 **`none` が出た文があれば止めること。**寄せられていない＝評価で引かれない。
 
+**なぜこうなるかは [knowledge/23](../knowledge/23_self_made_demos_need_the_instruction_the_model_sees.md) にある。**
+**組み終えたデータセットは検査を通すこと**（ずれがあれば終了コード 1）。
+
+```bash
+IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \
+    solution/tools/scripted_demo/check_dataset_instructions.py \
+    work/artifacts/libero_plus_bowl5 --grader-texts work/regen/grader_texts.txt
+```
+
 **これが終わってから `work/regen/npz_batch1` を消す**（[3 節](#3-ディスクを空ける)）。
 
 ### 9.2 丼 5 課題を外す

@@ -67,6 +67,28 @@
 書き、**その目的に照らしてより良い測り方を思いついたら変えてよい**と明示する。
 **変えた場合は理由を報告に書いてもらう。**
 
+## データを作る依頼を書くときは、指示文の穴を必ず渡す
+
+**自作した手本は、評価でモデルが実際に見る文で入れないと 1 度も引かれない**——
+[knowledge/23](../../knowledge/23_self_made_demos_need_the_instruction_the_model_sees.md)。
+`record` が残すのは bddl の言い方で、`policy_server.py` は採点で来た文を
+配布データの 40 種へ寄せてからモデルへ渡す。**寄せた先の言い方で入っていない手本は
+誰も引かない。**
+
+**この穴は沈黙して失敗する。**学習は通り、損失も下がり、エラーも出ない。
+出るのは「作ったのに効かない」という結果だけで、**原因が本数や学習の刻みに見える。**
+**だから受け側は自力では気づけない。依頼に書くこと。**
+
+**9/12 に手元の全データセットを検査した。**摂動下再生 1,009 本は 62%（626 本）が
+死んでいた。逆向きデータ（`reverse_lerobot_v2`・`jaist_mix_v2_x8`）は無事だった——
+3 文とも Track3 の bddl と完全一致で、**そちらは寄らないのが正しい。**
+
+```bash
+IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \
+    solution/tools/scripted_demo/check_dataset_instructions.py \
+    <データセット> --grader-texts work/regen/grader_texts.txt
+```
+
 ## 受け側が守ること
 
 - **範囲は広げないが、測り方は目的に照らして判断してよい。** 気づいたことのうち

@@ -51,6 +51,7 @@
 | [19_infer_less_count_first.md](19_infer_less_count_first.md) | **推し量る前に数える。**配布物の中身・崖のある制約・期限が切れる資格情報の 3 件 | 2, 3 |
 | [21_track3_stops_short_of_the_object.md](21_track3_stops_short_of_the_object.md) | **Track3 で掴めないのは迷いではない。**邪魔な物を場外へ移しても掴めず、**手先が 6〜20 cm 手前で止まる。**測る前に 2 回、嘘の数が出た | 3, 4 |
 | [22_reverse_data_interferes_with_same_objects.md](22_reverse_data_interferes_with_same_objects.md) | **逆向きデータは、同じ物体を使う順方向の課題を壊す。**共有する行は −24 ポイント、残りは −3 ポイント。**引き換えに Track3 が 11 提出ぶりに動いた**（0.000 → 0.0235） | 3, 4 |
+| [23_self_made_demos_need_the_instruction_the_model_sees.md](23_self_made_demos_need_the_instruction_the_model_sees.md) | **自作した手本は、評価でモデルが実際に見る文で入れないと 1 度も引かれない。**摂動下再生 1,009 本のうち 626 本（62%）がこれを踏んでいた。**沈黙して失敗する**——学習は通り、損失も下がる | 2, 3 |
 | [20_probe_object_choice_without_rollout.md](20_probe_object_choice_without_rollout.md) | **対象物を選べているかはロールアウト無しで測れる。**系譜 6 点で何を得て何を失ったか・**色はほとんど見ていない**（元から） | 3, 4 |
 
 
