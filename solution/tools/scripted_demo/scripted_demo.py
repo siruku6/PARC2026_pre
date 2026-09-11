@@ -98,7 +98,8 @@ FINGER_SPAN = 0.0481
 # 余裕 8.8 cm の方位を選んだ結果、同じ丼の課題が 151 歩から 273 歩になり、
 # 上限 300 歩に当たってゴールに届かなくなった。**一定以上は同点にして、
 # 残りは「ロボットの基部に近い側」で決める。**
-GRASP_CLEARANCE_ENOUGH = 0.030
+# **隙間の狭い場面では上げたほうがよい**ので、`GRASP_CLEARANCE_ENOUGH` で振れる。
+GRASP_CLEARANCE_ENOUGH = float(os.environ.get("GRASP_CLEARANCE_ENOUGH", 0.030))
 
 # 方位を選ぶとき、fixture から最低これだけ離れていることを求める [m]。
 # **fixture は採点の衝突判定の対象外**（観測に `_pos` を持たない）だが、
@@ -182,7 +183,10 @@ class RimPickPlace:
         物体の原点から見て、どの高さで縁を挟むか。**縁の上端より下、
         パッドの背丈（1.6 cm）が縁にかかる高さに取る。**
     approach_dz : float
-        降りる前に構える高さ。**ここで手首を回しきる。**
+        降りる前に構える高さ。**寄りながらここまで手首を回す。**
+    hover_dz : float
+        **降りるのを 2 段に割る中間の高さ。**指が縁に近づく前に手首を回しきる
+        ため、ここまでは回しながら降り、ここから下は真下へまっすぐ降りる。
     lift_dz : float
         掴んだあと、**真上へ**上げる高さ。
     lift_speed : float
@@ -199,6 +203,7 @@ class RimPickPlace:
     place_offset: tuple[float, float] = (0.0, 0.0)
     grasp_dz: float = 0.042
     approach_dz: float = 0.14
+    hover_dz: float = 0.07
     lift_dz: float = 0.10
     lift_speed: float = 0.45
     grasp_radius: float | None = None
@@ -290,6 +295,23 @@ class TaskPlan:
     blend_radius : float
         通過点をどれだけ手前で見切るか。**大きいほど滑らかだが、角が内側へ
         膨らむ。** fixture の際を通る経路では小さくする。
+    cruise : float
+        **巡航中に出す指令の大きさ**（1.0 が既定で、いちばん大きい軸を振り切る）。
+        **振り切ったままにすると、指令が上限の 1 点に積み上がる**——配布データが
+        上限付近に居るのは 7.79% なのに、既定のままだと 35.5% になった
+        （`docs/reference/33_gradient_norm_and_action_saturation.md`）。
+        **配布データの並進指令の中央は 0.603** なので、そこへ寄せる。
+    command_envelope : bool
+        **配布データから測った「封筒」に指令を収めるか**
+        （`solution/tools/motion/envelope.py`）。既定の False は今までどおりで、
+        `_velocity_command` の出す ±1.0 をそのまま送る。**True にすると
+        並進 ±0.9375・回転 ±0.30 に収め、1 コマの変化量も p99 で抑える。**
+
+        **なぜ要るか。**自作した手本を配布データと混ぜて学習する以上、
+        **指令の分布が違うとそこだけ別物になって学習が解けない**
+        （`docs/reference/33_gradient_norm_and_action_saturation.md`）。
+        とくに手首を回す `action[5]` は、配布データでは ±0.375 が端なのに、
+        素朴に比例制御で書くと ±1.0 まで出てしまう。
     smoothing : float
         指令を前回からなます強さ。**既定の 1.0 はなまさない。**
         向きを保つ指令と角の丸めだけでジャークは 18.3 → 12.3 まで下がり、
@@ -310,6 +332,8 @@ class TaskPlan:
     budget_descend: int = 25
     budget_lift: int = 22
     blend_radius: float = 0.050
+    cruise: float = 1.0
+    command_envelope: bool = False
     smoothing: float = 1.0
 
 
@@ -374,6 +398,11 @@ TASK_PLANS: dict[str, TaskPlan] = {
         place_z=0.972,    # 丼の底が 0.918。皿の縁の上端 0.9380 の内側へ降りる
         retreat_z=1.08,
         blend_radius=0.030,
+        cruise=0.85,             # 上限の 1 点への積み上がりを消す（35.5% → 0%）
+        command_envelope=True,   # 配布データと同じ指令の形にする
+        # **止まる歩数を削る。**指令が 0 の 1 点に積み上がると学習が解けない
+        # （配布データの停止コマは 0.96%。既定のままだと 24.2% になった）。
+        close_steps=10, settle_steps=4, open_steps=6, final_settle_steps=4,
         budget_move=60,   # 出発から丼まで 35 cm ある（45 歩では届かなかった）
         budget_descend=30,
     ),
@@ -391,6 +420,11 @@ TASK_PLANS: dict[str, TaskPlan] = {
         place_z=0.972,    # 丼の底が 0.918。皿の縁の上端 0.9380 の内側へ降りる
         retreat_z=1.08,
         blend_radius=0.030,
+        cruise=0.85,             # 上限の 1 点への積み上がりを消す（35.5% → 0%）
+        command_envelope=True,   # 配布データと同じ指令の形にする
+        # **止まる歩数を削る。**指令が 0 の 1 点に積み上がると学習が解けない
+        # （配布データの停止コマは 0.96%。既定のままだと 24.2% になった）。
+        close_steps=10, settle_steps=4, open_steps=6, final_settle_steps=4,
         budget_move=60,   # 出発から丼まで 35 cm ある（45 歩では届かなかった）
         budget_descend=30,
     ),
@@ -408,6 +442,11 @@ TASK_PLANS: dict[str, TaskPlan] = {
         place_z=0.972,    # 丼の底が 0.918。皿の縁の上端 0.9380 の内側へ降りる
         retreat_z=1.08,
         blend_radius=0.030,
+        cruise=0.85,             # 上限の 1 点への積み上がりを消す（35.5% → 0%）
+        command_envelope=True,   # 配布データと同じ指令の形にする
+        # **止まる歩数を削る。**指令が 0 の 1 点に積み上がると学習が解けない
+        # （配布データの停止コマは 0.96%。既定のままだと 24.2% になった）。
+        close_steps=10, settle_steps=4, open_steps=6, final_settle_steps=4,
         budget_move=60,   # 出発から丼まで 35 cm ある（45 歩では届かなかった）
         budget_descend=30,
     ),
@@ -425,6 +464,11 @@ TASK_PLANS: dict[str, TaskPlan] = {
         place_z=0.972,    # 丼の底が 0.918。皿の縁の上端 0.9380 の内側へ降りる
         retreat_z=1.08,
         blend_radius=0.030,
+        cruise=0.85,             # 上限の 1 点への積み上がりを消す（35.5% → 0%）
+        command_envelope=True,   # 配布データと同じ指令の形にする
+        # **止まる歩数を削る。**指令が 0 の 1 点に積み上がると学習が解けない
+        # （配布データの停止コマは 0.96%。既定のままだと 24.2% になった）。
+        close_steps=10, settle_steps=4, open_steps=6, final_settle_steps=4,
         budget_move=60,   # 出発から丼まで 35 cm ある（45 歩では届かなかった）
         budget_descend=30,
     ),
@@ -442,6 +486,11 @@ TASK_PLANS: dict[str, TaskPlan] = {
         place_z=0.972,    # 丼の底が 0.918。皿の縁の上端 0.9380 の内側へ降りる
         retreat_z=1.08,
         blend_radius=0.030,
+        cruise=0.85,             # 上限の 1 点への積み上がりを消す（35.5% → 0%）
+        command_envelope=True,   # 配布データと同じ指令の形にする
+        # **止まる歩数を削る。**指令が 0 の 1 点に積み上がると学習が解けない
+        # （配布データの停止コマは 0.96%。既定のままだと 24.2% になった）。
+        close_steps=10, settle_steps=4, open_steps=6, final_settle_steps=4,
         budget_move=60,   # 出発から丼まで 35 cm ある（45 歩では届かなかった）
         budget_descend=30,
     ),
@@ -631,7 +680,8 @@ class _Rollout:
                  record_images: bool, action_noise: float = 0.0,
                  rng: np.random.Generator | None = None,
                  disturb_scale: float = 0.0, disturb_steps: int = 10,
-                 disturb_at: tuple[int, int] | None = None) -> None:
+                 disturb_at: tuple[int, int] | None = None,
+                 envelope: Any = None, cruise: float = 1.0) -> None:
         self.env = env
         self.max_steps = max_steps
         self.record_images = record_images
@@ -644,6 +694,11 @@ class _Rollout:
             collision_threshold_m=threshold if collision_enabled else np.inf)
         self.phases: list[tuple[str, int, float]] = []
         self._last_command = np.zeros(3)
+        # **封筒は「送る前」に当てる。**記録する行動と送る行動が食い違うと、
+        # 学習の正解が実際に起きた動きと合わなくなる。
+        self._envelope = envelope
+        self._last_sent = np.zeros(6)
+        self.cruise = float(cruise)
         self.record.action_noise = self.action_noise
 
         # **妨害の中身は 1 歩も進める前に引く。** ここで引けば、
@@ -758,6 +813,10 @@ class _Rollout:
         こちらを最大化するのは筋が悪い。**判定される物体との余裕を最大化し、
         fixture は「`FIXTURE_MARGIN` 以上離れていること」という条件にする。**
 
+        **同じだけ空いているなら、ロボットの基部に近い方位を選ぶ。**縁をまたぐと
+        **置くときの手首の位置も同じ向きへ外れる**ので、遠い方位は掴む側と置く側の
+        両方を遠くする。回す量は最後の同点崩しにしか使わない。
+
         **余裕は頭打ちにする。**`GRASP_CLEARANCE_ENOUGH` を超えたぶんは
         同点として扱い、**ロボットの基部に近い方位**を選ぶ。そうしないと
         腕が遠回りして歩数が伸び、時間の点を落とす（実測 151 → 273 歩）。
@@ -774,8 +833,9 @@ class _Rollout:
         base = np.asarray(sim.data.body_xpos[sim.model.body_name2id("robot0_base")]) \
             if "robot0_base" in sim.model.body_names else np.zeros(3)
         toward_base = float(np.degrees(np.arctan2(*(base[:2] - centre[:2])[::-1])))
+        now = self.finger_azimuth
 
-        best: tuple[float, float, float] | None = None
+        best: tuple[float, float, float, float] | None = None
         for degree in range(0, 360, 5):
             angle = np.radians(float(degree))
             direction = np.array([np.cos(angle), np.sin(angle), 0.0])
@@ -790,15 +850,26 @@ class _Rollout:
                                                 skip=ignore)
                           for point in points)
             gap = abs((degree - toward_base + 180.0) % 360.0 - 180.0)
-            # 条件を満たすものを優先し、次に余裕、最後に**基部へ近い側**。
+            # **手首を何度回すことになるか。**指は 2 本で対称なので ±90 度に折り返す。
+            turn = abs((degree - now + 90.0) % 180.0 - 90.0)
+            # 条件を満たすものを優先し、次に余裕、次に**基部へ近い側**、
+            # 最後に手首を回さずに済む側。
+            # **基部へ近い側が効くのは、掴む側と置く側の両方を決めるからである。**
+            # 縁をまたぐと掴んだ物は手首から `radius` 外れるので、**置くときの
+            # 手首の位置も皿の中心から同じ向きへ `radius` 外れる。**手首の回転を
+            # 優先して遠い方位を選ぶと、置く位置が腕の届く範囲の端へ出て
+            # ゴールに届かなくなった（実測 46/50 → 2/8）。
             # **余裕は `GRASP_CLEARANCE_ENOUGH` で頭打ちにする**——それ以上は
             # 当たらないことに変わりが無く、遠い方位を選ぶと歩数だけ増える。
+            # **手首を回す速さは封筒で 1 歩 1.6 度に制限される**ので、90 度回すと
+            # それだけで 53 歩かかる。しかもその間は腕が止まり、**指令が 0 の
+            # 1 点に積み上がる**（reference/33）。回さずに済むなら回さない。
             key = (1.0 if allowed >= FIXTURE_MARGIN else 0.0,
-                   min(scored, GRASP_CLEARANCE_ENOUGH), -gap)
-            if best is None or key > best[0:3]:
+                   min(scored, GRASP_CLEARANCE_ENOUGH), -gap, -turn)
+            if best is None or key > best[0:4]:
                 best = key + (float(degree),)      # type: ignore[assignment]
         assert best is not None
-        return float(best[3]), float(best[1])      # type: ignore[index]
+        return float(best[4]), float(best[1])      # type: ignore[index]
 
     def turn_wrist(self, label: str, azimuth: float, gripper: float,
                    budget: int = 45, tolerance: float = 4.0) -> None:
@@ -868,12 +939,15 @@ class _Rollout:
 
         **いちばん大きい軸がちょうど振り切れる大きさに揃える。** 向きは
         目標をぴたりと指したまま、使える速度は全部使う。
+
+        **`cruise` はその上限そのものを下げる。**振り切ったままにすると指令が
+        上限の 1 点に積み上がり、配布データと分布が食い違う（`TaskPlan.cruise`）。
         """
         distance = float(np.linalg.norm(delta))
         largest = float(np.max(np.abs(delta)))
         if distance < 1e-9 or largest < 1e-9:
             return np.zeros(3)
-        return delta / largest * min(1.0, distance / full_speed_within)
+        return delta / largest * self.cruise * min(1.0, distance / full_speed_within)
 
     def _smoothed(self, command: np.ndarray, smoothing: float) -> np.ndarray:
         """指令を前回からなます。**加加速度（ジャーク）を直に下げる。**
@@ -969,8 +1043,34 @@ class _Rollout:
                              -1.0, 1.0)   # 環境が受け取る範囲
         return pushed
 
+    def _enveloped(self, action: np.ndarray) -> np.ndarray:
+        """指令を配布データの封筒へ収める。**大きさと、1 コマの変化量の両方。**
+
+        **大きさだけ切っても足りない。**上限ちょうどの 1 点に積み上がった
+        教師信号は学習で解けない（[33](../../../docs/reference/33_gradient_norm_and_action_saturation.md)）。
+        1 コマの変化量まで抑えると、上限に触れる前に立ち上がりが鈍るので、
+        端へ張り付く割合そのものが下がる。
+
+        **0 へ落ちるときも同じ速さで落とす。** 指令が急に 0 になる点は、
+        勾配の急変という意味で上限の 1 点と変わらない（reference/35）。
+        """
+        limits = np.concatenate([
+            np.full(3, self._envelope.limit_pos),
+            np.full(3, self._envelope.limit_rot)])
+        rates = np.concatenate([
+            np.full(3, self._envelope.accel_pos),
+            np.full(3, self._envelope.accel_rot)])
+        wanted = np.clip(np.asarray(action[:6], dtype=np.float64), -limits, limits)
+        change = np.clip(wanted - self._last_sent, -rates, rates)
+        self._last_sent = self._last_sent + change
+        shaped = action.copy()
+        shaped[:6] = self._last_sent
+        return shaped
+
     def _take_step(self, action: np.ndarray) -> bool:
         """1 ステップ進める。ステップ数の上限に達したら False を返す。"""
+        if self._envelope is not None:
+            action = self._enveloped(action)
         index = self.record.steps
         self.record.ee_positions.append(self.eef_position.copy())
         self.record.states.append(self._observation_state())
@@ -1004,8 +1104,8 @@ class _Rollout:
         self.record.wrist = self._wrist_buffer[:count]
 
     def move_to(self, label: str, target: np.ndarray | list[float],
-                gripper: float, tolerance: float = 0.005, budget: int = 60
-                ) -> None:
+                gripper: float, tolerance: float = 0.005, budget: int = 60,
+                yaw_target: float | None = None) -> None:
         """1 点へ寄せて、そこで止まる。**位置を合わせたい所に使う。**
 
         `follow` に中継点 1 つを渡すのと同じである。制御の中身を 2 つ持つと
@@ -1017,14 +1117,14 @@ class _Rollout:
         """
         self.follow(label, [target], gripper, blend_radius=0.0,
                     tolerance=tolerance, budget=budget,
-                    brake_distance=BRAKE_WITHIN_STOP)
+                    brake_distance=BRAKE_WITHIN_STOP, yaw_target=yaw_target)
 
     def follow(self, label: str, waypoints: list[Any], gripper: float,
                blend_radius: float, tolerance: float = 0.006,
                budget: int = 90, full_speed_within: float = BRAKE_WITHIN_STOP,
                smoothing: float = 1.0,
                brake_distance: float = BRAKE_WITHIN_PASS,
-               speed_cap: float = 1.0) -> None:
+               speed_cap: float = 1.0, yaw_target: float | None = None) -> None:
         """中継点を**止まらずに**繋いで通る。**運ぶ区間に使う。**
 
         `blend_radius` まで近づいたら、そこへ着く前に次の中継点へ目標を
@@ -1036,6 +1136,10 @@ class _Rollout:
         blend_radius : float
             途中の中継点をどれだけ手前で見切るか。**大きいほど滑らかだが、
             角が内側に膨らむ。** 障害物の際を通るときは小さくする。
+        yaw_target : float | None
+            指の並ぶ向きの目標 [度]。**渡すと、動きながら同時に手首を回す。**
+            封筒に収めると手首は 1 歩 1.6 度しか回らないので、**移動が終わって
+            から回すと 50 歩以上かかる。**移動と同時なら追加の歩数は要らない。
         speed_cap : float
             指令の上限。**1.0 が既定で、絞らない。**縁を挟んだ物を真上へ
             上げるときのように、**速く動かすと隣の物へ押し付ける区間だけ**
@@ -1063,6 +1167,9 @@ class _Rollout:
                 self._velocity_command(
                     delta, brake_distance if is_last else full_speed_within),
                 smoothing)
+            if yaw_target is not None:
+                turn = (yaw_target - self.finger_azimuth + 90.0) % 180.0 - 90.0
+                action[5] = float(np.clip(turn / 12.0, -1.0, 1.0))
             action[6] = gripper
             if not self._take_step(action):
                 break
@@ -1202,17 +1309,30 @@ def _run_rim_pick_place(rollout: _Rollout, step: RimPickPlace,
     direction = np.array([np.cos(angle), np.sin(angle), 0.0])
 
     wrist = centre + radius * direction
-    rollout.follow(f"{target} 掴む所の上へ",
+    # **寄りながら手首も回す。**封筒に収めると手首は 1 歩 1.6 度しか回らないので、
+    # 寄り終わってから回すと 50 歩以上かかる。**同時なら追加の歩数は要らない。**
+    rollout.follow(f"{target} 掴む所の上へ（手首も {azimuth:.0f} 度へ）",
                    [[wrist[0], wrist[1], centre[2] + step.approach_dz]],
                    GRIPPER_OPEN, blend_radius=0.0, tolerance=0.006,
-                   budget=plan.budget_move, smoothing=plan.smoothing)
-    rollout.turn_wrist(f"{target} 手首を {azimuth:.0f} 度へ"
-                       f"（余裕 {clearance * 100:.1f} cm）", azimuth, GRIPPER_OPEN)
-
+                   budget=plan.budget_move, smoothing=plan.smoothing,
+                   yaw_target=azimuth)
+    # **手首を回すためだけに腕を止めない。**止まっている区間は指令が 0 の 1 点に
+    # 積み上がり、上限の 1 点と同じ理由で学習が解けない（reference/33・35）。
+    # **大きく残っているときだけ**その場で詰め、あとは降りながら回す。
     # **寄っている間に物体が動いていることがある**ので位置を取り直す。
     centre = rollout.object_position(target)
     wrist = centre + radius * direction
-    rollout.move_to(f"{target} 縁を挟む位置へ",
+    # **降りるのを 2 段に割る。**上の段は回しながら降り、下の段は真下だけにする
+    # ——指が縁に近づいてから回すと、回り切る前に隣の物へ当たる。
+    rollout.follow(f"{target} 構える（手首も {azimuth:.0f} 度へ）",
+                   [[wrist[0], wrist[1], centre[2] + step.hover_dz]],
+                   GRIPPER_OPEN, blend_radius=0.0, tolerance=0.006,
+                   budget=plan.budget_descend, yaw_target=azimuth)
+    left = abs((azimuth - rollout.finger_azimuth + 90.0) % 180.0 - 90.0)
+    if left > 6.0:
+        rollout.turn_wrist(f"{target} 手首の残りを詰める", azimuth,
+                           GRIPPER_OPEN, budget=30, tolerance=5.0)
+    rollout.move_to(f"{target} 縁を挟む位置へ（余裕 {clearance * 100:.1f} cm）",
                     [wrist[0], wrist[1], centre[2] + step.grasp_dz],
                     GRIPPER_OPEN, tolerance=0.004, budget=plan.budget_descend)
     rollout.hold(f"{target} 掴む", GRIPPER_CLOSE, plan.close_steps)
@@ -1285,6 +1405,22 @@ _RUNNERS: dict[type, Any] = {PickPlace: _run_pick_place,
                              TurnKnob: _run_turn_knob}
 
 
+def _envelope_for(plan: TaskPlan) -> Any:
+    """計画が求めるなら、配布データの封筒を読んで返す。
+
+    **import はここで行う。**`motion` は別の入り口（`solution/tools/motion`）に
+    あり、`PYTHONPATH` に入っていない場に置かれることがある。**封筒を使わない
+    計画まで import で落とすと、moka pot の 2 課題が動かなくなる。**
+    """
+    if not plan.command_envelope:
+        return None
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from motion.envelope import envelope_from_environment
+
+    return envelope_from_environment()
+
+
 def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
                 max_steps: int = 300, record_images: bool = False,
                 verbose: bool = False, action_noise: float = 0.0,
@@ -1335,7 +1471,8 @@ def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
                        rng=np.random.default_rng(noise_seed),
                        disturb_scale=disturb_scale,
                        disturb_steps=disturb_steps,
-                       disturb_at=disturb_at)
+                       disturb_at=disturb_at,
+                       envelope=_envelope_for(plan), cruise=plan.cruise)
     for step in plan.steps:
         _RUNNERS[type(step)](rollout, step, plan)
     rollout.hold("整定", GRIPPER_OPEN, plan.final_settle_steps)
@@ -1685,6 +1822,7 @@ def command_verify(args: argparse.Namespace) -> None:
     lengths: list[int] = []
     failures: list[tuple[int, int, bool]] = []
     measured: list[dict[str, float]] = []
+    saved_actions: list[np.ndarray] = []
     for index, state in enumerate(init_states):
         record = run_episode(env, state, plan, args.max_steps,
                              verbose=args.verbose and index == 0,
@@ -1694,10 +1832,21 @@ def command_verify(args: argparse.Namespace) -> None:
                              disturb_steps=args.disturb_steps,
                              disturb_at=args.disturb_at)
         lengths.append(record.steps)
+        if args.save_actions:
+            saved_actions.append(np.asarray(record.actions, dtype=np.float32))
         if not record.success:
             failures.append((index, record.steps, record.collided))
         else:
             measured.append(smoothness(record.ee_positions))
+
+    if args.save_actions:
+        # **指令の形を測るために、行動だけを書き出す。**画像は要らないので
+        # `record` と違って描画しない（`motion/report_smoothness.py` の入力）。
+        args.save_actions.mkdir(parents=True, exist_ok=True)
+        for index, actions in enumerate(saved_actions):
+            np.savez_compressed(args.save_actions / f"{variant}_ep{index:03d}.npz",
+                                action=actions)
+        print(f"  行動を {len(saved_actions)} 本 {args.save_actions} へ書いた")
 
     succeeded = len(lengths) - len(failures)
     print(f"成功 {succeeded}/{len(lengths)}  "
@@ -1843,6 +1992,9 @@ def _parse_args() -> argparse.Namespace:
                              "散らすにはこちら）。省略時は妨害しない")
     parser.add_argument("--blend-radius", type=float, default=None,
                         help="通過点を見切る距離 [m]。scripted policy の値を上書きする")
+    parser.add_argument("--save-actions", type=Path, default=None, metavar="DIR",
+                        help="verify の行動列を npz で書き出す（描画しない）。"
+                             "**指令の形を `motion/report_smoothness.py` で測るため**")
     parser.add_argument("--verbose", action="store_true",
                         help="1 本目だけ段ごとのステップ数を出す")
     args = parser.parse_args()
