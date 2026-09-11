@@ -3,19 +3,24 @@
 > **この文書は打つコマンドだけを持つ。** なぜそうするのかは
 > [plan/24](../plan/24_contact_avoidance_redesign.md) にある。
 >
-> **所要**: 生成と変換 2〜3 時間（無人）→ 学習 10 時間（無人）→ 評価 2 時間 × 2。
-> **ディスク**: 途中のピークで 60 GB ほど要る。**始める前に 3 節を読むこと。**
+> **所要**: 生成と変換 1〜2 時間（無人）→ 学習 10 時間（無人）→ 評価 2 時間 × 2。
+> **ディスク**: 作った npz を段ごとに捨てるので 20 GB あれば足りる。
+>
+> **この手順は 1 変数である。**配布データに足すのは**今回作り直した丼 5 課題の手本だけ**で、
+> 摂動下再生 907 本は足さない（[9 節](#9-第-2-段摂動下再生-907-本を足す)）。
+> **2 つ同時に足すと、点が動いたときにどちらが効いたか読めない。**
 
 | 節 | 中身 |
 |---|---|
 | [1 何をするのか](#1-何をするのか) | 1 枚の図 |
 | [2 準備を確かめる](#2-準備を確かめる) | ここが揃っていないと 3 節で落ちる |
-| [3 ディスクを空ける](#3-ディスクを空ける) | **5.2 の作り直しが済んでから** |
+| [3 ディスクを空ける](#3-ディスクを空ける) | 20 GB 空けば足りる |
 | [4 手本を作る](#4-手本を作る) | 無人で 1 時間 |
 | [5 データセットを組む](#5-データセットを組む) | 入れ替え・混ぜる |
 | [6 学習する](#6-学習する) | 24,000 歩・10 時間 |
 | [7 対照評価する](#7-対照評価する) | **2 つの重みを同じ条件で** |
 | [8 どう読むか](#8-どう読むか) | 効いたと言ってよい条件 |
+| [9 第 2 段](#9-第-2-段摂動下再生-907-本を足す) | **8 節が出てから**足す |
 
 ---
 
@@ -27,14 +32,22 @@
    ▼
 12,467 本
    │  作り直した手本 約 1,800 本を足す   ← run_scripted_bowls.sh
-   │  摂動下再生 907 本を足す           ← 既にある 1,009 本から丼 5 課題の 102 本を外す
    ▼
-約 15,200 本  →  24,000 歩の学習  →  Track2 で対照評価
+約 14,300 本  →  24,000 歩の学習  →  Track2 で対照評価
+
+（摂動下再生 907 本はここでは足さない。→ 9 節）
 ```
 
 **対照は「配布データそのままで学習した重み」**である。手元にある
 `work/artifacts/pi05_full_local` がそれに当たるが、**学習の設定が揃っていないなら
 対照も同じ設定で回し直すこと**（[8 節](#8-どう読むか)）。
+
+**変える所を 1 つに絞ってある。**対照との差は**丼 5 課題の手本を入れ替えたことだけ**で、
+本数も 14,347 対 約 14,300 とほぼ同じである。**摂動下再生 907 本（`work/regen/lerobot_batch1`）は
+入れない**——あれは配布データの行動列をそのまま撃ち直したもので、
+**今回の掴み方は入っていない**（丼 5 課題ぶんの 102 本は古い掴み方のままである）。
+狙う穴も違う（手先のずれ 2.4〜6.5 cm の被覆・[plan/23 の 2 節](../plan/23_data_regeneration_design.md)）。
+**同時に足すと、点が動いたときにどちらが効いたか読めない。**足すなら [9 節](#9-第-2-段摂動下再生-907-本を足す)。
 
 ---
 
@@ -46,8 +59,6 @@ cd ~/src/PARC2026_pre
 python3 -c "import json;d=json.load(open('work/artifacts/libero_plus/meta/info.json'));print(d['total_episodes'],'本')"
 # 人の手本の初期状態（di を使うのに要る）
 ls work/artifacts/libero_states/index.json
-# 摂動下再生（1,009 本）
-python3 -c "import json;d=json.load(open('work/regen/lerobot_batch1/meta/info.json'));print(d['total_episodes'],'本')"
 # イメージ 2 つ
 docker images | grep -E "parc2026-(final|train-pi05)"
 ```
@@ -66,18 +77,16 @@ bash solution/tools/regen/run_in_container.sh \
 
 ## 3. ディスクを空ける
 
-**`work/regen/npz_batch1`（60 GB）は変換済みの中継物である。**
-**ただし [5.2 節](#52-摂動下再生を作り直す--指示文が配布データと違う)で
-作り直すまで消さないこと**——いまの `lerobot_batch1` は指示文が配布データと
-違うので、npz から作り直す必要がある。**作り直しが済んでから**消す。
+**`work/regen/npz_batch1`（60 GB）は摂動下再生の中継物である。**
+この手順では使わないので、**[9 節](#9-第-2-段摂動下再生-907-本を足す)をやらないと決めたなら消してよい。**
+
+**9 節をやる気があるなら消さないこと。**`lerobot_batch1` は指示文が配布データと
+違うので npz から作り直す必要があり、その材料がこれである（[9.1 節](#91-指示文を直して作り直す)）。
 
 ```bash
-python3 -c "
-import json; d=json.load(open('work/regen/lerobot_batch1_fixed/meta/info.json'))
-print(d['total_episodes'],'本',d['total_frames'],'コマ')"      # 1009 本 161795 コマ
 du -sh work/regen/npz_batch1
-rm -rf work/regen/npz_batch1        # 60 GB 空く
-df -h /home/ubuntu | tail -1        # 180 GB 以上あれば足りる
+rm -rf work/regen/npz_batch1        # 9 節をやらないと決めたときだけ。60 GB 空く
+df -h /home/ubuntu | tail -1        # 20 GB 以上あれば 4 節は回る
 ```
 
 ---
@@ -132,57 +141,13 @@ IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \
 
 **動画は作り直さない**（ハードリンク）。**ディスクは増えない。**
 
-### 5.2 摂動下再生を作り直す —— **指示文が配布データと違う**
-
-**`work/regen/lerobot_batch1`（1,009 本）は、62%（626 本）が
-評価で一度も渡らない指示文の下に入っている。**`record` が残すのは bddl の
-書き方（`pick the akita black bowl next to the cookies box …`）で、配布データは
-`pick up the black bowl next to the cookie box …` である。
-**`policy_server.py` は採点で来た文を学習データの 40 種へ寄せてから**モデルへ渡すので、
-**寄せた先の書き方で入っていない手本は誰も引かない。**
-
-**npz から作り直す**（`work/regen/npz_batch1` がまだあるなら。2〜3 時間・無人）。
-
-```bash
-IMAGE=parc2026-train-pi05 nohup bash solution/tools/regen/run_in_container.sh \
-    solution/tools/scripted_demo/npz_to_lerobot.py build \
-    --npz-dir work/regen/npz_batch1 \
-    --output work/regen/lerobot_batch1_fixed \
-    --repo-id local/regen_robotinit_b1 --normalize-instructions \
-    > work/regen/logs/rebuild_batch1.log 2>&1 &
-# 寄せ方を目で確かめる（38 種すべてが lexical か exact であること）
-sed -n "/指示文を学習データ/,/^Map/p" work/regen/logs/rebuild_batch1.log | head -80
-```
-
-**`none` が出た文があれば止めること。**寄せられていない＝評価で引かれない。
-
-**これが終わってから `work/regen/npz_batch1` を消す**（3 節）。
-
-### 5.3 摂動下再生から丼 5 課題を外す
-
-**1,009 本のうち丼 5 課題ぶんは 102 本である。**作り直した手本と同じ課題を
-**元の掴み方のまま**足すことになるので外す。
-
-```bash
-IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \
-    solution/tools/regen/make_replace_keep.py \
-    --root work/regen/lerobot_batch1_fixed \
-    --out work/regen/keep_batch1_without_bowl5.json
-IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \
-    solution/tools/contact_clean/rebuild_dataset.py \
-    --root work/regen/lerobot_batch1_fixed \
-    --output work/regen/lerobot_batch1_nobowl5 \
-    --keep-file work/regen/keep_batch1_without_bowl5.json
-# 期待: 1009 本 → 907 本
-```
-
-### 5.4 作り直した段を 1 つにまとめ、配布データへ足す
+### 5.2 作り直した段を 1 つにまとめ、配布データへ足す
 
 **`merge` は再エンコードしない**（1 本 1 秒）。段を順に足していく。
 
 ```bash
 BASE=work/artifacts/libero_plus_nobowl5
-for d in work/regen/lerobot_bowl/*/ work/regen/lerobot_batch1_nobowl5 ; do
+for d in work/regen/lerobot_bowl/*/ ; do
   NEXT="work/regen/mix_$(basename "$d")"
   IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \
       solution/tools/scripted_demo/npz_to_lerobot.py merge \
@@ -193,7 +158,7 @@ done
 mv "$BASE" work/artifacts/libero_plus_bowl5
 python3 -c "
 import json;d=json.load(open('work/artifacts/libero_plus_bowl5/meta/info.json'))
-print(d['total_episodes'],'本',d['total_frames'],'コマ')"   # 15,000〜15,300 本
+print(d['total_episodes'],'本',d['total_frames'],'コマ')"   # 14,200〜14,300 本
 ```
 
 **足し終えたら、指令の形が配布データと揃っているかを見る**（[plan/24 の 4.1.1](../plan/24_contact_avoidance_redesign.md)）。
@@ -286,3 +251,80 @@ cat work/final_eval/<日時>_track2_bowl5/score_composite.md
 | 衝突率が下がらない | 手本が転移していない | **本数か学習の刻みの問題。**0.17 エポックしか回っていない（[plan/23 の 2.3](../plan/23_data_regeneration_design.md)）ので、5 課題を重み付けして厚くする |
 | 衝突率は下がるが `done` が落ちた | 作り直した手本が別の失敗を教えた | **指令の形を疑う**（停止コマ 14.4%）。[reference/35](../reference/35_command_profile_and_ruckig.md) の Ruckig を入れて作り直す |
 | どちらも良いが合計点が動かない | 5 課題では全体が動かない | **[plan/24 の 6 節](../plan/24_contact_avoidance_redesign.md)の第 1 段・第 2 段へ広げる** |
+
+---
+
+## 9. 第 2 段——摂動下再生 907 本を足す
+
+> **8 節の結果が出てから読むこと。**ここを 1 段目と同時にやると 2 変数になる。
+
+**これは別の穴を埋める手である。**配布データは手先のずれ 1.0 cm までしか
+覆っていないのに、Track2 の採点では 2.4〜6.5 cm が出て、その帯で
+**成功率 0.833 → 0.535・衝突率 0.139 → 0.319** に崩れる
+（[plan/23 の 2 節](../plan/23_data_regeneration_design.md)）。
+`work/regen/lerobot_batch1` の 1,009 本は、**配布データの人の手本の行動列を
+そのまま撃ち直し**（初期姿勢だけ振る）、採点と同じ規則を通ったものである。
+
+**だから指令の形は配布データそのものである**（実測・2026-09-12）。
+
+| 見るもの | 配布 | 摂動下再生 1,009 | 作り直した手本 |
+|---|---|---|---|
+| 並進 ±0.9375 以上 [%] | 7.79 | 6.64 | 0.00 |
+| 停止コマ [%] | 0.96 | 1.35 | 14.40 |
+| 停止の塊 [個/本] | 0.8 | 1.0 | 3.4 |
+
+**Ruckig はどちらにも入っていない**（[reference/35](../reference/35_command_profile_and_ruckig.md) は
+まだ実装していない）。**1,009 本に無いのは Ruckig ではなく今回の掴み方である**——
+丼 5 課題ぶんの 102 本は古い掴み方のままなので、[9.2 節](#92-丼-5-課題を外す)で外す。
+
+### 9.1 指示文を直して作り直す
+
+**`work/regen/lerobot_batch1`（1,009 本）は、62%（626 本）が
+評価で一度も渡らない指示文の下に入っている。**`record` が残すのは bddl の
+書き方（`pick the akita black bowl next to the cookies box …`）で、配布データは
+`pick up the black bowl next to the cookie box …` である。
+**`policy_server.py` は採点で来た文を学習データの 40 種へ寄せてから**モデルへ渡すので、
+**寄せた先の書き方で入っていない手本は誰も引かない。**
+
+**npz から作り直す**（`work/regen/npz_batch1` がまだあるなら。2〜3 時間・無人）。
+
+```bash
+IMAGE=parc2026-train-pi05 nohup bash solution/tools/regen/run_in_container.sh \
+    solution/tools/scripted_demo/npz_to_lerobot.py build \
+    --npz-dir work/regen/npz_batch1 \
+    --output work/regen/lerobot_batch1_fixed \
+    --repo-id local/regen_robotinit_b1 --normalize-instructions \
+    > work/regen/logs/rebuild_batch1.log 2>&1 &
+# 寄せ方を目で確かめる（38 種すべてが lexical か exact であること）
+sed -n "/指示文を学習データ/,/^Map/p" work/regen/logs/rebuild_batch1.log | head -80
+```
+
+**`none` が出た文があれば止めること。**寄せられていない＝評価で引かれない。
+
+**これが終わってから `work/regen/npz_batch1` を消す**（[3 節](#3-ディスクを空ける)）。
+
+### 9.2 丼 5 課題を外す
+
+**1,009 本のうち丼 5 課題ぶんは 102 本である。**作り直した手本と同じ課題を
+**元の掴み方のまま**足すことになるので外す。
+
+```bash
+IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \
+    solution/tools/regen/make_replace_keep.py \
+    --root work/regen/lerobot_batch1_fixed \
+    --out work/regen/keep_batch1_without_bowl5.json
+IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \
+    solution/tools/contact_clean/rebuild_dataset.py \
+    --root work/regen/lerobot_batch1_fixed \
+    --output work/regen/lerobot_batch1_nobowl5 \
+    --keep-file work/regen/keep_batch1_without_bowl5.json
+# 期待: 1009 本 → 907 本
+```
+
+### 9.3 混ぜて学習し直す
+
+[5.2 節](#52-作り直した段を-1-つにまとめ配布データへ足す)の `for` に
+`work/regen/lerobot_batch1_nobowl5` を足して回し直し、6〜7 節を
+`--run-name pi05_bowl5_cov` で繰り返す。
+**対照は 8 節で使った `pi05_bowl5` のほうである**（配布そのままではない）——
+ここで見たいのは「被覆を足すと上乗せがあるか」だけだからである。
