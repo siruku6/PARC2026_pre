@@ -6,9 +6,11 @@
 （回転の合成だけ `rotation.py` の共有関数に置き換えた。値は同じ）。
 
 **新しい作り方（Ruckig）は `otg.py` にある。**ここは比較の基準として残す枠で、
-「同じ入力に同じ通過点を返すか」を `tests/test_motion_matches_028.py` が見ている。
+「同じ入力に同じ通過点を返すか」を `tests/test_motion_waypoints.py` が見ている。
 """
 from __future__ import annotations
+
+import os
 
 import numpy as np
 
@@ -18,6 +20,13 @@ from .rotation import relative_axisangle, rotate_along
 #: 最小ジャーク（5 次多項式）の速度の山は、平均速度のこの倍率になる。
 MIN_JERK_PEAK_RATIO = 1.875
 
+#: 距離が 0 に近くても刻む最小のコマ数。**5 次多項式だけの摘みである**
+#: （Ruckig は所要コマ数を上限から自分で出すので、この値を持たない）。
+#: **import 時に 1 度だけ読む**——`replay_video_probe.py` の
+#: `APPROACH_MIN_WAYPOINTS` も同じ読み方なので、揃えてある（揃えないと
+#: 一致の試験が環境変数の読む時刻の違いだけで落ちる）。
+DEFAULT_MIN_WAYPOINTS = int(os.environ.get("APPROACH_MIN_WAYPOINTS", "4"))
+
 
 def min_jerk_weight(ratio: float) -> float:
     """0 → 1 へ、両端で速度も加速度も 0 になる 5 次多項式の重み。"""
@@ -25,7 +34,9 @@ def min_jerk_weight(ratio: float) -> float:
 
 
 def min_jerk_waypoints(current_pose: np.ndarray, target_pose: np.ndarray,
-                       envelope: MotionEnvelope = LIBERO_PLUS) -> list[np.ndarray]:
+                       envelope: MotionEnvelope = LIBERO_PLUS,
+                       min_waypoints: int = DEFAULT_MIN_WAYPOINTS
+                       ) -> list[np.ndarray]:
     """接近区間の通過点を 5 次多項式の最小ジャークで作る（028 の実装そのもの）。
 
     **刻み数は「1 コマに出してよい上限」から決まる。**最小ジャークの速度の山は
@@ -38,6 +49,8 @@ def min_jerk_waypoints(current_pose: np.ndarray, target_pose: np.ndarray,
         姿勢 (6,)。前 3 つが位置 [m]、後ろ 3 つが軸角。
     envelope : MotionEnvelope
         1 コマに出してよい指令の上限と、指令 1 単位あたりの実移動量。
+    min_waypoints : int
+        距離が 0 に近くても刻む最小のコマ数。
 
     Returns
     -------
@@ -57,7 +70,7 @@ def min_jerk_waypoints(current_pose: np.ndarray, target_pose: np.ndarray,
                         / (envelope.limit_pos * envelope.response_pos_m))
     steps_rot = np.ceil(MIN_JERK_PEAK_RATIO * angle_rad
                         / (envelope.limit_rot * envelope.response_rot_rad))
-    num_waypoints = max(int(steps_pos), int(steps_rot), envelope.min_steps)
+    num_waypoints = max(int(steps_pos), int(steps_rot), min_waypoints)
 
     waypoints: list[np.ndarray] = []
     for index in range(1, num_waypoints + 1):

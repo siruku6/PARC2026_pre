@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from motion.smoothness import format_table
+from motion.smoothness import format_table, load_dataset_episodes
 
 
 def _load_npz(pattern: str) -> list[np.ndarray]:
@@ -34,20 +34,6 @@ def _load_npz(pattern: str) -> list[np.ndarray]:
     if not files:
         raise FileNotFoundError(f"npz が無い: {pattern}")
     return [np.load(path)["action"].astype(np.float64) for path in files]
-
-
-def _load_dataset(dataset: Path, count: int) -> list[np.ndarray]:
-    """配布データから無作為に `count` 本の `action` を読む。"""
-    import pyarrow.parquet as pq
-
-    files = sorted(globmodule.glob(str(dataset / "data" / "chunk-*" / "file-*.parquet")))
-    table = pq.read_table(files[0], columns=["action", "episode_index"])
-    actions = np.stack(table["action"].to_numpy(zero_copy_only=False)).astype(np.float64)
-    index = table["episode_index"].to_numpy()
-    unique = np.unique(index)
-    picked = np.random.default_rng(0).choice(unique, min(count, len(unique)),
-                                             replace=False)
-    return [actions[index == episode] for episode in picked]
 
 
 def _parse_args() -> argparse.Namespace:
@@ -66,7 +52,7 @@ def main() -> None:
     args = _parse_args()
     named: dict[str, list[np.ndarray]] = {}
     if args.dataset:
-        named["配布"] = _load_dataset(Path(args.dataset), args.episodes)
+        named["配布"] = load_dataset_episodes(args.dataset, args.episodes)
     for entry in args.npz:
         name, _, pattern = entry.partition("=")
         named[name] = _load_npz(pattern)

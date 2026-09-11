@@ -22,7 +22,6 @@ Generates:
 from __future__ import annotations
 
 import argparse
-import glob
 import sys
 from pathlib import Path
 
@@ -32,12 +31,12 @@ if __package__ in (None, ""):                            # 直接叩かれたと
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from motion.envelope import LIBERO_PLUS, MotionEnvelope
     from motion.otg import HAS_RUCKIG, RUCKIG_VERSION, PoseTrajectoryPlanner
-    from motion.smoothness import format_table
+    from motion.smoothness import format_table, load_dataset_episodes
     from motion.waypoints import min_jerk_waypoints
 else:
     from .envelope import LIBERO_PLUS, MotionEnvelope
     from .otg import HAS_RUCKIG, RUCKIG_VERSION, PoseTrajectoryPlanner
-    from .smoothness import format_table
+    from .smoothness import format_table, load_dataset_episodes
     from .waypoints import min_jerk_waypoints
 
 #: OSC の `output_max`（並進）。`replay_video_probe.OUT_MAX_POS` と同じ値。
@@ -88,16 +87,15 @@ def _simulate(waypoints: list[np.ndarray], arm_pose: np.ndarray,
     arm_pose : np.ndarray
         最後の腕の姿勢 (6,)。
     """
-    gain_pos = envelope.response_pos_m / OUT_MAX_POS
-    gain_rot = envelope.response_rot_rad / OUT_MAX_ROT
     commands = []
     pose = np.asarray(arm_pose, dtype=np.float64).copy()
     for waypoint in waypoints:
         translation = np.clip((waypoint[:3] - pose[:3]) / OUT_MAX_POS, -1.0, 1.0)
         rotation = np.clip((waypoint[3:6] - pose[3:6]) / OUT_MAX_ROT, -1.0, 1.0)
         commands.append(np.concatenate([translation, rotation]))
-        pose[:3] += translation * gain_pos * OUT_MAX_POS
-        pose[3:6] += rotation * gain_rot * OUT_MAX_ROT
+        # 腕は指令 1 単位あたり `response_*` だけ動く（`OUT_MAX_*` は切るときだけ）。
+        pose[:3] += translation * envelope.response_pos_m
+        pose[3:6] += rotation * envelope.response_rot_rad
     return np.asarray(commands), pose
 
 
@@ -148,22 +146,6 @@ def _ruckig_episodes(envelope: MotionEnvelope, segments: list[dict], count: int,
     return episodes
 
 
-def _distributed_episodes(dataset: Path, count: int) -> list[np.ndarray]:
-    """配布データから `count` 本ぶんの `action` 列を無作為に取る。"""
-    import pyarrow.parquet as pq
-
-    files = sorted(glob.glob(str(dataset / "data" / "chunk-*" / "file-*.parquet")))
-    if not files:
-        raise FileNotFoundError(f"parquet が無い: {dataset}")
-    table = pq.read_table(files[0], columns=["action", "episode_index"])
-    actions = np.stack(table["action"].to_numpy(zero_copy_only=False)).astype(np.float64)
-    index = table["episode_index"].to_numpy()
-    generator = np.random.default_rng(0)
-    picked = generator.choice(np.unique(index), min(count, len(np.unique(index))),
-                              replace=False)
-    return [actions[index == episode] for episode in picked]
-
-
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -188,7 +170,7 @@ def main() -> None:
 
     named: dict[str, list[np.ndarray]] = {}
     if not args.no_dataset:
-        named["配布"] = _distributed_episodes(Path(args.dataset), args.episodes)
+        named["配布"] = load_dataset_episodes(args.dataset, args.episodes)
     named["5次多項式"] = _min_jerk_episodes(envelope, DEFAULT_SEGMENTS, args.synthetic)
     named["Ruckig"] = _ruckig_episodes(envelope, DEFAULT_SEGMENTS, args.synthetic,
                                        args.exit_speed)

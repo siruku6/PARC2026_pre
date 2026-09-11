@@ -27,7 +27,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -52,10 +52,6 @@ class MotionEnvelope:
         **1.0 が配布データの立ち上がり方である。** 5 次多項式の最小ジャークは
         ここが 0 に固定されるため、**先頭 8 コマを捨てて何もしない**
         （実測: 配布は 1 コマ目で |u|>0.2 に達するのに、028 版は 8 コマ目）。
-    min_steps : int
-        距離が 0 に近くても刻む最小のコマ数。**5 次多項式の側だけが使う**
-        （既定 4 は 028 の `APPROACH_MIN_WAYPOINTS` と同じ）。Ruckig は
-        所要コマ数を上限から自分で出すので、この値を見ない。
     """
 
     limit_pos: float = 0.9375
@@ -67,15 +63,6 @@ class MotionEnvelope:
     response_pos_m: float = 0.0128
     response_rot_rad: float = 0.1125
     initial_accel_ratio: float = 1.0
-    min_steps: int = 4
-
-    def scaled(self, speed: float) -> "MotionEnvelope":
-        """速さだけを `speed` 倍した封筒を返す（形は変えない）。"""
-        return replace(self,
-                       limit_pos=self.limit_pos * speed,
-                       limit_rot=self.limit_rot * speed,
-                       accel_pos=self.accel_pos * speed,
-                       accel_rot=self.accel_rot * speed)
 
 
 #: 配布データ（`libero_plus`）から測った既定の封筒。
@@ -105,7 +92,6 @@ def envelope_from_environment(base: MotionEnvelope = LIBERO_PLUS) -> MotionEnvel
         response_rot_rad=value("APPROACH_RESPONSE_ROT_RAD", base.response_rot_rad),
         initial_accel_ratio=value("MOTION_INITIAL_ACCEL_RATIO",
                                   base.initial_accel_ratio),
-        min_steps=int(value("APPROACH_MIN_WAYPOINTS", base.min_steps)),
     )
 
 

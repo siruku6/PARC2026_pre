@@ -82,13 +82,6 @@ class MotionState:
     angular_velocity: np.ndarray
     angular_acceleration: np.ndarray
 
-    @staticmethod
-    def at_rest(pose: np.ndarray) -> "MotionState":
-        """止まっている状態を作る。"""
-        zero = np.zeros(3)
-        return MotionState(np.asarray(pose, dtype=np.float64).copy(),
-                           zero.copy(), zero.copy(), zero.copy(), zero.copy())
-
 
 def _plan_with_ruckig(distance: np.ndarray, entry_velocity: np.ndarray,
                       entry_acceleration: np.ndarray, exit_velocity: np.ndarray,
@@ -138,7 +131,12 @@ def _plan_with_ruckig(distance: np.ndarray, entry_velocity: np.ndarray,
         accelerations.append(list(out.new_acceleration))
         out.pass_to_input(inp)
         result = otg.update(inp, out)
-    positions.append(list(out.new_position))
+
+    # **最後の 1 点は目標そのものに置く。**軌道の所要時間は 1 コマの整数倍とは
+    # 限らないので、`Finished` のあとの `update()` は**終端を通り過ぎた点**を
+    # 返す（出口に速度を残したときだけ起きる）。それをそのまま通過点にすると、
+    # 行き過ぎてから目標へ引き戻す 1 コマが入り、**継ぎ目ごとに小さな逆走**になる。
+    positions.append(list(distance))
     velocities.append(list(out.new_velocity))
     accelerations.append(list(out.new_acceleration))
     return (np.asarray(positions), np.asarray(velocities),
@@ -172,7 +170,7 @@ def _s_curve_ramp(from_speed: float, to_speed: float, accel_cap: float,
 
 
 def _plan_without_ruckig(distance: np.ndarray, entry_velocity: np.ndarray,
-                         entry_acceleration: np.ndarray, exit_velocity: np.ndarray,
+                         _entry_acceleration: np.ndarray, exit_velocity: np.ndarray,
                          max_velocity: np.ndarray, max_acceleration: np.ndarray,
                          max_jerk: np.ndarray,
                          ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -180,12 +178,16 @@ def _plan_without_ruckig(distance: np.ndarray, entry_velocity: np.ndarray,
 
     **時間最適ではない。**所要コマ数がいちばん多い軸（支配軸）の速度の形を作り、
     残りの軸は同じ時間の割合で動かす（＝直線の経路になる）。Ruckig と違って
-    軸ごとの上限を使い切らないぶん数コマ長い。**入口と出口の速度は守る。**
+    軸ごとの上限を使い切らないぶん数コマ長い。**入口と出口の「速度」は守るが、
+    入口の「加速度」は守らない**——`_entry_acceleration` を受け取るのは
+    `_plan_with_ruckig` と同じ形で呼べるようにするためで、中では読んでいない。
 
     Parameters
     ----------
-    distance, entry_velocity, entry_acceleration, exit_velocity : np.ndarray
+    distance, entry_velocity, exit_velocity : np.ndarray
         `_plan_with_ruckig` と同じ (4,)。指令の単位・1 コマあたり。
+    _entry_acceleration : np.ndarray
+        **使わない**（呼び口を揃えるためだけの引数）。
     max_velocity, max_acceleration, max_jerk : np.ndarray
         自由度ごとの上限 (4,)。
 
@@ -220,6 +222,21 @@ def _plan_without_ruckig(distance: np.ndarray, entry_velocity: np.ndarray,
     return position, velocity, acceleration
 
 
+def _with_cruise(ramp_up: np.ndarray, ramp_down: np.ndarray, total: float,
+                 cruise_speed: float) -> np.ndarray:
+    """加速と減速のあいだに、残りの距離を等速で埋める区間を挟む。
+
+    **埋め方を 1 つにしておく。**山が収まる場合と、二分探索で山を下げた場合とで
+    別々の継ぎ足し方をすると、**山のてっぺんだけ速度が飛ぶ**——なめらかにする
+    ために作ったモジュールが、いちばん速い所に段差を作ることになる。
+    """
+    remainder = total - float(np.sum(ramp_up) + np.sum(ramp_down))
+    if remainder <= 1e-12:
+        return np.concatenate([ramp_up, ramp_down])
+    steps = max(int(np.ceil(remainder / max(cruise_speed, 1e-12))), 1)
+    return np.concatenate([ramp_up, np.full(steps, remainder / steps), ramp_down])
+
+
 def _speed_profile(total: float, entry_speed: float, exit_speed: float,
                    speed_cap: float, accel_cap: float, jerk_cap: float
                    ) -> np.ndarray:
@@ -236,10 +253,7 @@ def _speed_profile(total: float, entry_speed: float, exit_speed: float,
 
     up, down = ramps(speed_cap)
     if float(np.sum(up) + np.sum(down)) <= total:
-        remainder = total - float(np.sum(up) + np.sum(down))
-        cruise_steps = int(np.ceil(remainder / max(speed_cap, 1e-12)))
-        cruise = np.full(cruise_steps, remainder / max(cruise_steps, 1))
-        return np.concatenate([up, cruise, down])
+        return _with_cruise(up, down, total, speed_cap)
 
     # 山が高すぎる。収まる高さを二分探索で探す（20 回で十分に詰まる）。
     low, high = max(entry_speed, exit_speed), speed_cap
@@ -251,12 +265,7 @@ def _speed_profile(total: float, entry_speed: float, exit_speed: float,
         else:
             high = peak
     up, down = ramps(low)
-    speeds = np.concatenate([up, down])
-    covered = float(np.sum(speeds))
-    if covered < total and len(speeds) > 1:
-        # 足りない分は山のてっぺんに 1 コマ足して埋める。
-        speeds = np.concatenate([up, [min(total - covered, low)], down])
-    return speeds
+    return _with_cruise(up, down, total, low)
 
 
 def _parallel_exit_velocity(distance: np.ndarray, max_velocity: np.ndarray,
@@ -303,7 +312,6 @@ class PoseTrajectoryPlanner:
         self.observed: list[np.ndarray] = []
         self.num_planned = 0
         self.num_chained = 0
-        self.num_from_observation = 0
 
     def reset(self) -> None:
         """エピソードの切れ目で呼ぶ。持ち越しと観測を捨てる。"""
@@ -338,8 +346,15 @@ class PoseTrajectoryPlanner:
         return {"velocity": velocity, "acceleration": acceleration}
 
     def waypoints(self, current_pose: np.ndarray, target_pose: np.ndarray,
-                  exit_speed_ratio: float = 0.0) -> list[np.ndarray]:
+                  exit_speed_ratio: float = 0.0,
+                  next_target: np.ndarray | None = None) -> list[np.ndarray]:
         """`current_pose` から `target_pose` までの通過点を 1 コマ 1 点で返す。
+
+        **出口に速さを残すかどうかは、次にどこへ行くかで決まる。**掴む・置く
+        ように「そこで終わる」区間は止まり、通過するだけの区間は流したまま
+        次へ渡す。**呼ぶ側はそれを知っている**ので、`next_target` を渡せば
+        こちらで向きまで決められる——残った速度が次の行き先を向くので、
+        継ぎ目で進行方向が折れない。
 
         Parameters
         ----------
@@ -348,6 +363,10 @@ class PoseTrajectoryPlanner:
         exit_speed_ratio : float
             出口で残す速さを、上限に対する割合で指定する。**0 で停止**
             （掴む・置くなど、止まる必要のある区間）。
+        next_target : np.ndarray or None
+            **次の区間の行き先** (6,)。渡すと出口の速度がそこを向く。
+            `None` なら今の進行方向のまま出る。**`exit_speed_ratio=0` の
+            ときは何を渡しても止まる。**
 
         Returns
         -------
@@ -364,6 +383,7 @@ class PoseTrajectoryPlanner:
         rotation_axis = (axis_angle_rel / angle_rad if angle_rad > 1e-9
                          else np.zeros(3))
 
+        self.num_planned += 1
         entry = self._entry_state(current, rotation_axis)
 
         # 指令の単位へ。位置は「指令 1 単位ぶんの移動量」で割る。
@@ -382,7 +402,13 @@ class PoseTrajectoryPlanner:
         max_jerk = np.array([envelope.jerk_pos] * 3
                             + [envelope.jerk_rot / largest_axis_component])
 
-        exit_velocity = _parallel_exit_velocity(distance, max_velocity,
+        exit_direction = distance
+        if next_target is not None:
+            onward = np.asarray(next_target, dtype=np.float64)[:3] - target[:3]
+            if float(np.linalg.norm(onward)) > 1e-9:
+                exit_direction = np.concatenate([onward / envelope.response_pos_m,
+                                                 [0.0]])
+        exit_velocity = _parallel_exit_velocity(exit_direction, max_velocity,
                                                 float(exit_speed_ratio))
         planner = _plan_with_ruckig if HAS_RUCKIG else _plan_without_ruckig
         position, velocity, acceleration = planner(
@@ -399,7 +425,6 @@ class PoseTrajectoryPlanner:
         waypoints = self._to_poses(current, axis_angle_rel, distance,
                                    position, target)
         self._remember(waypoints[-1], velocity[-1], acceleration[-1], rotation_axis)
-        self.num_planned += 1
         return waypoints
 
     def _entry_state(self, current: np.ndarray, rotation_axis: np.ndarray
@@ -413,36 +438,41 @@ class PoseTrajectoryPlanner:
                 "acceleration": np.array([onset, onset, onset,
                                           envelope.accel_rot
                                           * envelope.initial_accel_ratio])}
-        measured = self._measured_state()
-        if measured is not None:
-            # **実測が最優先。**止まっていれば 0 が入り、動いていればその速度が入る。
-            self.num_from_observation += 1
-            if float(np.linalg.norm(measured["velocity"])) > 1e-6:
-                self.num_chained += 1
-            angular, angular_accel = self._angular_entry(rotation_axis)
-            return {
-                "velocity": np.concatenate([measured["velocity"], [angular]]),
-                "acceleration": np.concatenate([
-                    np.clip(measured["acceleration"], -onset, onset),
-                    [angular_accel]]),
-            }
-
-        if self.state is None:
+        translation = self._translation_entry(current)
+        if translation is None:
             return rest
 
-        gap = float(np.linalg.norm(current[:3] - self.state.pose[:3]))
-        allowed = (self.chain_tolerance_steps * envelope.limit_pos
-                   * envelope.response_pos_m)
-        if gap > allowed:                                # 別の場面が始まっている
-            self.state = None
-            return rest
-
-        self.num_chained += 1
+        if float(np.linalg.norm(translation["velocity"])) > 1e-6:
+            self.num_chained += 1               # 速度を持ったまま始めた区間の数
         angular, angular_accel = self._angular_entry(rotation_axis)
         # **加速度は「入口で出してよい量」以上には持ち込まない。**
-        translation_accel = np.clip(self.state.acceleration, -onset, onset)
-        return {"velocity": np.concatenate([self.state.velocity, [angular]]),
-                "acceleration": np.concatenate([translation_accel, [angular_accel]])}
+        return {
+            "velocity": np.concatenate([translation["velocity"], [angular]]),
+            "acceleration": np.concatenate([
+                np.clip(translation["acceleration"], -onset, onset), [angular_accel]]),
+        }
+
+    def _translation_entry(self, current: np.ndarray) -> dict[str, np.ndarray] | None:
+        """区間の入口の並進の速度・加速度を出す。止まって始めるなら `None`。
+
+        **実測（`observe()`）が最優先である。**止まっていれば 0 が入り、動いて
+        いればその速度が入るので、止まる必要のある継ぎ目とそうでない継ぎ目を
+        呼ぶ側が区別しなくてよい。実測が無いときだけ、直前の計画の出口を
+        持ち越す——そのときは「続きかどうか」を距離で見分けるしかない。
+        """
+        measured = self._measured_state()
+        if measured is not None:
+            return measured
+        if self.state is None:
+            return None
+        gap = float(np.linalg.norm(current[:3] - self.state.pose[:3]))
+        allowed = (self.chain_tolerance_steps * self.envelope.limit_pos
+                   * self.envelope.response_pos_m)
+        if gap > allowed:                                # 別の場面が始まっている
+            self.state = None
+            return None
+        return {"velocity": self.state.velocity,
+                "acceleration": self.state.acceleration}
 
     def _angular_entry(self, rotation_axis: np.ndarray) -> tuple[float, float]:
         """持ち越した回転の速度・加速度を、この区間の軸へ射影する。"""

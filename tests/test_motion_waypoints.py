@@ -27,6 +27,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "solution" / "tools"))
 
 from motion.envelope import LIBERO_PLUS, MotionEnvelope, measure_envelope
+from motion.otg import _plan_with_ruckig, _plan_without_ruckig
 from motion.otg import HAS_RUCKIG, PoseTrajectoryPlanner
 from motion.smoothness import onset_steps, sign_flip_gated, stop_clusters
 from motion.waypoints import min_jerk_waypoints, resample_segment
@@ -129,8 +130,7 @@ class TestRuckigProfile:
     def test_zero_exit_speed_stops(self) -> None:
         """出口の速さを 0 にしたら、ちゃんと止まること。"""
         planner = PoseTrajectoryPlanner(LIBERO_PLUS)
-        waypoints = planner.waypoints(np.zeros(6),
-                                      np.array([0.16, 0.0, 0.0, 0.0, 0.0, 0.0]))
+        planner.waypoints(np.zeros(6), np.array([0.16, 0.0, 0.0, 0.0, 0.0, 0.0]))
         assert np.linalg.norm(planner.state.velocity) < 1e-6
 
     def test_reset_drops_the_carry(self) -> None:
@@ -184,3 +184,61 @@ class TestSmoothness:
         assert set(measured) == {"limit_pos", "limit_rot", "accel_pos", "accel_rot",
                                  "jerk_pos", "jerk_rot"}
         assert all(value > 0 for value in measured.values())
+
+
+class TestFallbackAgreesWithRuckig:
+    """ruckig が無い機械でも、同じ封筒の中で同じ形が出ること。
+
+    **ホストでは自前の S 字、コンテナでは Ruckig が走る。**片方だけで測って
+    「なめらかになった」と言えてしまわないよう、**2 つが同じ主張を満たすこと**
+    を確かめる（速さの差は時間最適かどうかのぶんだけ許す）。
+    """
+
+    CASES = [
+        (np.array([12.0, -6.0, 3.0, 4.0]), 0.0),
+        (np.array([25.0, 0.0, 0.0, 0.0]), 0.3),
+        (np.array([3.0, 2.0, -1.0, 0.5]), 0.0),
+    ]
+
+    @staticmethod
+    def _limits() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        envelope = LIBERO_PLUS
+        return (np.array([envelope.limit_pos] * 3 + [envelope.limit_rot]),
+                np.array([envelope.accel_pos] * 3 + [envelope.accel_rot]),
+                np.array([envelope.jerk_pos] * 3 + [envelope.jerk_rot]))
+
+    @pytest.mark.skipif(not HAS_RUCKIG, reason="ruckig が入っていない")
+    @pytest.mark.parametrize("distance,exit_ratio", CASES)
+    def test_both_branches_make_the_same_claim(self, distance: np.ndarray,
+                                               exit_ratio: float) -> None:
+        max_velocity, max_acceleration, max_jerk = self._limits()
+        entry = np.zeros(4)
+        exit_velocity = distance / max(np.abs(distance).max(), 1e-9) * exit_ratio
+        results = {}
+        for name, plan in (("ruckig", _plan_with_ruckig),
+                           ("fallback", _plan_without_ruckig)):
+            position, velocity, _ = plan(distance, entry, entry, exit_velocity,
+                                         max_velocity, max_acceleration, max_jerk)
+            assert len(position) > 0, name
+            # 目標に着く
+            assert np.allclose(position[-1], distance, atol=1e-6), name
+            # 封筒を破らない
+            assert (np.abs(velocity) <= max_velocity + 1e-6).all(), name
+            results[name] = len(position)
+        # 自前の S 字は時間最適ではないが、桁で外れはしない
+        assert results["fallback"] <= results["ruckig"] * 2 + 4
+
+
+@pytest.mark.skipif(not HAS_PROBE,
+                    reason="robosuite が無い（常駐コンテナで打つこと）")
+def test_envelope_defaults_match_the_probe() -> None:
+    """封筒の既定が `replay_video_probe.py` の既定と食い違っていないこと。
+
+    **028 側が上限や応答量を測り直したときに気づけるようにする。**
+    どちらも同じ `APPROACH_*` を読むので、環境変数を振ったときは揃うが、
+    **既定そのものが動くと黙ってずれる。**
+    """
+    assert LIBERO_PLUS.limit_pos == replay_video_probe.APPROACH_LIMIT_POS
+    assert LIBERO_PLUS.limit_rot == replay_video_probe.APPROACH_LIMIT_ROT
+    assert LIBERO_PLUS.response_pos_m == replay_video_probe.APPROACH_RESPONSE_POS_M
+    assert LIBERO_PLUS.response_rot_rad == replay_video_probe.APPROACH_RESPONSE_ROT_RAD

@@ -159,10 +159,12 @@ planner = PoseTrajectoryPlanner(envelope_from_environment())
 
 for episode in episodes:
     planner.reset()                                  # エピソードの頭で持ち越しを捨てる
-    for target_pose, is_last in segments(episode):
-        # 止まる必要のない継ぎ目は速さを残す。掴む・置くは 0 にする
+    for target_pose, next_pose, is_last in segments(episode):
+        # 止まる必要のない継ぎ目は速さを残す。掴む・置くは 0 にする。
+        # next_pose を渡すと、残った速度が次の行き先を向く（継ぎ目で折れない）
         for waypoint in planner.waypoints(current_pose, target_pose,
-                                          0.0 if is_last else 0.25):
+                                          0.0 if is_last else 0.25,
+                                          next_target=next_pose):
             action = your_controller(observation, waypoint)
             observation = env.step(action)
             planner.observe(current_pose_of(observation))   # 実測を返す
