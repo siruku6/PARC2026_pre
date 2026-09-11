@@ -334,6 +334,30 @@ damage の 42〜50% が運搬中に出ているのは、**持ち上げきる前�
 
 ---
 
+## 6.4 作った手本が評価で引かれるには、指示文を寄せる必要がある
+
+**採点側が方策へ渡す文は、学習データの書き方ではない。**
+
+| どこ | 文 |
+|---|---|
+| 採点（`TASKS_CSV.csv`） | `Pick the akita black bowl on the cookies box and place it on the plate` |
+| 配布データの `task` 列 | `pick up the black bowl on the cookie box and place it on the plate` |
+| **`scripted_demo.py record` が残す文** | **採点側と同じ bddl の書き方** |
+
+`policy_server.py` は**入り口で採点側の文を学習データの 40 種へ寄せてから**
+モデルへ渡す（`InstructionNormalizer`。40 種すべて正しく寄ることを実測済み）。
+**だから学習データ側は寄せた先の書き方で入っていなければならない。**
+bddl の書き方のまま足すと、**41 番目の課題**になって誰も引かない。
+
+**既にあった 1,009 本がこれを踏んでいた。**38 種のうち配布データと一致するのは
+14 種だけで、**本数では 62%（626 本）が評価で渡らない文の下に入っていた。**
+
+`npz_to_lerobot.py build --normalize-instructions` を足して直した。
+**寄せる実装は `policy_server.py` のものをそのまま呼ぶ**——書き写すと必ず
+片方が古くなる。
+
+---
+
 ## 7. 落とした案
 
 | 案 | なぜ落としたか |

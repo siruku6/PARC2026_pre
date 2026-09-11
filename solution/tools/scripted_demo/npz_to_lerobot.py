@@ -190,6 +190,39 @@ def command_check(args: argparse.Namespace) -> None:
     print("**書き出しは Python 3.12 の環境で `build` を実行する。**")
 
 
+def _instruction_map(instructions: set[str]) -> dict[str, str]:
+    """bddl の言い方を、**学習データの 40 種**の言い方へ寄せる対応表を作る。
+
+    **これを通さないと、作った手本は評価で一度も使われない。**
+    採点側が方策へ渡す文は bddl の書き方（`Pick the akita black bowl on the
+    cookies box and place it on the plate`）だが、`policy_server.py` は
+    **入り口でそれを学習データの書き方へ寄せてから**モデルに渡す
+    （`InstructionNormalizer`。40 種すべて正しく寄ることを実測済み）。
+    **だから学習データ側は、寄せた先の書き方で入っていなければならない。**
+    bddl の書き方のまま入れると、**41 番目の課題**になって誰も引かない。
+
+    **寄せる実装は `policy_server.py` のものをそのまま呼ぶ。**書き写すと
+    必ず片方が古くなる。
+    """
+    import sys as _sys
+
+    # **読み込みは `check_instruction_normalization.py` の口を借りる。**
+    # `policy_server.py` はサーバーでもあるので HTTP 側の依存を import するが、
+    # 寄せる部分はそれを 1 つも使わない。代役を置く手はあちらが持っている。
+    _sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "suite"))
+    from check_instruction_normalization import _load_normalizer_class
+
+    normalizer_class, _ = _load_normalizer_class()
+    normalizer = normalizer_class()
+    mapping: dict[str, str] = {}
+    for text in sorted(instructions):
+        target, how, score = normalizer.normalize(text)
+        mapping[text] = target
+        mark = "" if how != "none" else "   ** 寄せられなかった **"
+        print(f"  {how:<8} {score:5.2f}  {text}\n           → {target}{mark}")
+    return mapping
+
+
 def command_build(args: argparse.Namespace) -> None:
     """npz を集めて 1 つの LeRobot データセットにする。
 
@@ -201,6 +234,11 @@ def command_build(args: argparse.Namespace) -> None:
     paths = sorted(args.npz_dir.glob("*.npz"))
     if not paths:
         raise SystemExit(f"npz が 1 つも無い: {args.npz_dir}")
+    mapping: dict[str, str] = {}
+    if args.normalize_instructions:
+        print("=== 指示文を学習データの書き方へ寄せる ===")
+        mapping = _instruction_map({SavedEpisode(path).instruction
+                                    for path in paths})
     _prepare_output(args.output)
 
     dataset = LeRobotDataset.create(
@@ -226,12 +264,14 @@ def command_build(args: argparse.Namespace) -> None:
                 "observation.images.wrist": wrist[index],
                 "observation.state": state[index],
                 "action": action[index],
-                "task": episode.instruction,
+                "task": mapping.get(episode.instruction,
+                                    episode.instruction),
             })
         dataset.save_episode()
         total_frames += len(state)
         written += 1
-        print(f"  {path.name}: {len(state)} コマ  「{episode.instruction}」")
+        print(f"  {path.name}: {len(state)} コマ  "
+              f"「{mapping.get(episode.instruction, episode.instruction)}」")
 
     dataset.finalize()
     # **本数は自分で数えた値を出す。** `meta.episodes` は読み出しのときだけ
@@ -541,6 +581,10 @@ def _parse_args() -> argparse.Namespace:
                        help="データセットの書き出し先")
     build.add_argument("--repo-id", default="local/scripted_demos",
                        help="データセットの名前（学習時に渡すもの）")
+    build.add_argument("--normalize-instructions", action="store_true",
+                       help="指示文を**学習データの 40 種**へ寄せる。"
+                            "**足さないと、作った手本は評価で一度も使われない**"
+                            "（`policy_server.py` が入り口で寄せるため）")
     build.add_argument("--keep-failures", action="store_true",
                        help="失敗した回も入れる（**通常は入れない**）")
 

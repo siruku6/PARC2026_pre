@@ -1590,8 +1590,25 @@ def _bddl_path(libero_root: Path, suite: str, variant: str) -> Path:
     return libero_root / "bddl_files" / suite / f"{variant}.bddl"
 
 
-def _init_states(libero_root: Path, suite: str, task: str) -> np.ndarray:
-    """初期状態の一覧。**variant ではなく元タスクの名前で引く**（1 タスク 1 file）。"""
+def _init_states(libero_root: Path, suite: str, task: str,
+                 from_demos: Path | None = None) -> np.ndarray:
+    """初期状態の一覧。**variant ではなく元タスクの名前で引く**（1 タスク 1 file）。
+
+    `from_demos` を渡すと、**人の手本が持っている置き場所**を使う
+    （`work/artifacts/libero_states/<suite>/<task>_demo.npz` の `states[0]`）。
+
+    **なぜ 2 通り要るか。**`.pruned_init` は採点器が使う 50 通りで、
+    **そこで通ることが成否の基準**である。一方、配布データの置き場所は
+    1 タスク 50 本ぶんあり、`.pruned_init` とは別の並びである
+    （2,000 デモで 1,681 通り。[reference/25 の 8.9]）。
+    **学習データを作るときは両方から作るほうが、置き場所の散らばりが増える。**
+    """
+    if from_demos is not None:
+        with np.load(from_demos / suite / f"{task}_demo.npz",
+                     allow_pickle=False) as bundle:
+            count = len({key.split("/")[0] for key in bundle.files})
+            return np.stack([bundle[f"demo_{index}/states"][0]
+                             for index in range(count)])
     import torch
 
     path = libero_root / "init_files" / suite / f"{task}.pruned_init"
@@ -1812,7 +1829,8 @@ def _setup(args: argparse.Namespace, with_images: bool
     env = _make_env(_bddl_path(args.libero_root, plan.suite, variant),
                     with_images)
     return plan, variant, env, _init_states(args.libero_root, plan.suite,
-                                            args.task)
+                                            args.task,
+                                            getattr(args, "init_from_demos", None))
 
 
 def command_measure(args: argparse.Namespace) -> None:
@@ -2017,6 +2035,10 @@ def command_record(args: argparse.Namespace) -> None:
         # **ノイズの大きさを名前に入れる。** 入れないと、σ を変えて作った組が
         # 同じ名前になって上書きし合う（同じ variant・同じ番号で作るため）。
         tag = "" if args.action_noise <= 0.0 else f"_n{args.action_noise:g}"
+        # **初期状態の出どころも名前に入れる。**`.pruned_init` の 50 通りと
+        # 手本の 50 通りは**番号が独立**なので、入れないと同じ名前で上書きし合う。
+        if getattr(args, "init_from_demos", None) is not None:
+            tag += "_di"
         # **妨害の大きさも名前に入れる。** 妨害あり／なしを同じ置き場に
         # 混ぜて作るので、入れないと同じ名前になって上書きし合う。
         if args.disturb_scale > 0.0:
@@ -2103,6 +2125,10 @@ def _parse_args() -> argparse.Namespace:
                              "散らすにはこちら）。省略時は妨害しない")
     parser.add_argument("--blend-radius", type=float, default=None,
                         help="通過点を見切る距離 [m]。scripted policy の値を上書きする")
+    parser.add_argument("--init-from-demos", type=Path, default=None, metavar="DIR",
+                        help="初期状態を人の手本の置き場所から取る"
+                             "（`work/artifacts/libero_states`）。**省くと "
+                             "`.pruned_init` の 50 通り**（採点器と同じ）")
     parser.add_argument("--save-actions", type=Path, default=None, metavar="DIR",
                         help="verify の行動列を npz で書き出す（描画しない）。"
                              "**指令の形を `motion/report_smoothness.py` で測るため**")
