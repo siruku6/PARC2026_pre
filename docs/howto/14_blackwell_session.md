@@ -453,6 +453,11 @@ tail -5 ~/upload_ckpt.log
 
 ### B4b 学習ログを `$HOME` と HF へ写すループを始める（3 分）
 
+> **2026-09-13 から、この節は打たなくてよい。**`upload_ckpt.sh` がチェックポイントを
+> 上げるたびにログも `logs/` へ上げ、`~/train_logs/<RUN>/` に写しを残すようになった
+> （[17 の 1 節](17_checkpoint_upload.md)）。**下の `sync_log.sh` は、`upload_ckpt.sh` を
+> 使わない走りのために残してある。**
+
 **これが分かると何が決まるか: loss の推移が後から読めるか。**
 **`$OUTPUT_ROOT`（`/opt/dlami/nvme/out`）はセッション終了で消える。**
 **そしてログは、やり直しでは作れない唯一のものである**——

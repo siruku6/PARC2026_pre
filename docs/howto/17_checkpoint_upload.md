@@ -32,18 +32,34 @@
 Blackwell で `blackwell_bowl5.sh`（または `blackwell_launch.sh`）を打つと、
 **別々の 3 つが走り始める。**どれも `setsid` なので端末を閉じても生きる。
 
-```
-train_pi05.py ──▶ /opt/dlami/nvme/out/<RUN>/checkpoints/<歩数>/pretrained_model
-                                    │
-                    upload_ckpt.sh ─┴─▶ HF <REPO>/<歩数>/     ← 上げる
-                                    └─▶ ~/uploaded/<RUN>/<歩数>   ← 上げた印
-                                        ~/uploaded/<RUN>/_all_uploaded ← 全部済んだ印
+```mermaid
+flowchart LR
+    T["train_pi05.py"] --> C["/opt/dlami/nvme/out/&lt;RUN&gt;/checkpoints/&lt;歩数&gt;/pretrained_model"]
+    T --> L["/opt/dlami/nvme/out/&lt;RUN&gt;.log と .nohup"]
+    C --> U["upload_ckpt.sh"]
+    L --> U
+    U -->|チェックポイント| H1["HF &lt;REPO&gt;/&lt;歩数&gt;/"]
+    U -->|写してから上げる| H2["HF &lt;REPO&gt;/logs/"]
+    U --> M["~/uploaded/&lt;RUN&gt;/&lt;歩数&gt; と _all_uploaded（印）"]
+    U --> K["~/train_logs/&lt;RUN&gt;/（ログの写し）"]
 ```
 
 **印（`~/uploaded/`）が要である。**HF を読んで一致を確かめてから置くので、
 **印があれば上がっている**と言い切れる。印が無ければ次の巡でやり直す。
 
-**`_all_uploaded` は「学習が終わった かつ 未上げ 0 個」のときだけ置かれる。**
+**学習ログもチェックポイントと一緒に上がる**（2026-09-13 から）。
+チェックポイントを 1 個確かめるたびに、その時点までのログを `logs/` へ上げる。
+**ログはやり直しでは作れない唯一のものである**——`train_config.json` は設定を持つが、
+loss の推移は持たない。9/13 に `pi05_bowl5_full` のチェックポイントだけが上がり、
+ログが 1 行も上がっていなかったので足した。
+
+**上げるのは `~/train_logs/<RUN>/` の写しである。**学習中のログは伸び続けるので、
+そのまま上げると大きさが変わって HF と突き合わせられない。写しは `$HOME` にあるので、
+**HF の認証が切れていてもセッションをまたいで残る。**
+
+**`_all_uploaded` は「学習が終わった かつ 未上げ 0 個 かつ 最後のログが確かめられた」
+ときだけ置かれる。**最後のログは学習が終わってから上げる——最後の保存のあとにも、
+終了コードや落ちたときの traceback が書かれるからである。
 監視セル（[14 の B6](14_blackwell_session.md)）は**これが在るときだけサーバを止める。**
 在らなければ止めない——GPU 時間は減るが、上がっていないチェックポイントは消えない。
 
@@ -69,6 +85,8 @@ RUN=pi05_bowl5_full REPO=siruku6/pi05_bowl5_full \
 | `LOG` | `~/upload_ckpt.log` | **走りごとに分けること**（下の 5.2） |
 | `VERIFY` | `~/tools/verify_upload.py` | 一致を確かめる道具。**無いと印を付けられない** |
 | `WAIT_START` | 600 | 学習が現れるのを待つ秒数。現れなければ**印を置かずに終わる** |
+| `TRAIN_LOG_DIR` | `$(dirname "$OUT")` | 学習ログ（`<RUN>.log`・`<RUN>.nohup`）の在り処。**`--log-file` を変えたときだけ渡す** |
+| `LOG_COPY` | `~/train_logs/$RUN` | ログの写しの置き場。HF の `logs/` へはここから上げる |
 
 **`blackwell_bowl5.sh` と `blackwell_launch.sh` は、この 5 つを渡してループを起こす。**
 手で起こすのは、ループだけ死んだときである（[5.3](#53-ループだけ死んだ)）。
@@ -107,9 +125,14 @@ tail -f ~/upload_ckpt_$RUN.log
 | `<歩数> 上げ始める（N MB）` | `hf upload` 実行中。最大 1 時間で打ち切る |
 | `<歩数> **確かめた。印を付けた**` | **HF を読んで一致した。**ここまで来て初めて安全 |
 | `<歩数> **確かめられない。印を付けない**` | 次の巡でやり直す。**放っておいてよい** |
+| `ログ 上げ始める（N 個・写しは ...）` | チェックポイントを確かめた直後に、ログも上げている |
+| `ログ **確かめた**` | その時点までの loss の推移が HF の `logs/` にある |
+| `ログ **hf upload が失敗**` / `**確かめられない**` | 写しは `~/train_logs/` に残っている。途中の回なら放っておいてよい |
+| `ログ **... に <RUN>.log も <RUN>.nohup も無い**` | ログの在り処が既定と違う。`TRAIN_LOG_DIR` を渡して起こし直す |
 | `見回り 未上げ N 個・学習は走っている` | 平常。1 分ごとに出る |
 | `見回り 未上げ N 個・学習は終わった` | 残りを上げ切るまで抜けない |
-| `=== 全部上がったことを確かめた ===` | `_all_uploaded` を置いて終了。**ここで止めてよい** |
+| `**チェックポイントは全部上がったが、最後のログが上がっていない。抜けない**` | 1 分ごとにやり直す。**続くなら [08](08_hf_transfer_troubleshooting.md) で認証を見る** |
+| `=== 全部上がったことを確かめた（チェックポイントとログ） ===` | `_all_uploaded` を置いて終了。**ここで止めてよい** |
 
 **止めてよいかの判定は 1 行で足りる。**
 
