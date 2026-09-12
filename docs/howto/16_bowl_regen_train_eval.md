@@ -3,7 +3,7 @@
 > **この文書は打つコマンドだけを持つ。** なぜそうするのかは
 > [plan/24](../plan/24_contact_avoidance_redesign.md) にある。
 >
-> **所要**: 生成と変換 1〜2 時間（無人）→ 学習 10 時間（無人）→ 評価 2 時間 × 2。
+> **所要**: 生成と変換 3 時間（無人）→ 組み立て 30 分 → 学習 9〜10 時間（無人・2 台で並行）→ 評価 2 時間 × 3。
 > **ディスク**: 作った npz を段ごとに捨てるので 20 GB あれば足りる。
 >
 > **この手順は 1 変数である。**配布データに足すのは**今回作り直した丼 5 課題の手本だけ**で、
@@ -17,8 +17,8 @@
 | [3 ディスクを空ける](#3-ディスクを空ける) | 20 GB 空けば足りる |
 | [4 手本を作る](#4-手本を作る) | 無人で 1 時間 |
 | [5 データセットを組む](#5-データセットを組む) | 入れ替え・混ぜる |
-| [6 学習する](#6-学習する) | 24,000 歩・10 時間 |
-| [7 対照評価する](#7-対照評価する) | **2 つの重みを同じ条件で** |
+| [6 学習する](#6-学習する--2-本立てにする) | **2 本立て。**JAIST が action expert だけ・Blackwell が全パラメータ |
+| [7 対照評価する](#7-対照評価する) | **3 つの重みを同じ条件で** |
 | [8 どう読むか](#8-どう読むか) | 効いたと言ってよい条件 |
 | [9 第 2 段](#9-第-2-段摂動下再生-907-本を足す) | **8 節が出てから**足す |
 
@@ -123,6 +123,23 @@ done
 
 ## 5. データセットを組む
 
+**1 本で通せる。**下の 5.1〜5.2 と、4 つの門と、HF へ上げるコマンドの印字までを
+[`build_bowl5_dataset.sh`](../../solution/tools/regen/build_bowl5_dataset.sh) が持っている。
+**何度打ってもよい**（出来上がっている段は数えて飛ばす）。
+
+```bash
+bash solution/tools/regen/build_bowl5_dataset.sh
+```
+
+| 門 | 見るもの |
+|---|---|
+| 1 | 本数・コマ数・課題数。**外した残りと作り直しの足し算にちょうど一致すること** |
+| 2 | 指示文が評価でモデルが見る文と合っているか（[knowledge/23](../knowledge/23_self_made_demos_need_the_instruction_the_model_sees.md)） |
+| 3 | 指令の形が配布データと揃っているか |
+| 4 | 正規化統計の倍率が桁として動いていないか（[6.3 節](#63-正規化統計は据え置かない)） |
+
+**下の 5.1・5.2 は、その中で何が起きているかである。**手で追うときに読む。
+
 ### 5.1 配布データから丼 5 課題を外す
 
 ```bash
@@ -172,38 +189,126 @@ IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \
 
 ---
 
-## 6. 学習する
+## 6. 学習する —— **2 本立てにする**
 
-**24,000 歩・batch 16 で約 10 時間**（[howto/07](07_train_pi05_local.md)）。
+**動かす範囲を変えて 2 本回し、どちらがどれだけ効くかを見る。**
+
+| | JAIST（`gpu-422591`） | Blackwell |
+|---|---|---|
+| 動かす範囲 | **action expert だけ**（693M / 4.14B） | **全部**（4.14B） |
+| batch | 16 | 64 |
+| 歩数 | **24,000**（対照と同じ） | **残り時間から決める**（下の 6.2） |
+| 所要 | **9 時間 15 分**（1.39 秒/step 実測） | 8.5〜10.5 時間（6.85 秒/step 実測） |
+| 制限 | 無し | **本選 1 で 60 時間・1 セッション 12 時間** |
+
+**20 GB には全パラメータが載らない**ので、この割り方しかない
+（[resources/infra_and_docker.md](../resources/infra_and_docker.md)）。
+**会社の RTX6000（Turing）は退避先にならない**——bf16 のテンソルコアが無く、
+実測 **428 秒/step** で 2 歩目に OOM した（2026-09-12）。
+
+### 6.1 JAIST —— action expert だけ（**対照と 1 変数**）
+
+**`jaist_launch.sh` の既定は逆向きデモ向け**（`rp3000` から 8,500 歩・5e-6・
+カメラ拡張あり）なので、**5 つ渡して対照の条件へ戻す。**
+これは `pi05_clean24k` の例そのもので、違うのはデータのパスだけである。
 
 ```bash
-docker run -d --gpus all --rm -it --user "$(id -u):$(id -g)" \
-    -v "$PWD/work/train:/out" \
-    -v "$PWD/work/artifacts:/artifacts" \
-    -v "$HOME/.cache/huggingface:/hf_home" \
-    parc2026-train-pi05 \
-    python /opt/pi05/train_pi05.py \
-        --run-name pi05_bowl5 \
-        --dataset-root /artifacts/libero_plus_bowl5 \
-        --steps 24000 --batch-size 16
-tail -f work/train/pi05_bowl5.log
+hf download siruku6/libero_plus_bowl5 --repo-type dataset \
+    --local-dir ~/.cache/huggingface/parc_work/libero_plus_bowl5
+
+RUN=pi05_bowl5 WEIGHTS=base \
+  DATASET=$HOME/.cache/huggingface/parc_work/libero_plus_bowl5 \
+  DATASET_REPO_ID=local/libero_plus_bowl5 \
+  STEPS=24000 BATCH=16 LR=2.5e-5 SAVE_FREQ=8000 CAMERA_AUGMENT=0 FREEZE_CHECK=0 \
+  nohup bash solution/train/jaist_launch.sh > ~/launch_pi05_bowl5.log 2>&1 &
 ```
 
-**チェックポイントの間引きを動かすこと**（1 個 11 GB）。cron 登録済みなら
-出力先を足す（[howto/07](07_train_pi05_local.md) の「チェックポイントを自動で間引く」）。
+| 渡す値 | なぜ | 対照 `pi05_full_local` |
+|---|---|---|
+| `WEIGHTS=base` | 素の `pi05_libero_base` から | 同じ（rev `a217bfd3`） |
+| `STEPS=24000` | 既定 8,500 を戻す | 24,000 |
+| `LR=2.5e-5` | 既定 5e-6 を戻す | 2.5e-5 → 2.5e-6 |
+| `CAMERA_AUGMENT=0` | 既定 あり を戻す | なし |
+| `FREEZE_CHECK=0` | **据え置いていない**ので入口の検査を外す（[6.3 節](#63-正規化統計は据え置かない)） | — |
+| `SAVE_FREQ=8000` | 学習に影響しない。既定 2,000 だと 12 個 108 GB になる | — |
 
-学習が終わったら重みを取り込む。
+**空きは 47 GB 要る**（チェックポイント 3 個 ＋ データ）。
+
+**20 歩で 3 つ確かめる**（`~/launch_pi05_bowl5.log` に出る）。
+
+| 見るもの | 期待 |
+|---|---|
+| `num_learnable_params` | **693,422,112** |
+| `dataset.num_episodes` | データの本数と一致 |
+| `updt_s` / `mem_gb` | **1.39 秒 / 16.27 GB**（過去 4 本と同じ。違えば設定が効いていない） |
+
+### 6.2 Blackwell —— 全パラメータ（**歩数は打つ前に決めない**）
+
+```bash
+. ~/env_pi05.sh
+hf download siruku6/pi05_code --local-dir ~/pi05_code
+bash ~/pi05_code/solution/train/blackwell_bowl5.sh
+```
+
+**1 本で準備から離席まで行く。**降ろす 2 つ（データ 17 GB ＋ 出発点 8.8 GB）を
+並列に流し、本数・コマ数・課題数を `bowl5_expected.json` と突き合わせ、
+残り時間から歩数を決めて起こす。**30 分で離席できることを狙っている。**
+
+**`blackwell_setup.sh` は打たない。**あちらは Blackwell の上でデータセットを
+組むので 2 時間かかる。**この走りのデータは手元で組んで HF に置いてあるので、
+降ろすだけで済む。**
+
+**歩数は起動時刻からの残り時間で決まる**（後片付けに 60 分を残す）。
+
+| 準備に要した時間 | 打つ歩数 | サンプル数（JAIST 比） |
+|---|---|---|
+| 30〜60 分 | **5,000** | 320,000（83%） |
+| 90〜120 分 | **4,500** | 288,000（75%） |
+
+**決めた歩数は `--policy.scheduler_decay_steps` にも入る。**LeRobot の既定は
+**30,000 歩固定で `--steps` に連動しない**ので、入れないと 5,000 歩では
+学習率がほぼ 2.5e-5 のまま終わる（`--steps 20` で回して確かめてある）。
+**だから「時間が余ったら伸ばす」ができない。**打つ前に確定させて完走させる。
+
+**20 歩で `num_learnable_params=4143404816` を確かめてから離席する**
+（693,422,112 なら action expert だけになっている）。
+
+### 6.3 正規化統計は据え置かない
+
+**据え置くのは「統計を持っている重みから続ける」ときだけである**
+（[reference/29 の 6.3](../reference/29_training_data_requirements.md)）。
+ここは統計を持たない `pi05_libero_base` から通すので、最初の学習が尺度を決める。
+
+**揃えるべきは数値ではなく手順である。**対照は「そのデータ自身の統計」で
+学習している。据え置くと**こちらだけが「自分のデータに合わない統計を使う」**
+ことになり、差が 1 つ増える。**出るずれはデータを入れ替えたことの帰結であって、
+別の変数ではない。**
+
+**それでも桁は見る**（[5 節](#5-データセットを組む)の門 4）。逆向きを 2 割混ぜた回は
+配布側の回転チャンネルが 0.43 倍に縮み、Track2 が 0.9167 から 0.5833 へ落ちている。
+**倍率が 0.5 を割るか 2 を超えたら、混ぜ方そのものを疑うこと。**
+
+### 6.4 終わったら重みを取り込む
 
 ```bash
 python3 solution/tools/weights/install_pi05_weights.py \
     work/train/pi05_bowl5/checkpoints/024000/pretrained_model --name pi05_bowl5
 ```
 
+**チェックポイントの間引きを動かすこと**（1 個 11 GB。
+[howto/07](07_train_pi05_local.md) の「チェックポイントを自動で間引く」）。
+
 ---
 
 ## 7. 対照評価する
 
-**2 つの重みを、同じ条件で、同じ本数だけ回す。**
+**3 つの重みを、同じ条件で、同じ本数だけ回す。**
+
+| 重み | 何を答えるか |
+|---|---|
+| `pi05_full_local`（既にある） | 対照。配布データそのまま・action expert だけ |
+| `pi05_bowl5`（JAIST） | **入れ替えたデータが効いたか。**対照と 1 変数 |
+| `pi05_bowl5_full`（Blackwell） | **全パラメータにするとどれだけ変わるか。**ただし全パラメータ × 元データの対照が無いので、**「全パラが効いた」と「データが効いた」は分けられない。**分けたければ Blackwell をもう 1 セッション使う |
 
 ```bash
 # 作り直した側

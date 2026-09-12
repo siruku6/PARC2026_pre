@@ -69,8 +69,12 @@ command -v hf >/dev/null || die "hf が無い" ". ~/env_pi05.sh を先に読む"
 echo "  出発点 $BASE_REPO@${BASE_REV:0:8}"
 [ -e "$OUTPUT_ROOT/$RUN" ] && die "出力先が既にある: $OUTPUT_ROOT/$RUN" \
     "別の RUN 名にするか、消してから打つ"
-python3 -c "import torch;assert torch.cuda.is_available()" 2>/dev/null \
-    || die "GPU が見えない" "nvidia-smi を打って確かめる"
+# **DRY のときは見ない。**降ろすところまでの空打ちは GPU の無い機械でもやりたい
+# （Blackwell の 12 時間を使わずに、取得と検算だけを別の機械で通すため）。
+if [ "$DRY" != 1 ]; then
+    python3 -c "import torch;assert torch.cuda.is_available()" 2>/dev/null \
+        || die "GPU が見えない" "nvidia-smi を打って確かめる"
+fi
 mkdir -p "$NVME/data" "$OUTPUT_ROOT" "$TOOLS"
 echo "  ok"
 
