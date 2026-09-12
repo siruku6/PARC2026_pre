@@ -55,7 +55,7 @@ sha256sum work/train/<消す候補>/model.safetensors         # 一致した候�
 `sha256sum` は 8.8 GB 1 本で 2〜3 分かかる（2026-08-23 に `pi05_quant_c0` の
 `016000/pretrained_model/model.safetensors` で実測）。既知の重みの
 sha256 は [../reference/19_weights_catalog.md](../reference/19_weights_catalog.md) の一覧の
-右端の列にある。HF 側は LFS の `sha256` を API から引ける（同じ文書の「引き直すコマンド」の節）。
+右端の列にある。HF 側は LFS の `sha256` を API から引ける（[18_inspect_weights.md](18_inspect_weights.md) の 5 節）。
 
 ## 3. ハードリンクは両方消して初めて空く
 

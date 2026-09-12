@@ -438,6 +438,31 @@ shasum -a 256 work/submission_<版>.zip     # Linux では sha256sum
 > **重みを 1 バイトでも変えれば sha256 は変わる。**一致を期待するのは
 > **「同じ重み・同じコードで組み直した」ときだけである。**
 
+## 環境変数ではなく、既定値そのものを書き換える
+
+**採点環境はこちらの環境変数を渡してくれない。**だから**提出する zip では
+`solution/policy_server.py` の既定値そのものを書き換えてから組む。**
+
+**手元の評価だけなら書き換えは要らない。**下の 7 つはすべて環境変数で上書きできるので、
+`PARC_NUM_INFERENCE_STEPS=20 bash solution/tools/eval/run_docker_eval.sh …` で足りる。
+
+| 書き換える既定値 | 何の設定か |
+|---|---|
+| `__version__` | 採点ログの `[parc]` 行に出る版 |
+| `PARC_N_ACTION_STEPS` | 1 回の推論で実際に実行する本数（π0.5 は 16・SmolVLA は 8） |
+| `PARC_NUM_INFERENCE_STEPS` | ノイズ除去の回数（π0.5 だけ） |
+| `PARC_BLEND_STEPS` | 行動列の継ぎ目を直前へ寄せる本数 |
+| `PARC_EMA_ALPHA` | 出した行動を前の行動と混ぜる係数 |
+| `PARC_SAMPLES` | 1 手ごとに何本サンプルして medoid を選ぶか |
+| `PARC_NORMALIZE_INSTRUCTION` | タスク文の表記を寄せる処理 |
+
+**行番号は書かない**——`policy_server.py` は動くので、
+`grep -n 'PARC_SAMPLES' solution/policy_server.py` で引く。
+
+**組み直した zip の sha256 は元と一致しない**（時刻が入る）。**提出済みの版のバイト列を
+後から示す必要があるときは、[../reference/19_weights_catalog.md](../reference/19_weights_catalog.md)
+の「出した zip の sha256」の表が唯一の手がかりである。**
+
 ## 版番号を決める
 
 **メジャー番号は重みを指す。**minor は挙動が変わる既定値の変更、patch は挙動が変わらない修正。
