@@ -146,20 +146,37 @@ print(format_table({
 step "門 4. 正規化統計のずれ"
 # **pi05 は state と action を mean/std で正規化し、`lerobot_train.py` が
 # `dataset.meta.stats` で上書きする。**混ぜた瞬間に配布データ側の正規化も変わる。
-# **対照の `pi05_full_local` は配布データの統計で学習されている**ので、
-# ずれが大きければ `freeze` で据え置いて 1 変数を保つ。
-R solution/tools/track3_reversal/check_merge_stats.py predict \
-    --provided "$SRC/meta/stats.json" --ours "$ALL/meta/stats.json" \
-    --copies 1 --merged "$OUT" || echo "  （predict が通らない。verify で見る）"
-echo
-echo "  **歪みが大きければ据え置く（打つのは手で）:**"
-echo "    IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \\"
-echo "        solution/tools/track3_reversal/check_merge_stats.py freeze \\"
-echo "        --merged $OUT --source $SRC/meta/stats.json"
+#
+# **この走りは据え置かない。**据え置くのは「統計を持っている重みから続ける」
+# ときだけである（[reference/29 の 6.3](../../../docs/reference/29_training_data_requirements.md)）。
+# ここは統計を持たない `pi05_libero_base` から通すので、**最初の学習が尺度を決める。**
+#
+# **揃えるべきは数値ではなく手順である。**対照の `pi05_full_local` は
+# 「そのデータ自身の統計」で学習している。据え置くと、こちらだけが
+# 「自分のデータに合わない統計を使う」ことになり、**差が 1 つ増える。**
+# 出るずれはデータを入れ替えたことの帰結であって、別の変数ではない。
+#
+# **それでも数は見る。**桁が違えば話が変わる——逆向きを 2 割混ぜた回は
+# 配布側の回転チャンネルが 0.43 倍に縮み、Track2 が 0.9167 から 0.5833 へ落ちた
+# （`plan/23`）。**倍率が 0.5 を割るか 2 を超えたら、混ぜ方そのものを疑うこと。**
+python3 - "$OUT" "$SRC" <<'GATE4'
+import json, sys
+import numpy as np
+def stats(path):
+    return json.load(open(f"{path}/meta/stats.json"))
+out, src = stats(sys.argv[1]), stats(sys.argv[2])
+worst = 1.0
+for key in ("action", "observation.state"):
+    m0, s0 = (np.array(src[key][f]) for f in ("mean", "std"))
+    m1, s1 = (np.array(out[key][f]) for f in ("mean", "std"))
+    ratio, shift = s1 / s0, np.abs((m1 - m0) / s0)
+    worst = max(worst, ratio.max(), 1.0 / ratio.min())
+    print(f"  {key:18} std 倍率 {ratio.min():.4f}〜{ratio.max():.4f}"
+          f"  平均のずれ 最大 {shift.max():.4f} σ")
+assert worst < 2.0, "**尺度が 2 倍以上動いた。混ぜ方そのものを疑うこと**"
+GATE4
+[ $? = 0 ] || die "門 4 で落ちた"
 
-# ---------------------------------------------------------------- 期待値
-# **Blackwell 側で突き合わせる値を、ここで書き出す。**手で書き写すと、
-# 写し間違いを検算で捕まえられない。
 step "期待値を同梱する"
 python3 - "$OUT" <<'PY'
 import json, sys
