@@ -149,7 +149,9 @@ PY
         "学習は回さず、環境を残して止める（venv は \$HOME に残る）"
     echo "  --steps $STEPS（$(python3 -c "print(f'{$STEPS*$SEC_PER_STEP/3600:.2f}')") 時間・後片付けに $RESERVE_MIN 分を残す）"
 fi
-NCKPT=$(( STEPS / SAVE_FREQ ))
+# **最後の 1 個を数え落とさない。**`STEPS` が `SAVE_FREQ` の倍数でなければ、
+# LeRobot は終端でもう 1 個保存する（5,500 歩 / 2,000 なら 2000・4000・5500 の 3 個）。
+NCKPT=$(( STEPS / SAVE_FREQ + (STEPS % SAVE_FREQ != 0) ))
 echo "  チェックポイント $NCKPT 個（1 個 8.8 GB ＝ 約 $((NCKPT * 9)) GB を HF へ）"
 [ "$NCKPT" -gt 5 ] && die "チェックポイントが $NCKPT 個は多い（非公開の空きは約 57 GB）" \
     "SAVE_FREQ を大きくする。目安は SAVE_FREQ=$(( (STEPS + 2) / 3 ))"
