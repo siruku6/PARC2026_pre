@@ -88,8 +88,14 @@ RUN=pi05_bowl5_full REPO=siruku6/pi05_bowl5_full \
 ## 3. 進み具合の読み方
 
 ```bash
-tail -f ~/upload_ckpt_<RUN>.log
+. ~/run_env.sh          # **これを読まないと $RUN が空である**
+tail -f ~/upload_ckpt_$RUN.log
 ```
+
+> **`~/env_pi05.sh` と `~/run_env.sh` は別物である。**前者（`omnicampus_setup.sh` が書く）は
+> `OUTPUT_ROOT` や `HF_HOME` を置き、**`RUN` は置かない。**後者（起こすスクリプトが書く）が
+> `RUN`・`REPO`・`STEPS` を置く。**前者だけ読むと `$OUTPUT_ROOT/$RUN.log` が
+> `/opt/dlami/nvme/out/.log` になって「そんなファイルは無い」と言われる**（9/12 に踏んだ）。
 
 **1 巡ごとに必ず 1 行出る。**出ていなければループが死んでいる。
 
