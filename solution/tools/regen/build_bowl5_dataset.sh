@@ -33,6 +33,10 @@ KEEP="${KEEP:-work/artifacts/libero_states/keep_without_bowl5.json}"
 GRADER="${GRADER:-work/regen/grader_texts.txt}"
 HF_REPO="${HF_REPO:-siruku6/libero_plus_bowl5}"
 R() { IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh "$@"; }
+# **コンテナは root で書く。**戻さないと、こちらから中継物を消せない
+# （`run_scripted_bowls.sh` と同じ手）。
+own() { docker run --rm -v "$PWD/$1:/out" --entrypoint chown parc2026-final \
+            -R "$(id -u):$(id -g)" /out >/dev/null 2>&1 || true; }
 
 die() { echo; echo "**止まった: $1**"; shift; for l in "$@"; do echo "  $l"; done; exit 1; }
 step() { echo; echo "=== $* ==="; }
@@ -68,10 +72,15 @@ else
             --base "$BASE" --base-repo-id local/bowl_all \
             --add "${d%/}" --add-repo-id local/bowl_stage \
             --output "$NEXT" --output-repo-id local/bowl_all || die "段をまとめられない: $d"
-        [ "$BASE" != "${DIRS[0]%/}" ] && rm -rf "$BASE"
+        # **中継物は捨てる。**段を 8 つ重ねるので、残すと 8 個ぶん場所を食う。
+        # 消してよいのはこの loop が作ったものだけ（1 段目は元データである）。
+        if [ "$BASE" != "${DIRS[0]%/}" ] && [ -d "$BASE" ]; then
+            rm -rf -- "$BASE"
+        fi
         BASE="$NEXT"
     done
     mv "$BASE" "$ALL"
+    own "$ALL"
     echo "  $(eps "$ALL") 本"
 fi
 
@@ -80,24 +89,40 @@ step "3. 配布データへ 1 回だけ足す"
 if [ "$(eps "$OUT")" -gt 0 ]; then
     echo "  済み（$(eps "$OUT") 本）"
 else
+    # **先に列の書き方を揃える。**中身は同じでも、lerobot の版が上がると
+    # `features` の飾りが変わり、`merge_datasets` が一致を求めて落ちる
+    # （非動画の列の `fps`・動画の `is_depth_map` の綴り・軸名の 3 つ）。
+    # **段どうしの merge では起きない**——どちらも同じ版で作ったからである。
+    R solution/tools/scripted_demo/npz_to_lerobot.py align \
+        --base "$NOBOWL" --add "$ALL" || die "列の書き方を揃えられない"
     R solution/tools/scripted_demo/npz_to_lerobot.py merge \
         --base "$NOBOWL" --base-repo-id lerobot/libero_plus \
         --add "$ALL" --add-repo-id local/bowl_all \
         --output "$OUT" --output-repo-id local/libero_plus_bowl5 || die "足せない"
+    own "$OUT"
 fi
 
 # ---------------------------------------------------------------- 門
 step "門 1. 本数・コマ数・課題数"
-python3 - "$OUT" "$SRC" <<'PY'
+# **足し算が合うかを見る。**「だいたいこの範囲」で見ると、段が 1 つ落ちていても
+# 通ってしまう。**外した残りと作り直しの足し算に、ちょうど一致すること。**
+python3 - "$OUT" "$SRC" "$NOBOWL" "$ALL" <<'GATE1'
 import json, sys
-a = json.load(open(f"{sys.argv[1]}/meta/info.json"))
-b = json.load(open(f"{sys.argv[2]}/meta/info.json"))
-print(f"  {'':10} {'入れ替え後':>12} {'配布':>12}")
+def info(path):
+    return json.load(open(f"{path}/meta/info.json"))
+out, src, nobowl, add = (info(x) for x in sys.argv[1:5])
+print(f"  {'':16} {'入れ替え後':>12} {'配布':>12}")
 for k in ("total_episodes", "total_frames", "total_tasks"):
-    print(f"  {k:10} {a[k]:>12,} {b[k]:>12,}")
-assert a["total_tasks"] == b["total_tasks"], "**課題数が違う。未学習のタスクが混ざっている**"
-assert 14200 <= a["total_episodes"] <= 14400, "**本数が想定の外**"
-PY
+    print(f"  {k:16} {out[k]:>12,} {src[k]:>12,}")
+print(f"  {'内訳':16} {nobowl['total_episodes']:,}（外した残り）"
+      f" + {add['total_episodes']:,}（作り直し）")
+assert out["total_tasks"] == src["total_tasks"], (
+    "**課題数が違う。未学習のタスクが混ざっている**")
+assert out["total_episodes"] == nobowl["total_episodes"] + add["total_episodes"], (
+    "**本数の足し算が合わない。段が落ちているか、二重に足している**")
+assert out["total_frames"] == nobowl["total_frames"] + add["total_frames"], (
+    "**コマ数の足し算が合わない**")
+GATE1
 [ $? = 0 ] || die "門 1 で落ちた"
 
 step "門 2. 指示文が、評価でモデルが見る文と合っているか"
@@ -106,9 +131,17 @@ R solution/tools/scripted_demo/check_dataset_instructions.py "$OUT" \
     "寄せられていない文がある。**評価で一度も引かれない**（knowledge/23）"
 
 step "門 3. 指令の形が配布データと揃っているか"
-R solution/tools/motion/report_smoothness.py --dataset "$SRC" --episodes 200 \
-    --npz "作り直し=work/regen/npz_bowl/*/*.npz" 2>/dev/null \
-    || echo "  （npz は変換後に消えている。段の生成時のログを見ること）"
+# **npz ではなくデータセットの `action` 列から測る。**npz は段ごとに捨てる
+# 設計なので、ここへ来る頃には残っていない。**捨てたものを測ろうとする門は、
+# 黙って飛ばされる門である。**
+R -c "
+import sys; sys.path.insert(0, 'solution/tools')
+from motion.smoothness import format_table, load_dataset_episodes
+print(format_table({
+    '配布': load_dataset_episodes('$SRC', 200),
+    '作り直し': load_dataset_episodes('$ALL', 200),
+    '入れ替え後': load_dataset_episodes('$OUT', 200),
+}))" || die "門 3 で落ちた"
 
 step "門 4. 正規化統計のずれ"
 # **pi05 は state と action を mean/std で正規化し、`lerobot_train.py` が
