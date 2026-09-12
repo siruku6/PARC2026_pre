@@ -22,6 +22,7 @@
 | **学習ログの `grdn` の読み方と、指令が上限ちょうどに積み上がると何が起きるか**（AdamW ではクリップされても更新量は変わらない・v2 の行動指令の分布の実測・複製の倍率と正規化の尺度） | **[33_gradient_norm_and_action_saturation.md](33_gradient_norm_and_action_saturation.md)** |
 | **軌道とデータを作り直す外部の道具と先端研究**（手作り 5 つの置き換え先・**人が動画を見て直す道具**・なめらかさで手本を選ぶ・時間反転の対称性・ライセンス） | **[34_trajectory_regeneration_toolchain_survey.md](34_trajectory_regeneration_toolchain_survey.md)** |
 | **自作デモの指令を配布データと同じ形にする**（028 の 4 条件では見えない「停止の塊」と「立ち上がりの遅さ」・**Ruckig の入れ方と実測**・共有モジュール `solution/tools/motion/`） | **[35_command_profile_and_ruckig.md](35_command_profile_and_ruckig.md)** |
+| **採点器が送る 16 文が、モデルに何として届くか**（対応表・入れ替わった語・3 段階の分類・**しきい値 0.50/0.65/0.99 の比較**・`task_id` との答え合わせ） | **[36_instruction_rewriting_table.md](36_instruction_rewriting_table.md)** |
 | LoRA をどこに当てるか | [12_lora_targets.md](12_lora_targets.md) |
 | 検証用に取り分けたエピソード | [13_holdout_episodes.md](13_holdout_episodes.md) |
 | 学習後に変えてよい設定 | [07_chunk_params.md](07_chunk_params.md) |
