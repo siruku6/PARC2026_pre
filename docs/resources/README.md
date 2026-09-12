@@ -24,3 +24,4 @@ Tips は、ここではなく `howto/` と `knowledge/` に書く。**
 |---|---|
 | [infra_and_docker.md](infra_and_docker.md) | 使える計算資源（このマシン・運営配布 GPU・RunPod・Mac）と、Docker image・コンテナの現状 |
 | [huggingface.md](huggingface.md) | HF 上に置いてあるモデル・提出 zip と、ローカルにある重みの控えの有無 |
+| [datasets.md](datasets.md) | 自作した学習データセットの一覧・置き場所・作り方の工夫 |
