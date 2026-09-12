@@ -394,7 +394,11 @@ class PoseTrajectoryPlanner:
 
         # **回転の上限は軸の向きを見て決める。** `osc_command` が見るのは
         # 軸角ベクトルの**成分**なので、軸が斜めなら測地線はそのぶん速く回れる。
-        largest_axis_component = max(float(np.abs(rotation_axis).max()), 1e-6)
+        # **回さない区間で上限を膨らませない。** 軸が零ベクトルのときに
+        # `1e-6` で割ると、回転の上限だけが 10^5 倍の値になる。進む量は 0 
+        # なので害は出ないはずだが、時間同期の解がその桁で荒れる。
+        largest_axis_component = (float(np.abs(rotation_axis).max())
+                                  if angle_rad > 1e-9 else 1.0)
         max_velocity = np.array([envelope.limit_pos] * 3
                                 + [envelope.limit_rot / largest_axis_component])
         max_acceleration = np.array([envelope.accel_pos] * 3

@@ -19,17 +19,33 @@ for name in GRASP_CLEARANCE_ENOUGH \
             APPROACH_LIMIT_POS APPROACH_LIMIT_ROT \
             APPROACH_RESPONSE_POS_M APPROACH_RESPONSE_ROT_RAD \
             MOTION_ACCEL_POS MOTION_ACCEL_ROT MOTION_JERK_POS MOTION_JERK_ROT \
-            MOTION_INITIAL_ACCEL_RATIO ; do
+            MOTION_INITIAL_ACCEL_RATIO \
+            MOTION_GLIDE MOTION_GLIDE_EXIT_SPEED MOTION_GLIDE_GAIN ; do
     if [ -n "${!name:-}" ]; then
         PASS_THROUGH+=(-e "$name=${!name}")
     fi
 done
+
+# **ruckig は 69 GB のイメージに焼かない。**ホストへ展開したものを読み取り専用で
+# 挿し、`PYTHONPATH` の先頭へ足す（`run_ruckig_replay.sh` と同じ手）。
+# 入れ方:
+#   pip install --target work/vendor_py310 --python-version 310 \
+#       --only-binary=:all: --platform manylinux_2_28_x86_64 ruckig
+# **無くても落ちない。**`motion/otg.py` が自前の台形＋S 字に切り替わる
+# （時間最適ではないぶん数コマ長いだけで、指令の形は同じ）。
+VENDOR="${VENDOR:-$REPOSITORY_ROOT/work/vendor_py310}"
+VENDOR_MOUNT=()
+if [ -d "$VENDOR" ]; then
+    VENDOR_MOUNT=(-v "$VENDOR:/vendor:ro"
+                  -e "PYTHONPATH=/vendor:/workspace/LIBERO-plus:/workspace:/workspace/compe")
+fi
 
 status=0
 docker run --rm --gpus all \
     -e "MUJOCO_GL=${GL}" -e PYTHONUNBUFFERED=1 \
     -e OMP_NUM_THREADS=1 -e MKL_NUM_THREADS=1 \
     "${PASS_THROUGH[@]+"${PASS_THROUGH[@]}"}" \
+    "${VENDOR_MOUNT[@]+"${VENDOR_MOUNT[@]}"}" \
     -v "$REPOSITORY_ROOT:/workspace/repo" \
     -w /workspace/repo \
     --entrypoint python \

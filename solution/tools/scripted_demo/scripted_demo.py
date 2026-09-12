@@ -89,6 +89,41 @@ GRIPPER_CLOSE = 1.0
 BRAKE_WITHIN_STOP = 0.012     # 止まる点。短く詰める
 BRAKE_WITHIN_PASS = 0.045     # 通過してから止まる点。長くかけて速度を残さない
 
+# **区間をつなぐ所だけ、通過点を先に作って通る**しくみ
+# （`solution/tools/motion/otg.py` の `PoseTrajectoryPlanner`）。
+#
+# **既定は off である。測って外した。**丼 5 課題 × 50 配置（計 250 本）で:
+#
+#     　　　　　　　　成功　　コマ数中央　停止コマ　遅い塊　符号反転(並進)
+#     配布データ　　　 ——　　　132　　　 0.96%　 3.0 個　 0.14%
+#     off（比例制御）　247/250　138　　　14.33%　 7.0 個　 0.46%
+#     on 　　　　　　 247/250　152　　　12.74%　 9.0 個　 2.37%
+#
+# **停止が減らないのは、つなぐ所がもともと止まっていなかったからである。**
+# 1 本あたりの停止コマ 21 のうち 21 が `hold`（掴む 10・落ち着かせる 4・
+# 離す 6・整定 4）で、**区間の継ぎ目の落ち込みは 1〜3 コマしかない。**
+# `follow` は遠くの 1 点を追う比例制御で、028 の逆向きデモが使っていた
+# 5 次多項式（両端で速度も加速度も 0）とは違い、**継ぎ目で止まる作りでは
+# 元から無い。** Ruckig が直すのはその 5 次多項式の欠点で、ここには無い。
+# 逆に、軸ごとの解を継ぐぶん**符号反転が 5 倍**になり、コマ数も 10% 増えた。
+# 詳しくは [reference/35 の 3.4 節](../../../docs/reference/35_command_profile_and_ruckig.md)。
+#
+# **消していないのは、測り直せるようにしておくためである。**`MOTION_GLIDE=1`
+# か `--glide on` で入る。**入れるなら成功率と符号反転を同時に読むこと。**
+GLIDE = os.environ.get("MOTION_GLIDE", "0").lower() not in ("0", "off", "false")
+# 継ぎ目に残す速さ（並進の上限に対する割合）。**0 にすると継ぎ目ごとに止まる。**
+GLIDE_EXIT_SPEED = float(os.environ.get("MOTION_GLIDE_EXIT_SPEED", 0.35))
+# 計画への追従の強さ。**指令の本体は計画の速度（前送り）で、ここは補正である。**
+# **0 にしても良くならない**（符号反転 2.37% → 2.43%・コマ数 152 → 157）。
+# 反転の出どころは補正ではなく、Ruckig が軸ごとに解く形そのものである。
+GLIDE_GAIN = float(os.environ.get("MOTION_GLIDE_GAIN", 0.25))
+# **腕は指令より何コマ遅れて動くか。**ずれを測る相手をこのぶん手前の通過点に
+# するために要る。**いまの通過点と比べてはいけない**——遅れは制御が下手だから
+# ではなく位置サーボの応答そのものなので、いつまでも消えない。消えないずれに
+# 補正をかけ続けると、補正だけで上限に届いて**前送りの形が消える**
+# （実測: 手先のジャーク 4.73 → 6.61 と、かえって荒れた）。
+GLIDE_LAG = int(os.environ.get("MOTION_GLIDE_LAG", 3))
+
 # 指の開き [m]。**実測**（`solution/tools/probe/gripper_frame.py`）。
 # **掴む対象の水平の張り出しがこの半分を超えると、縁をまたぐしかない。**
 FINGER_SPAN = 0.0481
@@ -687,7 +722,8 @@ class _Rollout:
                  rng: np.random.Generator | None = None,
                  disturb_scale: float = 0.0, disturb_steps: int = 10,
                  disturb_at: tuple[int, int] | None = None,
-                 envelope: Any = None, cruise: float = 1.0) -> None:
+                 envelope: Any = None, cruise: float = 1.0,
+                 glide: bool = True) -> None:
         self.env = env
         self.max_steps = max_steps
         self.record_images = record_images
@@ -705,6 +741,10 @@ class _Rollout:
         self._envelope = envelope
         self._last_sent = np.zeros(6)
         self.cruise = float(cruise)
+        # **区間をつなぐ所だけ通過点を先に作る**か（`glide`）。封筒が無い
+        # 計画では「指令 1 単位ぶんの移動量」が取れないので、使いようがない。
+        self.use_glide = bool(glide) and envelope is not None
+        self._planner: Any = None
         self.record.action_noise = self.action_noise
 
         # **妨害の中身は 1 歩も進める前に引く。** ここで引けば、
@@ -1229,6 +1269,170 @@ class _Rollout:
         error = float(np.linalg.norm(targets[-1] - self.eef_position))
         self.phases.append((label, self.record.steps - used, error))
 
+    def _trajectory_planner(self) -> Any:
+        """通過点の生成器。**使う課題で初めて作る。**
+
+        **import をここに置く理由は `_envelope_for` と同じである。** `motion` は
+        別の入り口（`solution/tools/motion`）にあり、`PYTHONPATH` に入っていない
+        場に置かれることがある。**使わない計画まで import で落とすと、moka pot の
+        2 課題が動かなくなる。**
+        """
+        if self._planner is None:
+            import sys as _sys
+            _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+            import dataclasses as _dataclasses
+
+            from motion.otg import PoseTrajectoryPlanner
+
+            # **計画の上限は、実際に出せる上限に揃える。** 封筒の `limit_pos` は
+            # 0.9375 だが、送る指令は `cruise`（丼の 5 課題では 0.85）で頭打ちに
+            # なる。揃えないと**計画のほうが速く、腕が永久に追いつけない**——
+            # ずれが増え続け、補正だけで上限に張り付く。
+            self._planner = PoseTrajectoryPlanner(_dataclasses.replace(
+                self._envelope,
+                limit_pos=min(self._envelope.limit_pos, self.cruise)))
+        return self._planner
+
+    @staticmethod
+    def _flat_pose(position: Any) -> np.ndarray:
+        """位置だけの姿勢 (6,) を作る。**向きは 0 に固定する。**
+
+        `PoseTrajectoryPlanner` は姿勢で受け取るが、**手首の向きはここでは
+        渡さない。** `follow` と同じく `action[5]` の比例制御に任せる——向きまで
+        計画に入れると、`turn_wrist` や `turn_arc` と 2 系統になって必ず片方が
+        古くなる。**前後で同じ 0 を渡すので、計画の回転自由度は動かない。**
+        """
+        return np.concatenate([np.asarray(position, dtype=np.float64)[:3],
+                               np.zeros(3)])
+
+    def _send(self, command: np.ndarray, gripper: float, speed_cap: float,
+              yaw_target: float | None) -> bool:
+        """手先の指令・指・手首をまとめて 1 歩送る。**向きを崩さずに大きさを切る。**
+
+        `_velocity_command` と同じ切り方をする——**いちばん大きい軸が `cruise` を
+        越えたらそこへ揃える。** 軸ごとに切ると、軸ごとに順番に飽和が解けて
+        進行方向が折れる。
+        """
+        command = np.asarray(command, dtype=np.float64)
+        largest = float(np.max(np.abs(command)))
+        if largest > self.cruise:
+            command = command / largest * self.cruise
+        action = np.zeros(7)
+        action[:3] = speed_cap * command
+        # **なましの履歴も進めておく。** あとから `smoothing < 1` の `follow` が
+        # 来たとき、止まっていた頃の指令から混ぜ始めると継ぎ目が段差になる。
+        self._last_command = action[:3].copy()
+        if yaw_target is not None:
+            turn = (yaw_target - self.finger_azimuth + 90.0) % 180.0 - 90.0
+            action[5] = float(np.clip(turn / 12.0, -1.0, 1.0))
+        action[6] = gripper
+        return self._take_step(action)
+
+    def glide(self, label: str, waypoints: list[Any], gripper: float, *,
+              exit_ratio: float = 0.0, next_target: Any = None,
+              resume: bool = False, tolerance: float = 0.006,
+              budget: int = 90, speed_cap: float = 1.0,
+              yaw_target: float | None = None, smoothing: float = 1.0,
+              blend_radius: float = 0.0,
+              brake_distance: float = BRAKE_WITHIN_PASS) -> None:
+        """**区間をつなぐ所**を、躍度を抑えた通過点で通る。**止まらずに次へ渡す。**
+
+        **`follow` は区間の終わりで必ず指令が 0 付近まで落ちる。** あちらは
+        「目標 − いまの姿勢」を毎歩出す比例制御で、終点の手前 `brake_distance`
+        で絞るからである。段を 7 つ並べると 1 本に停止が 7 回入り、実測で
+        **停止コマが 14.40%**（配布データは 0.96%）になっていた。**動画が
+        カクカクして見えるのはこれである。**
+
+        ここは代わりに `motion/otg.py` で**1 コマ 1 点の通過点**を先に作り、
+        それを追いかける。**指令の本体は計画の速度（前送り）**で、実際の姿勢との
+        ずれは `GLIDE_GAIN` 倍だけ足す。前送りが主なので、**指令の形はそのまま
+        計画の形になる**——加速・巡航・減速が躍度の上限を守った S 字で出る。
+
+        **`exit_ratio` を正にすると、その区間の終わりで止まらない。** 残した
+        速度は次の呼び出し（`resume=True`）が入口として受け取る。
+
+        Parameters
+        ----------
+        exit_ratio : float
+            出口に残す速さ（並進の上限に対する割合）。**0 で止まる。**
+            **掴む・置く・離すの直前は必ず 0 にすること**——速度を残したまま
+            物へ寄せると、当たった衝撃で器が台の上を滑る。
+        next_target : Any
+            **次に行く先** (3,)。渡すと出口の速度がそこを向くので、継ぎ目で
+            進行方向が折れない。**`exit_ratio=0` のときは何を渡しても止まる。**
+        resume : bool
+            **直前の `glide` の続きか。** False なら持ち越しを捨てて、止まった
+            状態から組む。**間に `follow` や `hold` を挟んだら必ず False に
+            すること**——挟んだ区間で腕は止まっているのに、古い速度を入口に
+            使うと計画が実際より速いところから始まる。
+        smoothing, blend_radius, brake_distance : float
+            **`MOTION_GLIDE=0` で `follow` に落ちたときにだけ効く。** 対照の側が
+            1 歩も変わらないように、**元の `follow` が渡していた値をそのまま
+            持たせておくための引数である。**
+        """
+        if not self.use_glide:
+            self.follow(label, waypoints, gripper, blend_radius=blend_radius,
+                        tolerance=tolerance, budget=budget, smoothing=smoothing,
+                        brake_distance=brake_distance, speed_cap=speed_cap,
+                        yaw_target=yaw_target)
+            return
+
+        used = self.record.steps
+        planner = self._trajectory_planner()
+        if not resume:
+            planner.reset()
+        targets = [np.asarray(point, dtype=np.float64) for point in waypoints]
+        response = self._envelope.response_pos_m
+        running = True
+        for order, target in enumerate(targets):
+            is_last = order == len(targets) - 1
+            onward = next_target if is_last else targets[order + 1]
+            ratio = exit_ratio if is_last else GLIDE_EXIT_SPEED
+            planned = planner.waypoints(
+                self._flat_pose(self.eef_position), self._flat_pose(target),
+                exit_speed_ratio=ratio,
+                next_target=None if onward is None else self._flat_pose(onward))
+            # **前送りは「計画の 1 コマぶんの進み」である。** 実測の姿勢では
+            # なく計画どうしの差を使う——実測で割ると、遅れているぶんが
+            # そのまま速度に化けて前送りが二重にかかる。
+            planned = list(planned)
+            start = self.eef_position.copy()
+            previous = start.copy()
+            for tick, point in enumerate(planned):
+                if self.record.steps - used >= budget:
+                    running = False
+                    break
+                planner.observe(self.eef_position)
+                # **ずれは `GLIDE_LAG` コマ手前の通過点と比べる。** いまの
+                # 通過点と比べると、消えない遅れをずっと補正し続けることになる。
+                behind = (planned[tick - GLIDE_LAG][:3]
+                          if tick >= GLIDE_LAG else start)
+                command = ((point[:3] - previous)
+                           + GLIDE_GAIN * (behind - self.eef_position)) / response
+                previous = point[:3].copy()
+                if not self._send(command, gripper, speed_cap, yaw_target):
+                    running = False
+                    break
+            if not running:
+                break
+        planner.observe(self.eef_position)
+
+        # **計画を配り終えても、腕はまだ手前にいる。** 指令に対する腕の遅れが
+        # 3〜4 コマあるからである（`otg.py`）。**止まる区間だけ**、今までの
+        # 比例制御で残りを詰める——止まらない区間で詰めに行くと、そこで速度が
+        # 落ちて、継ぎ目をつないだ意味が無くなる。
+        if running and exit_ratio <= 0.0:
+            while self.record.steps - used < budget:
+                delta = targets[-1] - self.eef_position
+                if float(np.linalg.norm(delta)) < tolerance:
+                    break
+                if not self._send(
+                        self._velocity_command(delta, BRAKE_WITHIN_STOP),
+                        gripper, speed_cap, yaw_target):
+                    break
+        error = float(np.linalg.norm(targets[-1] - self.eef_position))
+        self.phases.append((label, self.record.steps - used, error))
+
     def joint_anchor(self, name: str) -> np.ndarray:
         """関節の回転の中心。**fixture は初期配置ごとに数 mm ずれる**ので実行時に読む。"""
         sim = self.env.env.sim
@@ -1386,6 +1590,23 @@ def _run_rim_pick_place(rollout: _Rollout, step: RimPickPlace,
     | 掴む位置を**方位から決める** | 物体が指より広く、縁をまたぐしかないため。**方位は自由変数** |
     | 掴んだあと**真上へゆっくり上げる** | 横へ動かすと隣の物へ押し付ける。実測で damage の 85〜88% が掴む区間 |
     | 置く位置を**掴んだ物の中心**で合わせる | 縁をまたぐと物の中心が手首から 5.65 cm 外れる。合わせないと皿の縁に落ちる |
+
+    **段ごとに、通過点を先に作る（`glide`）か、比例制御だけ（`follow`）かを分けている。**
+    先に作るのは**何にも触れていない区間だけ**である。
+
+    | 段 | 作り方 | なぜ |
+    |---|---|---|
+    | 掴む所の上へ | `glide` 出口に速度を残す | 何にも触れていない。**降りる向きに速度を残して渡す** |
+    | 構える | `glide` 出口で止まる | 続きとして受け取る。**降り切る前に止める** |
+    | 縁を挟む位置へ | `follow` | **掴む直前。**速度を残して寄せると、当たった衝撃で器が滑る |
+    | 掴む | `hold` | 止めるしかない（`hold_at` は測って外した） |
+    | 真上へ上げる | `follow` | **掴んだ直後。**damage の 85〜88% がこの区間で出ている |
+    | 運ぶ | `glide` | 何も触れずに空中を通る。**角で速度を落とさない** |
+    | 置く・落ち着かせる・離す・逃げる | `follow` / `hold` | **置く・放す の前後。**引きずると置き場所から外れる |
+
+    **触れている所を作り直さないのは、成否がそこで決まっているからである。**
+    なめらかさは学習のための性質だが、掴めない・当たる手本は混ぜる値打ちが無い。
+    **`MOTION_GLIDE=0` を渡すと全段が `follow` に戻る**ので、対照はそれで取る。
     """
     target = step.target
     centre = rollout.object_position(target)
@@ -1402,11 +1623,15 @@ def _run_rim_pick_place(rollout: _Rollout, step: RimPickPlace,
     wrist = centre + radius * direction
     # **寄りながら手首も回す。**封筒に収めると手首は 1 歩 1.6 度しか回らないので、
     # 寄り終わってから回すと 50 歩以上かかる。**同時なら追加の歩数は要らない。**
-    rollout.follow(f"{target} 掴む所の上へ（手首も {azimuth:.0f} 度へ）",
-                   [[wrist[0], wrist[1], centre[2] + step.approach_dz]],
-                   GRIPPER_OPEN, blend_radius=0.0, tolerance=0.006,
-                   budget=plan.budget_move, smoothing=plan.smoothing,
-                   yaw_target=azimuth)
+    rollout.glide(f"{target} 掴む所の上へ（手首も {azimuth:.0f} 度へ）",
+                  [[wrist[0], wrist[1], centre[2] + step.approach_dz]],
+                  GRIPPER_OPEN, exit_ratio=GLIDE_EXIT_SPEED,
+                  # **次に降りる先を渡す。**残る速度が真下を向くので、着いた
+                  # 瞬間から降り始める——ここが「近づく→降りる」の継ぎ目である。
+                  # 下の取り直しで数 mm ずれるが、向きを決めるには十分である。
+                  next_target=[wrist[0], wrist[1], centre[2] + step.hover_dz],
+                  tolerance=0.006, budget=plan.budget_move,
+                  smoothing=plan.smoothing, yaw_target=azimuth)
     # **手首を回すためだけに腕を止めない。**止まっている区間は指令が 0 の 1 点に
     # 積み上がり、上限の 1 点と同じ理由で学習が解けない（reference/33・35）。
     # **大きく残っているときだけ**その場で詰め、あとは降りながら回す。
@@ -1415,10 +1640,11 @@ def _run_rim_pick_place(rollout: _Rollout, step: RimPickPlace,
     wrist = centre + radius * direction
     # **降りるのを 2 段に割る。**上の段は回しながら降り、下の段は真下だけにする
     # ——指が縁に近づいてから回すと、回り切る前に隣の物へ当たる。
-    rollout.follow(f"{target} 構える（手首も {azimuth:.0f} 度へ）",
-                   [[wrist[0], wrist[1], centre[2] + step.hover_dz]],
-                   GRIPPER_OPEN, blend_radius=0.0, tolerance=0.006,
-                   budget=plan.budget_descend, yaw_target=azimuth)
+    rollout.glide(f"{target} 構える（手首も {azimuth:.0f} 度へ）",
+                  [[wrist[0], wrist[1], centre[2] + step.hover_dz]],
+                  GRIPPER_OPEN, exit_ratio=0.0, resume=True,
+                  tolerance=0.006, budget=plan.budget_descend,
+                  yaw_target=azimuth)
     left = abs((azimuth - rollout.finger_azimuth + 90.0) % 180.0 - 90.0)
     if left > 6.0:
         rollout.turn_wrist(f"{target} 手首の残りを詰める", azimuth,
@@ -1450,12 +1676,13 @@ def _run_rim_pick_place(rollout: _Rollout, step: RimPickPlace,
     held = rollout.object_position(target)[:2] - rollout.eef_position[:2]
     place_xy = base[:2] + np.asarray(step.place_offset) - held
 
-    rollout.follow(f"{target} 運ぶ",
-                   [[here[0], here[1], plan.carry_z],
-                    [place_xy[0], place_xy[1], plan.carry_z]],
-                   GRIPPER_CLOSE, blend_radius=plan.blend_radius,
-                   budget=plan.budget_lift + plan.budget_move,
-                   smoothing=plan.smoothing, yaw_target=azimuth)
+    rollout.glide(f"{target} 運ぶ",
+                  [[here[0], here[1], plan.carry_z],
+                   [place_xy[0], place_xy[1], plan.carry_z]],
+                  GRIPPER_CLOSE, exit_ratio=0.0,
+                  budget=plan.budget_lift + plan.budget_move,
+                  blend_radius=plan.blend_radius, smoothing=plan.smoothing,
+                  yaw_target=azimuth)
     rollout.move_to(f"{target} 置く", [place_xy[0], place_xy[1], plan.place_z],
                     GRIPPER_CLOSE, tolerance=0.004, budget=plan.budget_descend,
                     yaw_target=azimuth)
@@ -1523,7 +1750,8 @@ def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
                 verbose: bool = False, action_noise: float = 0.0,
                 noise_seed: int | None = None, disturb_scale: float = 0.0,
                 disturb_steps: int = 10,
-                disturb_at: tuple[int, int] | None = None) -> EpisodeRecord:
+                disturb_at: tuple[int, int] | None = None,
+                glide: bool | None = None) -> EpisodeRecord:
     """scripted policy を 1 本ぶん実行し、採点と同じ基準で成否を付ける。
 
     Parameters
@@ -1557,6 +1785,10 @@ def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
     disturb_at : tuple[int, int] | None
         妨害を始める歩の範囲。**この範囲から本ごとに 1 つ引く**ので、
         本数ぶん違うタイミングで失敗する手本になる。
+    glide : bool | None
+        **区間をつなぐ所の通過点を先に作るか**（`_Rollout.glide`）。
+        `None` なら `MOTION_GLIDE`（既定 1）に従う。**False にすると
+        比例制御だけの今までの動きに 1 歩も違わず戻る**ので、対照はこれで取る。
 
     Returns
     -------
@@ -1569,7 +1801,8 @@ def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
                        disturb_scale=disturb_scale,
                        disturb_steps=disturb_steps,
                        disturb_at=disturb_at,
-                       envelope=_envelope_for(plan), cruise=plan.cruise)
+                       envelope=_envelope_for(plan), cruise=plan.cruise,
+                       glide=GLIDE if glide is None else glide)
     for step in plan.steps:
         _RUNNERS[type(step)](rollout, step, plan)
     rollout.hold("整定", GRIPPER_OPEN, plan.final_settle_steps)
@@ -1946,7 +2179,8 @@ def command_verify(args: argparse.Namespace) -> None:
                              noise_seed=args.noise_seed + index,
                              disturb_scale=args.disturb_scale,
                              disturb_steps=args.disturb_steps,
-                             disturb_at=args.disturb_at)
+                             disturb_at=args.disturb_at,
+                             glide=args.glide)
         lengths.append(record.steps)
         if args.save_actions:
             saved_actions.append(np.asarray(record.actions, dtype=np.float32))
@@ -2028,7 +2262,8 @@ def command_record(args: argparse.Namespace) -> None:
                              noise_seed=args.noise_seed + index,
                              disturb_scale=args.disturb_scale,
                              disturb_steps=args.disturb_steps,
-                             disturb_at=args.disturb_at)
+                             disturb_at=args.disturb_at,
+                             glide=args.glide)
         if not record.success and not args.keep_failures:
             print(f"  ep{index:02d} 失敗（{record.steps} 歩）—— 書き出さない")
             continue
@@ -2132,9 +2367,17 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--save-actions", type=Path, default=None, metavar="DIR",
                         help="verify の行動列を npz で書き出す（描画しない）。"
                              "**指令の形を `motion/report_smoothness.py` で測るため**")
+    parser.add_argument("--glide", default=None, choices=("on", "off"),
+                        help="**区間をつなぐ所の通過点を先に作るか**"
+                             "（近づく→降りる、運ぶ）。省略時は `MOTION_GLIDE`"
+                             "（既定 on）に従う。**off にすると比例制御だけの"
+                             "今までの動きに 1 歩も違わず戻る**ので、"
+                             "滑らかさと成功率の対照はこれで取る")
     parser.add_argument("--verbose", action="store_true",
                         help="1 本目だけ段ごとのステップ数を出す")
     args = parser.parse_args()
+    if args.glide is not None:
+        args.glide = args.glide == "on"
     if args.episodes:
         args.episodes = [int(x) for x in args.episodes.split(",")]
     if args.disturb_at:
