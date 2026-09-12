@@ -214,61 +214,9 @@ hf download <ユーザー名>/<リポジトリ名> \
 
 ---
 
-## 非公開のリポジトリを公開へ移して枠を空ける（**9/5 に足した**）
+## 非公開のリポジトリを公開へ移して枠を空ける
 
-**これが分かると何が決まるか: 非公開の 100 GB の枠に、次の学習のチェックポイントが入るか。**
-**枠を食っているのは非公開のリポジトリだけである**（[14_blackwell_session.md](14_blackwell_session.md) の分岐 2）。
-**だから消さずに公開へ移すだけで、その分が枠から外れる。**
-
-### 1. 移す前に見る 2 つ
-
-| 見るもの | 打つもの | 何が出たら止めるか |
-|---|---|---|
-| **ログにトークンが混じっていないか** | `hf download siruku6/pi05_camdrop2500 --include 'logs/*' --local-dir /tmp/ck && grep -rn 'hf_[A-Za-z0-9]\{20,\}' /tmp/ck` | **1 行でも出たら公開しない。**そのトークンを先に失効させる |
-| **大会の規約が重みの公開を禁じていないか** | 本選資料を読む | 禁止・制限があれば公開しない。**判断はユーザがする** |
-
-**`train_config.json` には機械の中のパスが入るが、それだけである**（`/opt/dlami/nvme/...`）。
-
-### 2. カードと NOTICE を上げる（2 行）
-
-**Gemma Terms of Use は、派生した重みを配るときに規約そのものを渡すことと、
-規約に従う旨を目立つ場所に書くことを求める**（[../knowledge/04_licenses.md](../knowledge/04_licenses.md)）。
-**その 2 つを満たす 2 ファイルを [../../solution/hf_repo_cards/pi05_camdrop2500/](../../solution/hf_repo_cards/pi05_camdrop2500/) に置いてある。**
-
-```sh
-cd <このリポジトリ>/solution/hf_repo_cards/pi05_camdrop2500
-hf upload siruku6/pi05_camdrop2500 README.md README.md --repo-type model
-hf upload siruku6/pi05_camdrop2500 NOTICE    NOTICE    --repo-type model
-```
-
-**`README.md` の先頭の `license: gemma` が、HF のページに規約へのリンクを出す。**
-**中身は英語である**——読む相手が HF の利用者だからで、[../knowledge/04_licenses.md](../knowledge/04_licenses.md) の値をそのまま写してある。
-
-### 3. 公開へ切り替える
-
-**web の画面で切り替えるのが確実である**——`Settings` → `Change visibility` → リポジトリ名を打って確定。
-**API で切り替えるなら 1 行**（`403` が出たらトークンに設定を変える権限が無いので、web で切り替える）。
-
-```sh
-python3 -c "
-from huggingface_hub import HfApi
-HfApi().update_repo_settings('siruku6/pi05_camdrop2500', private=False)
-print('公開にした')"
-```
-
-### 4. 枠に戻ったことを数えて確かめる
-
-**9/5 に `pi05_camdrop2500`（46.77 GB）で実際に戻った**——非公開だけの合計が
-**93.64 GB → 46.87 GB**（空き 6.36 GB → **53.13 GB**）。**待ち時間は無く、同じ日に数えて出ている。**
-
-```sh
-python3 -c "
-from huggingface_hub import HfApi
-api = HfApi(); t = 0
-for kind, lister in (('model', api.list_models), ('dataset', api.list_datasets)):
-    for r in lister(author='siruku6'):
-        i = api.repo_info(r.id, repo_type=kind, files_metadata=True)
-        if i.private:
-            t += sum((f.lfs.size if f.lfs else (f.size or 0)) for f in i.siblings)
-print(f'非公開だけで {t/1e9:.2f} GB / 100 GB')"
-```
+**この手順は `hf-publish` skill（`.claude/skills/hf-publish/`）へ移した。**
+カードの書き方・公開前の確認・可視性の切り替え・枠が戻ったことの確認まで、すべてそちらに揃っている。
+**9/5 に `pi05_camdrop2500`（46.77 GB）で実際に枠が戻った実績がある**
+（非公開だけの合計 93.64 GB → 46.87 GB）。

@@ -970,7 +970,7 @@ bash solution/tools/train/run_train_tests.sh
 | 手 | 戻る量 | 決めるのは |
 |---|---|---|
 | ~~`siruku6/pi05_stage1_24000` を消す~~ | **0 GB。公開なので枠を食っていない**（9/3 に分かった） | — |
-| **非公開のリポジトリを公開へ移す** | **そのリポジトリの全量。**消さずに戻る（`pi05_camdrop2500` の 46.77 GB を 9/5 にこれで戻した）。**手順は [08_hf_transfer_troubleshooting.md](08_hf_transfer_troubleshooting.md) の最後の節** | 親の判断（**公開してよい中身かを先に見る**） |
+| **非公開のリポジトリを公開へ移す** | **そのリポジトリの全量。**消さずに戻る（`pi05_camdrop2500` の 46.77 GB を 9/5 にこれで戻した）。**手順は `hf-publish` skill（`.claude/skills/hf-publish/`）** | 親の判断（**公開してよい中身かを先に見る**） |
 | `siruku6/parc2026-submission` の古い版を消して履歴を潰す（`super_squash_history`） | 8/29 に 76.4 → 57.7 GB になった実績あり | 親の判断 |
 | **上げるのを `001500` だけにする** | 要るのが 8.8 GB で済む | **その場で決めてよい。**比較の要は `001500` である |
 
