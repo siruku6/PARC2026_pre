@@ -93,8 +93,9 @@ ULOG="$HOME/upload_ckpt_$RUN.log"
 OLD=$(pgrep -af "upload_ckpt.sh" | head -1)
 [ -n "$OLD" ] && die "上げるループが既に動いている: $OLD" \
     "別の走りのものなら pkill -f upload_ckpt.sh してから打つ"
-RUN="$RUN" REPO="$REPO" LOG="$ULOG" setsid nohup "$TOOLS/upload_ckpt.sh" \
-    > "$HOME/upload_ckpt_$RUN.nohup" 2>&1 &
+# **出力とログの在り処はここで渡す。**学習もログもここが置いたので、上げる側に推測させない。
+RUN="$RUN" REPO="$REPO" LOG="$ULOG" OUT="$OUTPUT_ROOT/$RUN" TRAIN_LOG_DIR="$OUTPUT_ROOT" \
+    setsid nohup "$TOOLS/upload_ckpt.sh" > "$HOME/upload_ckpt_$RUN.nohup" 2>&1 &
 sleep 25
 grep -q "学習を見つけた" "$ULOG" 2>/dev/null \
     || { tail -5 "$ULOG" 2>/dev/null; tail -5 "$HOME/upload_ckpt_$RUN.nohup";

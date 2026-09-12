@@ -448,78 +448,27 @@ tail -5 ~/upload_ckpt.log
 > **1 つだけ注意。**階層が落ちるので、**HF から LeRobot の `--resume` で直に続けることはできない**
 > （`configs/train.py` 329 行は Hub 上の `<歩数>/pretrained_model/train_config.json` を探す）。
 > **`--init-from` は落ちた形のままで読めるので、いつもの続け方には影響しない。**
-> **そして `train_config.json` は設定しか持たない**——**loss の推移は B4b のログにしか無い。**
+> **そして `train_config.json` は設定しか持たない**——**loss の推移は `logs/` に上がるログにしか無い**（B4b）。
 
 
 ### B4b 学習ログを `$HOME` と HF へ写すループを始める（3 分）
 
-> **2026-09-13 から、この節は打たなくてよい。**`upload_ckpt.sh` がチェックポイントを
-> 上げるたびにログも `logs/` へ上げ、`~/train_logs/<RUN>/` に写しを残すようになった
-> （[17 の 1 節](17_checkpoint_upload.md)）。**下の `sync_log.sh` は、`upload_ckpt.sh` を
-> 使わない走りのために残してある。**
+> **2026-09-13 から、ここで打つものは無い。**B4 の `upload_ckpt.sh` が、チェックポイントを
+> 上げるたびにログも `logs/` へ上げ、`~/train_logs/<RUN>/` に写しを残す。
+> 理由と仕組みは [17 の 1 節](17_checkpoint_upload.md)。**以前ここにあった `sync_log.sh` は、
+> 同じことを別の置き方でする 2 つ目の道になるので消した。**
 
-**これが分かると何が決まるか: loss の推移が後から読めるか。**
-**`$OUTPUT_ROOT`（`/opt/dlami/nvme/out`）はセッション終了で消える。**
-**そしてログは、やり直しでは作れない唯一のものである**——
-チェックポイントの `train_config.json` は設定を持つが、**loss の推移は持たない。**
-**9/1 に `ladder2500` の「loss は 2,000 歩かけて −2.2%」を判定できたのは、
-ログを機械が消える前に降ろしてあったからである**（`open_items.md` の `F61`）。
-
-**置き先は 2 か所にする。**
-
-| 置き先 | 残り方 | 落ちる筋 |
-|---|---|---|
-| **`$HOME/train_logs/`** | **セッションをまたいで残る**（自動保存の対象） | **`~/data`・`~/.cache`・`~/dataset` に置くと消える**——あの 3 つは一時領域への symlink である |
-| **HF の `pi05_camdrop2500`** | **どの機械からでも降ろせる** | 認証が切れていると黙って失敗する（だから `$HOME` 側を先に写す） |
+**確かめるのは 1 つだけである。**最初のチェックポイントが上がったあとに打つ。
 
 ```bash
-cat > ~/sync_log.sh <<'EOF'
-#!/usr/bin/env bash
-# 学習ログを $HOME と HF へ写す。1 分ごとに $HOME、10 分ごとに HF。
-set -u
-RUN=pi05_camdrop2500
-SRC=/opt/dlami/nvme/out
-DST=$HOME/train_logs          # symlink でない $HOME の実体に置く（~/data は消える）
-REPO=siruku6/pi05_camdrop2500
-mkdir -p "$DST"
-copy() {
-  for f in "$RUN.log" "$RUN.nohup"; do
-    [ -f "$SRC/$f" ] && cp "$SRC/$f" "$DST/$f"
-  done
-}
-push() {
-  if hf upload "$REPO" "$DST/$RUN.log" "logs/$RUN.log" --repo-type model >/dev/null 2>&1; then
-    echo "$(date -Iseconds) HF へ上げた"
-  else
-    echo "$(date -Iseconds) HF は失敗（~/train_logs への写しは済んでいる）"
-  fi
-}
-i=0
-while pgrep -f "train_pi05.py --run-name $RUN" >/dev/null; do
-  copy
-  i=$((i + 1))
-  [ $((i % 10)) -eq 0 ] && push
-  sleep 60
-done
-copy; push                      # 学習が終わったあと、最後に 1 回
-echo "$(date -Iseconds) ログの写しを終える"
-EOF
-chmod +x ~/sync_log.sh
-export PATH="$HOME/.local/bin:$PATH"
-nohup ~/sync_log.sh > ~/sync_log.nohup 2>&1 &
-echo "PID $!"
+. ~/run_env.sh
+ls -la ~/train_logs/$RUN/                       # <RUN>.log と <RUN>.nohup が並ぶ
+grep "ログ" ~/upload_ckpt_$RUN.log | tail -3     # 「ログ **確かめた**」が出ている
 ```
 
-**1 分後に 2 行で確かめる。**
-
-```bash
-sleep 65; ls -la ~/train_logs/
-tail -3 ~/sync_log.nohup
-```
-
-**`~/train_logs/` に 2 つ並べば、最悪の全損は防げている。**
-**10 分たっても `HF へ上げた` が出ないときは、`hf auth whoami` を打ち直す**
+**`確かめた` が出ないときは、`hf auth whoami` を打ち直す**
 （`~/.cache` が消える領域なので、トークンはセッションごとに入れ直している）。
+**写しは `~/train_logs/<RUN>/` に残っている**ので、その間も全損にはならない。
 
 ### B5 最初の 500 ステップが HF に載るまで見届ける（40 分）
 
@@ -642,14 +591,14 @@ for f in HfApi().repo_info('siruku6/pi05_camdrop2500', repo_type='model').siblin
     print(f.rfilename)"
 ```
 
-**ログも一緒に降ろす。**`logs/` に上がっている（B4b）。
+**ログも一緒に降ろす。**`logs/` に上がっている（[17 の 1 節](17_checkpoint_upload.md)）。
 
 ```bash
 hf download siruku6/pi05_camdrop2500 --include 'logs/*' \
     --local-dir work/train/pi05_camdrop2500
 ```
 
-**上がっていなければ、`$HOME` のほうに残っている**（`~/train_logs/`）。
+**上がっていなければ、`$HOME` のほうに残っている**（`~/train_logs/<RUN>/`）。
 **次のセッションで開いたときに、まずそれを降ろすこと**——`$HOME` は残るが、
 **同じ名前で次の走りを回すと上書きされる。**
 
@@ -872,7 +821,7 @@ HF に上がっていないチェックポイントは存在しないのと同�
 |---|---|
 | [B1 上げ先を用意する](#b1-上げ先を用意する10-分) | `create_repo` の名前を **`siruku6/pi05_all111`** に。**同じ script が非公開の空きを数える** |
 | [B4 上げるループ](#b4-チェックポイントを-hf-へ上げるループを始める10-分) | **3 か所**——`OUT=/opt/dlami/nvme/out/pi05_all111`・`REPO=siruku6/pi05_all111`・`pgrep -f` の `--run-name pi05_all111` |
-| [B4b ログを写すループ](#b4b-学習ログを-home-と-hf-へ写すループを始める3-分) | **2 か所**——`RUN=pi05_all111`・`REPO=siruku6/pi05_all111` |
+| [B4b ログを写すループ](#b4b-学習ログを-home-と-hf-へ写すループを始める3-分) | **打たなくてよい**——ログは B4 の `upload_ckpt.sh` が一緒に上げる（2026-09-13 から） |
 | [B5](#b5-最初の-500-ステップが-hf-に載るまで見届ける40-分)・[B6](#b6-監視セルを実行状態のまま残して離席する5-分) | 書き換えなし。**B6 を飛ばすと 1 時間の待機で学習ごと止まる** |
 
 **HF の空きはこの 1 本に足りる（9/5 に数え直した）。**
@@ -1315,7 +1264,7 @@ hf upload-large-folder siruku6/pi05_camdrop2500 ~/up --repo-type=model
 | **認証していないと非公開リポジトリが `not found` に見える** | `~/.hf_token` を置く（A3）。**名前の間違いではない** |
 | **Notebook のセルが `/bin/sh` で動くことがある** | `source` が無い。**`.` で読む**（8/31 に踏んだ） |
 | **`df` が答えない共有ストレージがある** | 使用量は `du -sh`、枠は画面で見る |
-| **学習ログを `$OUTPUT_ROOT` にしか置かない** | **セッション終了で消える。****loss の推移はチェックポイントに残らないので、やり直しでは作れない。**B4b のループで `$HOME/train_logs/` と HF の 2 か所へ写す（**`~/data` は symlink で消えるので置き先にしない**） |
+| **学習ログを `$OUTPUT_ROOT` にしか置かない** | **セッション終了で消える。****loss の推移はチェックポイントに残らないので、やり直しでは作れない。**`upload_ckpt.sh` が `~/train_logs/<RUN>/` と HF の `logs/` の 2 か所へ写す（[17 の 1 節](17_checkpoint_upload.md)） |
 | **ディスクが埋まると書いている途中のファイルが壊れる** | 書く前に空きを見る。**`policy_server.py` を実際に 0 バイトにした** |
 | **前のセッションの「上げた印」が残っていて、上げるループが黙って飛ばす** | **9/5 に踏んだ。**`~/uploaded/000500` は 9/3 の `camdrop2500` が置いたものである。**印は走りごとに分ける**（上の B4 の `MARK`）。**症状は [分岐 6](#分岐-6-上げるループが見回りだけを書いて上げない)** |
 | **`--learning-rate` を省くと 10 倍から再スタートする** | 必ず `5e-6` を書く |

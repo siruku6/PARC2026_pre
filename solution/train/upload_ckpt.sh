@@ -1,23 +1,19 @@
 #!/usr/bin/env bash
-# チェックポイントの pretrained_model を HF へ上げ、**上がったことを確かめてから**印を付ける。
+# チェックポイントの pretrained_model と学習ログを HF へ上げ、**上がったことを確かめてから**印を付ける。
 #
 #   RUN=pi05_proto20 REPO=siruku6/pi05_proto20 nohup ~/upload_ckpt.sh > ~/upload_ckpt.nohup 2>&1 &
 #
-# **2026-09-03 に踏んだ 2 つを潰すために作り直した**（`howto/14` の分岐 5）。
+# 摘み・ログの読み方・ログも上げる理由は `docs/howto/17_checkpoint_upload.md` にある。
 #
 # | 踏んだこと | ここでどう潰すか |
 # |---|---|
-# | **`000500` の次から 1 個も上がらず、跡も残らなかった** | **上げた後に HF を読んで数える**（`verify_upload.py`）。**確かめられなければ印を付けない**ので次の巡でやり直す。**止まりうる場所の手前に必ず 1 行書く**ので、跡が残る |
-# | **上げている 10 分の間に学習が終わると `break` して最後の 1 個を落とす** | **`break` の条件を「学習が終わった かつ 未上げが 0 個」にした。**学習が終わってからも、残りを上げ切るまで抜けない |
+# | **`000500` の次から 1 個も上がらず、跡も残らなかった**（9/3・`howto/14` の分岐 5） | **上げた後に HF を読んで数える**（`verify_upload.py`）。**確かめられなければ印を付けない**ので次の巡でやり直す。**止まりうる場所の手前に必ず 1 行書く**ので、跡が残る |
+# | **上げている 10 分の間に学習が終わると `break` して最後の 1 個を落とす**（9/3） | **`break` の条件を「学習が終わった かつ 未上げが 0 個」にした。**学習が終わってからも、残りを上げ切るまで抜けない |
 # | **チェックポイントは上がったのに、学習ログが 1 行も上がっていなかった**（9/13 に `pi05_bowl5_full` で踏んだ） | **チェックポイントを上げるたびに、ログも `logs/` へ上げる。**最後の 1 回は学習が終わってから上げ、**それが確かめられるまで `_all_uploaded` を置かない** |
 #
 # **抜けるときに `$MARK/_all_uploaded` を置く。**監視セルはこれが在るときだけ
 # サーバを止める。**在らなければ止めない**（GPU 時間は減るが、上がっていない
 # チェックポイントは消えない。`/opt/dlami/nvme` はインスタンス終了で消える）。
-#
-# **ログはやり直しでは作れない唯一のものである。**チェックポイントの
-# `train_config.json` は設定を持つが、loss の推移は持たない。だから
-# チェックポイントと同じ扱い（確かめてから済みとする）にしてある。
 set -u
 RUN="${RUN:?RUN を渡すこと（--run-name と同じ文字列）}"
 REPO="${REPO:?REPO を渡すこと（例 siruku6/pi05_proto20）}"
@@ -26,14 +22,12 @@ MARK="${MARK:-$HOME/uploaded/$RUN}"
 LOG="${LOG:-$HOME/upload_ckpt.log}"
 VERIFY="${VERIFY:-$HOME/tools/verify_upload.py}"
 DONE="$MARK/_all_uploaded"
-# **学習ログの在り処。**`train_pi05.py` は `<出力先の親>/<RUN>.log` に書き、
-# 起こすスクリプトは同じ所へ `<RUN>.nohup` を落とす（`blackwell_bowl5.sh`・
-# `blackwell_launch.sh` とも）。だから `OUT` の親を見れば足り、引数は増やさない。
+# **学習ログの在り処は、起こすスクリプトが渡す**（ログを置いた本人が知っている）。
+# 既定は `OUT` の親——`train_pi05.py` が `<出力先の親>/<RUN>.log` に書く既定と同じで、
+# 手で起こすとき用である。
 TRAIN_LOG_DIR="${TRAIN_LOG_DIR:-$(dirname "$OUT")}"
-# **上げるのは写しのほうである。**学習中のログは伸び続けるので、そのまま上げると
-# 上げている間に大きさが変わり、HF と突き合わせられない。写しは `$HOME` に置くので
-# 自動保存に乗り、**HF の認証が切れていてもセッションをまたいで残る。**
-LOG_COPY="${LOG_COPY:-$HOME/train_logs/$RUN}"
+# 伸び続けるログをそのまま上げると大きさが変わって突き合わせられないので、写しを上げる。
+LOG_COPY="$HOME/train_logs/$RUN"
 
 mkdir -p "$MARK"
 say() { echo "$(date -Iseconds) $*" >> "$LOG"; }
@@ -52,33 +46,43 @@ pending_list() {
 
 training_alive() { pgrep -f "train_pi05.py --run-name $RUN" >/dev/null; }
 
-# 学習ログを写して `logs/` へ上げ、HF を読んで確かめる。確かめられたら 0 を返す。
+# `hf upload` し、HF を読んで確かめる。確かめられたら 0 を返す。
+#   upload_verified <ログの札> <手元のディレクトリ> <HF 上の置き場> <上げる時間の上限 [秒]>
+upload_verified() {
+  local label="$1" local_dir="$2" dest="$3" limit="$4" rc
+  timeout "$limit" hf upload "$REPO" "$local_dir" "$dest" --repo-type model
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    say "$label **hf upload が失敗**（終了コード $rc）"
+    return 1
+  fi
+  say "$label hf upload は 0 で返った。HF を読んで確かめる"
+  if timeout $(( limit < 600 ? limit : 600 )) python3 "$VERIFY" \
+      --repo "$REPO" --step "$dest" --local "$local_dir" >> "$LOG" 2>&1; then
+    return 0
+  fi
+  say "$label **確かめられない**（次の巡でやり直す）"
+  return 1
+}
+
+# 学習ログを写して `logs/` へ上げる。確かめられたら 0 を返す。
 push_logs() {
   local f copied=0
   mkdir -p "$LOG_COPY"
   for f in "$RUN.log" "$RUN.nohup"; do
-    [ -f "$TRAIN_LOG_DIR/$f" ] || continue
-    cp "$TRAIN_LOG_DIR/$f" "$LOG_COPY/$f" && copied=$((copied + 1))
+    [ -f "$TRAIN_LOG_DIR/$f" ] && cp "$TRAIN_LOG_DIR/$f" "$LOG_COPY/$f" && copied=$((copied + 1))
   done
   if [ "$copied" -eq 0 ]; then
     say "ログ **$TRAIN_LOG_DIR に $RUN.log も $RUN.nohup も無い**（TRAIN_LOG_DIR を渡すこと）"
     return 1
   fi
   say "ログ 上げ始める（$copied 個・写しは $LOG_COPY）"
-  if ! timeout 600 hf upload "$REPO" "$LOG_COPY" logs --repo-type model >/dev/null 2>&1; then
-    say "ログ **hf upload が失敗**（写しは $LOG_COPY に残っている）"
-    return 1
-  fi
-  if timeout 600 python3 "$VERIFY" --repo "$REPO" --step logs --local "$LOG_COPY" >> "$LOG" 2>&1; then
-    say "ログ **確かめた**"
-    return 0
-  fi
-  say "ログ **確かめられない**（次の巡でやり直す）"
-  return 1
+  # 数十 KB なので、2 分で上がらなければ失敗として次の巡に回す
+  upload_verified ログ "$LOG_COPY" logs 120 && say "ログ **確かめた**"
 }
 
 rm -f "$DONE"
-say "=== 開始 RUN=$RUN REPO=$REPO OUT=$OUT"
+say "=== 開始 RUN=$RUN REPO=$REPO OUT=$OUT TRAIN_LOG_DIR=$TRAIN_LOG_DIR"
 say "    既にある印: $(ls "$MARK" 2>/dev/null | tr '\n' ' ')"
 
 # **学習が立ち上がるのを待つ。**待たずに入ると、未上げ 0 個・学習なしの状態で
@@ -107,22 +111,11 @@ while true; do
     [ "$a" = "$b" ] || { say "$step まだ書いている（$a → $b）"; continue; }
 
     say "$step 上げ始める（$((a / 1000000)) MB）"
-    if timeout 3600 hf upload "$REPO" "$dir" "$step" --repo-type model; then
-      say "$step hf upload は 0 で返った。HF を読んで確かめる"
-    else
-      say "$step **hf upload が失敗**（終了コード $?）"
-      continue
-    fi
-
-    if timeout 600 python3 "$VERIFY" --repo "$REPO" --step "$step" --local "$dir" >> "$LOG" 2>&1; then
+    if upload_verified "$step" "$dir" "$step" 3600; then
       date -Iseconds > "$MARK/$step"
       say "$step **確かめた。印を付けた**"
       rm -rf "$OUT/checkpoints/$step/training_state"   # 16 GB。上げないので消す
-      # **ここまでの loss の推移を一緒に上げる。**途中で機械が落ちても、
-      # 最後に上がったチェックポイントまでのログは HF に残る。
-      push_logs
-    else
-      say "$step **確かめられない。印を付けない**（次の巡でやり直す）"
+      push_logs   # ここまでの loss の推移を一緒に上げる
     fi
   done
 
@@ -131,17 +124,16 @@ while true; do
     say "見回り 未上げ $left 個・学習は走っている"
   else
     say "見回り 未上げ $left 個・学習は終わった"
-    if [ "$left" -eq 0 ]; then
-      # **最後のログは学習が終わってから上げる。**最後のチェックポイントを保存したあとも
-      # 学習は数行書く（終了コードや落ちたときの traceback はここに出る）。
-      if push_logs; then
-        date -Iseconds > "$DONE"
-        say "=== 全部上がったことを確かめた（チェックポイントとログ）。ループを終える ==="
-        break
-      fi
-      say "**チェックポイントは全部上がったが、最後のログが上がっていない。抜けない**"
-    else
+    if [ "$left" -gt 0 ]; then
       say "**学習は終わったが未上げが $left 個ある。抜けない**"
+    # **最後のログは学習が終わってから上げる。**最後の保存のあとにも、
+    # 終了コードや落ちたときの traceback が書かれる。
+    elif push_logs; then
+      date -Iseconds > "$DONE"
+      say "=== 全部上がったことを確かめた（チェックポイントとログ）。ループを終える ==="
+      break
+    else
+      say "**チェックポイントは全部上がったが、最後のログが上がっていない。抜けない**"
     fi
   fi
   sleep 60
