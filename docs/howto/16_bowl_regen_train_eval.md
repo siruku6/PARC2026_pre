@@ -290,6 +290,10 @@ bash ~/pi05_code/solution/train/blackwell_bowl5.sh
 
 ### 6.4 終わったら重みを取り込む
 
+**Blackwell の出力は `/opt/dlami/nvme` にあり、セッション終了で消える。**
+上げるループが `_all_uploaded` を置くまで止めないこと（[17](17_checkpoint_upload.md)）。
+**JAIST の `work/train` は消えない**ので、終わってから手で上げれば足りる。
+
 ```bash
 python3 solution/tools/weights/install_pi05_weights.py \
     work/train/pi05_bowl5/checkpoints/024000/pretrained_model --name pi05_bowl5
