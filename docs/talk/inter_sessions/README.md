@@ -104,6 +104,7 @@ IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \
 
 | # | 何を | 状態 |
 |---|---|---|
+| **[032](032_molmoact2_libero_adoption.md)** | **土台を MolmoAct2-LIBERO に差し替える**（**Track2 が狙い。**キックオフ MTG で選抜成績優秀者が「Track2 が上がる」と話していた件。**導入方法の調べは 9/12 に済んだ**——重みは 10.88 GB で 20 GB に入る・Apache 2.0・同梱済みの LeRobot v0.6.0 に実装が既にある。残る未知は 1 推論の秒数だけ） | **着手（9/12）。****段階 0（素の重みで Track2 を測る・RTX6000 で 1 時間）から。**決めてほしいこと 2 件は同ファイルの 8 節 |
 | **[031](031_instruction_text_rewriting.md)** | **指示文の書き換えが適切かを判定する**（採点器が送る 16 文 → モデルが見る文の対応表を出典付きで作り、語の単位で何が変わったかと 3 段階の分類を付ける。**しきい値 0.65 と 0.99 が併存していて、決める根拠が「1 件の誤りを見つけた」しか無い**） | **依頼中（9/12）。**穴と道具は [knowledge/23](../../knowledge/23_self_made_demos_need_the_instruction_the_model_sees.md) |
 | [002](002_robot_init_pose_coverage.md) | ロボット初期姿勢の振り方を、作業空間を覆う形に作り直す | 進行中 |
 | **[006](006_track3_reverse_direction.md)** | **Track3 の逆向きタスクを試作する**（**方針は 8/30 に決まった**——広く覆う・初日に時間反転と scripted の両方を 1 タスクで試す） | **依頼中**（`open_items.md` の `F27`） |
