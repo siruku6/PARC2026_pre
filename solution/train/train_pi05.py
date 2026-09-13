@@ -145,7 +145,7 @@ from train import (  # noqa: E402
 
 # 量子化候補（C1〜C3）の窓口。**このファイルは import して呼ぶだけで、
 # 何をどう低精度にするかは一切持たない**（experiments/quantization/__init__.py）。
-from experiments import camera_dropout, geometry, quantization  # noqa: E402
+from experiments import camera_dropout, geometry, quantization, sensor_noise  # noqa: E402
 
 _BASE_MODEL_REPO = "lerobot/pi05_libero_base"
 _BASE_MODEL_REVISION = "a217bfd3b14673cf2ce597e69997ab21866438dd"
@@ -245,6 +245,7 @@ def _parse_args() -> argparse.Namespace:
     quantization.add_arguments(parser)
     geometry.add_arguments(parser)
     camera_dropout.add_arguments(parser)
+    sensor_noise.add_arguments(parser)
     parser.add_argument("--camera-viewpoint-augment", action="store_true",
                         help="Tier 1（Camera Viewpoints 対策）の安価な近似。LeRobot の "
                              "image_transforms を有効化し、既定 6 種に加えて crop+zoom "
@@ -341,6 +342,13 @@ def _command_head(args: argparse.Namespace) -> list[str]:
         return geometry.command_head(args)
     if quantization.selected(args):
         return quantization.command_head(args)
+    if sensor_noise.selected(args):
+        # blur のラッパーは場面カメラを潰すパッチも一緒に当てる。**geometry・quantization の
+        # ラッパーは blur のパッチを当てない**ので、組み合わせは始める前に止める。
+        if geometry.selected(args) or quantization.selected(args):
+            raise SystemExit("[train_pi05] --scene-sensor-noise は geometry・quantization と"
+                             "一緒には使えない（そちらのラッパーが blur のパッチを当てない）")
+        return sensor_noise.command_head(args)
     return camera_dropout.command_head(args)
 
 
@@ -424,6 +432,7 @@ def _build_command(
     command += quantization.extra_arguments(args)
     command += geometry.extra_arguments(args)
     command += camera_dropout.extra_arguments(args)
+    command += sensor_noise.extra_arguments(args)
     if args.camera_viewpoint_augment:
         command += [
             "--dataset.image_transforms.enable=true",
@@ -534,6 +543,8 @@ def main() -> None:
     geometry.validate(args)
     camera_dropout.set_environment(args)
     camera_dropout.validate(args)
+    sensor_noise.set_environment(args)
+    sensor_noise.validate(args)
     _check_dataset_choice(args)
 
     output_dir: Path = (args.output_root / args.run_name).resolve()
@@ -620,7 +631,7 @@ def main() -> None:
             f"train_expert_only={args.train_expert_only}、"
             f"dtype={args.dtype}、grad_ckpt={args.gradient_checkpointing}、"
             f"{quantization.describe(args)}、{geometry.describe(args)}、"
-            f"{camera_dropout.describe(args)}、"
+            f"{camera_dropout.describe(args)}、{sensor_noise.describe(args)}、"
             f"データ {args.dataset_repo}"
             f"{'（' + str(args.dataset_root) + '）' if args.dataset_root else ''}）"
         )
