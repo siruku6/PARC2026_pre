@@ -53,7 +53,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripted_demo"))
 
-from replay_yield import _replay_one, _variant  # noqa: E402
+from replay_yield import (MIN_OFFSET_CM, _replay_one, _variant,  # noqa: E402
+                          passes_gates)
 
 DEAD_TASKS = (
     # 手本が 146 本すべて 341 歩以上で、300 歩の打ち切りに入らない。
@@ -76,6 +77,10 @@ def _parse_args() -> argparse.Namespace:
                         default="open_loop",
                         help="**既定の `open_loop` はずれを最後まで抱える**ので被覆になる。"
                              "`prealign` は歩留まりの穴埋め用")
+    parser.add_argument("--prealign-planner", choices=("proportional", "glide"),
+                        default="proportional",
+                        help="`prealign` の寄せ方。**`glide` は Ruckig**（比べた結果は "
+                             "`prealign_ruckig_probe.py`）。`open_loop` では効かない")
     parser.add_argument("--initstates", type=int, nargs="+", metavar="N",
                         default=[282, 232, 389, 285, 242, 129,
                                  273, 392, 243, 432, 483, 372],
@@ -84,7 +89,7 @@ def _parse_args() -> argparse.Namespace:
                              "（2.2/2.5/2.9/3.2/3.6/3.9/4.3/4.9/5.6/6.4/7.5/9.7 cm）。"
                              "**番号を倍率で選んではいけない**——`initstate_170` は "
                              "倍率 0.2 だが 0.88 cm しか動かず、被覆の門で全部落ちる")
-    parser.add_argument("--min-offset-cm", type=float, default=2.0, metavar="CM",
+    parser.add_argument("--min-offset-cm", type=float, default=MIN_OFFSET_CM, metavar="CM",
                         help="引き継ぎ時の手先のずれの下限。**これを割る回は捨てる**")
     parser.add_argument("--demos-per-task", type=int, default=0, metavar="N",
                         help="1 課題から使うデモの本数。0 で全部（50 本）")
@@ -171,16 +176,13 @@ def _run_item(item: dict, args: argparse.Namespace, budget: int) -> list[dict]:
                 started = time.perf_counter()
                 result, rollout = _replay_one(
                     sd, env, states[0], actions, args.seed, args.method,
-                    ee_pos0, record_images=True)
+                    ee_pos0, record_images=True, planner=args.prealign_planner)
 
-                reached = 0 < result["goal_step"] <= 300
-                clean = (result["disp_at_goal_mm"] or 0.0) <= 1.0
-                covered = result["eef_offset_cm"] >= args.min_offset_cm
-                keep = bool(reached and clean and covered)
+                gates = passes_gates(result, args.min_offset_cm)
+                keep = gates["keep"]
                 row = {"task": item["task"], "suite": item["suite"],
                        "demo": demo, "initstate": item["initstate"],
-                       "method": args.method, "keep": keep,
-                       "reached": reached, "clean": clean, "covered": covered,
+                       "method": args.method, **gates,
                        "seconds": round(time.perf_counter() - started, 2),
                        **{k: v for k, v in result.items() if k != "eef0"}}
                 if keep:
@@ -207,6 +209,11 @@ def _run_item(item: dict, args: argparse.Namespace, budget: int) -> list[dict]:
                         source_demo=demo,
                         initstate=item["initstate"],
                         method=args.method,
+                        planner=args.prealign_planner,
+                        prealign_steps=result["prealign_steps"],
+                        # **1 コマごとの対象外の変位 [m]。**動画で「いつ当たったか」を
+                        # 焼くのに要る。後から足すには撃ち直すしかない。
+                        displacement_m=np.asarray(record.displacements, dtype=np.float32),
                         eef_offset_cm=result["eef_offset_cm"],
                         disp_at_goal_mm=result["disp_at_goal_mm"],
                         goal_step=result["goal_step"],

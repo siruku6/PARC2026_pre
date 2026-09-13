@@ -285,6 +285,30 @@ def _parallel_exit_velocity(distance: np.ndarray, max_velocity: np.ndarray,
     return distance * min(scales) * ratio
 
 
+def _parallel_onset_acceleration(distance: np.ndarray, onset_pos: float,
+                                 onset_rot: float) -> np.ndarray:
+    """止まった状態から始める区間の入口加速度を、**進行方向に平行**に作る。
+
+    **成分ごとに `+onset` を置いてはいけない。**符号が無いと Ruckig は
+    「いま `+x+y+z` へ加速中である」と受け取り、目標が逆側にあっても
+    **まずその加速を打ち消してから向きを変える。**実測（2026-09-13・寄せる区間 160 本）で
+    **160 本すべてが頭の 2〜3 コマを行き先と逆向きに出し**、3 → 4 コマ目で
+    符号が反転していた（並進の符号反転 7.19%・配布データ 0.14%）。
+
+    **符号だけ付けても足りない。**ほとんど動かない軸にも満額の加速度が乗り、
+    その軸だけ行き過ぎて戻る——`_parallel_exit_velocity` と同じ理由である。
+    並進は**いちばん大きい軸がちょうど `onset_pos` になる大きさ**で距離に平行に取る。
+    回転も同じで、**回す量が無ければ 0 にする。**
+    """
+    accel = np.zeros(NUM_DOF)
+    largest = float(np.abs(distance[:3]).max())
+    if largest > 1e-9:
+        accel[:3] = onset_pos * distance[:3] / largest
+    if abs(float(distance[3])) > 1e-9:
+        accel[3] = onset_rot * float(np.sign(distance[3]))
+    return accel
+
+
 class PoseTrajectoryPlanner:
     """区間をまたいで速度を持ち越す、姿勢の通過点の生成器。
 
@@ -384,11 +408,11 @@ class PoseTrajectoryPlanner:
                          else np.zeros(3))
 
         self.num_planned += 1
-        entry = self._entry_state(current, rotation_axis)
 
         # 指令の単位へ。位置は「指令 1 単位ぶんの移動量」で割る。
         distance = np.concatenate([delta_pos / envelope.response_pos_m,
                                    [angle_rad / envelope.response_rot_rad]])
+        entry = self._entry_state(current, rotation_axis, distance)
         if float(np.abs(distance).max()) < 1e-9:
             return [target.copy()]
 
@@ -431,17 +455,16 @@ class PoseTrajectoryPlanner:
         self._remember(waypoints[-1], velocity[-1], acceleration[-1], rotation_axis)
         return waypoints
 
-    def _entry_state(self, current: np.ndarray, rotation_axis: np.ndarray
-                     ) -> dict[str, np.ndarray]:
+    def _entry_state(self, current: np.ndarray, rotation_axis: np.ndarray,
+                     distance: np.ndarray) -> dict[str, np.ndarray]:
         """持ち越した速度を、この区間の自由度へ移す。続きでなければ止まった状態。"""
         envelope = self.envelope
         # **区間の頭でいきなり出してよい加速度。** 5 次多項式はここが 0 で、
         # そのために先頭 8 コマを捨てていた（モジュールの説明を見よ）。
         onset = envelope.accel_pos * envelope.initial_accel_ratio
         rest = {"velocity": np.zeros(NUM_DOF),
-                "acceleration": np.array([onset, onset, onset,
-                                          envelope.accel_rot
-                                          * envelope.initial_accel_ratio])}
+                "acceleration": _parallel_onset_acceleration(
+                    distance, onset, envelope.accel_rot * envelope.initial_accel_ratio)}
         translation = self._translation_entry(current)
         if translation is None:
             return rest

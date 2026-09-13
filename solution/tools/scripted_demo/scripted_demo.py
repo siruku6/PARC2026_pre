@@ -116,6 +116,10 @@ GLIDE_EXIT_SPEED = float(os.environ.get("MOTION_GLIDE_EXIT_SPEED", 0.35))
 # 計画への追従の強さ。**指令の本体は計画の速度（前送り）で、ここは補正である。**
 # **0 にしても良くならない**（符号反転 2.37% → 2.43%・コマ数 152 → 157）。
 # 反転の出どころは補正ではなく、Ruckig が軸ごとに解く形そのものである。
+# **【9/13】ただしこの測定は `otg.py` の入口加速度に向きが無かった頃のものである。**
+# 止まった状態から始める区間は、頭の 2〜3 コマを行き先と逆へ出していた
+# （`otg._parallel_onset_acceleration`）。寄せる区間 160 本では直して反転 7.19% → 0.08%。
+# **丼 5 課題では測り直していない。**
 GLIDE_GAIN = float(os.environ.get("MOTION_GLIDE_GAIN", 0.25))
 # **腕は指令より何コマ遅れて動くか。**ずれを測る相手をこのぶん手前の通過点に
 # するために要る。**いまの通過点と比べてはいけない**——遅れは制御が下手だから
@@ -357,6 +361,11 @@ class TaskPlan:
         向きを保つ指令と角の丸めだけでジャークは 18.3 → 12.3 まで下がり、
         **なましを足すと滑らかさはほとんど変わらないままステップ数だけ増えた**
         （0.6 で 234 ステップ・0.35 で 264 ステップ）。細かく動かしたいときだけ下げる。
+    glide : bool | None
+        **この課題だけ `run_episode` の既定の glide を決める。**`None` は `MOTION_GLIDE` に従う
+        （今までどおり）。`run_episode(glide=…)` を明示すればそちらが勝つ。
+        **封筒と Ruckig を揃えて初めて 300 歩に入る課題**（モカポット 2 つ）で、
+        生成のたびに環境変数を渡し忘れないために置く。
     """
 
     suite: str
@@ -375,6 +384,7 @@ class TaskPlan:
     cruise: float = 1.0
     command_envelope: bool = False
     smoothing: float = 1.0
+    glide: bool | None = None
 
 
 # **scripted policy はここに足していく。** 鍵は元タスクの名前（bddl から摂動の接尾辞を
@@ -383,18 +393,34 @@ TASK_PLANS: dict[str, TaskPlan] = {
     "KITCHEN_SCENE8_put_both_moka_pots_on_the_stove": TaskPlan(
         suite="libero_10",
         steps=[
-            # コンロの枠は半幅 0.075。**2 つを 7cm 離して置く**（鍋の半径 2.5cm）。
             # 掴めるのは蓋のつまみ（原点から 7.2cm 上）だけ。**本体は 5cm 角で、
             # 指は 4.8cm しか開かない。**
-            PickPlace("moka_pot_1", "flat_stove_1_cook_region", (-0.035, 0.0),
+            # **【9/13】順番と置き場所は人の手本に揃える。**人の手本 146 本と混ぜて学習するので、
+            # 食い違うと同じ場面に「先にどちらを掴むか」の正解が 2 つできる。人の手本は
+            # 48/48 本が鍋 2 を先に掴み、置き場所の中央は鍋 2 がコンロの中心から
+            # (−4.7, −3.9) cm・鍋 1 が (+3.1, +3.6) cm（`work/regen/moka2_glide/pot_order.py`・
+            # `pot_place.py`）。コンロの枠は半幅 0.075 で、2 つは 10 cm 離れる（鍋の半径 2.5cm）。
+            PickPlace("moka_pot_2", "flat_stove_1_cook_region", (-0.045, -0.035),
                       grasp_dz=0.072),
-            PickPlace("moka_pot_2", "flat_stove_1_cook_region", (0.035, 0.0),
+            PickPlace("moka_pot_1", "flat_stove_1_cook_region", (0.030, 0.035),
                       grasp_dz=0.072),
         ],
         # コンロの当たる上端 0.9652、鍋の底は手先から 0.1398 下。
         carry_z=1.14,     # 鍋の底が 1.000 まで上がる
         place_z=1.072,    # 鍋の底が 0.932。コンロ上面 0.9305 のすぐ上
         retreat_z=1.16,
+        # **【9/13】300 歩に入れるための 4 つ。**8/13 の既定（封筒なし・cruise 1.0）は
+        # 指令の 54% が ±1.000 に張り付き、止まる歩数も長く、人の置き場所に揃えると
+        # 50 本中 14 本が打ち切り 300 歩に当たった。**封筒 ＋ 頭打ち 0.90（上限 0.9375 の手前）
+        # ＋ 止まる歩数を削る ＋ Ruckig** で 50/50 成功・中央 268 歩（最大 276）・
+        # 上限以上 0%・止まっているコマ 8.5%（`work/regen/moka2_glide/probe.py` の `v2hmq`）。
+        close_steps=8,
+        settle_steps=3,
+        open_steps=4,
+        final_settle_steps=2,
+        cruise=0.90,
+        command_envelope=True,
+        glide=True,
     ),
     "KITCHEN_SCENE3_turn_on_the_stove_and_put_the_moka_pot_on_it": TaskPlan(
         suite="libero_10",
@@ -735,6 +761,10 @@ class _Rollout:
             # しきい値にしておけば、判定の分岐を増やさずに従える。
             collision_threshold_m=threshold if collision_enabled else np.inf)
         self.phases: list[tuple[str, int, float]] = []
+        # **直前の `glide` が「計画を配るのに使った歩数」。** 残りは配り終えた
+        # あとの詰め（比例制御）で、**指令の作り方が違う。** 区間の中で歪みが
+        # どちらから出ているのかを分けて数えるために要る。
+        self.glide_plan_steps = 0
         self._last_command = np.zeros(3)
         # **封筒は「送る前」に当てる。**記録する行動と送る行動が食い違うと、
         # 学習の正解が実際に起きた動きと合わなくなる。
@@ -1416,6 +1446,7 @@ class _Rollout:
             if not running:
                 break
         planner.observe(self.eef_position)
+        self.glide_plan_steps = self.record.steps - used
 
         # **計画を配り終えても、腕はまだ手前にいる。** 指令に対する腕の遅れが
         # 3〜4 コマあるからである（`otg.py`）。**止まる区間だけ**、今までの
@@ -1531,11 +1562,13 @@ def _run_pick_place(rollout: _Rollout, step: PickPlace, plan: TaskPlan) -> None:
     position = rollout.object_position(name)
 
     # 近づく途中。**真上の点は通過点**で、止まる必要がない。
+    # **何にも触れていない区間なので、通過点を先に作る**（`glide`）。封筒の無い計画と
+    # `MOTION_GLIDE=0` では同じ引数の `follow` に落ちるので、今までの動きは 1 歩も変わらない。
     above = [position[0], position[1], position[2] + step.approach_dz]
-    rollout.follow(f"{name} 近づく", [above, [position[0], position[1],
-                                             position[2] + step.hover_dz]],
-                   GRIPPER_OPEN, blend_radius=plan.blend_radius,
-                   budget=plan.budget_move, smoothing=plan.smoothing)
+    rollout.glide(f"{name} 近づく", [above, [position[0], position[1],
+                                            position[2] + step.hover_dz]],
+                  GRIPPER_OPEN, exit_ratio=0.0, blend_radius=plan.blend_radius,
+                  budget=plan.budget_move, smoothing=plan.smoothing)
 
     # **寄っている間に物体が動いていることがある**ので位置を取り直す。
     position = rollout.object_position(name)
@@ -1549,11 +1582,11 @@ def _run_pick_place(rollout: _Rollout, step: PickPlace, plan: TaskPlan) -> None:
     #
     # **弧はここで終える。** 置く位置の真上まで斜めに降りると、
     # 先に置いた物体に横から当たって落とす。**最後は真下へまっすぐ降ろす。**
-    rollout.follow(
+    rollout.glide(
         f"{name} 運ぶ",
         [[position[0], position[1], plan.carry_z],
          [place_xy[0], place_xy[1], plan.carry_z]],
-        GRIPPER_CLOSE, blend_radius=plan.blend_radius,
+        GRIPPER_CLOSE, exit_ratio=0.0, blend_radius=plan.blend_radius,
         budget=plan.budget_lift + plan.budget_move, smoothing=plan.smoothing)
 
     rollout.move_to(f"{name} 置く", [place_xy[0], place_xy[1], plan.place_z],
@@ -1787,7 +1820,7 @@ def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
         本数ぶん違うタイミングで失敗する手本になる。
     glide : bool | None
         **区間をつなぐ所の通過点を先に作るか**（`_Rollout.glide`）。
-        `None` なら `MOTION_GLIDE`（既定 1）に従う。**False にすると
+        `None` なら `plan.glide`、それも `None` なら `MOTION_GLIDE`（既定 0）に従う。**False にすると
         比例制御だけの今までの動きに 1 歩も違わず戻る**ので、対照はこれで取る。
 
     Returns
@@ -1802,7 +1835,8 @@ def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
                        disturb_steps=disturb_steps,
                        disturb_at=disturb_at,
                        envelope=_envelope_for(plan), cruise=plan.cruise,
-                       glide=GLIDE if glide is None else glide)
+                       glide=(glide if glide is not None
+                              else plan.glide if plan.glide is not None else GLIDE))
     for step in plan.steps:
         _RUNNERS[type(step)](rollout, step, plan)
     rollout.hold("整定", GRIPPER_OPEN, plan.final_settle_steps)

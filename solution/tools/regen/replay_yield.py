@@ -67,6 +67,12 @@ MAX_EXTRA_STEPS = 60
 数十歩そのまま止めて待つと物が落ち着いてゴールが立つことがある。
 """
 
+MAX_STEPS = 300
+"""採点の打ち切り。**寄せる区間の歩数もこの中に数える**（学習データに入るのは寄せた区間ごとである）。"""
+
+MIN_OFFSET_CM = 2.0
+"""被覆の門。引き継ぎ時の手先のずれがこれを割る回は、腕が元の経路に戻っているので捨てる。"""
+
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -125,12 +131,22 @@ def _variant(task: str, initstate: int) -> str:
     return f"{task}_view_0_0_100_0_0_initstate_{initstate}"
 
 
-def _prealign(sd, rollout, target: np.ndarray, gripper: float) -> int:
-    """デモの 0 コマ目の手先へ腕を寄せる。**指令の作り方は scripted policy と同じ。**
+def _prealign(sd, rollout, target: np.ndarray, gripper: float,
+              planner: str = "proportional") -> int:
+    """デモの 0 コマ目の手先へ腕を寄せる。
+
+    | `planner` | 寄せ方 |
+    |---|---|
+    | `proportional` | **比例制御。**毎歩「目標 − いまの姿勢」を `_velocity_command` で出す |
+    | `glide` | **Ruckig。**躍度の上限を守った通過点を先に作って追う（`_Rollout.glide`）。**封筒つきの `_Rollout` が要る** |
 
     `_velocity_command` を借りるのは、**行動ラベルの大きさを配布データに寄せる**
     ためである。誤差に比例させただけの指令は小さすぎて這い、
     `action` 列の標準偏差が 3 分の 1 に痩せる（`docs/plan/23` の 4.2 節）。
+
+    **`glide` の区間は 2 つに割れる。**Ruckig の計画を配る前半と、配り終えたあとに
+    残りを詰める後半（比例制御）である（`_Rollout.glide`）。**指令の作り方が違うので、
+    歪みを見るときは分けて数える**——歩数は `rollout.glide_plan_steps` に入る。
 
     Returns
     -------
@@ -138,6 +154,14 @@ def _prealign(sd, rollout, target: np.ndarray, gripper: float) -> int:
         寄せるのに使った歩数。
     """
     used = rollout.record.steps
+    rollout.glide_plan_steps = 0
+    if planner == "glide":
+        # **出口の速さは 0 にする。**寄せた先はデモの 0 コマ目で、人が静止した状態から
+        # 始めている。速度を残して渡すと、記録された行動が想定していない初速が乗る。
+        rollout.glide("prealign", [np.asarray(target, dtype=np.float64)], gripper,
+                      exit_ratio=0.0, tolerance=PREALIGN_TOLERANCE,
+                      budget=PREALIGN_STEPS)
+        return rollout.record.steps - used
     for _ in range(PREALIGN_STEPS):
         delta = target - rollout.eef_position
         if float(np.linalg.norm(delta)) < PREALIGN_TOLERANCE:
@@ -152,7 +176,8 @@ def _prealign(sd, rollout, target: np.ndarray, gripper: float) -> int:
 
 def _replay_one(sd, env, init_state: np.ndarray, actions: np.ndarray,
                 seed: int, method: str, ee_pos0: np.ndarray | None,
-                record_images: bool = False) -> tuple[dict, object]:
+                record_images: bool = False,
+                planner: str = "proportional") -> tuple[dict, object]:
     """記録された行動を 1 本撃ち、採点と同じ規則で成否を付ける。
 
     **変位は 2 つ出す。**採点は**ゴールが立った時点で打ち切る**ので、
@@ -164,25 +189,40 @@ def _replay_one(sd, env, init_state: np.ndarray, actions: np.ndarray,
     record_images : bool
         観測画像も溜めるか。**描画は 1 歩の 6% しか足さない**ので、
         生成では溜めたうえで**合格した回だけ書き出す**のがいちばん安い。
+    planner : str
+        `method="prealign"` のときの寄せ方（`_prealign`）。`open_loop` では効かない。
 
     Returns
     -------
     result : dict
-        `goal_step`（届かなければ -1）・`disp_at_goal_mm`・`disp_full_mm`・
-        `steps`・`eef0`。
+        `goal_step`（届かなければ -1）・`disp_at_goal_mm`・`disp_full_mm`・`steps`・
+        `prealign_steps`・`prealign_plan_steps`・`prealign_residual_mm`・
+        `eef_offset_cm`・`eef0`。
     rollout : scripted_demo._Rollout
         書き出しに使う。画像は `attach_images()` のあと `record.front` にある。
     """
     env.seed(seed)
     budget = int(actions.shape[0]) + MAX_EXTRA_STEPS
+    aligning = method == "prealign" and ee_pos0 is not None
     if method == "prealign":
         budget += PREALIGN_STEPS
-    rollout = sd._Rollout(env, init_state, budget, record_images=record_images)
+    envelope = None
+    if aligning and planner == "glide":
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from motion.envelope import envelope_from_environment
+
+        envelope = envelope_from_environment()
+    rollout = sd._Rollout(env, init_state, budget, record_images=record_images,
+                          envelope=envelope, glide=envelope is not None)
     eef0 = rollout.eef_position.copy()
-    prealign_steps = 0
-    if method == "prealign" and ee_pos0 is not None:
-        prealign_steps = _prealign(sd, rollout, np.asarray(ee_pos0, dtype=np.float64),
-                                   float(actions[0][6]))
+    prealign_steps, residual_mm = 0, float("nan")
+    if aligning:
+        target = np.asarray(ee_pos0, dtype=np.float64)
+        prealign_steps = _prealign(sd, rollout, target, float(actions[0][6]), planner)
+        residual_mm = 1000.0 * float(np.linalg.norm(target - rollout.eef_position))
+        # **封筒は寄せる区間にだけ当てる。**記録された行動に当てると 7.79% のコマが
+        # 削られ、撃ち直す手本そのものが変わる。
+        rollout._envelope = None
     goal_step = -1
     disp_at_goal = float("nan")
     for action in actions:
@@ -206,11 +246,37 @@ def _replay_one(sd, env, init_state: np.ndarray, actions: np.ndarray,
             "disp_full_mm": round(1000.0 * float(rollout.record.max_displacement), 3),
             "steps": int(rollout.record.steps),
             "prealign_steps": prealign_steps,
+            # **寄せる区間のうち、Ruckig の計画を配ったぶん。**残りは比例制御の詰めで、
+            # 比例制御だけで寄せた回（`planner="proportional"`）では 0 である。
+            "prealign_plan_steps": int(rollout.glide_plan_steps),
+            "prealign_residual_mm": round(residual_mm, 3),
             # **方策が引き継ぐ時点で腕がどれだけずれているか [cm]。**
             # ここが 2 cm を割ると、作っても被覆は増えない（`docs/plan/23` の 5 節の門 6）。
             "eef_offset_cm": round(100.0 * offset, 3),
             "eef0": [round(float(value), 5) for value in eef0]}, rollout
 
+
+def passes_gates(result: dict, min_offset_cm: float = MIN_OFFSET_CM) -> dict[str, bool]:
+    """生成の 3 つの門を判定する。**採否の規則はここ 1 か所だけに置く。**
+
+    | 門 | 中身 |
+    |---|---|
+    | `reached` | 採点の打ち切り（`MAX_STEPS`）以内にゴールが立った |
+    | `clean` | ゴール時点で対象外の物体が 1 mm を超えて動いていない |
+    | `covered` | 引き継ぎ時の手先のずれが `min_offset_cm` 以上 |
+    """
+    reached = 0 < result["goal_step"] <= MAX_STEPS
+    clean = (result["disp_at_goal_mm"] or 0.0) <= 1.0
+    covered = result["eef_offset_cm"] >= min_offset_cm
+    return {"reached": bool(reached), "clean": bool(clean), "covered": bool(covered),
+            "keep": bool(reached and clean and covered)}
+
+
+def suite_of(states_dir: Path) -> dict[str, str]:
+    """課題名 → suite。`index.json` の鍵（`<suite>/<課題>_demo.hdf5`）から引く。"""
+    index = json.loads((states_dir / "index.json").read_text())
+    return {key.split("/")[1].replace("_demo.hdf5", ""): key.split("/")[0]
+            for key in index}
 
 def _run_item(item: dict, seed: int, method: str) -> list[dict]:
     """(課題, 摂動) 1 単位ぶんを撃つ。**env はここで 1 回だけ作る。**"""
