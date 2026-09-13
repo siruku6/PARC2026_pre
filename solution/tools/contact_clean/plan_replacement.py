@@ -46,6 +46,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--done", nargs="*", default=None, metavar="TASK",
                         help="**もう置き換え済みの課題**（土台が `libero_plus_bowl5` なら丼 5 課題）。"
                              "外す側から抜き、配る側にも入れない")
+    parser.add_argument("--share-done", action="store_true",
+                        help="**余りは `--done` の課題にも配る**（外す側からは抜いたまま）。"
+                             "丼 5 課題は台本が通るので、余りを受け取ってよい（ユーザ・9/14）")
+    parser.add_argument("--scripted", nargs="*", default=None, metavar="TASK",
+                        help="**人の手本を撃ち直さず、台本で作る課題。**`--quota-out` に書くだけで、"
+                             "本数の計算は変えない（`generate_perturbed.py` はこれを飛ばす）")
+    parser.add_argument("--quota-out", type=Path, default=None, metavar="JSON",
+                        help="**need の配り方を課題ごとの本数として書く**"
+                             "（`generate_perturbed.py --quota` が読む）")
     return parser.parse_args()
 
 
@@ -89,7 +98,7 @@ def main() -> None:
     for task in done:
         drop[task] = 0
     tasks = sorted(total)
-    share_tasks = [task for task in tasks if task not in done]
+    share_tasks = [task for task in tasks if args.share_done or task not in done]
     dropped_total = sum(drop.values())
     print(f"課題 {len(tasks)}・全 {sum(total.values())} 本")
     print(f"**外す本 {dropped_total} 本**"
@@ -114,6 +123,16 @@ def main() -> None:
         print(f"{task[:50]:<52} {total[task]:>5} {drop[task]:>5} {rest:>5} "
               f"{flat[task]:>5} {rest + flat[task]:>6} "
               f"{need[task]:>5} {rest + need[task]:>6}")
+
+    if args.quota_out:
+        # **need を採る**（ユーザ・9/14）。まず外した数だけ埋め戻し、余りを均等に配る。
+        args.quota_out.write_text(json.dumps(
+            {"quota": {task: need[task] for task in tasks if need[task] > 0},
+             "dropped": {task: drop[task] for task in tasks if drop[task] > 0},
+             "budget": args.budget, "done": sorted(done),
+             "scripted": sorted(args.scripted or ())}, indent=1))
+        print(f"\n=== 課題ごとの本数を書いた: {args.quota_out}"
+              f"（{sum(need.values())} 本・{sum(v > 0 for v in need.values())} 課題）===")
 
     for label, share in (("flat", flat), ("need", need)):
         shrink = [t for t in tasks if total[t] - drop[t] + share[t] < total[t]]

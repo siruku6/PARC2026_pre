@@ -34,6 +34,12 @@
 #   KEEP_NPZ=0    1 にすると npz を消さない（デバッグ用）
 #   APPEARANCE    外観を重ねる配り方（`appearance.py`）。既定 `off`＝素の見た目だけ。
 #                 033 の 4,000 本は `plain=25,light=25,background=25,camera=25`
+#   QUOTA         課題ごとの本数の JSON（`plan_replacement.py --quota-out`）。渡すと
+#                 PER_NUMBER の代わりに、**塊ごとに「番号を消化した割合」ぶんまで**課題を埋める
+#   PER_DEMO_CAP  同じ (課題, デモ) を何本まで採るか（既定 0＝上限なし）
+#   FALLBACK_PREALIGN=1  open_loop で落ちたデモを prealign（PREALIGN_PLANNER・既定 glide）で撃ち直す
+#   CONVERT_PARALLEL  同時に走らせる変換の数（既定 1）。**npz が (この数 + 1) 塊ぶんディスクに載る。**
+#                 変換は 1 本 13.5 秒で、3,460 本を 1 本ずつだと 13 時間かかり生成より遅い
 #
 # Reads:
 #   - $INITSTATES・work/artifacts/libero_states・$OLD_MANIFEST
@@ -55,6 +61,11 @@ PER_CHUNK="${PER_CHUNK:-10}"
 WORKERS="${WORKERS:-13}"
 KEEP_NPZ="${KEEP_NPZ:-0}"
 APPEARANCE="${APPEARANCE:-off}"
+QUOTA="${QUOTA:-}"
+PER_DEMO_CAP="${PER_DEMO_CAP:-0}"
+FALLBACK_PREALIGN="${FALLBACK_PREALIGN:-0}"
+PREALIGN_PLANNER="${PREALIGN_PLANNER:-glide}"
+CONVERT_PARALLEL="${CONVERT_PARALLEL:-1}"
 mkdir -p "$OUT_NPZ" "$OUT_LEROBOT" work/regen/logs
 
 # 撃つ番号を並べる。**既に撃った番号は `OLD_MANIFEST` から読む**——
@@ -101,12 +112,19 @@ print(f\"{d['total_episodes']} 本 {d['total_frames']} コマ {d['total_tasks']}
 }
 
 chunk=0
-converting=""
 for start in $(seq 0 "$PER_CHUNK" $(( ${#NUMBERS[@]} - 1 )) ); do
     chunk=$(( chunk + 1 ))
     name=$(printf "c%02d" "$chunk")
     slice=("${NUMBERS[@]:start:PER_CHUNK}")
     target=$(( ${#slice[@]} * PER_NUMBER ))
+    EXTRA=(--per-demo-cap "$PER_DEMO_CAP" --prealign-planner "$PREALIGN_PLANNER")
+    [ "$FALLBACK_PREALIGN" = "1" ] && EXTRA+=(--fallback-prealign)
+    if [ -n "$QUOTA" ]; then
+        # **累計の割合で渡す。**前の塊で足りなかった課題の不足は次の塊へ持ち越される。
+        fraction=$(python3 -c "print(($start + ${#slice[@]}) / ${#NUMBERS[@]})")
+        EXTRA+=(--quota "$QUOTA" --quota-fraction "$fraction")
+        target=1000000
+    fi
     dir="$OUT_NPZ/$name"
     echo ""
     echo "=== [$name] 生成 番号 ${slice[*]} / 目標 $target 本 / $(date -Is) ==="
@@ -115,7 +133,7 @@ for start in $(seq 0 "$PER_CHUNK" $(( ${#NUMBERS[@]} - 1 )) ); do
         solution/tools/regen/generate_perturbed.py \
         --states "$STATES" --out-npz "$dir" --target "$target" \
         --initstates "${slice[@]}" --workers "$WORKERS" --skip "$SKIP_FILE" \
-        --appearance "$APPEARANCE" \
+        --appearance "$APPEARANCE" "${EXTRA[@]}" \
         > "work/regen/logs/init_pose_gen_${name}.log" 2>&1
     echo "  生成 exit=$? / $(ls "$dir"/*.npz 2>/dev/null | wc -l) 本 / $(du -sh "$dir" 2>/dev/null | cut -f1)"
 
@@ -124,10 +142,9 @@ for start in $(seq 0 "$PER_CHUNK" $(( ${#NUMBERS[@]} - 1 )) ); do
         tee -a "$OUT_NPZ/manifest_all.jsonl" < "$dir/manifest.jsonl" >> "$SKIP_FILE"
     fi
 
-    # 前の塊の変換を待ってから、この塊の変換を背面で始める（変換は常に 1 本だけ）。
-    [ -n "$converting" ] && wait "$converting"
+    # 変換は同時に CONVERT_PARALLEL 本まで。空きが出るのを待ってから背面で始める。
+    while [ "$(jobs -rp | wc -l)" -ge "$CONVERT_PARALLEL" ]; do wait -n; done
     convert_chunk "$name" &
-    converting=$!
 done
 wait
 
