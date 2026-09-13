@@ -529,6 +529,61 @@ cream cheese と butter 40/480・soup と cream cheese 35/370・マグとプリ�
 **いまの空きは 4.8 GB**（評価サーバ 2 つが 19.2 GB 保持・利用率 1〜3%）。
 **13 並列なら 7〜8 GB 要る計算なので入らない。**6 並列なら入るが、生成は倍の時間になる。
 
+### 9.4.3.1 置き換えの流れと本数（9/14・確定・生成を開始）
+
+**ユーザの指定した順番どおりに数える。**
+
+1. **丼 5 課題の置き換えを先に済ませた土台 `libero_plus_bowl5`（14,085 本）から始める**
+2. **その土台でまだ外れる本（1,532 本）を、課題ごとに同じ本数だけ埋め戻す**
+3. **余り 2,440 本を 40 課題へ 61 本ずつ配る**（**丼 5 課題にも配る**・ユーザ・9/14。70 本 × 35 課題の案から変えた）
+
+`work/regen/quota_4000.json`（計 3,972 本。割り算の端数ぶん 4,000 に 28 本足りない）。
+
+| 作り方 | 課題 | 本数 | 道具 |
+|---|---|---|---|
+| **人の手本を初期姿勢を振って撃ち直す**（open_loop → 落ちたら prealign・Ruckig） | 34 課題 | 3,460 | `generate_perturbed.py`・`run_init_pose_batches.sh` |
+| **台本・初期姿勢を振る**（`.pruned_init`） | 丼 5 課題 | 305（61 × 5） | `generate_scripted.py` |
+| **台本・初期姿勢は振らない**（人の置き場所・外観だけ振る） | モカポット 2 つ | 207 | 同上 |
+
+**丼 5 課題を人の手本の撃ち直しで作らない理由。**土台の丼 5 課題は台本の掴み方（縁をまたぐ）に入れ替わっている。
+人の手本を足すと同じ場面に掴み方の正解が 2 つできる。
+
+**モカポット 2 つの初期姿勢を振らない理由。**試し撃ちで、初期姿勢 285 から撃つと 62 回中 0 本（全部 300 歩の打ち切り）、
+372 から 2 回中 1 本（292 歩）。**寄せる距離のぶん 300 歩を超える。**振らなければ 50/50（9 節）。
+
+**デモの偏り除去。**`--per-demo-cap 3`（本数の多い課題は `ceil(1.5 × 本数 ÷ 50)` まで引き上げる）・
+初期姿勢ごとに最初に撃つデモをずらす・**塊ごとに「番号を消化した割合」ぶんまでしか課題を埋めない**
+（`--quota-fraction`。早い塊が通りやすい課題を食い尽くさない）。
+
+**打ったコマンド**（9/14 08:18 に開始）。
+
+```bash
+APPEARANCE=plain=25,light=25,background=25,camera=25 QUOTA=work/regen/quota_4000.json \
+PER_DEMO_CAP=3 FALLBACK_PREALIGN=1 PREALIGN_PLANNER=glide \
+INITSTATES=work/regen/initstates_48.json OUT_NPZ=work/regen/npz_init_pose_v2 \
+OUT_LEROBOT=work/regen/lerobot_init_pose_v2 OLD_MANIFEST=/dev/null \
+PER_NUMBER=80 PER_CHUNK=3 WORKERS=11 CONVERT_PARALLEL=2 \
+  nohup bash solution/tools/regen/run_init_pose_batches.sh > work/regen/logs/init_pose_v2.log 2>&1 &
+
+CHOWN_PATH="$PWD/work/regen" bash solution/tools/regen/run_in_container.sh \
+  solution/tools/regen/generate_scripted.py --states work/artifacts/libero_states \
+  --out-npz work/regen/npz_scripted_v2 --quota work/regen/quota_4000.json \
+  --initstates <initstates_48.json の 50 個> --appearance plain=25,light=25,background=25,camera=25 \
+  --per-demo-cap 3 --workers 3 > work/regen/logs/scripted_v2.log 2>&1 &
+```
+
+**台本側は変換を自動で回さない**（`npz_scripted_v2` に溜まる・512 本 × 約 80 MB）。終わったら
+`npz_to_lerobot.py build --normalize-instructions` を打つこと。
+
+**外す本の残し一覧（土台の番号）——`work/regen/keep_replace_v2.json`。**土台 14,085 本から 1,532 本を外し **12,553 本**を残す。
+**土台の先頭 12,467 本は、配布データから丼 5 課題を抜いた本を番号順に並べ直したもの**である
+（`keep_without_bowl5.json` の順と、長さ・指示文が 12,467 本すべて一致。後ろ 1,618 本が台本の丼）。
+だから配布の番号 → 土台の番号は「`keep_without_bowl5` の中の位置」で引ける。
+組み直しは `contact_clean/rebuild_dataset.py --root <libero_plus_bowl5> --keep-file work/regen/keep_replace_v2.json`。
+
+**最初の塊の実測。**34 課題・220 本の枠に対して 523 回撃って 217 本・12.3 分（歩留まり 41%）。
+**17 塊で約 4 時間**の見込み（33 節の 13.9 時間より速い——prealign へ落とす形が効いている）。
+
 ### 9.4.4 道 A の下見——モカポット 2 つ以外の「300 コマ超」（9/14・済・GPU 不要）
 
 **対象はモカポット 2 つを除く 7 課題の 35 組（配布データで 255 本）。**
