@@ -72,7 +72,7 @@ import functools
 import os
 import statistics
 import time
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any
 
@@ -361,9 +361,9 @@ class TaskPlan:
         向きを保つ指令と角の丸めだけでジャークは 18.3 → 12.3 まで下がり、
         **なましを足すと滑らかさはほとんど変わらないままステップ数だけ増えた**
         （0.6 で 234 ステップ・0.35 で 264 ステップ）。細かく動かしたいときだけ下げる。
-    glide : bool | None
-        **この課題だけ `run_episode` の既定の glide を決める。**`None` は `MOTION_GLIDE` に従う
-        （今までどおり）。`run_episode(glide=…)` を明示すればそちらが勝つ。
+    glide : bool
+        **この課題だけ、区間をつなぐ所の通過点を先に作るか**（`_Rollout.glide`）。
+        **既定は `MOTION_GLIDE`**（環境変数・既定 0）。`run_episode(glide=…)` を明示すればそちらが勝つ。
         **封筒と Ruckig を揃えて初めて 300 歩に入る課題**（モカポット 2 つ）で、
         生成のたびに環境変数を渡し忘れないために置く。
     """
@@ -384,7 +384,46 @@ class TaskPlan:
     cruise: float = 1.0
     command_envelope: bool = False
     smoothing: float = 1.0
-    glide: bool | None = None
+    glide: bool = GLIDE
+
+
+def steps_from_json(defaults: list[Any], patches: list[dict]) -> list[Any]:
+    """JSON で書いた差分から `TaskPlan.steps` を組む。**やらせたい順に並べる。**
+
+    **なぜ要るか。**`steps` は物の並び（`PickPlace` などの dataclass）なので JSON では
+    書けない。**掴む順番や置き場所を課題の既定と変えて撃ち比べたい**とき、
+    そのためだけの鍵（`reverse_steps`・`place_offsets`）を増やしていくと、
+    比べる側の書式が `TaskPlan` から離れていく。**既定の段を名前で引いて、
+    書いた項目だけ差し替える**形にすれば、順番も置き場所もこれ 1 つで足りる。
+
+        steps_from_json(plan.steps,
+                        [{"target": "moka_pot_2", "place_offset": [-0.045, -0.035]},
+                         {"target": "moka_pot_1", "place_offset": [0.030, 0.035]}])
+
+    段を指す鍵は**その段の 1 つ目の項目**である（`PickPlace`・`RimPickPlace` は
+    `target`、`TurnKnob` は `joint`）。**採るものが決まったら、ここに書いた値を
+    そのまま `TASK_PLANS` へ写せる。**
+    """
+    def key_of(step: Any) -> str:
+        return fields(step)[0].name
+
+    steps = []
+    for patch in patches:
+        values = dict(patch)
+        found = [step for step in defaults
+                 if values.get(key_of(step)) == getattr(step, key_of(step))]
+        if len(found) != 1:
+            raise ValueError(f"どの段を指しているのか決まらない: {patch}")
+        step = found[0]
+        values.pop(key_of(step))
+        unknown = set(values) - {item.name for item in fields(step)}
+        if unknown:
+            raise ValueError(f"{type(step).__name__} に無い項目: {sorted(unknown)}")
+        # JSON は配列しか書けないので、組にし直す（`place_offset` など）。
+        steps.append(replace(step, **{
+            name: tuple(value) if isinstance(value, list) else value
+            for name, value in values.items()}))
+    return steps
 
 
 # **scripted policy はここに足していく。** 鍵は元タスクの名前（bddl から摂動の接尾辞を
@@ -570,6 +609,12 @@ class EpisodeRecord:
 
     steps: int = 0
     goal_reached: bool = False
+    # **ゴールが初めて立った歩**（立たなければ -1）と、そのときの
+    # 対象外の物体のずれ [m]。**採点は最初にゴールが立った歩で打ち切る**ので、
+    # 採否に効くのはこの 2 つである（最後まで撃ったあとの値ではない）。
+    # `_Rollout._take_step` が 1 歩ごとに見て、初めて立った所で控える。
+    goal_step: int = -1
+    disp_at_goal_m: float | None = None
     max_displacement: float = 0.0
     # **どの物体をいつ動かしたか。**`max_displacement` だけでは「衝突した」しか
     # 分からず、**打つ手が決まらない**（掴む前か、運搬中か、どの物か）。
@@ -749,9 +794,15 @@ class _Rollout:
                  disturb_scale: float = 0.0, disturb_steps: int = 10,
                  disturb_at: tuple[int, int] | None = None,
                  envelope: Any = None, cruise: float = 1.0,
-                 glide: bool = True) -> None:
+                 glide: bool = True,
+                 post_goal_steps: int | None = None) -> None:
         self.env = env
         self.max_steps = max_steps
+        # **ゴールが立ってから、あと何歩で打ち切るか。**`None` なら打ち切らない
+        # （ゴールの歩を控えるだけ）。**配布データの人の手本は 10 歩で止めている**
+        # （`LIBERO-plus/scripts/collect_demonstration.py` の
+        # `task_completion_hold_count`）。`regen/replay_yield.POST_GOAL_STEPS` を見よ。
+        self.post_goal_steps = post_goal_steps
         self.record_images = record_images
         self.action_noise = float(action_noise)
         self._rng = rng if rng is not None else np.random.default_rng(0)
@@ -769,6 +820,11 @@ class _Rollout:
         # **封筒は「送る前」に当てる。**記録する行動と送る行動が食い違うと、
         # 学習の正解が実際に起きた動きと合わなくなる。
         self._envelope = envelope
+        # **封筒で指令を削るか。**False にすると `_take_step` は素の行動を送るが、
+        # **`glide` が使う上限と「指令 1 単位ぶんの移動量」は残る。**
+        # 記録された手本を撃ち直す側が要る——手本に封筒を当てると 7.79% のコマが
+        # 削られ、撃ち直す手本そのものが変わってしまう（`regen/replay_yield.py`）。
+        self.shape_commands = True
         self._last_sent = np.zeros(6)
         self.cruise = float(cruise)
         # **区間をつなぐ所だけ通過点を先に作る**か（`glide`）。封筒が無い
@@ -1182,8 +1238,18 @@ class _Rollout:
         return shaped
 
     def _take_step(self, action: np.ndarray) -> bool:
-        """1 ステップ進める。ステップ数の上限に達したら False を返す。"""
-        if self._envelope is not None:
+        """1 ステップ進める。**続けてよければ True。**
+
+        止めるのは 2 つ——**ステップ数の上限**と、**ゴールが立ってから
+        `post_goal_steps` 歩**（`None` なら後者は見ない）。
+
+        **ゴールの後の打ち切りは、進める前にも見る。**False を返しても次の段が
+        始まればその頭で 1 歩進んでしまい、**段の数だけ余分に伸びる**からである
+        （実測で台本は 1 歩伸びていた）。
+        """
+        if self._past_post_goal():
+            return False
+        if self.shape_commands and self._envelope is not None:
             action = self._enveloped(action)
         index = self.record.steps
         self.record.ee_positions.append(self.eef_position.copy())
@@ -1216,7 +1282,18 @@ class _Rollout:
                         and value > self.record.collision_threshold_m):
                     self.record.first_violation = (name, self.record.steps)
         self.record.displacements.append(self.record.max_displacement)
-        return self.record.steps < self.max_steps
+        # **ゴールは 1 歩ごとに見て、初めて立った歩を控える。**採点も最初に
+        # 立った所で打ち切るので、**ここが採点と同じ「いつ成功したか」である。**
+        # 最後にまとめて見る形では、立ったあと崩れた本を取り落とす。
+        if self.record.goal_step < 0 and bool(self.env.check_success()):
+            self.record.goal_step = self.record.steps
+            self.record.disp_at_goal_m = self.record.max_displacement
+        return not self._past_post_goal() and self.record.steps < self.max_steps
+
+    def _past_post_goal(self) -> bool:
+        """ゴールが立ってから `post_goal_steps` 歩ぶん進んだか。"""
+        return (self.post_goal_steps is not None and self.record.goal_step >= 0
+                and self.record.steps >= self.record.goal_step + self.post_goal_steps)
 
     def attach_images(self) -> None:
         """溜めた画像を、ステップ数ぶんに切って結果へ渡す。**複製しない。**"""
@@ -1784,7 +1861,8 @@ def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
                 noise_seed: int | None = None, disturb_scale: float = 0.0,
                 disturb_steps: int = 10,
                 disturb_at: tuple[int, int] | None = None,
-                glide: bool | None = None) -> EpisodeRecord:
+                glide: bool | None = None,
+                post_goal_steps: int | None = None) -> EpisodeRecord:
     """scripted policy を 1 本ぶん実行し、採点と同じ基準で成否を付ける。
 
     Parameters
@@ -1820,8 +1898,12 @@ def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
         本数ぶん違うタイミングで失敗する手本になる。
     glide : bool | None
         **区間をつなぐ所の通過点を先に作るか**（`_Rollout.glide`）。
-        `None` なら `plan.glide`、それも `None` なら `MOTION_GLIDE`（既定 0）に従う。**False にすると
+        `None` なら `plan.glide`（その既定が `MOTION_GLIDE`）に従う。**False にすると
         比例制御だけの今までの動きに 1 歩も違わず戻る**ので、対照はこれで取る。
+    post_goal_steps : int | None
+        **ゴールが立ってから、あと何歩で打ち切るか**（`_Rollout`）。`None` なら
+        打ち切らず、**ゴールの歩を `record.goal_step` に控えるだけ。**
+        学習データを書き出す側は 10 を渡す（`regen/replay_yield.POST_GOAL_STEPS`）。
 
     Returns
     -------
@@ -1835,14 +1917,17 @@ def run_episode(env: Any, init_state: np.ndarray, plan: TaskPlan,
                        disturb_steps=disturb_steps,
                        disturb_at=disturb_at,
                        envelope=_envelope_for(plan), cruise=plan.cruise,
-                       glide=(glide if glide is not None
-                              else plan.glide if plan.glide is not None else GLIDE))
+                       glide=plan.glide if glide is None else glide,
+                       post_goal_steps=post_goal_steps)
     for step in plan.steps:
         _RUNNERS[type(step)](rollout, step, plan)
     rollout.hold("整定", GRIPPER_OPEN, plan.final_settle_steps)
 
     record = rollout.record
-    record.goal_reached = bool(env.check_success())
+    # **1 歩ごとに見た結果を使う**（`_take_step`）。最後にもう一度見る形だと、
+    # **ゴールが立ったあとに置いた物が崩れた本を失敗と数えてしまう**——
+    # 採点は最初に立った所で打ち切るので、それは成功である。
+    record.goal_reached = record.goal_step >= 0
     rollout.attach_images()
 
     if verbose:

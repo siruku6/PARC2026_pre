@@ -48,6 +48,9 @@ sys.path.insert(0, str(TOOLS / "scripted_demo"))
 
 from check_dataset_instructions import dataset_tasks  # noqa: E402
 from motion.rotation import relative_axisangle  # noqa: E402
+# **向きの偏りの物差しは 1 か所に置く**（番号を選ぶ側と、出来を測るこちらで
+# 同じ数字を見ないと比べられない）。
+from screen_initstates import direction_bias  # noqa: E402
 
 
 def _parse_args() -> argparse.Namespace:
@@ -130,13 +133,13 @@ def main() -> None:
         print(_row("配布データ", ref_values, threshold))
         print(_row("**測った側**", values, threshold))
 
-    bias = float(np.linalg.norm(direction.mean(axis=0)))
-    print(f"\n### ずれの方向\n\n**偏りの大きさ {bias:.3f}**（0 なら偏り無し）\n")
+    bias, positive, expected = direction_bias(direction)
+    print(f"\n### ずれの方向\n\n**偏りの大きさ {bias:.3f}**（0 なら偏り無し。"
+          f"この本数を無作為に引けば約 {expected:.3f} なので、**これを下回るなら偏りではない**）\n")
     print("| 軸 | 正 | 負 |")
     print("|---|---|---|")
     for axis, label in enumerate(("左右 x", "前後 y", "上下 z")):
-        plus = (direction[:, axis] > 0).mean() * 100
-        print(f"| {label} | {plus:.0f}% | {100 - plus:.0f}% |")
+        print(f"| {label} | {positive[axis]:.0f}% | {100 - positive[axis]:.0f}% |")
     print(f"\n位置と向きの相関 r = {np.corrcoef(pos, rot)[0, 1]:.3f}")
 
     if args.json:

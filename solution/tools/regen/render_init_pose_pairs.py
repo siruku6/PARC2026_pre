@@ -53,12 +53,9 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from render_before_after import (FPS, HEADER, PANEL, _annotate,  # noqa: E402
-                                 _header_band, _view)
-from replay_yield import _replay_one, suite_of  # noqa: E402
-
-IMAGES = ("front", "wrist", "disp")
-"""動画にだけ使い、`summary.json` には書かない鍵。"""
+from render_before_after import (IMAGES, _before, _view,  # noqa: E402
+                                 _write_columns)
+from replay_yield import suite_of  # noqa: E402
 
 
 def _parse_args() -> argparse.Namespace:
@@ -93,59 +90,16 @@ def _load_after(path: Path) -> dict:
 def _run_before(sd, env, init_state: np.ndarray, actions: np.ndarray,
                 ee_pos0: np.ndarray, seed: int) -> dict:
     """摂動なしで同じ手本を再生する。"""
-    result, rollout = _replay_one(sd, env, init_state, actions, seed,
-                                 "open_loop", ee_pos0, record_images=True)
-    rollout.attach_images()
-    record = rollout.record
-    return {
-        "label": f"before  init0  {result['eef_offset_cm']:.1f}cm",
-        "front": _view(record.front), "wrist": _view(record.wrist),
-        "disp": [1000.0 * d for d in record.displacements],
-        **{k: v for k, v in result.items() if k != "eef0"},
-    }
-
-
-def _panels(run: dict, step: int) -> tuple[np.ndarray, np.ndarray]:
-    """1 本の、あるコマの front（数字を焼いたもの）と wrist を返す。"""
-    here = min(step, len(run["front"]) - 1)
-    disp = run["disp"][min(here, len(run["disp"]) - 1)]
-    goal = 0 < run["goal_step"] <= here + 1
-    lines = [
-        (f"nontarget {disp:7.2f}mm" + ("  OVER 1mm" if disp > 1.0 else ""),
-         (60, 60, 255) if disp > 1.0 else (235, 235, 235)),
-        (f"step {here + 1}/{run['steps']}" + ("  GOAL" if goal else ""),
-         (80, 220, 80) if goal else (235, 235, 235)),
-    ]
-    return _annotate(run["front"][here], lines), np.ascontiguousarray(run["wrist"][here])
+    run = _before(sd, env, init_state, actions, ee_pos0, seed)
+    return {"label": f"before  init0  {run['eef_offset_cm']:.1f}cm", **run}
 
 
 def _write_all(prefix: Path, before: dict, after: dict) -> int:
-    """before・after・pair の 3 本を、コマを 1 回ずつ組んで同時に書く。"""
-    import cv2
-
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    height = HEADER + 2 * PANEL
-    writers = {name: cv2.VideoWriter(f"{prefix}__{name}.mp4", fourcc, FPS,
-                                     (PANEL * (2 if name == "pair" else 1), height))
-               for name in ("before", "after", "pair")}
-    band_before = _header_band(PANEL, before["label"])
-    band_after = _header_band(PANEL, after["label"])
-    length = max(len(before["front"]), len(after["front"]))
-    for step in range(length):
-        before_front, before_wrist = _panels(before, step)
-        after_front, after_wrist = _panels(after, step)
-        frames = {
-            "before": np.concatenate([band_before, before_front, before_wrist]),
-            "after": np.concatenate([band_after, after_front, after_wrist]),
-            "pair": np.concatenate([
-                np.concatenate([band_before, band_after], axis=1),
-                np.concatenate([before_front, after_front], axis=1),
-                np.concatenate([before_wrist, after_wrist], axis=1)]),
-        }
-        for name, frame in frames.items():
-            writers[name].write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-    for writer in writers.values():
-        writer.release()
+    """before・after・pair の 3 本を書く。**焼く中身は `_panel` 1 か所で決まる。**"""
+    for name, runs in (("before", [before]), ("after", [after]),
+                       ("pair", [before, after])):
+        length = _write_columns(Path(f"{prefix}__{name}.mp4"),
+                                [run["label"] for run in runs], runs)
     return length
 
 

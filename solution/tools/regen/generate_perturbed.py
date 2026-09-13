@@ -152,7 +152,9 @@ def _run_item(item: dict, args: argparse.Namespace, budget: int) -> list[dict]:
 
     `budget` はこの単位で書き出してよい本数。**0 なら撃たない。**
     """
-    if budget <= 0:
+    # **撃つ本が無ければ env も作らない。**`--skip` で全部飛ばされた単位
+    # （撃ち直しでは普通に起きる）でも env を 1 つ作っていた。
+    if budget <= 0 or not item["demos"]:
         return []
     import scripted_demo as sd
     from libero.libero import get_libero_path
@@ -221,6 +223,10 @@ def _run_item(item: dict, args: argparse.Namespace, budget: int) -> list[dict]:
                     row["npz"] = destination.name
                     written += 1
                 rows.append(row)
+                # **画像を手放してから次の本を撃つ。**`rollout` を持ったままだと
+                # 前の本の置き場（1 本 60〜97 MB）が次の本の間ずっと resident で、
+                # 並列 14 で 1 GB 近く余分に食う。
+                result = rollout = record = None
     finally:
         env.close()
     return rows

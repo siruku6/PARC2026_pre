@@ -364,7 +364,7 @@ bash solution/tools/regen/run_in_container.sh solution/tools/scripted_demo/scrip
 | M | `solution/tools/motion/envelope.py` | `initial_accel_ratio` の説明に 1 行 |
 | M | `solution/tools/scripted_demo/scripted_demo.py`（追加分） | **`_run_pick_place` の「近づく」「運ぶ」を `glide` に**（既定の動きは変わらない） |
 | ?? | `solution/tools/regen/merge_actions.py` | 道 A（指令を隣どうしまとめる） |
-| ?? | `solution/tools/regen/render_training_pairs.py` | 元の動きと新しい動きを横に並べた動画 |
+| ?? | `solution/tools/regen/render_training_pairs.py` | 元の動きと新しい動きを横に並べた動画。**コマに焼く中身と動画の書き出しは `render_before_after._panel`・`_write_columns` に寄せた**（9/13 夜 4 の整理。4 本のレンダラで同じ物を 4 回書いていて、赤の指定が 2 本で青くなっていた） |
 | M | `solution/tools/scripted_demo/scripted_demo.py` | `_Rollout.glide_plan_steps`・`GLIDE_GAIN` のコメントに 9/13 の注記（**撃ち方は変えていない**） |
 | M | `solution/tools/regen/replay_yield.py` | 共通の家（`MAX_STEPS`・`MIN_OFFSET_CM`・`_prealign(planner=)`・`passes_gates`・`suite_of`・`prealign_plan_steps`） |
 | M | `solution/tools/regen/generate_perturbed.py` | `--prealign-planner`・`--min-offset-cm`・npz に `planner`・`prealign_steps`・`displacement_m` |
@@ -431,9 +431,10 @@ bash solution/tools/regen/run_in_container.sh solution/tools/scripted_demo/scrip
 **同じコード・同じ設定でもシムは毎回わずかに揺らぐ。**`v2hmq` との食い違い（0.001 ほど・49〜55 行目から）もこれである。`spec_moka.json` の台本の列からは上書きを外した
 （残すと順番が二重に逆になる）。
 
-**台本の手本もゴールの後が少し残る。**台本は最後にまとめてゴールを見るので、2 つ目の鍋を離してから
-「逃げる」（最大 22 歩）と整定 2 歩のぶん、ゴール後が 10 歩より長くなりうる。**生成に組むときは
-1 歩ごとにゴールを見て、`POST_GOAL_STEPS` で切ること**（未実装）。
+**台本の手本もゴールの後が少し残る。**2 つ目の鍋を離してから「逃げる」（最大 22 歩）と
+整定 2 歩のぶんである。**切る仕掛けは入った**（9/13 夜 4 の整理で `_Rollout` に移した。9.5 節）——
+`run_episode(post_goal_steps=10)` を渡せば台本も同じ規則で切れる。**生成に組むときに渡すこと**
+（既定は `None` ＝ 切らない。今までの動画・撃ち比べの歩数を変えないため）。
 
 ### 9.3 方向の記録（V3・済）
 
@@ -496,8 +497,81 @@ p10 10・p25 11・**中央 11**・p75 14・p90 22（50 超は 3 本）。**長�
 **確かめたこと**——ワイン 10 本（`open_loop`・摂動なし）で、ゴールの歩は 10 本とも 9/12 と一致、長さは 10 本ともゴール ＋ 10
 （demo 0 は 347 → 145）。`work/regen/postgoal_cut_wine.jsonl`・`logs/postgoal_cut_wine.log`。
 
-**まだ入れていない所**——台本（`run_episode`）。最後にまとめてゴールを見るので、道 B の生成に組むときに 1 歩ごとの判定を足す。
 **ゴールに届かず行動を撃ち切ったあとの「止めて待つ」区間**（`MAX_EXTRA_STEPS`）は、ゴールが立った歩で止まる（今までどおり）。
+
+**【9/13 夜 4・整理】判定と打ち切りを `_Rollout._take_step` に移した。**
+`EpisodeRecord.goal_step`・`disp_at_goal_m` を 1 歩ごとに控え、`_Rollout(post_goal_steps=…)` で切る。
+
+| | 前 | 後 |
+|---|---|---|
+| ゴールを見る場所 | 手本の再生（`replay_yield`）は 1 歩ごと・**台本は最後に 1 回だけ** | **どちらも 1 歩ごと（1 か所）** |
+| 打ち切り | 手本の再生だけ | **`post_goal_steps` を渡した側だけ**（生成は 10・台本の既定は `None`＝切らない） |
+| 台本の「いつ成功したか」 | **測れなかった**（`goal_reached` しか無い） | `record.goal_step` に入る |
+| 台本の成否 | 最後にもう一度見る＝**ゴール後に崩れた本を失敗と数えていた** | 初めて立った歩で決まる（採点と同じ） |
+
+**打ち切りは「進める前」にも見る。**False を返しても次の段が始まればその頭で 1 歩進むので、
+段の数だけ伸びてしまう（実測で台本は goal ＋ 11 歩になっていた。直して ＋ 10 歩ちょうど）。
+
+**台本のゴール後の長さ（初めて測った）。**モカポット 2 つで **goal は 266〜269 歩のうち 247〜250 歩目、
+後ろは 19 歩**（2 つ目の鍋を離してから逃げる区間）。`post_goal_steps=10` で 258〜260 歩に縮み、
+5 本とも成功のまま。`work/regen/moka2_glide/goal_tail.py`・`logs/moka2_goal_tail2.log`。
+
+**`_Rollout` にもう 1 つ足した——`shape_commands`。**寄せ終わったあとに封筒を切るのに
+`rollout._envelope = None` と private を潰していたのを、**旗を倒す形にした。**
+封筒が残るので `glide` も引き続き使える（前は寄せたあとに `glide` を呼ぶと落ちた）。
+
+---
+
+## 10. コードの整理（9/13 夜 4・`/simplify`）
+
+**2 つのコミットのあと、再利用・単純化・効率・深さの 4 観点で見直した。**直したものと、
+**あえて直さなかったもの**を残す（同じ指摘が次も出るので）。
+
+### 10.1 直したもの
+
+| 何 | どこ | 効き目 |
+|---|---|---|
+| **ゴールの判定と打ち切りを `_Rollout._take_step` へ** | `scripted_demo.py` | 手本の再生と台本で 1 か所。台本の `goal_step` が初めて測れる（9.5 節） |
+| **封筒の切り方を private の潰しから旗へ**（`shape_commands`） | 同 | 寄せたあとに `glide` を呼んでも落ちない |
+| **`_parallel_scaled` に統合** | `motion/otg.py` | 「進行方向に平行に、上限で頭打ち」の実装が 2 つあった（入口の加速度と出口の速度）。**4,007 通りで数値一致を確認**（差 2.8e-17） |
+| **`steps_from_json`** | `scripted_demo.py` | 動画の spec の `reverse_steps`・`place_offsets` を廃し、`plan.steps` の差分 1 つに。**`TurnKnob` を含む課題で `AttributeError` になる形も消えた**（コンロ＋モカポットの課題で確認） |
+| **コマに焼く処理と動画の書き出しを 1 か所へ**（`_panel`・`_write_columns`・`IMAGES`） | `render_before_after.py` ← 4 本のレンダラ | 同じ物を 4 回書いていた。**`render_prealign_pairs`・`render_init_pose_pairs` は赤の指定が BGR で、画面では青く出ていた**（どちらの docstring も「赤」と書いてある）。あわせて `render_init_pose_pairs` は 300 歩超の印も出るようになった |
+| **`MAX_STEPS`・`passes_gates`・`suite_of` の重複を削除** | `render_before_after.py` | 同じ `solution/tools/regen/` に `MAX_STEPS = 300` が 2 つあった。**`render_examples.py` にはまだ残っている**（今回の差分の外） |
+| **`direction_bias` を 1 か所へ** | `screen_initstates.py` ← `measure_init_pose_coverage.py` | 番号を選ぶ側と出来を測る側で同じ数字を見る。無作為の目安（0.921/√N）も両方に出る |
+| **`merge_adjacent` の状態機械を単純化** | `merge_actions.py` | 数え上げをやめて、まとめない区間を先に印付け。**人の手本 50 本 × 8 設定と作り物 3,000 本で出力が 1 ビットも変わらないことを確認** |
+| **画像を手放してから次の本を撃つ** | `generate_perturbed.py` | **並列 14 で 1 GB 弱の節約**（1 本 60〜97 MB を次の本の間ずっと抱えていた） |
+| 撃つ本が無い単位で env を作らない | 同 | 撃ち直し（`--skip`）のときだけ効く |
+| `sys.path` の追加と封筒作りを本ごとから 1 回へ | `replay_yield.py` | `sys.path` が 1 本ごとに伸びていた |
+| 同じ bddl の列は env を使い回す | `render_training_pairs.py` | 1 本の動画で 3〜4 回作っていた env が 1〜2 回に |
+| `_column` に集約・`merge_adjacent` の既定を二重に書かない | 同 | 同じ 10 個の鍵を 2 か所で組んでいた |
+
+### 10.1.1 整理のあとに撃ち直して確かめたこと
+
+| 確かめたこと | 結果 | どこ |
+|---|---|---|
+| 手本の再生が 1 ビットも変わらない | ワイン 10 本 × 7 項目 **食い違い 0**（ゴールの後は 10 歩ちょうど） | `work/regen/postgoal_cut_wine{,_after_simplify,_guard}.jsonl` |
+| モカポットの台本 | **50/50・中央 269 歩（265〜279）・衝突 0**（整理前は 269（264〜276）と 269（264〜278）。**同じ設定でも毎回揺らぐ**範囲内） | `moka2_glide/plan_simplify/`・`logs/moka2_glide_probe_plan_simplify.log` |
+| 台本のゴール後と打ち切り | goal 247〜250 / 全 266〜269 歩・**後ろ 19 歩** → `post_goal_steps=10` で **goal ＋ 10 歩ちょうど**・5 本とも成功のまま | `moka2_glide/goal_tail.py`・`logs/moka2_goal_tail2.log` |
+| 寄せる区間（Ruckig・`shape_commands`） | 8 組を撃って落ちない（封筒を潰さなくなった） | `prealign_simplify/`・`logs/prealign_simplify.log` |
+| 動画の書き出し | 3 列 392 コマ・人と道 A の数値は一致。**台本の `goal` が 268 → 249 に直った**（前は「エピソードの長さ」を出していた）。見出しは `script+ruckig` | `work/regen/videos_simplify/`・`logs/render_simplify2.log` |
+| 数値の検算（シム不要） | `_parallel_scaled` 4,007 通り（差 2.8e-17）・`merge_adjacent` 人 50 本 × 8 設定と作り物 3,000 本で完全一致・`direction_bias` 旧実装と差 0・`screen_initstates` の集計 6 項目一致 | — |
+
+**古い `goal_step` の出し方は台本の列で間違っていた**（`record.steps if goal_reached else -1`）。
+動画 09・10 の json に入っている台本列の `goal_step`（268・269）は**エピソードの長さ**であって、
+**ゴールが立った歩は 249 前後である。**採否（KEEP）は変わらない。
+
+### 10.2 あえて直さなかったもの
+
+| 指摘 | 直さない理由 |
+|---|---|
+| `otg.waypoints` の「距離が 0 なら帰る」判定を `_entry_state` の前へ動かす | **持ち越した速度の扱いが変わる。**`_entry_state` は `num_chained` を数え、持ち越しを消費する副作用がある。速さの得はほぼ無い |
+| `screen_initstates` の基準姿勢を親で 1 回測る | 節約は env 作り 26 回（全体の約 3%）。**親が libero を読み込む必要が出る**ので釣り合わない |
+| `render_init_pose_pairs` の env を組ごとに作り直さない | 古い道具で、もう使わない見込み |
+| `merge_actions.LIMIT_POS` を `motion/envelope.py` から引く | 見ているものが違う。**あちらは自分の台本を配布データの内側に収める値**（回転 0.30）で、こちらは**配布データそのものの端**（0.375）。`LIMIT_ROT` に注記を足した |
+| `run_init_pose_batches.sh` の変換部分を `run_scripted_bowls.sh` と共有 | `regen/` に共有の shell が無い。作るのは締切後 |
+| `measure_train_data_perturbation.py` の `pose` を退役させる | 今回の差分の外。**新しい方が 13 倍速く、向きも測れる**ので、いずれ寄せる |
+| `render_examples.py` の `_verdict`・`suite_of` の写し | 今回の差分の外。次に触るときに寄せる |
+| `GLIDE_EXIT_SPEED`・`GLIDE_GAIN`・`GLIDE_LAG` を `TaskPlan` へ | `glide` を課題ごとにした理由（環境変数の渡し忘れ）はこの 3 つにも当てはまる。**`GLIDE_GAIN` は入口加速度を直したあと測り直していない**ので、測り直すときに一緒に移す |
 
 ---
 

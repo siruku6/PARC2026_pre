@@ -25,6 +25,8 @@
 
 Reads:
   - <spec> … `[{"name": …, "task": …, "demo": 0, "columns": [{"kind": "human"}, …]}]`
+    台本の列は `plan` で `TaskPlan` の項目を上書きできる（掴む順番と置き場所は
+    その中の `steps`。`scripted_demo.steps_from_json`）
   - <states>/index.json・<states>/<suite>/<課題>_demo.npz
 Generates:
   - <out>/<name>.mp4 … 列を横に並べた 1 本
@@ -36,18 +38,16 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from merge_actions import merge_adjacent  # noqa: E402
-from render_before_after import (FPS, HEADER, PANEL, _annotate,  # noqa: E402
-                                 _header_band, _view)
+from render_before_after import IMAGES, _view, _write_columns  # noqa: E402
 from replay_yield import (MAX_STEPS, _replay_one, _variant,  # noqa: E402
                           passes_gates, suite_of)
-
-IMAGES = ("front", "wrist", "disp")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -61,68 +61,73 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _replayed(sd, libero_root: Path, suite: str, task: str, column: dict,
-              init_state: np.ndarray, actions: np.ndarray, ee_pos0: np.ndarray,
-              seed: int) -> dict:
+def _column(record, *, goal_step: int, keep: bool, length: int | None = None,
+            prealign_steps: int = 0, eef_offset_cm: float = 0.0,
+            disp_at_goal_mm: float | None = None) -> dict:
+    """1 列ぶんの結果。**`_panel` と `_header` が読む形はここだけで決める。**
+
+    `length` は「送った行動の本数」で、`steps` と違うのは短くした列だけである
+    （`merged`。見出しに出す）。
+    """
+    return {"front": _view(record.front), "wrist": _view(record.wrist),
+            "disp": [1000.0 * d for d in record.displacements],
+            "goal_step": int(goal_step), "steps": int(record.steps),
+            "length": int(record.steps if length is None else length),
+            "prealign_steps": int(prealign_steps), "keep": bool(keep),
+            "eef_offset_cm": float(eef_offset_cm),
+            "disp_at_goal_mm": disp_at_goal_mm}
+
+
+def _replayed(sd, env, column: dict, init_state: np.ndarray,
+              actions: np.ndarray, ee_pos0: np.ndarray, seed: int) -> dict:
     """`human`・`prealign`・`merged` の列を撃つ。"""
     kind = column["kind"]
-    variant = _variant(task, column["initstate"]) if kind == "prealign" else task
-    sequence = (merge_adjacent(actions, column.get("scale", 1.0), column.get("dwell", 8))
-                if kind == "merged" else actions)
+    merge_keys = {key: column[key] for key in ("scale", "dwell") if key in column}
+    sequence = merge_adjacent(actions, **merge_keys) if kind == "merged" else actions
     method = "prealign" if kind == "prealign" else "open_loop"
-    env = sd._make_env(sd._bddl_path(libero_root, suite, variant), True)
-    try:
-        result, rollout = _replay_one(sd, env, init_state, sequence, seed, method, ee_pos0,
-                                      record_images=True,
-                                      planner=column.get("planner", "proportional"))
-        rollout.attach_images()
-    finally:
-        env.close()
+    result, rollout = _replay_one(sd, env, init_state, sequence, seed, method, ee_pos0,
+                                  record_images=True,
+                                  planner=column.get("planner", "proportional"))
+    rollout.attach_images()
     gates = passes_gates(result)
     # 摂動なしの列は手先がずれていないので、被覆の門は見ない。
     keep = gates["keep"] if kind == "prealign" else gates["reached"] and gates["clean"]
-    record = rollout.record
-    return {"front": _view(record.front), "wrist": _view(record.wrist),
-            "disp": [1000.0 * d for d in record.displacements],
-            "goal_step": result["goal_step"], "steps": result["steps"],
-            "prealign_steps": result["prealign_steps"], "keep": bool(keep),
-            "length": int(len(sequence)), "eef_offset_cm": result["eef_offset_cm"],
-            "disp_at_goal_mm": result["disp_at_goal_mm"]}
+    return _column(rollout.record, goal_step=result["goal_step"], keep=keep,
+                   length=len(sequence), prealign_steps=result["prealign_steps"],
+                   eef_offset_cm=result["eef_offset_cm"],
+                   disp_at_goal_mm=result["disp_at_goal_mm"])
 
 
-def _scripted(sd, libero_root: Path, suite: str, task: str, column: dict,
-              init_state: np.ndarray) -> dict:
+def _scripted(sd, env, task: str, column: dict, init_state: np.ndarray) -> dict:
     """`scripted` の列を撃つ。**置き場所は人の手本の 0 コマ目と同じ。**
 
     `column["plan"]` を渡すと `TaskPlan` の項目をその列だけ上書きする
     （例 `{"command_envelope": true, "cruise": 0.85}`）。**台本の既定を書き換える前に、
     採るかどうかを動画で決めるためである。**
+
+    **掴む順番と置く場所も、`plan` の中の `steps` で列ごとに変えられる**
+    （`sd.steps_from_json`）。`steps` は**やらせたい順に並べた差分**で、
+    書いた項目だけが既定を上書きする。
+
+        "plan": {"cruise": 0.90,
+                 "steps": [{"target": "moka_pot_2", "place_offset": [-0.045, -0.035]},
+                           {"target": "moka_pot_1", "place_offset": [0.030, 0.035]}]}
     """
     import dataclasses
 
-    plan = dataclasses.replace(sd._resolve_plan(task), **column.get("plan", {}))
-    # **掴む順番と置く場所も列ごとに変えられる。**`TaskPlan.steps` は物の並びなので JSON では
-    # 書けない——順番は `reverse_steps`、置く場所は `place_offsets`（物の名前 → [x, y] m）で渡す。
-    if column.get("reverse_steps"):
-        plan = dataclasses.replace(plan, steps=list(reversed(plan.steps)))
-    offsets = column.get("place_offsets", {})
-    if offsets:
-        plan = dataclasses.replace(plan, steps=[
-            dataclasses.replace(step, place_offset=tuple(offsets[step.target]))
-            if step.target in offsets else step for step in plan.steps])
-    env = sd._make_env(sd._bddl_path(libero_root, suite, task), True)
-    try:
-        record = sd.run_episode(env, init_state, plan, MAX_STEPS, record_images=True,
-                                glide=column.get("glide"))
-    finally:
-        env.close()
-    return {"front": _view(record.front), "wrist": _view(record.wrist),
-            "disp": [1000.0 * d for d in record.displacements],
-            "goal_step": record.steps if record.goal_reached else -1,
-            "steps": int(record.steps), "prealign_steps": 0,
-            "keep": bool(record.success), "length": int(record.steps),
-            "eef_offset_cm": 0.0,
-            "disp_at_goal_mm": round(1000.0 * float(record.max_displacement), 3)}
+    overrides = dict(column.get("plan", {}))
+    plan = sd._resolve_plan(task)
+    if "steps" in overrides:
+        overrides["steps"] = sd.steps_from_json(plan.steps, overrides["steps"])
+    plan = dataclasses.replace(plan, **overrides)
+    record = sd.run_episode(env, init_state, plan, MAX_STEPS, record_images=True,
+                            glide=column.get("glide"))
+    return {**_column(record, goal_step=record.goal_step, keep=record.success,
+                      disp_at_goal_mm=(None if record.disp_at_goal_m is None else
+                                       round(1000.0 * record.disp_at_goal_m, 3))),
+            # **見出しに出すのは「実際に効いた」値である。**課題の既定で Ruckig が
+            # 入るようになったので、spec に書いていなくても入っていることがある。
+            "glide": bool(plan.glide if column.get("glide") is None else column["glide"])}
 
 
 def _header(column: dict, run: dict) -> str:
@@ -133,47 +138,11 @@ def _header(column: dict, run: dict) -> str:
     elif kind == "merged":
         what = f"merged {run['length']}st"
     elif kind == "scripted":
-        what = "script" + ("+ruckig" if column.get("glide") else "")
+        what = "script" + ("+ruckig" if run.get("glide") else "")
     else:
         what = "original"
     goal = "no goal" if run["goal_step"] < 0 else f"goal {run['goal_step']}"
     return f"{what} | {goal} | {'KEEP' if run['keep'] else 'DROP'}"
-
-
-def _panel(run: dict, step: int) -> tuple[np.ndarray, np.ndarray]:
-    here = min(step, len(run["front"]) - 1)
-    disp = run["disp"][min(here, len(run["disp"]) - 1)] if run["disp"] else 0.0
-    goal = 0 < run["goal_step"] <= here + 1
-    lines = []
-    if run["prealign_steps"]:
-        aligning = here < run["prealign_steps"]
-        lines.append(("PREALIGN" if aligning else "REPLAY",
-                      (80, 200, 255) if aligning else (200, 200, 200)))
-    lines.append((f"nontarget {disp:6.2f}mm" + ("  OVER 1mm" if disp > 1.0 else ""),
-                  (255, 60, 60) if disp > 1.0 else (235, 235, 235)))
-    over = here + 1 > MAX_STEPS
-    lines.append((f"step {here + 1}/{run['steps']}" + ("  GOAL" if goal else "")
-                  + ("  OVER 300" if over else ""),
-                  (255, 60, 60) if over else ((80, 220, 80) if goal else (235, 235, 235))))
-    return _annotate(run["front"][here], lines), np.ascontiguousarray(run["wrist"][here])
-
-
-def _write(path: Path, bands: list[np.ndarray], runs: list[dict]) -> int:
-    import cv2
-
-    width = PANEL * len(runs)
-    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), FPS,
-                             (width, HEADER + 2 * PANEL))
-    length = max(len(run["front"]) for run in runs)
-    top = np.concatenate(bands, axis=1)
-    for step in range(length):
-        panels = [_panel(run, step) for run in runs]
-        frame = np.concatenate([top,
-                                np.concatenate([p[0] for p in panels], axis=1),
-                                np.concatenate([p[1] for p in panels], axis=1)])
-        writer.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-    writer.release()
-    return length
 
 
 def main() -> None:
@@ -194,18 +163,30 @@ def main() -> None:
             init_state = bundle[f"demo_{demo}/states"][0]
             actions = bundle[f"demo_{demo}/actions"]
             ee_pos0 = bundle[f"demo_{demo}/ee_pos"][0]
-        runs, bands = [], []
-        for column in item["columns"]:
-            if column["kind"] == "scripted":
-                run = _scripted(sd, libero_root, suite, task, column, init_state)
-            else:
-                run = _replayed(sd, libero_root, suite, task, column, init_state,
-                                actions, ee_pos0, args.seed)
-            header = _header(column, run)
-            print(f"  {header}", flush=True)
-            runs.append(run)
-            bands.append(_header_band(PANEL, header))
-        length = _write(args.out / f"{item['name']}.mp4", bands, runs)
+        runs, headers = [], []
+        # **同じ bddl の列は env を使い回す。**摂動を掛ける `prealign` の列だけ
+        # 別の bddl になる——ほかの列は 1 本ぶん作り直すだけ無駄である。
+        envs: dict[str, Any] = {}
+        try:
+            for column in item["columns"]:
+                variant = (_variant(task, column["initstate"])
+                           if column["kind"] == "prealign" else task)
+                if variant not in envs:
+                    envs[variant] = sd._make_env(
+                        sd._bddl_path(libero_root, suite, variant), True)
+                env = envs[variant]
+                if column["kind"] == "scripted":
+                    run = _scripted(sd, env, task, column, init_state)
+                else:
+                    run = _replayed(sd, env, column, init_state,
+                                    actions, ee_pos0, args.seed)
+                headers.append(_header(column, run))
+                print(f"  {headers[-1]}", flush=True)
+                runs.append(run)
+        finally:
+            for env in envs.values():
+                env.close()
+        length = _write_columns(args.out / f"{item['name']}.mp4", headers, runs)
         (args.out / f"{item['name']}.json").write_text(json.dumps(
             {"task": task, "demo": demo, "frames": length,
              "columns": [{**column, **{k: v for k, v in run.items() if k not in IMAGES}}

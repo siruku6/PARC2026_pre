@@ -28,7 +28,12 @@ LIMIT_POS = 0.9375
 """並進の上限（配布データの端・`motion/envelope.py` の `limit_pos`）。"""
 
 LIMIT_ROT = 0.375
-"""回転の上限（配布データの端）。"""
+"""回転の上限（配布データの端）。
+
+**`motion/envelope.py` の `limit_rot`（0.30）ではない。**あちらは自分で書く台本を
+配布データの内側に収めるための、意図して狭い値である。ここで見たいのは
+**配布データそのものの端**——人の手本をまとめて、配布データの外へ出さない、という判定である。
+"""
 
 
 def merge_adjacent(actions: np.ndarray, scale: float = 1.0, dwell: int = 8) -> np.ndarray:
@@ -49,18 +54,20 @@ def merge_adjacent(actions: np.ndarray, scale: float = 1.0, dwell: int = 8) -> n
         (M, 7)。M ≤ N。指の値はまとめた区間の最後のコマのものを使う。
     """
     actions = np.asarray(actions, dtype=np.float64)
+    # **指の開閉の直後 `dwell` コマは、まとめずにそのまま残す区間である。**
+    # 先に印を付けてしまえば、まとめる側は「保留中の 1 コマ」だけを持てばよい
+    # （数え上げながらまとめると、区間の出入りと保留の状態が絡まる）。
+    frozen = np.zeros(len(actions), dtype=bool)
+    for start in np.flatnonzero(np.diff(actions[:, 6])) + 1:
+        frozen[start:start + dwell] = True
     merged: list[np.ndarray] = []
     pending: np.ndarray | None = None
-    since_toggle = dwell
-    for index, row in enumerate(actions):
-        if index > 0 and row[6] != actions[index - 1, 6]:
-            since_toggle = 0
-        if since_toggle < dwell:
+    for row, hold in zip(actions, frozen):
+        if hold:
             if pending is not None:
                 merged.append(pending)
                 pending = None
             merged.append(row.copy())
-            since_toggle += 1
             continue
         if pending is None:
             pending = row.copy()

@@ -42,6 +42,7 @@ Generates:
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import multiprocessing as mp
 import os
@@ -52,7 +53,9 @@ from pathlib import Path
 import numpy as np
 
 # `scripted_demo` は環境の作り方と採点と同じ衝突判定を持っている。**写さずに借りる。**
+# `motion` も同じ置き場から引く（`import` は本ごとに 1 回で足りるので下で遅らせる）。
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripted_demo"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 PREALIGN_STEPS = 40
 """`prealign` で、デモの 0 コマ目の手先へ寄せるのに許す歩数の上限。"""
@@ -184,6 +187,19 @@ def _prealign(sd, rollout, target: np.ndarray, gripper: float,
     return rollout.record.steps - used
 
 
+@functools.cache
+def _glide_envelope():
+    """Ruckig で寄せるときの封筒。**環境変数だけで決まるので 1 度作れば足りる。**
+
+    `motion` の import はここまで遅らせる——**寄せ方が `glide` のときしか要らず**、
+    コンテナの外（`measure_init_pose_coverage.py` を打つホスト）では
+    `motion` が読めないことがある。
+    """
+    from motion.envelope import envelope_from_environment
+
+    return envelope_from_environment()
+
+
 def _replay_one(sd, env, init_state: np.ndarray, actions: np.ndarray,
                 seed: int, method: str, ee_pos0: np.ndarray | None,
                 record_images: bool = False,
@@ -193,6 +209,9 @@ def _replay_one(sd, env, init_state: np.ndarray, actions: np.ndarray,
     **変位は 2 つ出す。**採点は**ゴールが立った時点で打ち切る**ので、
     採否に効くのは `disp_at_goal_mm` のほうである。`disp_full_mm` は撃ち切るまでの
     最大で、**学習データとして全コマ入れるなら**こちらを見る。
+
+    **ゴールを見るのと打ち切るのは `_Rollout` が 1 歩ごとにやる**
+    （`post_goal_steps=POST_GOAL_STEPS`）。ここで数え直さない。
 
     Parameters
     ----------
@@ -212,18 +231,15 @@ def _replay_one(sd, env, init_state: np.ndarray, actions: np.ndarray,
         書き出しに使う。画像は `attach_images()` のあと `record.front` にある。
     """
     env.seed(seed)
-    budget = int(actions.shape[0]) + MAX_EXTRA_STEPS
     aligning = method == "prealign" and ee_pos0 is not None
+    budget = int(actions.shape[0]) + MAX_EXTRA_STEPS
     if method == "prealign":
         budget += PREALIGN_STEPS
-    envelope = None
-    if aligning and planner == "glide":
-        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-        from motion.envelope import envelope_from_environment
-
-        envelope = envelope_from_environment()
+    envelope = _glide_envelope() if aligning and planner == "glide" else None
+    # **ゴールの歩を控えるのと打ち切るのは `_Rollout` の仕事である**
+    # （台本の手本も同じ規則で切れるように、1 か所に置いてある）。
     rollout = sd._Rollout(env, init_state, budget, record_images=record_images,
-                          envelope=envelope, glide=envelope is not None)
+                          envelope=envelope, post_goal_steps=POST_GOAL_STEPS)
     eef0 = rollout.eef_position.copy()
     prealign_steps, residual_mm = 0, float("nan")
     if aligning:
@@ -232,29 +248,20 @@ def _replay_one(sd, env, init_state: np.ndarray, actions: np.ndarray,
         residual_mm = 1000.0 * float(np.linalg.norm(target - rollout.eef_position))
         # **封筒は寄せる区間にだけ当てる。**記録された行動に当てると 7.79% のコマが
         # 削られ、撃ち直す手本そのものが変わる。
-        rollout._envelope = None
-    goal_step = -1
-    disp_at_goal = float("nan")
+        rollout.shape_commands = False
     for action in actions:
-        if goal_step >= 0 and rollout.record.steps >= goal_step + POST_GOAL_STEPS:
-            break
         if not rollout._take_step(np.asarray(action, dtype=np.float32)):
             break
-        if goal_step < 0 and bool(env.check_success()):
-            goal_step = rollout.record.steps
-            disp_at_goal = float(rollout.record.max_displacement)
     # 撃ち切っても届いていなければ、止めたまま少し待つ。
-    while goal_step < 0 and rollout.record.steps < budget:
+    while rollout.record.goal_step < 0 and rollout.record.steps < budget:
         if not rollout._take_step(np.zeros(7, dtype=np.float32)):
             break
-        if bool(env.check_success()):
-            goal_step = rollout.record.steps
-            disp_at_goal = float(rollout.record.max_displacement)
+    goal_step = rollout.record.goal_step
     offset = (float("nan") if ee_pos0 is None
               else float(np.linalg.norm(np.asarray(ee_pos0) - eef0)))
     return {"goal_step": goal_step,
             "disp_at_goal_mm": (None if goal_step < 0
-                                else round(1000.0 * disp_at_goal, 3)),
+                                else round(1000.0 * rollout.record.disp_at_goal_m, 3)),
             "disp_full_mm": round(1000.0 * float(rollout.record.max_displacement), 3),
             "steps": int(rollout.record.steps),
             "prealign_steps": prealign_steps,

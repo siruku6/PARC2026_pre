@@ -41,8 +41,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from render_before_after import (FPS, HEADER, PANEL, _annotate,  # noqa: E402
-                                 _header_band, _view)
+from render_before_after import _view, _write_columns  # noqa: E402
 from replay_yield import (MIN_OFFSET_CM, _replay_one, _variant,  # noqa: E402
                           passes_gates, suite_of)
 
@@ -62,31 +61,12 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _write(path: Path, record, result: dict, header: str) -> int:
-    """1 本を動画にする（上段 front・下段 wrist）。"""
-    import cv2
-
-    front, wrist = _view(record.front), _view(record.wrist)
-    disp_mm = [1000.0 * d for d in record.displacements]
-    band = _header_band(PANEL, header)
-    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), FPS,
-                            (PANEL, HEADER + 2 * PANEL))
-    for step in range(len(front)):
-        here = disp_mm[min(step, len(disp_mm) - 1)] if disp_mm else 0.0
-        aligning = step < result["prealign_steps"]
-        goal = 0 < result["goal_step"] <= step + 1
-        lines = [
-            ("PREALIGN" if aligning else "REPLAY",
-             (80, 200, 255) if aligning else (200, 200, 200)),
-            (f"nontarget {here:6.2f}mm" + ("  OVER" if here > 1.0 else ""),
-             (60, 60, 255) if here > 1.0 else (235, 235, 235)),
-            (f"step {step + 1}/{len(front)}" + ("  GOAL" if goal else ""),
-             (80, 220, 80) if goal else (235, 235, 235)),
-        ]
-        frame = np.concatenate([band, _annotate(front[step], lines),
-                                np.ascontiguousarray(wrist[step])], axis=0)
-        writer.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-    writer.release()
-    return len(front)
+    """1 本を動画にする（1 列。焼く中身は `render_before_after._panel` が決める）。"""
+    return _write_columns(path, [header], [{
+        "front": _view(record.front), "wrist": _view(record.wrist),
+        "disp": [1000.0 * d for d in record.displacements],
+        "goal_step": result["goal_step"], "steps": result["steps"],
+        "prealign_steps": result["prealign_steps"]}])
 
 
 def main() -> None:

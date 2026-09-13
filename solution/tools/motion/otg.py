@@ -268,21 +268,35 @@ def _speed_profile(total: float, entry_speed: float, exit_speed: float,
     return _with_cruise(up, down, total, low)
 
 
+def _parallel_scaled(distance: np.ndarray, caps: np.ndarray,
+                     ratio: float = 1.0) -> np.ndarray:
+    """`distance` に**平行**な向きで、どの成分も `caps × ratio` を超えない量を作る。
+
+    **成分ごとに上限を置いてはいけない。**ほとんど動かない軸にも満額が乗り、
+    その軸だけ行き過ぎて戻る。**いちばん上限に近づく軸がちょうど上限になる
+    大きさ**を選べば、向きを保ったまま大きさだけを決められる。
+
+    **区間の出口の速度と入口の加速度が、どちらもこれである**
+    （`_parallel_exit_velocity`・`_parallel_onset_acceleration`）。
+    動かない軸（`1e-9` 未満）は上限を見ない——見ると倍率が発散する。
+    """
+    if ratio <= 0.0:
+        return np.zeros(len(distance))
+    scales = [caps[i] / abs(distance[i])
+              for i in range(len(distance)) if abs(distance[i]) > 1e-9]
+    if not scales:
+        return np.zeros(len(distance))
+    return distance * min(scales) * ratio
+
+
 def _parallel_exit_velocity(distance: np.ndarray, max_velocity: np.ndarray,
                             ratio: float) -> np.ndarray:
     """区間の出口に残す速度を、**進行方向に平行**に、上限の `ratio` 倍で作る。
 
-    成分ごとに `上限 × ratio` を置いてはいけない。**ほとんど動かない軸にも
-    満速の出口速度が付いてしまい**、その軸だけ行き過ぎる。進行方向に平行に
-    取れば、向きを保ったまま速さだけを残せる。
+    **並進と回転をまとめて 1 つの向きとして扱う**（入口の加速度と違う点である。
+    出口では経路の向きを保つことが要り、入口では並進と回転が別々に立ち上がる）。
     """
-    if ratio <= 0.0:
-        return np.zeros(NUM_DOF)
-    scales = [max_velocity[i] / abs(distance[i])
-              for i in range(NUM_DOF) if abs(distance[i]) > 1e-9]
-    if not scales:
-        return np.zeros(NUM_DOF)
-    return distance * min(scales) * ratio
+    return _parallel_scaled(distance, max_velocity, ratio)
 
 
 def _parallel_onset_acceleration(distance: np.ndarray, onset_pos: float,
@@ -295,18 +309,13 @@ def _parallel_onset_acceleration(distance: np.ndarray, onset_pos: float,
     **160 本すべてが頭の 2〜3 コマを行き先と逆向きに出し**、3 → 4 コマ目で
     符号が反転していた（並進の符号反転 7.19%・配布データ 0.14%）。
 
-    **符号だけ付けても足りない。**ほとんど動かない軸にも満額の加速度が乗り、
-    その軸だけ行き過ぎて戻る——`_parallel_exit_velocity` と同じ理由である。
-    並進は**いちばん大きい軸がちょうど `onset_pos` になる大きさ**で距離に平行に取る。
-    回転も同じで、**回す量が無ければ 0 にする。**
+    **符号だけ付けても足りない**ので `_parallel_scaled` に乗せる。
+    **並進と回転は別々に掛ける**——上限が別（`accel_pos` と `accel_rot`）で、
+    まとめると回す量の少ない区間で並進の加速度まで削れてしまう。
     """
-    accel = np.zeros(NUM_DOF)
-    largest = float(np.abs(distance[:3]).max())
-    if largest > 1e-9:
-        accel[:3] = onset_pos * distance[:3] / largest
-    if abs(float(distance[3])) > 1e-9:
-        accel[3] = onset_rot * float(np.sign(distance[3]))
-    return accel
+    return np.concatenate([
+        _parallel_scaled(distance[:3], np.full(3, onset_pos)),
+        _parallel_scaled(distance[3:], np.array([onset_rot]))])
 
 
 class PoseTrajectoryPlanner:

@@ -127,6 +127,29 @@ def _run_task(suite: str, task: str, numbers: list[int], layout: int,
     return merged
 
 
+def direction_bias(vectors: np.ndarray) -> tuple[float, np.ndarray, float]:
+    """ずれの**向き**の偏りを測る。**大きさを捨てて、単位ベクトルの平均の長さを見る。**
+
+    0 なら全方向に均等、1 なら全部同じ向きである。**「無作為ならこのくらい」も返す**
+    ——等方な 3 次元で N 本引いたときの平均の長さの期待値は約 `0.921 / √N` で、
+    **これを下回る偏りは偏りと呼べない。**
+
+    Returns
+    -------
+    bias : float
+        単位ベクトルの平均の長さ。
+    positive_pct : np.ndarray
+        軸ごとの「正の側の割合」[%]（左右 x・前後 y・上下 z）。
+    expected : float
+        無作為に選んだときの `bias` の目安。
+    """
+    units = np.asarray(vectors, dtype=np.float64)
+    units = units / np.maximum(np.linalg.norm(units, axis=1, keepdims=True), 1e-12)
+    return (float(np.linalg.norm(units.mean(axis=0))),
+            100.0 * (units > 0).mean(axis=0),
+            0.921 / np.sqrt(len(units)))
+
+
 def main() -> None:
     args = _parse_args()
     os.environ.setdefault("OMP_NUM_THREADS", "1")
@@ -143,18 +166,18 @@ def main() -> None:
     first, second = per_task[names[0]], per_task[names[1]]
     both = [n for n in numbers if first.get(n) and second.get(n)]
 
-    def vector(entry: dict) -> np.ndarray:
-        return np.asarray(entry["vector_cm"], dtype=np.float64)
+    def scenes(number: int, key: str) -> list[np.ndarray]:
+        """その番号の値を、2 つの場面ぶん並べて返す。"""
+        return [np.asarray(scene[number][key], dtype=np.float64)
+                for scene in (first, second)]
 
-    def turn(entry: dict) -> np.ndarray:
-        return np.asarray(entry["rotation_vector_deg"], dtype=np.float64)
-
-    gap = [abs(np.linalg.norm(vector(first[n])) - np.linalg.norm(vector(second[n])))
-           for n in both]
-    agree = [float(vector(first[n]) @ vector(second[n])
-                   / max(np.linalg.norm(vector(first[n])) * np.linalg.norm(vector(second[n])), 1e-12))
-             for n in both]
-    turn_gap = [float(np.linalg.norm(turn(first[n]) - turn(second[n]))) for n in both]
+    gap, agree, turn_gap = [], [], []
+    for n in both:
+        one, other = scenes(n, "vector_cm")
+        lengths = np.linalg.norm([one, other], axis=1)
+        gap.append(abs(lengths[0] - lengths[1]))
+        agree.append(float(one @ other / max(lengths.prod(), 1e-12)))
+        turn_gap.append(float(np.linalg.norm(np.subtract(*scenes(n, "rotation_vector_deg")))))
     print(f"\n2 つの場面での差（{len(both)} 番号）: 大きさ 中央 {np.median(gap):.3f}・最大 {np.max(gap):.3f} cm"
           f" ／ 向きの一致 cos 中央 {np.median(agree):.3f}・最小 {np.min(agree):.3f}"
           f" ／ 手首の回転の差 中央 {np.median(turn_gap):.2f}・最大 {np.max(turn_gap):.2f} 度")
@@ -162,12 +185,14 @@ def main() -> None:
 
     # 採用する値は 2 場面の平均にする。**大きさは今までどおり「大きさの平均」**
     # （向きの平均の長さではない）——9/11 に作った一覧と同じ物差しに揃えるため。
-    offsets = {n: round(float(np.mean([np.linalg.norm(vector(first[n])),
-                                       np.linalg.norm(vector(second[n]))])), 3) for n in both}
-    vectors = {n: [round(float(v), 3) for v in (vector(first[n]) + vector(second[n])) / 2.0]
+    offsets = {n: round(float(np.linalg.norm(scenes(n, "vector_cm"), axis=1).mean()), 3)
                for n in both}
-    turns = {n: [round(float(v), 3) for v in (turn(first[n]) + turn(second[n])) / 2.0]
+    vectors = {n: [round(float(v), 3) for v in np.mean(scenes(n, "vector_cm"), axis=0)]
+               for n in both}
+    turns = {n: [round(float(v), 3)
+                 for v in np.mean(scenes(n, "rotation_vector_deg"), axis=0)]
              for n in both}
+    # `turns` の長さ。**JSON に両方載せる**——選び直すときに向きも角度も引きたい。
     angles = {n: round(float(np.linalg.norm(turns[n])), 3) for n in both}
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(
@@ -191,16 +216,12 @@ def main() -> None:
             band = [n for n in usable if low <= offsets[n] < high]
             print(f"  {low}〜{high} cm: {len(band)} 個  例 {band[:8]}")
     def bias_report(label: str, chosen: list[int]) -> None:
-        """単位ベクトルの平均の長さ（0 なら偏り無し）と、軸ごとの正の割合を出す。"""
-        units = np.asarray([np.asarray(vectors[n]) / max(np.linalg.norm(vectors[n]), 1e-12)
-                            for n in chosen])
-        mean = units.mean(axis=0)
-        # 無作為な N 方向の平均の長さの期待値（等方な 3 次元）は約 0.921 / √N
-        print(f"  {label}: {len(chosen)} 個  偏り {np.linalg.norm(mean):.3f}"
-              f"（無作為なら約 {0.921 / np.sqrt(len(chosen)):.3f}）"
-              f"  正の割合 左右x {100 * np.mean(units[:, 0] > 0):.0f}%"
-              f"・前後y {100 * np.mean(units[:, 1] > 0):.0f}%"
-              f"・上下z {100 * np.mean(units[:, 2] > 0):.0f}%"
+        """向きの偏り（`direction_bias`）と、手首の回転の中央を 1 行で出す。"""
+        bias, positive, expected = direction_bias([vectors[n] for n in chosen])
+        print(f"  {label}: {len(chosen)} 個  偏り {bias:.3f}"
+              f"（無作為なら約 {expected:.3f}）"
+              f"  正の割合 左右x {positive[0]:.0f}%"
+              f"・前後y {positive[1]:.0f}%・上下z {positive[2]:.0f}%"
               f"  手首の回転 中央 {np.median([angles[n] for n in chosen]):.1f} 度")
 
     print("\n### ずれの向き")
