@@ -67,6 +67,16 @@ MAX_EXTRA_STEPS = 60
 数十歩そのまま止めて待つと物が落ち着いてゴールが立つことがある。
 """
 
+POST_GOAL_STEPS = 10
+"""ゴールが立ってから、記録された行動をあと何歩流して打ち切るか。
+
+**配布データの人の手本と同じ切り方である。**LIBERO の収集スクリプトは、成功が
+続けて 10 歩立った所で記録を止める（`LIBERO-plus/scripts/collect_demonstration.py` の
+`task_completion_hold_count = 10`）。**最後まで流すと、採点では一度も見ない
+「置いた物をいじる」コマが入る**——9/12 の 950 本で全コマの 9.7%、寄せる版で 15.4%
+（ワインは 1 本で 217 コマ）。
+"""
+
 MAX_STEPS = 300
 """採点の打ち切り。**寄せる区間の歩数もこの中に数える**（学習データに入るのは寄せた区間ごとである）。"""
 
@@ -226,6 +236,8 @@ def _replay_one(sd, env, init_state: np.ndarray, actions: np.ndarray,
     goal_step = -1
     disp_at_goal = float("nan")
     for action in actions:
+        if goal_step >= 0 and rollout.record.steps >= goal_step + POST_GOAL_STEPS:
+            break
         if not rollout._take_step(np.asarray(action, dtype=np.float32)):
             break
         if goal_step < 0 and bool(env.check_success()):
