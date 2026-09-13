@@ -137,11 +137,19 @@ def _work_items(states_dir: Path, demos_per_task: int, initstates: list[int],
     return items
 
 
-def _variant(task: str, initstate: int) -> str:
-    """摂動を当てた bddl の名前。**0 なら素の課題名のままである。**"""
-    if initstate == 0:
+def _variant(task: str, initstate: int, appearance: dict | None = None) -> str:
+    """摂動を当てた bddl の名前。**摂動も外観も無ければ素の課題名のままである。**
+
+    `appearance` は `appearance.draw` が返す辞書（`scene`・`view`）。**照明・背景は
+    bddl 側、カメラと初期姿勢は名前側**に入る。外観だけ変えるときも
+    `_initstate_0` を付ける——`env_wrapper` は `_view_` と `_initstate_` が
+    両方あるときだけ名前を切って読む。
+    """
+    scene = appearance["scene"] if appearance else ""
+    view = appearance["view"] if appearance else "0_0_100_0_0"
+    if initstate == 0 and not scene and view == "0_0_100_0_0":
         return task
-    return f"{task}_view_0_0_100_0_0_initstate_{initstate}"
+    return f"{task}{scene}_view_{view}_initstate_{initstate}"
 
 
 def _prealign(sd, rollout, target: np.ndarray, gripper: float,

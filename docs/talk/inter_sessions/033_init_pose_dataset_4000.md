@@ -275,6 +275,11 @@ PY
 `libero/libero/benchmark/task_classification.json` に課題ごとの一覧がある。
 **3 行すべて OK でなければ、通った軸だけを使う。**
 
+> **【9/14】やること 1・2 は済んだ（034 の 9.6 節）。**重ねた名前は 3 課題 × 7 通りすべて開け、
+> 6 課題 × 4 通りで**撃ち直しの結果が 1 ビットも変わらない**ことを確かめた。
+> `generate_perturbed.py --appearance plain=25,light=25,background=25,camera=25`
+> （`run_init_pose_batches.sh` では `APPEARANCE=…`）。**雑音は重ねない**（記録するコマに乗らない・学習側の拡張で足りている）。
+
 ### 2. 外観の配り方を、配布データの出方に合わせて決める
 
 **素の見た目だけにしない。**配布データの出方に合わせて引く。
@@ -308,6 +313,7 @@ PY
 ### 4. 4,000 本作る
 
 ```bash
+APPEARANCE=plain=25,light=25,background=25,camera=25 \
 INITSTATES=work/regen/initstates_48.json \
 OUT_NPZ=work/regen/npz_init_pose_v2 \
 OUT_LEROBOT=work/regen/lerobot_init_pose_v2 \

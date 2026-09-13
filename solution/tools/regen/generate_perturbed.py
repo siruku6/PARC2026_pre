@@ -53,6 +53,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripted_demo"))
 
+from appearance import draw as draw_appearance, parse_weights  # noqa: E402
 from replay_yield import (MIN_OFFSET_CM, _replay_one, _variant,  # noqa: E402
                           passes_gates)
 
@@ -98,6 +99,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--workers", type=int, default=14, metavar="N")
     parser.add_argument("--seed", type=int, default=0, metavar="N",
                         help="`env.seed()` と、組を並べ替える種")
+    parser.add_argument("--appearance", default="off", metavar="WEIGHTS",
+                        help="**外観を重ねる配り方**（`appearance.py`）。例 "
+                             "`plain=25,light=25,background=25,camera=25`。"
+                             "**既定の `off` は素の見た目だけ**（今までと同じ）。"
+                             "引きは (課題, 初期姿勢, 種) で決まる")
     return parser.parse_args()
 
 
@@ -160,8 +166,12 @@ def _run_item(item: dict, args: argparse.Namespace, budget: int) -> list[dict]:
     from libero.libero import get_libero_path
 
     libero_root = Path(get_libero_path("bddl_files")).parent
-    bddl = sd._bddl_path(libero_root, item["suite"],
-                         _variant(item["task"], item["initstate"]))
+    # **外観は単位（課題, 初期姿勢）ごとに 1 つ。**env を作り直す単位と揃えるため。
+    look = draw_appearance(item["task"],
+                           f"{args.seed}:{item['task']}:{item['initstate']}",
+                           parse_weights(args.appearance))
+    variant = _variant(item["task"], item["initstate"], look)
+    bddl = sd._bddl_path(libero_root, item["suite"], variant)
     rows: list[dict] = []
     written = 0
     # **画像を溜めるので env は描画つきで作る。**
@@ -185,6 +195,9 @@ def _run_item(item: dict, args: argparse.Namespace, budget: int) -> list[dict]:
                 row = {"task": item["task"], "suite": item["suite"],
                        "demo": demo, "initstate": item["initstate"],
                        "method": args.method, **gates,
+                       # **どの本にどの外観を当てたかを残す**——後から見た目の
+                       # 分布を数え直せないと、Track1 への影響を測れない。
+                       "appearance": look["kind"], "variant": variant,
                        "seconds": round(time.perf_counter() - started, 2),
                        **{k: v for k, v in result.items() if k != "eef0"}}
                 if keep:
@@ -210,6 +223,8 @@ def _run_item(item: dict, args: argparse.Namespace, budget: int) -> list[dict]:
                         source_task=item["task"],
                         source_demo=demo,
                         initstate=item["initstate"],
+                        appearance=look["kind"],
+                        variant=variant,
                         method=args.method,
                         planner=args.prealign_planner,
                         prealign_steps=result["prealign_steps"],

@@ -32,6 +32,8 @@
 #   PER_CHUNK     1 回に回す番号の個数。**npz は PER_NUMBER × PER_CHUNK × 60〜97 MB が 2 塊ぶん**
 #   WORKERS       生成の並列数（**変換に 1 コア残す**）
 #   KEEP_NPZ=0    1 にすると npz を消さない（デバッグ用）
+#   APPEARANCE    外観を重ねる配り方（`appearance.py`）。既定 `off`＝素の見た目だけ。
+#                 033 の 4,000 本は `plain=25,light=25,background=25,camera=25`
 #
 # Reads:
 #   - $INITSTATES・work/artifacts/libero_states・$OLD_MANIFEST
@@ -52,6 +54,7 @@ PER_NUMBER="${PER_NUMBER:-25}"
 PER_CHUNK="${PER_CHUNK:-10}"
 WORKERS="${WORKERS:-13}"
 KEEP_NPZ="${KEEP_NPZ:-0}"
+APPEARANCE="${APPEARANCE:-off}"
 mkdir -p "$OUT_NPZ" "$OUT_LEROBOT" work/regen/logs
 
 # 撃つ番号を並べる。**既に撃った番号は `OLD_MANIFEST` から読む**——
@@ -112,6 +115,7 @@ for start in $(seq 0 "$PER_CHUNK" $(( ${#NUMBERS[@]} - 1 )) ); do
         solution/tools/regen/generate_perturbed.py \
         --states "$STATES" --out-npz "$dir" --target "$target" \
         --initstates "${slice[@]}" --workers "$WORKERS" --skip "$SKIP_FILE" \
+        --appearance "$APPEARANCE" \
         > "work/regen/logs/init_pose_gen_${name}.log" 2>&1
     echo "  生成 exit=$? / $(ls "$dir"/*.npz 2>/dev/null | wc -l) 本 / $(du -sh "$dir" 2>/dev/null | cut -f1)"
 
