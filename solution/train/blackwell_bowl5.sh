@@ -35,6 +35,8 @@ set -uo pipefail
 RUN="${RUN:-pi05_bowl5_full}"
 REPO="${REPO:-siruku6/$RUN}"
 DATASET_REPO="${DATASET_REPO:-siruku6/libero_plus_bowl5}"
+DATASET_ID="${DATASET_ID:-local/libero_plus_bowl5}"   # --dataset-repo に渡す名前（中身は --dataset-root が決める）
+SKIP_DL_DATASET="${SKIP_DL_DATASET:-0}"   # 1 なら $DS を降ろさずそのまま使う（blackwell_initpose.sh が組んだもの）
 BASE_REPO="${BASE_REPO:-lerobot/pi05_libero_base}"
 # **版は `train_pi05.py` から読む。**ここに書き写すと、あちらが上げたときに
 # 黙って別の重みから始まる。
@@ -82,8 +84,13 @@ echo "  ok"
 # **2 つを並列に降ろす。**互いに独立なので、直列にすると待ち時間が足し算になる。
 step "降ろす（データ約 15 GB ＋ 出発点 8.8 GB を並列に）"
 T_DL=$(date +%s)
-( hf download "$DATASET_REPO" --repo-type dataset --local-dir "$DS" \
-    > "$HOME/dl_dataset.log" 2>&1 ; echo $? > "$HOME/dl_dataset.rc" ) &
+if [ "$SKIP_DL_DATASET" = 1 ]; then
+    echo "  データは降ろさない（SKIP_DL_DATASET=1。$DS をそのまま使う）"
+    ( echo 0 > "$HOME/dl_dataset.rc" ) &
+else
+    ( hf download "$DATASET_REPO" --repo-type dataset --local-dir "$DS" \
+        > "$HOME/dl_dataset.log" 2>&1 ; echo $? > "$HOME/dl_dataset.rc" ) &
+fi
 PID_DS=$!
 ( hf download "$BASE_REPO" --revision "$BASE_REV" \
     > "$HOME/dl_base.log" 2>&1 ; echo $? > "$HOME/dl_base.rc" ) &
@@ -182,7 +189,7 @@ step "学習を起こす"
 NW=$(python3 -c "import os;print(min(os.cpu_count()//2, 16))")
 cd "$CODE_DIR" || die "$CODE_DIR へ入れない"
 setsid nohup python train_pi05.py --run-name "$RUN" \
-    --dataset-repo local/libero_plus_bowl5 --dataset-root "$DS" \
+    --dataset-repo "$DATASET_ID" --dataset-root "$DS" \
     --steps "$STEPS" --batch-size "$BATCH" --num-workers "$NW" \
     --learning-rate "$LR" --save-freq "$SAVE_FREQ" --seed 42 \
     --freeze-vision-encoder false --train-expert-only false \
