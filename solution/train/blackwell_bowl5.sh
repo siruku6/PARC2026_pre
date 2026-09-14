@@ -165,9 +165,10 @@ echo "  チェックポイント $NCKPT 個（1 個 8.8 GB ＝ 約 $((NCKPT * 9)
 
 # ---------------------------------------------------------------- 道具
 step "上げる道具を置く"
+# **毎回上書きする。**`$TOOLS` は `$HOME` にあって前のセッションの版が残る。「無ければ置く」だと
+# 古い版のまま走る（9/14 に踏んだ：9/12 に置いた、ログを上げない版が使われ、HF のログが更新されなかった）。
 for f in upload_ckpt.sh verify_upload.py; do
-    [ -f "$TOOLS/$f" ] || cp "$CODE_DIR/$f" "$TOOLS/$f" \
-        || die "$CODE_DIR/$f が無い" "pi05_code を取り直す"
+    cp "$CODE_DIR/$f" "$TOOLS/$f" || die "$CODE_DIR/$f が無い" "pi05_code を取り直す"
 done
 chmod +x "$TOOLS/upload_ckpt.sh"
 cat > "$HOME/run_env.sh" <<EOF
