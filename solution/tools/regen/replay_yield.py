@@ -261,8 +261,13 @@ def _replay_one(sd, env, init_state: np.ndarray, actions: np.ndarray,
         if not rollout._take_step(np.asarray(action, dtype=np.float32)):
             break
     # 撃ち切っても届いていなければ、止めたまま少し待つ。
+    # **指は直前の指令を出し続ける**（0 にしない）。0 はシミュレータでは「動かさない」だが、
+    # 人の手本の指の値は ±1 だけなので、学習データの中で書き方の外れ値になる
+    # （9/14 までの生成で 39 本・238 コマ。`fix_gripper_encoding.py --mode hold` で埋めた）。
+    wait = np.zeros(7, dtype=np.float32)
+    wait[6] = rollout.record.actions[-1][6] if rollout.record.actions else actions[-1][6]
     while rollout.record.goal_step < 0 and rollout.record.steps < budget:
-        if not rollout._take_step(np.zeros(7, dtype=np.float32)):
+        if not rollout._take_step(wait):
             break
     goal_step = rollout.record.goal_step
     offset = (float("nan") if ee_pos0 is None

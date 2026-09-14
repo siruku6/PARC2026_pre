@@ -138,7 +138,10 @@ if [ "$STAGE" = p ] || [ "$STAGE" = all ]; then
     step "P 門 2. 指示文が評価でモデルが見る文と合っているか"
     R solution/tools/scripted_demo/check_dataset_instructions.py "$P" --grader-texts "$GRADER" \
         || die "P 門 2 で落ちた"
-    step "P 門 3. 指の値が ±1 だけか"
+    step "P 門 3. 指の値が ±1 だけか（生成の「止めて待つ」コマの 0 を直前の値で埋めてから見る）"
+    # 9/14 までの生成は、撃ち切ってもゴールが立たないと行動 7 次元すべて 0 で待っていた（39 本・238 コマ）。
+    # 何度打っても同じ結果になる（埋める 0 が無ければ何もしない）。
+    python3 solution/tools/regen/fix_gripper_encoding.py --root "$P" --mode hold || die "指の 0 を埋められない"
     gripper_gate "$P" || die "P 門 3 で落ちた"
     step "P 門 4. 正規化の尺度（libero_plus_bowl5 と比べる）"
     stats_gate "$P" "$BOWL5" || die "P 門 4 で落ちた"

@@ -49,7 +49,34 @@ import pyarrow.parquet as pq
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", type=Path, required=True, metavar="DIR")
+    parser.add_argument("--mode", choices=("encode", "hold"), default="encode",
+                        help="encode: {0,1} を ±1 に直す（combined の先頭）。"
+                             "hold: 腕も指も 0 の「止めて待つ」コマの指の 0 を、直前の指の値で埋める（生成データ）")
     return parser.parse_args()
+
+
+def _fill_hold(gripper: np.ndarray, arm: np.ndarray) -> np.ndarray | None:
+    """**「止めて待つ」コマの指の 0 を、直前（無ければ直後）の ±1 で埋める。**埋める所が無ければ None。
+
+    **なぜ要るか。**`replay_yield._replay_one` は、記録した行動を撃ち切ってもゴールが立たないとき
+    行動 7 次元すべて 0 で待っていた（9/14 までの生成）。シミュレータにとって指の 0 は「動かさない」で
+    正しいが、**人の手本の指の値は ±1 だけ**なので、学習データの中では書き方の外れ値になる
+    （`libero_plus_bowl5_initpose` で 39 本・238 コマ。すべてエピソードの末尾）。
+    指はそれまで同じ向きの指令を受け続けているので、直前の値で埋めても「握ったまま／開いたまま」の意味は変わらない。
+    """
+    hold = (gripper == 0) & np.all(arm == 0, axis=1)
+    if not hold.any():
+        return None
+    if (gripper == 0).sum() != hold.sum():
+        raise SystemExit("腕が動いているコマに指の 0 がある（「止めて待つ」コマ以外）。直し方を決め直すこと")
+    filled = gripper.copy()
+    known = np.flatnonzero(~hold)
+    if len(known) == 0:
+        raise SystemExit("指の値がすべて 0 のエピソードがある")
+    for index in np.flatnonzero(hold):
+        before = known[known < index]
+        filled[index] = gripper[before[-1]] if len(before) else gripper[known[0]]
+    return filled
 
 
 def _refuse_hardlinks(files: list[Path]) -> None:
@@ -77,7 +104,12 @@ def main() -> None:
         episode = table.column("episode_index").to_numpy()
         for index in np.unique(episode):
             rows = episode == index
-            if not (action[rows, 6] < 0).any():
+            if args.mode == "hold":
+                filled = _fill_hold(action[rows, 6], action[rows, :6])
+                if filled is not None:
+                    action[rows, 6] = filled
+                    fixed.add(int(index))
+            elif not (action[rows, 6] < 0).any():
                 values = set(np.unique(action[rows, 6]).tolist())
                 if not values <= {0.0, 1.0}:
                     raise SystemExit(f"エピソード {index} の指の値が {{0,1}} でも ±1 でもない: {sorted(values)[:5]}")
