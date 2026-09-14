@@ -24,8 +24,18 @@
 #     DS=/workspace/data/libero_combined_bowl5_initpose \
 #     bash /workspace/pi05_code/solution/train/runpod_initpose_ft.sh
 #
-# **学習率は頂点からやり直す。**15.0.0 は 2.5e-6 まで下げ切って終わっているので、
+# **学習率は既定では頂点からやり直す。**15.0.0 は 2.5e-6 まで下げ切って終わっているので、
 # その 10 倍から始まる（`train_pi05._resolve_init_from` の注意）。**揃えると決めたうえでそうしている。**
+# **9/15 に `LR`・`WARMUP` を渡せるようにした。**続きの学習で頂点に戻したくないときに使う。
+#
+# **`EXPERT_ONLY=1` なら action expert だけを動かす**（9/15 に足した。既定 0 ＝全パラメータ）。
+# 画像側と言語側を凍結し、20 歩の検算は 693,422,112 と突き合わせる。
+#
+#   RUN=pi05_combined_ae4k INIT_REPO=siruku6/pi05_combined_initpose_full INIT_STEP=005500 \
+#     EXPERT_ONLY=1 LR=5e-6 STEPS=4000 SAVE_FREQ=4000 \
+#     DATA_REPO=siruku6/libero_combined_bowl5_initpose DATASET_ID=local/libero_combined_bowl5_initpose \
+#     DS=/workspace/data/libero_combined_bowl5_initpose \
+#     bash /workspace/pi05_code/solution/train/runpod_initpose_ft.sh
 #
 # Reads:
 #   - HF `$DATA_REPO`（手元で組んだデータセット）と、その中の `bowl5_expected.json`
@@ -53,8 +63,18 @@ STEPS="${STEPS:-5500}"
 SAVE_FREQ="${SAVE_FREQ:-2750}"
 # **既定は対照と同じ 64。**96 GB の GPU なら `BATCH=128` も渡せる（対照とは別の作り方になる。howto/16 の 10 節）
 BATCH="${BATCH:-64}"
-LR=2.5e-5
-WARMUP=500
+LR="${LR:-2.5e-5}"
+WARMUP="${WARMUP:-500}"
+EXPERT_ONLY="${EXPERT_ONLY:-0}"
+if [ "$EXPERT_ONLY" = 1 ]; then
+    TRAIN_RANGE=(--freeze-vision-encoder true --train-expert-only true)
+    WANT_PARAMS=693422112
+    RANGE_NAME="action expert だけ"
+else
+    TRAIN_RANGE=(--freeze-vision-encoder false --train-expert-only false)
+    WANT_PARAMS=4143404816
+    RANGE_NAME="全パラメータ"
+fi
 export HF_HOME="${HF_HOME:-$W/hf_home}"
 
 step() { echo; echo "=== $* ==="; }
@@ -120,7 +140,7 @@ HfApi().create_repo('$REPO', private=True, exist_ok=True); print('  上げ先 $R
 NCKPT=$(( STEPS / SAVE_FREQ + (STEPS % SAVE_FREQ != 0) ))
 echo "  チェックポイント $NCKPT 個（約 $((NCKPT * 9)) GB を HF へ）"
 
-step "学習を起こす（出発点 $START・$STEPS 歩・学習率 $LR・warmup $WARMUP・batch $BATCH）"
+step "学習を起こす（出発点 $START・$RANGE_NAME・$STEPS 歩・学習率 $LR・warmup $WARMUP・batch $BATCH）"
 NW=$(python3 -c "import os;print(min(os.cpu_count()//2, 16))")
 cd "$CODE_DIR" || die "$CODE_DIR へ入れない"
 setsid nohup python train_pi05.py --run-name "$RUN" --output-root "$OUTPUT_ROOT" \
@@ -128,7 +148,7 @@ setsid nohup python train_pi05.py --run-name "$RUN" --output-root "$OUTPUT_ROOT"
     ${INIT_ARGS[@]+"${INIT_ARGS[@]}"} \
     --steps "$STEPS" --batch-size "$BATCH" --num-workers "$NW" \
     --learning-rate "$LR" --save-freq "$SAVE_FREQ" --seed 42 \
-    --freeze-vision-encoder false --train-expert-only false \
+    "${TRAIN_RANGE[@]}" \
     -- "--policy.scheduler_warmup_steps=$WARMUP" \
        "--policy.scheduler_decay_steps=$STEPS" \
     > "$OUTPUT_ROOT/$RUN.nohup" 2>&1 &
@@ -148,11 +168,11 @@ for _ in $(seq 1 240); do
 done
 GOT_PARAMS=$(grep -m1 -o "num_learnable_params=[0-9]*" "$OUTPUT_ROOT/$RUN.log" | cut -d= -f2)
 GOT_DSEPS=$(grep -m1 -o "dataset.num_episodes=[0-9]*" "$OUTPUT_ROOT/$RUN.log" | cut -d= -f2)
-printf '  %-24s %-12s %s\n' 見たもの 実際 期待 num_learnable_params "$GOT_PARAMS" 4143404816 dataset.num_episodes "$GOT_DSEPS" "$WANT_EPS"
-[ "$GOT_PARAMS" = 4143404816 ] || die "全パラメータになっていない（$GOT_PARAMS）" "pkill -f 'train_pi05.py --run-name $RUN'; pkill -f 'lerobot[-_]train'"
+printf '  %-24s %-12s %s\n' 見たもの 実際 期待 num_learnable_params "$GOT_PARAMS" "$WANT_PARAMS" dataset.num_episodes "$GOT_DSEPS" "$WANT_EPS"
+[ "$GOT_PARAMS" = "$WANT_PARAMS" ] || die "動かす範囲が「$RANGE_NAME」になっていない（$GOT_PARAMS）" "pkill -f 'train_pi05.py --run-name $RUN'; pkill -f 'lerobot[-_]train'"
 [ "$GOT_DSEPS" = "$WANT_EPS" ] || die "読んでいるデータが違う（$GOT_DSEPS 本）" "pkill -f 'train_pi05.py --run-name $RUN'; pkill -f 'lerobot[-_]train'"
 [ "$INIT_REPO" = base ] || grep -q "初期重みにローカルのチェックポイントを使う" "$OUTPUT_ROOT/$RUN.nohup" "$OUTPUT_ROOT/$RUN.log" 2>/dev/null \
-    || die "出発点が 15.0.0 になっていない（--init-from の行がログに無い）" "pkill -f 'train_pi05.py --run-name $RUN'; pkill -f 'lerobot[-_]train'"
+    || die "出発点が $START になっていない（--init-from の行がログに無い）" "pkill -f 'train_pi05.py --run-name $RUN'; pkill -f 'lerobot[-_]train'"
 grep -q "開始 RUN=$RUN" "$W/upload_ckpt_$RUN.log" 2>/dev/null || echo "  **上げるループの開始行がまだ無い。**tail $W/upload_ckpt_$RUN.nohup を見る"
 
 UPDT=$(grep -m1 -o "updt_s:[0-9.]*" "$OUTPUT_ROOT/$RUN.log" | cut -d: -f2)

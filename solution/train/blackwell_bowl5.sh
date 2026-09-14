@@ -17,6 +17,17 @@
 # **この走りはどちらも使わない**（対照の `pi05_full_local` が使っていないため）ので、
 # あちらを直すと別のセッションの走りが変わってしまう。
 #
+# **学習済みの重みから続けるときは `INIT_REPO` と `INIT_STEP` を渡す**（9/15 に足した）。
+# 既定の `INIT_REPO=base` なら今までと同じ動き（素の `pi05_libero_base` から始める）である。
+# **続けるときは `LR` の明示が必須。**渡さないと頂点 2.5e-5 に戻り、前の段が 2.5e-6 で
+# 終わっているぶんの 10 倍から始まる（`train_pi05._resolve_init_from` の注意）。
+#
+#   RUN=pi05_combined_cont4k INIT_REPO=siruku6/pi05_combined_initpose_full INIT_STEP=005500 \
+#     LR=5e-6 STEPS=4000 SAVE_FREQ=4000 \
+#     DATASET_REPO=siruku6/libero_combined_bowl5_initpose DATASET_ID=local/libero_combined_bowl5_initpose \
+#     DS=/opt/dlami/nvme/data/libero_combined_bowl5_initpose \
+#     bash ~/pi05_code/solution/train/blackwell_bowl5.sh
+#
 # | この走りが対照と違うところ | |
 # |---|---|
 # | データ | 丼 5 課題の 1,880 本を、作り直した手本と入れ替えた |
@@ -26,6 +37,7 @@
 # Reads:
 #   - HF `$DATASET_REPO`（手元で組んだデータセット）と `bowl5_expected.json`
 #   - HF `lerobot/pi05_libero_base`（出発点。`train_pi05.py` が自分で降ろす）
+#   - HF `$INIT_REPO` の `$INIT_STEP/`（続けるときだけ）
 # Generates:
 #   - $OUTPUT_ROOT/$RUN.log / .nohup   学習のログ
 #   - ~/upload_ckpt_$RUN.log           上げるループのログ
@@ -42,11 +54,16 @@ BASE_REPO="${BASE_REPO:-lerobot/pi05_libero_base}"
 # 黙って別の重みから始まる。
 BASE_REV="${BASE_REV:-}"
 NVME="${NVME:-/opt/dlami/nvme}"
+# **続けるときの出発点。**`base` なら `--init-from` を渡さない（今までの動き）。
+INIT_REPO="${INIT_REPO:-base}"
+INIT_STEP="${INIT_STEP:-}"
+INIT_DIR="${INIT_DIR:-$NVME/init/$(basename "$INIT_REPO")}"
 DS="${DS:-$NVME/data/libero_plus_bowl5}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-$NVME/out}"
 TOOLS="${TOOLS:-$HOME/tools}"
 CODE_DIR="${CODE_DIR:-$HOME/pi05_code/solution/train}"
 BATCH="${BATCH:-64}"
+LR_GIVEN="${LR:+1}"   # 続けるときは明示を必須にする（下の「前提の確認」）
 LR="${LR:-2.5e-5}"
 SAVE_FREQ="${SAVE_FREQ:-2000}"
 WARMUP="${WARMUP:-500}"
@@ -68,7 +85,15 @@ command -v hf >/dev/null || die "hf が無い" ". ~/env_pi05.sh を先に読む"
     "$CODE_DIR/train_pi05.py")
 [ ${#BASE_REV} = 40 ] || die "出発点の版を train_pi05.py から読めない（'$BASE_REV'）" \
     "pi05_code を取り直すか、BASE_REV=<40 桁> を渡す"
-echo "  出発点 $BASE_REPO@${BASE_REV:0:8}"
+if [ "$INIT_REPO" = base ]; then
+    echo "  出発点 $BASE_REPO@${BASE_REV:0:8}"
+else
+    [[ "$INIT_STEP" =~ ^[0-9]{6}$ ]] || die "INIT_STEP が 6 桁でない（'$INIT_STEP'）" \
+        "HF の $INIT_REPO にある階層名を INIT_STEP=005500 のように渡す"
+    [ "$LR_GIVEN" = 1 ] || die "続きの学習なのに LR が渡されていない" \
+        "既定の 2.5e-5 は素の重みから始めるときの値。続けるなら LR=5e-6 などを明示する"
+    echo "  出発点 $INIT_REPO/$INIT_STEP（続きの学習・学習率 $LR）"
+fi
 [ -e "$OUTPUT_ROOT/$RUN" ] && die "出力先が既にある: $OUTPUT_ROOT/$RUN" \
     "別の RUN 名にするか、消してから打つ"
 # **DRY のときは見ない。**降ろすところまでの空打ちは GPU の無い機械でもやりたい
@@ -82,7 +107,7 @@ echo "  ok"
 
 # ---------------------------------------------------------------- 降ろす
 # **2 つを並列に降ろす。**互いに独立なので、直列にすると待ち時間が足し算になる。
-step "降ろす（データ約 15 GB ＋ 出発点 8.8 GB を並列に）"
+step "降ろす（データ・素の重み・続けるときは出発点を並列に）"
 T_DL=$(date +%s)
 if [ "$SKIP_DL_DATASET" = 1 ]; then
     echo "  データは降ろさない（SKIP_DL_DATASET=1。$DS をそのまま使う）"
@@ -95,9 +120,27 @@ PID_DS=$!
 ( hf download "$BASE_REPO" --revision "$BASE_REV" \
     > "$HOME/dl_base.log" 2>&1 ; echo $? > "$HOME/dl_base.rc" ) &
 PID_BASE=$!
-wait "$PID_DS" "$PID_BASE"
+PIDS=("$PID_DS" "$PID_BASE")
+if [ "$INIT_REPO" != base ]; then
+    mkdir -p "$INIT_DIR"
+    ( hf download "$INIT_REPO" --include "$INIT_STEP/*" --local-dir "$INIT_DIR" \
+        > "$HOME/dl_init.log" 2>&1 ; echo $? > "$HOME/dl_init.rc" ) &
+    PIDS+=("$!")
+fi
+wait "${PIDS[@]}"
 [ "$(cat "$HOME/dl_dataset.rc")" = 0 ] || { tail -5 "$HOME/dl_dataset.log"; die "データを降ろせない"; }
 [ "$(cat "$HOME/dl_base.rc")"    = 0 ] || { tail -5 "$HOME/dl_base.log";    die "出発点を降ろせない"; }
+INIT_ARGS=()
+if [ "$INIT_REPO" != base ]; then
+    [ "$(cat "$HOME/dl_init.rc")" = 0 ] || { tail -5 "$HOME/dl_init.log"
+        die "続きの出発点を降ろせない" "HF の $INIT_REPO に $INIT_STEP/ があるか確かめる"; }
+    # **渡すのは重みの入った階層そのもの**（`config.json` と `model.safetensors` が直下にある所）。
+    for f in config.json model.safetensors; do
+        [ -f "$INIT_DIR/$INIT_STEP/$f" ] || die "$INIT_DIR/$INIT_STEP/$f が無い" "降ろした階層を ls で確かめる"
+    done
+    INIT_ARGS=(--init-from "$INIT_DIR/$INIT_STEP")
+    echo "  出発点を置いた: $INIT_DIR/$INIT_STEP"
+fi
 echo "  $(( ($(date +%s) - T_DL) / 60 )) 分 $(( ($(date +%s) - T_DL) % 60 )) 秒"
 
 # ---------------------------------------------------------------- 検算
@@ -175,22 +218,24 @@ cat > "$HOME/run_env.sh" <<EOF
 # blackwell_bowl5.sh が書いた。**ターミナルが落ちたら . ~/run_env.sh で戻る**
 . ~/env_pi05.sh
 export NVME=$NVME DS=$DS OUTPUT_ROOT=$OUTPUT_ROOT TOOLS=$TOOLS CODE_DIR=$CODE_DIR
-export RUN=$RUN REPO=$REPO STEPS=$STEPS
+export RUN=$RUN REPO=$REPO STEPS=$STEPS INIT_REPO=$INIT_REPO INIT_STEP=$INIT_STEP
 export PATH="\$HOME/.local/bin:\$PATH"
 EOF
 echo "  ~/run_env.sh・$TOOLS"
 [ "$DRY" = 1 ] && { echo; echo "=== DRY=1 なので、ここで止める ==="; exit 0; }
 
 # ---------------------------------------------------------------- 起動
-# **`--init-from` を渡さない。**渡さなければ `train_pi05.py` が
+# **`INIT_REPO=base` なら `--init-from` を渡さない。**渡さなければ `train_pi05.py` が
 # `lerobot/pi05_libero_base` を自分で引く（上で降ろしたキャッシュに当たる）。
-# 対照の `pi05_full_local` と同じ出発点にするために、ここは素の base である。
+# 対照の `pi05_full_local` と同じ出発点にするために、既定は素の base である。
+# 続けるときだけ、上で降ろした階層を渡す。
 # **`--camera-viewpoint-augment` も付けない。**対照が付けていない。
 step "学習を起こす"
 NW=$(python3 -c "import os;print(min(os.cpu_count()//2, 16))")
 cd "$CODE_DIR" || die "$CODE_DIR へ入れない"
 setsid nohup python train_pi05.py --run-name "$RUN" \
     --dataset-repo "$DATASET_ID" --dataset-root "$DS" \
+    ${INIT_ARGS[@]+"${INIT_ARGS[@]}"} \
     --steps "$STEPS" --batch-size "$BATCH" --num-workers "$NW" \
     --learning-rate "$LR" --save-freq "$SAVE_FREQ" --seed 42 \
     --freeze-vision-encoder false --train-expert-only false \
@@ -239,6 +284,12 @@ printf '  %-26s %s\n' "最初の 20 歩" "$FIRST"
     "pkill -f 'train_pi05.py --run-name $RUN'; pkill -f 'lerobot[-_]train'"
 [ "$GOT_DSEPS" = "$WANT_EPS" ] || die "読んでいるデータが違う（$GOT_DSEPS 本）" \
     "--dataset-root が効いていない。止めて打ち直す"
+if [ "$INIT_REPO" != base ]; then
+    grep -q "初期重みにローカルのチェックポイントを使う" "$OUTPUT_ROOT/$RUN.nohup" "$OUTPUT_ROOT/$RUN.log" 2>/dev/null \
+        || die "出発点が $INIT_REPO/$INIT_STEP になっていない（--init-from の行がログに無い）" \
+            "pkill -f 'train_pi05.py --run-name $RUN'; pkill -f 'lerobot[-_]train'"
+    echo "  出発点 $INIT_REPO/$INIT_STEP を読んだ（ログの行で確かめた）"
+fi
 
 echo
 echo "=== 走っている。離席してよい ==="
