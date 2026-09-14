@@ -70,6 +70,18 @@ MAX_EXTRA_STEPS = 60
 数十歩そのまま止めて待つと物が落ち着いてゴールが立つことがある。
 """
 
+RELEASE_OPEN_STEPS = 5
+"""**握ったまま撃ち切ったとき**、腕を止めて指を開くコマ数（`_release_and_wait`）。"""
+
+RELEASE_LIFT = tuple(float(z) for z in np.linspace(0.4, 0.0, 15))
+"""指を開いた後に手先を上げる z 指令（1 コマずつ）。
+
+**人の手本の離し方に揃えた**（9/14 に `libero_states` の 40 課題 × 10 デモで測った）。
+最後に指を開いてから手本の終わりまで中央 14 コマ（p10 6・p90 26）、
+開いた直後 15 コマの z 指令は平均で中央 +0.20（p10 −0.07・p90 +0.40）で、
+**腕は止まらず、0.4 前後から 0 へ減らしながら上げている**（例：soup の demo_0 は 0.44 → 0）。
+"""
+
 POST_GOAL_STEPS = 10
 """ゴールが立ってから、記録された行動をあと何歩流して打ち切るか。
 
@@ -195,6 +207,33 @@ def _prealign(sd, rollout, target: np.ndarray, gripper: float,
     return rollout.record.steps - used
 
 
+def _release_and_wait(rollout, gripper: float) -> None:
+    """記録した行動を撃ち切ってもゴールが立たないとき、**人の手本のように手を離してから**待つ。
+
+    **なぜ要るか。**9/14 までは行動 7 次元すべて 0 で止めて待っていた。39 本がこれに当たり、
+    うち 9 本は**物を握ったまま**待っていた（握ったままではゴールが立たないことがある）。
+    指の 0 は人の手本に無い書き方でもあった。
+
+    1. **握っていたら**（指の直前の値が正）、腕を止めて指を開く（`RELEASE_OPEN_STEPS`）
+    2. 続けて手先を上げる（`RELEASE_LIFT`。人の手本の離した直後の z 指令に揃えた）
+    3. 指は開いたまま（開いていた本は直前の値のまま）止めて待つ
+
+    **ゴールが立った後も `_take_step` が False を返すまで続ける。**前はゴールが立った瞬間に
+    やめていたので、この 39 本だけゴール後の 10 コマ（`POST_GOAL_STEPS`）が無かった。
+    """
+    open_value = -1.0 if gripper > 0 else gripper
+    plan = []
+    if gripper > 0:
+        plan += [np.array([0, 0, 0, 0, 0, 0, -1], dtype=np.float32)] * RELEASE_OPEN_STEPS
+        plan += [np.array([0, 0, z, 0, 0, 0, -1], dtype=np.float32) for z in RELEASE_LIFT]
+    for action in plan:
+        if not rollout._take_step(action):
+            return
+    still = np.array([0, 0, 0, 0, 0, 0, open_value], dtype=np.float32)
+    while rollout._take_step(still):
+        pass
+
+
 @functools.cache
 def _glide_envelope():
     """Ruckig で寄せるときの封筒。**環境変数だけで決まるので 1 度作れば足りる。**
@@ -260,15 +299,10 @@ def _replay_one(sd, env, init_state: np.ndarray, actions: np.ndarray,
     for action in actions:
         if not rollout._take_step(np.asarray(action, dtype=np.float32)):
             break
-    # 撃ち切っても届いていなければ、止めたまま少し待つ。
-    # **指は直前の指令を出し続ける**（0 にしない）。0 はシミュレータでは「動かさない」だが、
-    # 人の手本の指の値は ±1 だけなので、学習データの中で書き方の外れ値になる
-    # （9/14 までの生成で 39 本・238 コマ。`fix_gripper_encoding.py --mode hold` で埋めた）。
-    wait = np.zeros(7, dtype=np.float32)
-    wait[6] = rollout.record.actions[-1][6] if rollout.record.actions else actions[-1][6]
-    while rollout.record.goal_step < 0 and rollout.record.steps < budget:
-        if not rollout._take_step(wait):
-            break
+    # 撃ち切っても届いていなければ、人の手本のように手を離して待つ。
+    if rollout.record.goal_step < 0:
+        last = rollout.record.actions[-1][6] if rollout.record.actions else actions[-1][6]
+        _release_and_wait(rollout, float(last))
     goal_step = rollout.record.goal_step
     offset = (float("nan") if ee_pos0 is None
               else float(np.linalg.norm(np.asarray(ee_pos0) - eef0)))

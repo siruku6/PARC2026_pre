@@ -98,9 +98,15 @@ print('  上げ先 $2（private=$3）')" || die "上げ先を作れない"
 if [ "$STAGE" = p ] || [ "$STAGE" = all ]; then
     step "P0. 撃ち直しの全塊の変換が終わるのを待つ"
     until grep -q "=== 出来たもの ===" work/regen/logs/init_pose_v2.log; do sleep 120; done
-    mapfile -t PARTS < <(ls -d work/regen/lerobot_init_pose_v2/c*/ | sed 's:/$::'; \
-                         echo work/regen/lerobot_scripted_v2; echo work/regen/lerobot_merged_v2)
-    [ "${#PARTS[@]}" = 19 ] || die "部品が 19 個でない（${#PARTS[@]} 個）" "塊が欠けていないか ls する"
+    # **部品の一覧は PARTS_FILE（1 行 1 ディレクトリ）で差し替えられる。**9/14 夜に「止めて待つ」39 本を
+    # 撃ち直したときは、元の塊から 39 本を抜いた部品と撃ち直した部品を並べた一覧を渡した（work/regen/release/parts.txt）。
+    if [ -n "${PARTS_FILE:-}" ]; then
+        mapfile -t PARTS < <(grep -v '^\s*$' "$PARTS_FILE")
+    else
+        mapfile -t PARTS < <(ls -d work/regen/lerobot_init_pose_v2/c*/ | sed 's:/$::'; \
+                             echo work/regen/lerobot_scripted_v2; echo work/regen/lerobot_merged_v2)
+        [ "${#PARTS[@]}" = 19 ] || die "部品が 19 個でない（${#PARTS[@]} 個）" "塊が欠けていないか ls する"
+    fi
     ADD_EPS=0; ADD_FRAMES=0
     for part in "${PARTS[@]}"; do
         n=$(field "$part" total_episodes); [ "$n" -gt 0 ] || die "$part に info.json が無い"
