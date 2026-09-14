@@ -16,6 +16,14 @@
 # | データ | `libero_plus_bowl5_initpose` | 同じ |
 # | 範囲・学習率・warmup・batch・種・歩数 | 全部・2.5e-5・500・64・42・5,500 | 同じ |
 #
+# **`INIT_REPO=base` なら素の `lerobot/pi05_libero_base` から始める**（9/14 夜。Blackwell が空かないので、
+# Blackwell で回す予定だった combined の全パラメータ学習をここで回すため）。版は `train_pi05.py` から読む。
+#
+#   RUN=pi05_combined_initpose_full INIT_REPO=base SAVE_FREQ=5500 \
+#     DATA_REPO=siruku6/libero_combined_bowl5_initpose DATASET_ID=local/libero_combined_bowl5_initpose \
+#     DS=/workspace/data/libero_combined_bowl5_initpose \
+#     bash /workspace/pi05_code/solution/train/runpod_initpose_ft.sh
+#
 # **学習率は頂点からやり直す。**15.0.0 は 2.5e-6 まで下げ切って終わっているので、
 # その 10 倍から始まる（`train_pi05._resolve_init_from` の注意）。**揃えると決めたうえでそうしている。**
 #
@@ -36,13 +44,15 @@ DS="${DS:-$W/data/libero_plus_bowl5_initpose}"
 INIT_REPO="${INIT_REPO:-siruku6/pi05_bowl5_full}"
 INIT_STEP="${INIT_STEP:-005500}"
 INIT_DIR="$W/init/$(basename "$INIT_REPO")"
+BASE_REPO="lerobot/pi05_libero_base"
 OUTPUT_ROOT="$W/out"
 TOOLS="$W/tools"
 CODE_DIR="${CODE_DIR:-$W/pi05_code/solution/train}"
 STEPS="${STEPS:-5500}"
 # **HF の非公開枠を食うのでチェックポイントは 2 個**（2,750・5,500）。保存の間隔は学習の中身を変えない。
 SAVE_FREQ="${SAVE_FREQ:-2750}"
-BATCH=64
+# **既定は対照と同じ 64。**96 GB の GPU なら `BATCH=128` も渡せる（対照とは別の作り方になる。howto/16 の 10 節）
+BATCH="${BATCH:-64}"
 LR=2.5e-5
 WARMUP=500
 export HF_HOME="${HF_HOME:-$W/hf_home}"
@@ -57,6 +67,10 @@ python3 -c "import torch;assert torch.cuda.is_available()" 2>/dev/null || die "G
 python3 -c "import lerobot" 2>/dev/null || die "lerobot が import できない" "runpod_setup.sh を先に打つ"
 [ -f "$CODE_DIR/train_pi05.py" ] || die "$CODE_DIR/train_pi05.py が無い" \
     "hf download siruku6/pi05_code --local-dir $W/pi05_code"
+BASE_REV=$(sed -n 's/^_BASE_MODEL_REVISION = "\(.*\)"$/\1/p' "$CODE_DIR/train_pi05.py")
+[ ${#BASE_REV} = 40 ] || die "出発点の版を train_pi05.py から読めない" "pi05_code を取り直す"
+if [ "$INIT_REPO" = base ]; then START="$BASE_REPO@${BASE_REV:0:8}"; else START="$INIT_REPO/$INIT_STEP"; fi
+echo "  出発点 $START"
 [ -e "$OUTPUT_ROOT/$RUN" ] && die "出力先が既にある: $OUTPUT_ROOT/$RUN" "RUN を変えるか、消してから打つ"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 echo "  $W の空き: $(df -h "$W" | awk 'NR==2{print $4}')（要る量は約 80 GB）"
@@ -64,14 +78,23 @@ mkdir -p "$W/data" "$OUTPUT_ROOT" "$TOOLS" "$INIT_DIR"
 
 step "降ろす（データと出発点を並列に）"
 ( hf download "$DATA_REPO" --repo-type dataset --local-dir "$DS" > "$W/dl_data.log" 2>&1; echo $? > "$W/dl_data.rc" ) &
-( hf download "$INIT_REPO" --include "$INIT_STEP/*" --local-dir "$INIT_DIR" > "$W/dl_init.log" 2>&1; echo $? > "$W/dl_init.rc" ) &
+if [ "$INIT_REPO" = base ]; then
+    # **`--init-from` を渡さなければ `train_pi05.py` が同じ版を自分で引く**（ここで降ろしたキャッシュに当たる）
+    ( hf download "$BASE_REPO" --revision "$BASE_REV" > "$W/dl_init.log" 2>&1; echo $? > "$W/dl_init.rc" ) &
+else
+    ( hf download "$INIT_REPO" --include "$INIT_STEP/*" --local-dir "$INIT_DIR" > "$W/dl_init.log" 2>&1; echo $? > "$W/dl_init.rc" ) &
+fi
 wait
 [ "$(cat "$W/dl_data.rc")" = 0 ] || { tail -5 "$W/dl_data.log"; die "データを降ろせない" "$DATA_REPO が上がっているか確かめる"; }
-[ "$(cat "$W/dl_init.rc")" = 0 ] || { tail -5 "$W/dl_init.log"; die "出発点を降ろせない" "$INIT_REPO に $INIT_STEP/ があるか確かめる"; }
-# **渡すのは重みの入った階層そのもの**（`config.json` と `model.safetensors` が直下にある所）。
-for f in config.json model.safetensors; do
-    [ -f "$INIT_DIR/$INIT_STEP/$f" ] || die "$INIT_DIR/$INIT_STEP/$f が無い" "降ろした階層を ls で確かめる"
-done
+[ "$(cat "$W/dl_init.rc")" = 0 ] || { tail -5 "$W/dl_init.log"; die "出発点を降ろせない" "$START があるか確かめる"; }
+INIT_ARGS=()
+if [ "$INIT_REPO" != base ]; then
+    # **渡すのは重みの入った階層そのもの**（`config.json` と `model.safetensors` が直下にある所）。
+    for f in config.json model.safetensors; do
+        [ -f "$INIT_DIR/$INIT_STEP/$f" ] || die "$INIT_DIR/$INIT_STEP/$f が無い" "降ろした階層を ls で確かめる"
+    done
+    INIT_ARGS=(--init-from "$INIT_DIR/$INIT_STEP")
+fi
 
 step "降りたものを数える"
 [ -f "$DS/bowl5_expected.json" ] || die "$DS/bowl5_expected.json が無い" "手元で組んだときの期待値が同梱された版を上げたか確かめる"
@@ -97,12 +120,12 @@ HfApi().create_repo('$REPO', private=True, exist_ok=True); print('  上げ先 $R
 NCKPT=$(( STEPS / SAVE_FREQ + (STEPS % SAVE_FREQ != 0) ))
 echo "  チェックポイント $NCKPT 個（約 $((NCKPT * 9)) GB を HF へ）"
 
-step "学習を起こす（出発点 $INIT_REPO/$INIT_STEP・$STEPS 歩・学習率 $LR・warmup $WARMUP・batch $BATCH）"
+step "学習を起こす（出発点 $START・$STEPS 歩・学習率 $LR・warmup $WARMUP・batch $BATCH）"
 NW=$(python3 -c "import os;print(min(os.cpu_count()//2, 16))")
 cd "$CODE_DIR" || die "$CODE_DIR へ入れない"
 setsid nohup python train_pi05.py --run-name "$RUN" --output-root "$OUTPUT_ROOT" \
     --dataset-repo "$DATASET_ID" --dataset-root "$DS" \
-    --init-from "$INIT_DIR/$INIT_STEP" \
+    ${INIT_ARGS[@]+"${INIT_ARGS[@]}"} \
     --steps "$STEPS" --batch-size "$BATCH" --num-workers "$NW" \
     --learning-rate "$LR" --save-freq "$SAVE_FREQ" --seed 42 \
     --freeze-vision-encoder false --train-expert-only false \
@@ -128,11 +151,14 @@ GOT_DSEPS=$(grep -m1 -o "dataset.num_episodes=[0-9]*" "$OUTPUT_ROOT/$RUN.log" | 
 printf '  %-24s %-12s %s\n' 見たもの 実際 期待 num_learnable_params "$GOT_PARAMS" 4143404816 dataset.num_episodes "$GOT_DSEPS" "$WANT_EPS"
 [ "$GOT_PARAMS" = 4143404816 ] || die "全パラメータになっていない（$GOT_PARAMS）" "pkill -f 'train_pi05.py --run-name $RUN'; pkill -f 'lerobot[-_]train'"
 [ "$GOT_DSEPS" = "$WANT_EPS" ] || die "読んでいるデータが違う（$GOT_DSEPS 本）" "pkill -f 'train_pi05.py --run-name $RUN'; pkill -f 'lerobot[-_]train'"
-grep -q "初期重みにローカルのチェックポイントを使う" "$OUTPUT_ROOT/$RUN.nohup" "$OUTPUT_ROOT/$RUN.log" 2>/dev/null \
+[ "$INIT_REPO" = base ] || grep -q "初期重みにローカルのチェックポイントを使う" "$OUTPUT_ROOT/$RUN.nohup" "$OUTPUT_ROOT/$RUN.log" 2>/dev/null \
     || die "出発点が 15.0.0 になっていない（--init-from の行がログに無い）" "pkill -f 'train_pi05.py --run-name $RUN'; pkill -f 'lerobot[-_]train'"
 grep -q "開始 RUN=$RUN" "$W/upload_ckpt_$RUN.log" 2>/dev/null || echo "  **上げるループの開始行がまだ無い。**tail $W/upload_ckpt_$RUN.nohup を見る"
 
 UPDT=$(grep -m1 -o "updt_s:[0-9.]*" "$OUTPUT_ROOT/$RUN.log" | cut -d: -f2)
+MEM=$(nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader | head -1)
+echo "  GPU メモリ（20 歩の時点）: $MEM（batch $BATCH）"
+grep -m1 -oE "mem_gb:[0-9.]*" "$OUTPUT_ROOT/$RUN.log" | sed 's/^/  ログの /'
 echo
 echo "=== 走っている ==="
 [ -n "$UPDT" ] && python3 -c "s = $UPDT * $STEPS; print(f'  終わる目安: {int(s//3600)} 時間 {int(s%3600//60)} 分（1 歩 $UPDT 秒 × $STEPS 歩）')"

@@ -529,7 +529,7 @@ bash ~/pi05_code/solution/train/omnicampus_setup.sh 2>&1 | tee ~/recon_setup.txt
 python3 -c "from huggingface_hub import create_repo; print(create_repo('siruku6/pi05_combined_initpose_full', private=True, exist_ok=True))"
 
 # 3. 降ろす → 数える → 学習と上げるループを起こす → 20 歩で検算（1 本で離席まで行く）
-RUN=pi05_combined_initpose_full STEPS=5500 SAVE_FREQ=5500 \
+RUN=pi05_combined_initpose_full STEPS=5500 SAVE_FREQ=3000 \
   DATASET_REPO=siruku6/libero_combined_bowl5_initpose \
   DATASET_ID=local/libero_combined_bowl5_initpose \
   DS=/opt/dlami/nvme/data/libero_combined_bowl5_initpose \
@@ -579,3 +579,114 @@ ULOG = os.path.expanduser(f"~/upload_ckpt_{RUN}.log")   # blackwell_bowl5.sh は
 
 **評価の組み方はまだ決めていない。**取り込むときは 6.4 節と同じく
 `install_pi05_weights.py` に `005500/pretrained_model` を渡し、`--name pi05_combined_initpose_full` とする。
+
+### 10.6 RunPod で回すとき（**Blackwell が空かない日の代わり**・9/14 夜に準備）
+
+**同じ学習を RunPod で回す。**スクリプトは `runpod_initpose_ft.sh` に `INIT_REPO=base` を渡す
+（素の `pi05_libero_base` から始める口。9/14 夜に足した）。**違いは置き場（`/workspace`）と、
+12 時間の枠が無いことだけで、学習の設定は 10.2 と同じである。**
+
+**9/14 に Blackwell で `pi05_combined_initpose_full` を回した。**RunPod で打つのは、それが
+落ちたときか、別の作り方（batch 128 など）を足すときである。**`RUN` は Blackwell と別の名前にする**
+（同じ名前だと、上げ先の HF リポジトリの同じ `005500/` を上書きし合う）。
+
+#### (1) イメージは作り直さなくてよい（9/14 夜に確かめた）
+
+**`sirukufarios/parc2026-train-pi05:v2`（8/13 に push）のままでよい。**スクリプトはイメージに焼いた
+`/opt/pi05/train_pi05.py` を使わず、HF の `pi05_code` から降ろした最新版を `/workspace` で動かすので、
+イメージで効くのはライブラリだけである。手元に `v2` を降ろして確かめた:
+
+| 見たもの | 結果 |
+|---|---|
+| スクリプトが使うコマンド | `pgrep`・`setsid`・`timeout`・`du`・`hf`・`tmux` がすべてある |
+| torch | **2.11.0+cu128**。対応 GPU に **`sm_120`（Blackwell 世代）** が入っている（`sm_80` A100・`sm_90` H100 も） |
+| lerobot・huggingface_hub・torchcodec | 0.6.0・1.27.0・0.11.1（Blackwell の環境と同じ組） |
+| いまの学習コードで combined を 4 歩（手元の 20 GB GPU・action expert・batch 2） | **読めて回った**（`dataset.num_episodes=21642`・loss 3.5 → 1.0・`End of training`） |
+
+**`bitsandbytes`・`torchao` は `v2` に入っていないが要らない。**量子化の実験を指定したときだけ
+関数の中で読み込まれる。
+
+**終わりに `ValueError: flush of closed file` が出て終了コードが 120 になるが、無害である。**
+学習とチェックポイントの保存が済んだ後、ログの写しを閉じる順番で出るだけで、
+スクリプトも上げるループも終了コードを見ていない。
+
+#### (2) Pod を作る（RunPod の画面）
+
+| 欄 | 入れるもの |
+|---|---|
+| GPU | **96 GB（RTX PRO 6000 Blackwell）か 80 GB（H100・H200）。**A100 80GB は遅い（下の表） |
+| Image | **`sirukufarios/parc2026-train-pi05:v2`**（`:v1` は SSH が入っていない） |
+| Container Start Command | **`bash /opt/pi05/runpod_ssh_start.sh`**（空にしない） |
+| Container Disk | 20 GB |
+| Volume Disk | **150 GB**（データ 28 GB ＋ 出発点 9 GB ＋ チェックポイント 25 GB ＝ 約 62 GB。保存の一瞬に膨らむぶんの余裕） |
+| Environment Variables | `OUTPUT_ROOT=/workspace/out` と `HF_HOME=/workspace/hf_home` |
+| Expose TCP Ports | **`22`** |
+
+| GPU | 1 歩（batch 64・全パラメータ） | 5,500 歩 | 残高の目安（Estimated time left） |
+|---|---|---|---|
+| **RTX PRO 6000 Blackwell 96 GB** | **6.85 秒**（Blackwell サーバで実測。同じ GPU） | **約 10.5 時間** | 13 時間以上 |
+| H100 80 GB | 未実測（6.6 秒前後の見込み） | 約 10〜11 時間 | 14 時間以上 |
+| A100 80 GB | **10.29 秒**（8/14 に RunPod で実測） | **約 15.7 時間** | 19 時間以上 |
+
+#### (3) 入って打つ（Pod で）
+
+```bash
+ssh root@<IP> -p <port> -i ~/.ssh/id_ed25519     # Connect タブの公開 IP 側（Full SSH）
+tmux new -s train                                 # 抜けるのは Ctrl+b → d、戻るのは tmux attach -t train
+
+export HF_HOME=/workspace/hf_home
+hf auth login                                     # 非公開のデータを降ろすので先にやる（Volume に残る）
+hf download siruku6/pi05_code --local-dir /workspace/pi05_code
+
+RUN=pi05_combined_initpose_full_rp INIT_REPO=base STEPS=5500 SAVE_FREQ=5500 \
+  DATA_REPO=siruku6/libero_combined_bowl5_initpose \
+  DATASET_ID=local/libero_combined_bowl5_initpose \
+  DS=/workspace/data/libero_combined_bowl5_initpose \
+  bash /workspace/pi05_code/solution/train/runpod_initpose_ft.sh
+```
+
+**1 本で、降ろす → 数える → 上げ先を非公開で作る → 学習と上げるループを起こす → 20 歩で検算、まで行く。**
+学習と上げるループは `setsid` で起こすので、SSH が切れても止まらない。
+
+| 段 | 見るもの | 期待 |
+|---|---|---|
+| 前提 | `出発点 lerobot/pi05_libero_base@a217bfd3` | その通り（`siruku6/pi05_bowl5_full/005500` と出たら `INIT_REPO=base` が抜けている） |
+| 降りたものを数える | 実際 ／ 期待 | **21642 3436940 111** が両方に出る |
+| 上げる道具と上げ先 | `チェックポイント 1 個` | その通り |
+| 動き出し | `num_learnable_params` ・ `dataset.num_episodes` | **4143404816** ・ **21642** |
+| 最後 | `GPU メモリ` ・ `終わる目安` | batch 64 で **約 49 GB** ・ 上の表の時間 |
+
+**Blackwell と違って監視セルは要らない**（RunPod には待機による自動停止が無い）。
+
+#### (4) 見張る・終わらせる
+
+```bash
+tail -f /workspace/out/pi05_combined_initpose_full_rp.log                # 学習
+tail -f /workspace/upload_ckpt_pi05_combined_initpose_full_rp.log        # 上げるループ
+ls ~/uploaded/pi05_combined_initpose_full_rp/                            # _all_uploaded があれば全部上がった
+```
+
+| 見えたもの | やること |
+|---|---|
+| **`=== 全部上がったことを確かめた …`**（上げるループのログ）と `_all_uploaded` | HF の `siruku6/pi05_combined_initpose_full_rp` に `005500/` と `logs/` があるのを見てから、**画面で Terminate**（Stop ではない。Stop は Volume の料金が続き、GPU も手放す） |
+| `hf upload が失敗` が続く | HF の空きが足りない（10.1 節）。**RunPod は枠の時間が無いので、空けるまで Pod を残しておけば消えない**（ただし料金は続く）。空けば 60 秒ごとのやり直しで上がる |
+| 学習が途中で落ちた（スクリプトが `止まった` と出す） | 表示された `tail` を読む。**打ち直す前に `rm -rf /workspace/out/<RUN>` を打つ**（出力先があると止まる） |
+
+#### (5) 96 GB の GPU で batch 128 にするとき（**対照とは別の作り方になる**）
+
+**`BATCH=128` を足して打つ。**`RUN` も別にする（例 `pi05_combined_initpose_full_b128`）。
+
+```bash
+RUN=pi05_combined_initpose_full_b128 INIT_REPO=base BATCH=128 STEPS=5500 SAVE_FREQ=5500 \
+  DATA_REPO=siruku6/libero_combined_bowl5_initpose \
+  DATASET_ID=local/libero_combined_bowl5_initpose \
+  DS=/workspace/data/libero_combined_bowl5_initpose \
+  bash /workspace/pi05_code/solution/train/runpod_initpose_ft.sh
+```
+
+| 気にすること | 中身 |
+|---|---|
+| **載るか** | **未実測。**A100 80 GB では batch 128 が **75.77 GB で落ちた**（8/14）。96 GB なら載るか際どい。**20 歩の `GPU メモリ` を見る。**落ちたら `学習が途中で落ちた` で止まるので、`rm -rf /workspace/out/<RUN>` をして batch 64 で打ち直す |
+| **速くはならない** | batch 64 で GPU は既に手一杯（9.3 サンプル/秒）。**1 歩がほぼ 2 倍（約 13〜14 秒）になり、5,500 歩で約 21 時間**（見込み）。20 歩の `終わる目安` で確かめる |
+| **比べ方が変わる** | 見るサンプルが対照の 2 倍（704,000）になる。**データの効き目と学習量の効き目が混ざる。**同じサンプル数にするなら `STEPS=2750` だが、歩数と学習率の下げ方が対照と違ってしまう |
+| 学習率 | 2.5e-5 のまま（batch に合わせて変えていない） |
