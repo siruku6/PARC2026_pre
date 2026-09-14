@@ -457,22 +457,33 @@ IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \
 
 ---
 
-## 10. 第 3 段——初期姿勢を振ったデータで全パラメータ学習する（Blackwell・9/14）
+## 10. 第 3 段——初期姿勢を振った combined のデータで全パラメータ学習する（Blackwell・9/14）
 
 **`pi05_bowl5_full`（6.2 節）と同じスクリプト・同じ設定で、データだけを
-`libero_plus_bowl5_initpose` に替えて 1 本回す。**違いはデータ 1 つなので、
-評価の差はそのままデータの効き目として読める。
+`libero_combined_bowl5_initpose` に替えて 1 本回す**（ユーザ 9/14 夜）。
 
-| | `pi05_bowl5_full`（対照） | **`pi05_initpose_full`（これ）** |
+| | `pi05_bowl5_full`（対照） | **`pi05_combined_initpose_full`（これ）** |
 |---|---|---|
-| データ | `siruku6/libero_plus_bowl5`（14,085 本） | **`siruku6/libero_plus_bowl5_initpose`**（公開・16,820 本・2,712,308 コマ・40 課題・22.8 GB） |
+| データ | `siruku6/libero_plus_bowl5`（14,085 本・40 課題） | **`siruku6/libero_combined_bowl5_initpose`**（非公開・21,642 本・3,436,940 コマ・111 課題・28.1 GB） |
 | 出発点 | `lerobot/pi05_libero_base`（版は `train_pi05.py` の `_BASE_MODEL_REVISION`） | 同じ |
 | 動かす範囲 | 全部（4,143,404,816） | 同じ |
 | 学習率・warmup・減衰 | 2.5e-5・500 歩・5,500 歩で減衰 | 同じ |
 | batch・種・歩数 | 64・42・5,500 | 同じ |
 | チェックポイントの間隔 | 2,000（HF には `004000`・`005500`） | **5,500（最後の 1 個だけ）。学習には影響しない**（10.1 節） |
 
-データの中身は [resources/datasets.md の 2.1 節](../resources/datasets.md)。
+**データの中身**（詳しくは [resources/datasets.md の 2.1・2.2 節](../resources/datasets.md)）:
+
+| 部分 | 本数 | 中身 |
+|---|---|---|
+| `libero_plus_bowl5_initpose` | 16,820 | `libero_plus_bowl5` から接触・300 コマ超を外し、ロボットの初期姿勢と外観を振って作った手本で埋め戻したもの（40 課題） |
+| 配布 `libero_combined_20hz` の先頭 | 4,822 | `libero_10`・`spatial`・`object`・`libero_90` の元の手本（丼 5 課題・300 コマ超・接触を外した残り）。**指の値は {0,1} から ±1 に直してある** |
+
+**この 1 本で読めること・読めないこと:**
+
+- 対照との差は「初期姿勢を振ったデータ」と「`libero_90` などを足したこと」の**2 つが重なったもの**である。**どちらが効いたかは分けられない。**分けるには `libero_plus_bowl5_initpose`（P）で同じ設定の 1 本が要る（打つなら `DATASET_*` を P に替えるだけ。いまは予定なし）。
+- 歩数は対照と同じ 5,500 歩（352,000 サンプル）なので、**データが 1.5 倍に増えた分、1 本あたりを見る回数は減る**（全コマの約 10%。対照は約 16%）。
+- 正規化の統計はこのデータ自身のもの（据え置かない。6.3 節）。P と比べて行動 0.99〜1.06 倍・状態 0.97〜1.03 倍で、桁は変わっていない。
+
 **RunPod で `pi05_bowl5_full` から続ける走り（`runpod_initpose_ft.sh`）は、
 HF の空きが無いので一旦見送った**（ユーザ 9/14 夜）。
 
@@ -490,6 +501,8 @@ HF の空きが無いので一旦見送った**（ユーザ 9/14 夜）。
 
 **このマシンから数えると非公開は 65.8 GB で、枠が 100 GB なら約 34 GB 空いている計算になる。**
 **「空きが無い」と見えているなら数え方が違うので、HF の設定画面（Settings → Storage）の数字を正にする。**
+
+**学習データ `libero_combined_bowl5_initpose` は非公開なので、学習が降ろし終わるまで消さないこと。**
 
 **上げるのは学習が終わってから（打ってから約 10.5 時間後）である。**
 **それまでに 10 GB 空けば間に合う。**間に合わなくても、上げるループは失敗したら
@@ -513,31 +526,36 @@ bash ~/pi05_code/solution/train/omnicampus_setup.sh 2>&1 | tee ~/recon_setup.txt
 . ~/env_pi05.sh
 
 # 2. 上げ先を非公開で作る（作らないと公開で作られる）
-python3 -c "from huggingface_hub import create_repo; print(create_repo('siruku6/pi05_initpose_full', private=True, exist_ok=True))"
+python3 -c "from huggingface_hub import create_repo; print(create_repo('siruku6/pi05_combined_initpose_full', private=True, exist_ok=True))"
 
 # 3. 降ろす → 数える → 学習と上げるループを起こす → 20 歩で検算（1 本で離席まで行く）
-RUN=pi05_initpose_full STEPS=5500 SAVE_FREQ=5500 \
-  DATASET_REPO=siruku6/libero_plus_bowl5_initpose \
-  DATASET_ID=local/libero_plus_bowl5_initpose \
-  DS=/opt/dlami/nvme/data/libero_plus_bowl5_initpose \
+RUN=pi05_combined_initpose_full STEPS=5500 SAVE_FREQ=5500 \
+  DATASET_REPO=siruku6/libero_combined_bowl5_initpose \
+  DATASET_ID=local/libero_combined_bowl5_initpose \
+  DS=/opt/dlami/nvme/data/libero_combined_bowl5_initpose \
   bash ~/pi05_code/solution/train/blackwell_bowl5.sh
 ```
 
 **HF の空きが 19 GB 以上あると確かめられたら、`SAVE_FREQ=2750` にして途中の 1 個も残してよい**
 （学習の中身は変わらない）。
 
-**`blackwell_initpose.sh` は使わない。**あちらは 9/13 の T1′（`lerobot_init_pose_all` 1,250 本を
-Blackwell の上で足す）用で、データが違う。
+**`blackwell_initpose.sh`・`blackwell_c1_data.sh` は使わない。**あちらは 9/13 の T1′・C1
+（Blackwell の上でデータを組む）用で、データが違う。**このデータは手元で組んで HF に置いてあるので、
+`blackwell_bowl5.sh` が降ろすだけで済む。**
 
 ### 10.3 離席の前に、スクリプトの出力で 5 つ確かめる
 
 | 段 | 見るもの | 期待 |
 |---|---|---|
-| 降りたものを数える | 本数・コマ数・課題数 | **16820・2712308・40**（`bowl5_expected.json` と一致しなければ止まる） |
+| 降りたものを数える | 本数・コマ数・課題数 | **21642・3436940・111**（`bowl5_expected.json` と一致しなければ止まる） |
 | 歩数を決める | `STEPS=5500 を渡された` と `チェックポイント 1 個` | その通り |
 | 動き出し | `num_learnable_params` | **4143404816**（693422112 なら action expert だけ。止まる） |
-| 動き出し | `dataset.num_episodes` | **16820** |
+| 動き出し | `dataset.num_episodes` | **21642** |
 | 最後 | `=== 走っている。離席してよい ===` と `終わる目安` | **10 時間 30 分前後**（1 歩 6.85 秒前後。目立って遅ければ枠に入らない） |
+
+**降ろす段の表示は「データ約 15 GB」と出るが、実際は 28 GB である**（表示は対照のときの値のまま）。
+
+**動画は打つ前に手元で確かめてある**（9/14 夜）。148 ファイル（正面・手首）すべてで、各ファイルの最後のエピソードの最後のコマが torchcodec で読めた（`work/regen/combined/check_video_tails.py`）。
 
 ### 10.4 監視セルを貼って離席する
 
@@ -545,7 +563,7 @@ Blackwell の上で足す）用で、データが違う。
 Notebook に貼り、**先頭の 2 行だけ**次に替えて実行する。**貼らないと 1 時間の待機で学習ごと止まる。**
 
 ```python
-RUN  = "pi05_initpose_full"
+RUN  = "pi05_combined_initpose_full"
 ULOG = os.path.expanduser(f"~/upload_ckpt_{RUN}.log")   # blackwell_bowl5.sh はこの名前で書く
 ```
 
@@ -555,9 +573,9 @@ ULOG = os.path.expanduser(f"~/upload_ckpt_{RUN}.log")   # blackwell_bowl5.sh は
 
 | セルの最後の行 | 意味 | やること |
 |---|---|---|
-| **`全部上がった。UI から Stop Server を押してよい`** | `005500` とログが HF に上がり、確かめられた | HF の `siruku6/pi05_initpose_full` に `005500/` と `logs/` があるのを見てから **File > Hub Control Panel > Stop Server** |
-| `上げ待ち: … hf upload が失敗` が続く | **HF の空きが足りない**（ほかの理由もありうるので `~/upload_ckpt_pi05_initpose_full.log` を読む） | **HF で 10 GB 空ける。**ループが 60 秒ごとにやり直すので、空けば自動で上がる。**T0 ＋ 12 時間が締切** |
+| **`全部上がった。UI から Stop Server を押してよい`** | `005500` とログが HF に上がり、確かめられた | HF の `siruku6/pi05_combined_initpose_full` に `005500/` と `logs/` があるのを見てから **File > Hub Control Panel > Stop Server** |
+| `上げ待ち: … hf upload が失敗` が続く | **HF の空きが足りない**（ほかの理由もありうるので `~/upload_ckpt_pi05_combined_initpose_full.log` を読む） | **HF で 10 GB 空ける。**ループが 60 秒ごとにやり直すので、空けば自動で上がる。**T0 ＋ 12 時間が締切** |
 | `人を待っている` | 上げるループが居ないのに印が無い | [howto/17](17_checkpoint_upload.md) の手順で手で上げる |
 
 **評価の組み方はまだ決めていない。**取り込むときは 6.4 節と同じく
-`install_pi05_weights.py` に `005500/pretrained_model` を渡し、`--name pi05_initpose_full` とする。
+`install_pi05_weights.py` に `005500/pretrained_model` を渡し、`--name pi05_combined_initpose_full` とする。
