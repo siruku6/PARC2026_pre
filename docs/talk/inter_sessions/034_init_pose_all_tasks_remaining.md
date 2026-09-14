@@ -91,6 +91,7 @@ LIBERO-plus のロボット操作を解く。
 | 9/14 昼 | **道 A を入れる。**4,000 本の枠の外に 303 本（7 課題 195 本＋モカポット 2 つ 108 本）。まとめ方の弱い順（orig → m80 → m100）に撃ち、1 組あたりの本数は配布データと同じ（`generate_merged.py`） |
 | 9/14 昼 | **丼「ラメキンの上」が作れた向きに偏るのはやむを得ない。**モカポットは物体の置き場所が 50 通りで変わっていれば足りる（外観の意味と散らばりは `docs/resources/datasets.md` の 2.1 節） |
 | 9/14 昼 | **学習は 2 本。**(b) Blackwell で素の重みから `pi05_bowl5_full` と同じ作り方（全パラメータ・2.5e-5・warmup 500・batch 64・5,500 歩）＝ `blackwell_bowl5.sh` に `DATASET_REPO` などを渡す。(a) RunPod で `pi05_bowl5_full` の `005500` から**(b) と同じ設定**（`runpod_initpose_ft.sh`）。**データは HF 経由で渡す** |
+| 9/14 午後 | **データセットを 2 つ作る。**`libero_plus` を土台にした P（`libero_plus_bowl5_initpose`・**比較用なので HF 公開でよい**）と、`libero_combined_20hz` を土台にした C（`libero_combined_bowl5_initpose`）。C の `libero_90` 3,921 本は**接触を判定せずそのまま入れる**（300 コマ超だけ外す）。指の値は ±1 に直す（`docs/resources/datasets.md` の 2.2 節） |
 
 ---
 

@@ -92,11 +92,16 @@ def _remap_tasks(source_tasks: pa.Table, used: set[int]):
     **指示文は列ではなく pandas の索引として書く。**lerobot の `load_tasks` が
     `tasks.index.name = "task"` を当てて読むので、列で書くと指示文が引けず、
     学習データの `task` が数字のまま出てくる（9/9 に 1 度そうなった）。
+
+    **読むときも列の名前に頼らない。**指示文の列は `lerobot/libero_plus` では `task`、
+    配布の `libero_combined_20hz` では `__index_level_0__` である（どちらも pandas の索引として
+    書かれている）。`to_pandas()` で索引に戻してから読めば、どちらでも同じに読める。
     """
     import pandas as pd
 
+    source = source_tasks.to_pandas()
     pairs = sorted((int(index), str(task)) for index, task
-                   in zip(source_tasks["task_index"], source_tasks["task"])
+                   in zip(source["task_index"], source.index)
                    if int(index) in used)
     mapping = {old: new for new, (old, _) in enumerate(pairs)}
     frame = pd.DataFrame({"task_index": [mapping[old] for old, _ in pairs]},
