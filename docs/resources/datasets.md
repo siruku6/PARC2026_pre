@@ -33,13 +33,13 @@ TOC:
 | `reverse_lerobot_v2` | ローカルのみ（`work/artifacts/reverse_lerobot_v2`、397 episodes） | 順方向の手本デモを時間反転し、行動（相対差分）の符号を反転して「逆再生」の教師データを作る（Track3: 物を置いた状態から取り出す方向） | 初代（`reverse_lerobot_389`、HF `siruku6/reverse_lerobot_389`）で出た事故を修正——回転量のクリップ方式変更・不要な水平合わせ動作の除去・持ち上げ後の静止時間追加で、手本の落下事故をほぼ解消 | `jaist_mix_v2` の材料として使用中。単独では HF に上げていない |
 | `jaist_mix_v2` | HF `siruku6/jaist_mix_v2`（**公開**。`siruku6/jaist_mix_v2_x8` というリポジトリは**存在しない**——`HfApi` で 9/14 に確認済み）／ローカル `work/artifacts/jaist_mix_v2_x8`（6,176 episodes） | `libero_plus` を 75 episodes/課題に間引いたもの（3,000 本）と `reverse_lerobot_v2` を 8 倍複製したもの（3,176 本）を混合し、反転デモの比率を約 5 割まで引き上げた | 混合比を意図的に反転側へ寄せることで、順方向データに埋もれず反転動作を学習させる設計。正規化統計は既存の学習済みモデル（`rp3000`）に固定して比較を単純化 | 初代の `jaist_mix_75_x7`（HF `siruku6/jaist_mix`）の後継。この系列で初めて Track3 のローカル評価が非ゼロになった（提出は 0.000 のまま） |
 | `libero_plus_bowl5` | HF `siruku6/libero_plus_bowl5`（非公開）／ローカル `work/artifacts/libero_plus_bowl5`（14,085 episodes） | 配布データのうち衝突率が高かった「丼」5 課題ぶん（1,880 本）を外し、作り直したスクリプト操作のデモに入れ替えた | 掴む半径を縁の壁の中心に合わせ、降りる勢いを絞ることで、対象 5 課題の成功率を摂動込みで 130/150 まで改善してから収録 | **`libero_plus_bowl5_initpose` の土台。**ローカルの Track2（VAL72）では、**データだけを変えた比較（`pi05_bowl5` 対 `pi05_full_local`）で合計点 0.3656 → 0.3354 と下がった。**全パラメータで学習した `pi05_bowl5_full` は 0.4004 で 4 つの重みの中で最高だが、学習の仕方も違うのでデータの効き目とは分けられない。**表は 4 節**。`pi05_bowl5_full` を版 15.0.0 として 9/13 に提出済み |
-| **`libero_plus_bowl5_initpose`** | **作成中**（2026-09-14 08:18 に生成を開始）。部品はローカル `work/regen/lerobot_init_pose_v2/`（撃ち直し・塊ごと）・`work/regen/npz_scripted_v2/`（台本・未変換）・`work/regen/keep_replace_v2.json`（土台から外す番号）。**組み上げ後は HF `siruku6/libero_plus_bowl5_initpose`（公開。比較用なので公開してよい——ユーザ 9/14）に上げる**。組み上げは `solution/tools/regen/build_initpose_datasets.sh`（`STAGE=p`） | **`libero_plus_bowl5`（14,085 本）を土台に、①接触している本と 300 コマを超える本（1,532 本）を外し、②同じ課題の新しい手本で同じ本数だけ埋め戻し、③余りを 40 課題へ 61 本ずつ配る。**新しい手本は計 3,972 本で、すべて**ロボットの初期姿勢を振り（モカポット 2 つを除く）、外観（照明・机と背景・カメラ）を重ねて**作る。**さらに道 A（300 コマを超えて外した手本を短くして撮り直す）の 303 本を足し、総数は 16,820 本**（14,085 − 1,532 + 3,453 + 511 + 303。枠に 8 本届かなかった） | 外観を重ねても物理が 1 ビットも変わらないことを確かめたうえで Track1 の見た目の分布を薄めない・同じデモに偏らない（1 デモ 3 本まで）・ゴールの 10 歩後で切る（配布データと同じ）・指示文を配布データの書き方に寄せる。**詳細は 2.1 節** | **生成中。**学習は 2 本を予定（ユーザ・9/14）——(b) Blackwell で素の重みから `pi05_bowl5_full` と同じ作り方（全パラメータ・2.5e-5・5,500 歩・batch 64）、(a) RunPod で `pi05_bowl5_full` の `005500` から同じ設定（`solution/train/runpod_initpose_ft.sh`）。評価はまだ無い。**今後もこのデータセットを更新していく本命**（ユーザ・9/14） |
-| **`libero_combined_bowl5_initpose`** | **作成中**（9/14）。ローカル `work/artifacts/libero_combined_bowl5_initpose`・HF `siruku6/libero_combined_bowl5_initpose`（非公開）に上げる。組み上げは `build_initpose_datasets.sh`（`STAGE=c`） | **`libero_plus_bowl5_initpose` に、配布 `libero_combined_20hz` の先頭 5,186 本から残した 4,822 本を足す**（予定 21,650 本・111 課題）。combined の後ろ 14,347 本は `libero_plus` と 1 ビットも違わないので、組み直さずに P をそのまま使う | **先頭の指の値を {0,1} から ±1 に直す**（直さないと「開く」に逆の正解が付く。`solution/tools/regen/fix_gripper_encoding.py`）。標準スイートの元データ 1,265 本は今までと同じ規則で外す（丼 5 課題 218・300 コマ超 65・接触 71）。`libero_90` 3,921 本は 300 コマ超 10 本だけ外し、接触は判定しない（ユーザ 9/14）。**詳細は 2.2 節** | **作成中。**`libero_plus_bowl5_initpose` と対にして、`libero_90` などを足した効き目を見るためのもの。学習の予定はまだ無い |
+| **`libero_plus_bowl5_initpose`** | **作成済み（9/14 20:00 に HF へ上げ、ファイル数・大きさを突き合わせ済み）。**HF `siruku6/libero_plus_bowl5_initpose`（**公開**。比較用なので公開してよい——ユーザ 9/14）／ローカル `work/artifacts/libero_plus_bowl5_initpose`（16,820 episodes・2,712,035 コマ・40 課題・22.6 GB）。組み上げは `solution/tools/regen/build_initpose_datasets.sh`（`STAGE=p`）。部品は `work/regen/lerobot_init_pose_v2/`（撃ち直し・塊ごと）・`lerobot_scripted_v2`（台本）・`lerobot_merged_v2`（道 A）・`keep_replace_v2.json`（土台から外す番号） | **`libero_plus_bowl5`（14,085 本）を土台に、①接触している本と 300 コマを超える本（1,532 本）を外し、②同じ課題の新しい手本で同じ本数だけ埋め戻し、③余りを 40 課題へ 61 本ずつ配る。**新しい手本は計 3,972 本で、すべて**ロボットの初期姿勢を振り（モカポット 2 つを除く）、外観（照明・机と背景・カメラ）を重ねて**作る。**さらに道 A（300 コマを超えて外した手本を短くして撮り直す）の 303 本を足し、総数は 16,820 本**（14,085 − 1,532 + 3,453 + 511 + 303。枠に 8 本届かなかった） | 外観を重ねても物理が 1 ビットも変わらないことを確かめたうえで Track1 の見た目の分布を薄めない・同じデモに偏らない（1 デモ 3 本まで）・ゴールの 10 歩後で切る（配布データと同じ）・指示文を配布データの書き方に寄せる。**詳細は 2.1 節** | **組み上げ済み・門 4 つを通過。**学習は 2 本を予定（ユーザ・9/14）——(b) Blackwell で素の重みから `pi05_bowl5_full` と同じ作り方（全パラメータ・2.5e-5・5,500 歩・batch 64）、(a) RunPod で `pi05_bowl5_full` の `005500` から同じ設定（`solution/train/runpod_initpose_ft.sh`）。評価はまだ無い。**今後もこのデータセットを更新していく本命**（ユーザ・9/14） |
+| **`libero_combined_bowl5_initpose`** | **作成済み（9/14 20:13 に HF へ上げ、ファイル数・大きさを突き合わせ済み）。**HF `siruku6/libero_combined_bowl5_initpose`（非公開）／ローカル `work/artifacts/libero_combined_bowl5_initpose`（21,642 episodes・3,436,667 コマ・111 課題・27.5 GB）。組み上げは `build_initpose_datasets.sh`（`STAGE=c`） | **`libero_plus_bowl5_initpose` に、配布 `libero_combined_20hz` の先頭 5,186 本から残した 4,822 本を足す**（21,642 本・111 課題）。combined の後ろ 14,347 本は `libero_plus` と 1 ビットも違わないので、組み直さずに P をそのまま使う | **先頭の指の値を {0,1} から ±1 に直す**（直さないと「開く」に逆の正解が付く。`solution/tools/regen/fix_gripper_encoding.py`）。標準スイートの元データ 1,265 本は今までと同じ規則で外す（丼 5 課題 218・300 コマ超 65・接触 71）。`libero_90` 3,921 本は 300 コマ超 10 本だけ外し、接触は判定しない（ユーザ 9/14）。**詳細は 2.2 節** | **組み上げ済み・門 4 つを通過。**`libero_plus_bowl5_initpose` と対にして、`libero_90` などを足した効き目を見るためのもの。学習の予定はまだ無い |
 | `lerobot_batch1` | ローカルのみ（`work/regen/lerobot_batch1`、1,009 episodes） | 配布デモの行動列を、初期姿勢をずらした状態で実際の採点ルール通りに再生し直した「摂動下再生」データ | 配布データが薄い摂動幅（手のオフセット 2.4〜6.5cm）を狙って埋め、その帯域で成功率が落ちる問題に対応 | **`libero_plus_bowl5_initpose` に置き換わった。**12 番号だけで作られ、素の見た目だけで、62% が指示文の書き方の違いで評価に引かれない形だった（`docs/knowledge/23`）。学習には使わない |
 
 ## 2. 各データセットの補足
 
-### 2.1 `libero_plus_bowl5_initpose`（作成中・今後も更新する）
+### 2.1 `libero_plus_bowl5_initpose`（作成済み・今後も更新する）
 
 **経緯と数値の一次資料は [talk/inter_sessions/034 の 9.4〜9.6 節](../talk/inter_sessions/034_init_pose_all_tasks_remaining.md)。**
 このデータセットを更新するときは、**下の「組み方の決まり」を崩さないこと**と、**表の数字を書き換えること。**
@@ -134,7 +134,9 @@ TOC:
 | **指示文を配布データの書き方へ寄せる** | 変換で `npz_to_lerobot.py build --normalize-instructions`・変換後に `check_dataset_instructions.py` | 寄せないと評価で 1 度も引かれない（`docs/knowledge/23`） |
 | **指の値は ±1 だけにする** | 撃ち直しで「記録した行動を撃ち切ってもゴールが立たず、止めて待った」コマは、指の値が 0 だった（39 本・238 コマ・すべて末尾）。組み上げで直前の ±1 に埋めた（`fix_gripper_encoding.py --mode hold`）。9/14 以降の生成は、待つ間も直前の指令を出し続ける（`replay_yield._replay_one`） | 人の手本の指の値は ±1 だけ。0 はシミュレータでは「動かさない」で誤りではないが、学習データの中では書き方の外れ値になる |
 
-#### 組み上げの残り手順（9/14 時点で未実施）
+#### 組み上げの手順（9/14 に実施済み・`solution/tools/regen/build_initpose_datasets.sh` にまとめた）
+
+**更新するときは、部品を作り直してから同じスクリプトを打ち直す。**門は本数・コマ・課題数の足し算、指示文、指の値が ±1 だけ、正規化の尺度の 4 つ。
 
 1. 生成が終わるのを待つ（撃ち直しは 17 塊・約 4〜6 時間。最初の塊は 523 回撃って 217 本・12 分）
 2. 台本の npz と道 A の npz（`work/regen/npz_merged_v2`）を変換する（`npz_to_lerobot.py build --normalize-instructions`）
@@ -150,7 +152,7 @@ TOC:
 - **道 A で戻らない組がある。**7 課題の 300 コマ超 35 組 255 本のうち 10 組 60 本、モカポット 2 つの 50 組のうち 25 組は、どの版でも門を通らない。
 - 4,000 本に 28 本足りない（61 本への切り捨て）。
 
-### 2.2 `libero_combined_bowl5_initpose`（作成中）
+### 2.2 `libero_combined_bowl5_initpose`（作成済み）
 
 **`libero_plus_bowl5_initpose`（以下 P）の後ろに、配布 `libero_combined_20hz` の先頭から残した本を繋いだもの。**
 調査の一次資料は `docs/talk/tmp_reply/260914_combined_base_survey.md`・`260914_gripper_encoding_videos.md`（git の外）と
@@ -191,6 +193,8 @@ TOC:
    4. 繋いだ先頭が元の combined と同じコマを指す——正面・手首の画・`state`・腕の指令が一致し、指は直した値になっている（`verify_appended_frames.py`）
 
 **20 本で試し、画・`state`・指の直しがすべて一致することを確かめてから本番を流した**（9/14）。
+本番（21,642 本）でも門 1〜4 をすべて通った。本数・コマ・課題数は 21,642・3,436,667・111 で足し算どおり、
+正規化の std 倍率は P に対して 0.97〜1.06 倍、門 4 は 3 本 × 2 コマで画・`state`・腕・指・指示文がすべて一致。
 
 #### 分かっている欠け
 
