@@ -17,7 +17,10 @@
 #   TRACK_EPISODES=1 bash solution/tools/eval/run_final_eval.sh track2
 #
 # 環境変数（省略時の既定）
-#   TRACK_EPISODES=2  タスクあたりの本数
+#   TRACK_EPISODES=2  タスクあたりの本数。**比べる実行どうしは必ず同じ本数にする。**
+#                     1 行の中で episode 番号ごとに初期状態が決まっていて（`init_states[ep_id]`）、
+#                     番号によって難しさが違う。本数が違うと別の初期状態の混ざりを比べることになる
+#                     （9/15 に 1・3・5 本の実行を並べて重みを選びかけた。docs/howto/03 の「比べる評価の揃え方」）
 #   MAX_STEPS=300     本番と同じ打ち切り
 #   RECORD=1          各タスクの 1 本目を mp4 に残す（成功／失敗が名前に入る）
 #   WEIGHTS           測る重み。既定は 4.2.0 の重み（work/artifacts/pi05_rp3000）
@@ -83,6 +86,10 @@ label="$TRACK"
 [ -n "${LABEL:-}" ] && label="${label}_${LABEL}"
 OUTPUT_DIR="$REPOSITORY_ROOT/work/final_eval/$(date +%m%d_%H%M%S)_${label}"
 mkdir -p "$OUTPUT_DIR/results"
+# **比べるための条件を実行ディレクトリへ残す**（9/15 に踏んだ：本数と描き方が違う実行を並べて重みを選びかけた）。
+# `decision_score.py` がこれを読み、候補どうしで本数・描き方・行の一覧が違えば止まる。
+printf '{"track": "%s", "episodes": %s, "max_steps": %s, "mujoco_gl": "%s", "tasks_csv": "%s", "weights": "%s"}\n' \
+    "$TRACK" "$TRACK_EPISODES" "$MAX_STEPS" "$MUJOCO_GL" "${TASKS_CSV:-}" "$WEIGHTS" > "$OUTPUT_DIR/eval_conditions.json"
 
 # **端末が消えても読めるように、この先の出力を run.log にも落とす。**
 # バックグラウンドへ回したあと SSH を切ると、端末への書き込みが失敗して
@@ -123,7 +130,7 @@ if [ ! -d "$WEIGHTS/vlm" ]; then
     exit 1
 fi
 
-echo "== 本選評価  トラック=$TRACK  本数=$TRACK_EPISODES  打ち切り=$MAX_STEPS"
+echo "== 本選評価  トラック=$TRACK  本数=$TRACK_EPISODES  打ち切り=$MAX_STEPS  描画=$MUJOCO_GL"
 echo "   重み: $WEIGHTS"
 echo "   出力: $OUTPUT_DIR"
 

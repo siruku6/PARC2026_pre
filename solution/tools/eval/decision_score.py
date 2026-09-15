@@ -20,8 +20,17 @@ libero_90 の本数の割合（3,921 / 19,533 ＝ 20%）を使う（ユーザ 9/
             work/final_eval/<LIBERO90 の実行> \\
         --candidate C005500 work/final_eval/<...> work/final_eval/<...>
 
-**1 つの候補の結果が複数の実行に分かれているときは、カンマでつなぐ。**
-同じ行が 2 つの実行にあれば、前に書いた実行の値を使う。
+**比べられない実行を渡すと止まる**（9/15 に足した）。候補どうしで次のどれかが違えば、表を出さずに終わる。
+
+| 揃えるもの | なぜ |
+|---|---|
+| **本数**（`n_eval_episodes`） | 1 行の中で episode 番号ごとに初期状態が決まっていて（`init_states[ep_id]`）、番号で難しさが違う。9/15 に C の判定セットは 0・1・2 番で 65・55・46/84 だった |
+| **行の一覧**（実行ディレクトリの `TASKS_CSV.csv` が、渡した CSV と同じ並び） | 乱数はサーバー内部のリセット回数で決まる（`docs/plan/23` の 7 節）。行が違えば同じ行でも別の乱数になる |
+| **描き方**（`eval_conditions.json` の `mujoco_gl`） | EGL と osmesa で画素が変わる。記録の無い実行（9/15 17 時より前）は描き方が分からないので比べない |
+| **1 つの候補は 1 つの実行** | カンマでつないだ実行どうしは乱数の並びが違う |
+
+探りのために揃っていない実行を並べたいときだけ `--allow-mixed` を付ける（警告を出して表を出す）。
+**`--allow-mixed` を付けた表で重みを選ばない。**
 
 Reads:
   - <実行ディレクトリ>/results/server_8000.json
@@ -82,6 +91,8 @@ def _parse_args() -> argparse.Namespace:
                         help="LIBERO90 側の比率（既定 0.2）。判定セット側は 1 から引いた値")
     parser.add_argument("--tie", type=float, default=0.02,
                         help="この差以内は差なしとみなす（既定 0.02）")
+    parser.add_argument("--allow-mixed", action="store_true",
+                        help="本数・行の一覧・描き方が揃っていなくても表を出す（探り用。これで選ばない）")
     return parser.parse_args()
 
 
@@ -91,9 +102,10 @@ def _read_task_ids(csv_path: Path) -> list[str]:
         return [row["task_id"] for row in csv.DictReader(handle)]
 
 
-def _load_task_results(run_arg: str) -> dict[str, dict]:
-    """カンマでつないだ実行ディレクトリから、タスク名 → 結果 を集める（前の実行が優先）。"""
+def _load_task_results(run_arg: str) -> tuple[dict[str, dict], list[dict]]:
+    """カンマでつないだ実行ディレクトリから、タスク名 → 結果 と、実行ごとの条件を集める（前の実行が優先）。"""
     task_results: dict[str, dict] = {}
+    conditions: list[dict] = []
     for run_text in run_arg.split(","):
         run_dir = Path(run_text)
         if not run_dir.is_absolute():
@@ -102,10 +114,58 @@ def _load_task_results(run_arg: str) -> dict[str, dict]:
         if not json_path.is_file():
             raise SystemExit(f"結果が無い: {json_path}（評価が終わっていないか、ディレクトリ名の誤り）")
         data = json.loads(json_path.read_text())
+        conditions.append(_read_conditions(run_dir, data))
         for track in data["tracks"]:
             for task in track["tasks"]:
                 task_results.setdefault(task["task_name"], task)
-    return task_results
+    return task_results, conditions
+
+
+def _read_conditions(run_dir: Path, data: dict) -> dict:
+    """1 つの実行の、比べるために揃えるべき条件（本数・描き方・行の一覧）を読む。"""
+    recorded = run_dir / "eval_conditions.json"
+    renderer = json.loads(recorded.read_text()).get("mujoco_gl") if recorded.is_file() else None
+    tasks_csv = run_dir / "TASKS_CSV.csv"
+    task_ids = _read_task_ids(tasks_csv) if tasks_csv.is_file() else None
+    return {"run": run_dir.name, "episodes": data["metadata"]["eval_config"]["n_eval_episodes"],
+            "renderer": renderer, "task_ids": task_ids}
+
+
+def _check_comparable(set_label: str, csv_ids: list[str],
+                      per_candidate: list[tuple[str, list[dict]]], allow_mixed: bool) -> str:
+    """候補どうしで本数・行の一覧・描き方が揃っているかを見る。揃っていなければ止める。
+
+    Returns
+    -------
+    str
+        揃っていたときの条件の短い説明（表の見出しに使う）。
+    """
+    problems: list[str] = []
+    for name, conditions in per_candidate:
+        if len(conditions) != 1:
+            problems.append(f"{name}: 実行が {len(conditions)} 個に分かれている（実行ごとに乱数の並びが違う）")
+        for cond in conditions:
+            if cond["renderer"] is None:
+                problems.append(f"{name}: {cond['run']} に描き方の記録（eval_conditions.json）が無い")
+            if cond["task_ids"] != csv_ids:
+                count = "無し" if cond["task_ids"] is None else f"{len(cond['task_ids'])} 行"
+                problems.append(f"{name}: {cond['run']} の行の一覧（{count}）が {len(csv_ids)} 行の CSV と同じ並びでない")
+    episodes = {f"{name}={cond['episodes']}" for name, conds in per_candidate for cond in conds}
+    if len({cond["episodes"] for _, conds in per_candidate for cond in conds}) > 1:
+        problems.append("本数が揃っていない: " + "・".join(sorted(episodes)))
+    renderers = {cond["renderer"] for _, conds in per_candidate for cond in conds}
+    if len(renderers - {None}) > 1:
+        problems.append("描き方が揃っていない: " + "・".join(
+            sorted(f"{name}={cond['renderer']}" for name, conds in per_candidate for cond in conds)))
+    if problems:
+        text = f"{set_label} は比べられない:\n" + "\n".join(f"  - {p}" for p in problems)
+        if not allow_mixed:
+            raise SystemExit(text + "\n同じ CSV・同じ本数・同じ描き方で回した実行を 1 つずつ渡す"
+                                    "（docs/howto/03_gpu_eval.md の「比べる評価の揃え方」）")
+        print("**警告（--allow-mixed）: この表で重みを選ばないこと**\n" + text + "\n")
+        return "揃っていない"
+    first = per_candidate[0][1][0]
+    return f"{first['episodes']} 本・{first['renderer']}"
 
 
 def _score_set(label: str, task_ids: list[str], task_results: dict[str, dict]) -> _SetScore:
@@ -147,10 +207,16 @@ def _score_candidates(args: argparse.Namespace) -> list[_CandidateScore]:
     """全候補について、2 つの評価セットの点と重み付きの点を出す（並べた順のまま）。"""
     judge_ids: list[str] = _read_task_ids(args.judge_csv)
     libero_ids: list[str] = _read_task_ids(args.libero_csv)
+    loaded = [(name, _load_task_results(judge_runs), _load_task_results(libero_runs))
+              for name, judge_runs, libero_runs in args.candidate]
+    args.judge_condition = _check_comparable(
+        "判定セット", judge_ids, [(name, judge[1]) for name, judge, _ in loaded], args.allow_mixed)
+    args.libero_condition = _check_comparable(
+        "LIBERO90", libero_ids, [(name, libero[1]) for name, _, libero in loaded], args.allow_mixed)
     scores: list[_CandidateScore] = []
-    for name, judge_runs, libero_runs in args.candidate:
-        judge = _score_set(f"{name} の判定セット", judge_ids, _load_task_results(judge_runs))
-        libero = _score_set(f"{name} の LIBERO90", libero_ids, _load_task_results(libero_runs))
+    for name, (judge_results, _), (libero_results, _) in loaded:
+        judge = _score_set(f"{name} の判定セット", judge_ids, judge_results)
+        libero = _score_set(f"{name} の LIBERO90", libero_ids, libero_results)
         weighted = (1.0 - args.libero_weight) * judge.total + args.libero_weight * libero.total
         scores.append(_CandidateScore(name, judge, libero, weighted))
     return scores
@@ -165,9 +231,10 @@ def _choose(scores: list[_CandidateScore], tie: float) -> _CandidateScore:
 def _print_table(scores: list[_CandidateScore], chosen: _CandidateScore, args: argparse.Namespace) -> None:
     """候補ごとの点を表にして、選んだ候補と理由を印字する。"""
     best: float = max(score.weighted for score in scores)
-    print(f"判定セット {args.judge_csv.name}（{scores[0].judge.num_tasks} 行）× {1 - args.libero_weight:.1f}"
-          f" ＋ {args.libero_csv.name}（{scores[0].libero.num_tasks} 行）× {args.libero_weight:.1f}"
-          f"  ／ 差なしの幅 {args.tie}")
+    print(f"判定セット {args.judge_csv.name}（{scores[0].judge.num_tasks} 行・{args.judge_condition}）"
+          f"× {1 - args.libero_weight:.1f}"
+          f" ＋ {args.libero_csv.name}（{scores[0].libero.num_tasks} 行・{args.libero_condition}）"
+          f"× {args.libero_weight:.1f}  ／ 差なしの幅 {args.tie}")
     print()
     print(f"  {'候補':<24}{'判定セット':>10}{'成功':>7}{'衝突':>7}"
           f"{'LIBERO90':>10}{'成功':>7}{'衝突':>7}{'重み付き':>10}{'最高との差':>11}")
