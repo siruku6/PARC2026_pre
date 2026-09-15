@@ -639,9 +639,12 @@ class MyPolicy(BasePolicy):
         # 置いてある重みが SmolVLA なら 3.7.0 と同じ道をそのまま通る（版 3.8.0）。
         self._kind = str(config.type)
 
-        if self._kind != "pi05":
+        if self._kind == "smolvla":
             # VLM の重みはチェックポイントに含まれる。True のままだと Hub へ
             # 取りに行き、通信が遮断された採点環境では起動に失敗する。
+            # **MolmoAct2 にはこの `vlm/` 同梱の仕組みが無い**（独自の
+            # `checkpoint_path` 経由でトークナイザ・プロセッサ設定を読む。
+            # `_build_molmoact2` を参照）ので、smolvla だけに絞る。
             config.load_vlm_weights = False
             # 設定とトークナイザは同梱物から読む（本体の重みは含めていない）。
             config.vlm_model_name = str(weights / "vlm")
@@ -692,8 +695,12 @@ class MyPolicy(BasePolicy):
         # 16 は範囲内。1 ステップの見込みは 0.084 秒で、`/act` の 10 秒に対して桁違いに余裕。
         # SmolVLA の既定は 8 のままである。設定値の名前は共通なので、
         # `PARC_N_ACTION_STEPS` を渡せばどちらも同じように上下できる。
+        # **MolmoAct2 の既定は 10**——チェックポイント同梱の `train_config.json`
+        # が chunk 長 10・1 chunk から実行する歩数 10 と書いている
+        # （`docs/talk/inter_sessions/032_molmoact2_libero_adoption.md` 4.1 節）。
+        _default_n_action_steps = {"pi05": "16", "molmoact2": "10"}.get(self._kind, "8")
         config.n_action_steps = int(os.environ.get(
-            "PARC_N_ACTION_STEPS", "16" if self._kind == "pi05" else "8"
+            "PARC_N_ACTION_STEPS", _default_n_action_steps
         ))
 
         if self._kind == "pi05":
@@ -711,6 +718,8 @@ class MyPolicy(BasePolicy):
             if steps:
                 config.num_inference_steps = int(steps)
             self._policy = self._build_pi05(config, weights)
+        elif self._kind == "molmoact2":
+            self._policy = self._build_molmoact2(config, weights)
         else:
             from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
 
@@ -764,13 +773,19 @@ class MyPolicy(BasePolicy):
 
         # tokenizer_processor は保存時の設定に Hub の repo 名が焼き込まれている。
         # 上書きしないと起動時に Hub へ取りに行き、通信のない採点環境で失敗する。
+        # **MolmoAct2 のパイプラインには `tokenizer_processor` という名の段が無い**
+        # （`make_molmoact2_pre_post_processors` は `config.checkpoint_path` から直接
+        # トークナイザ・プロセッサ設定を読む。`_build_molmoact2` で既にローカルへ
+        # 向け替えてあるので、ここで渡す上書きは無い）。
+        _preprocessor_overrides = {"device_processor": {"device": self._device}}
+        if self._kind != "molmoact2":
+            _preprocessor_overrides["tokenizer_processor"] = {
+                "tokenizer_name": str(weights / "vlm")
+            }
         self._preprocessor, self._postprocessor = make_pre_post_processors(
             config,
             str(weights),
-            preprocessor_overrides={
-                "device_processor": {"device": self._device},
-                "tokenizer_processor": {"tokenizer_name": str(weights / "vlm")},
-            },
+            preprocessor_overrides=_preprocessor_overrides,
         )
         self._env_preprocessor = PolicyProcessorPipeline(steps=[LiberoProcessorStep()])
 
@@ -929,10 +944,10 @@ class MyPolicy(BasePolicy):
         self._normalizer: InstructionNormalizer | None = None
         if os.environ.get("PARC_NORMALIZE_INSTRUCTION", "1") != "0":
             self._normalizer = InstructionNormalizer()
-            # **π0.5 では埋め込みでの寄せを切る。** `_embed_instructions` は
-            # SmolVLA の `model.vlm_with_expert` を直に触る実装で、π0.5 には
-            # その属性が無い。文字列での寄せ（lexical）はそのまま効く。
-            use_embedding = self._kind != "pi05" and os.environ.get(
+            # **π0.5・MolmoAct2 では埋め込みでの寄せを切る。** `_embed_instructions` は
+            # SmolVLA の `model.vlm_with_expert` を直に触る実装で、その属性が無い
+            # 模型では `AttributeError` になる。文字列での寄せ（lexical）はそのまま効く。
+            use_embedding = self._kind == "smolvla" and os.environ.get(
                 "PARC_NORM_EMBED", "1" if _USE_EMBEDDING else "0"
             ) != "0"
             if use_embedding:
@@ -1133,6 +1148,64 @@ class MyPolicy(BasePolicy):
         print(f"[parc] pi05 の重みを {len(copied)} 個読んだ"
               f"（{time.perf_counter() - started:.1f} 秒）", flush=True)
         return policy
+
+    def _build_molmoact2(self, config, weights):
+        """MolmoAct2-LIBERO-LeRobot のチェックポイントを、重みを 2 回読まずに組む。
+
+        **同梱 LeRobot の `MolmoAct2Policy.__init__` は、素の状態では起動のたびに
+        2 回重みを読む**（`docs/talk/inter_sessions/032_molmoact2_libero_adoption.md`
+        4.3 節）。
+
+        1. `config.checkpoint_path`（既定は Hub の `"allenai/MolmoAct2"`）が指す
+           **素の HF 重みを読む**。採点環境は `HF_HUB_OFFLINE=1` なので、
+           ローカルに無ければここで起動が落ちる。
+        2. そのあと `from_pretrained` が、**こちらの追加学習した
+           `model.safetensors` を上から載せる**（すべて上書きされる）。
+
+        1 は 2 で全部上書きされるので、**`checkpoint_path` を「小さいファイル
+        （config・トークナイザ・`norm_stats.json`。約 12 MB）だけ置いた場所」へ
+        向け替える**。同梱 LeRobot 側の `_load_hf_model`
+        （`vendor/lerobot/policies/molmoact2/modeling_molmoact2.py`）も、
+        その場所に safetensors が無ければ `from_config`（重みを読まない組み立て）
+        へ切り替えるよう直してある。**これで 1 は「形を組むだけ」になり、
+        通信も大きな読み込みも起きない。**
+
+        Parameters
+        ----------
+        config : PreTrainedConfig
+            チェックポイントから読んだ設定（`device` と `n_action_steps` は
+            呼び出し側で入れてある）。
+        weights : Path
+            `model_weights` ディレクトリ。**`model.safetensors` に加えて、
+            `molmoact2_base_small/`（`config.json`・`processor_config.json`・
+            `tokenizer.json`・`tokenizer_config.json`・`chat_template.jinja`・
+            `norm_stats.json`）を同梱すること。**
+
+        Returns
+        -------
+        policy : MolmoAct2Policy
+            重みを読み終えた方策（`to` と `eval` は呼び出し側で行う）。
+
+        Reads:
+          - <weights>/model.safetensors
+          - <weights>/molmoact2_base_small/*（`checkpoint_path` の向け先）
+        """
+        from lerobot.policies.molmoact2.modeling_molmoact2 import MolmoAct2Policy
+
+        base_small = weights / "molmoact2_base_small"
+        if not base_small.is_dir():
+            raise RuntimeError(
+                f"{base_small} が無い。MolmoAct2 の起動には config・トークナイザ・"
+                "norm_stats.json だけを置いた場所が要る"
+                "（032 の 4.3 節・0-2 の huggingface-cli download を参照）。"
+            )
+        config.checkpoint_path = str(base_small)
+
+        # **`from_pretrained` の `strict=True` で、自前の重みだけで全部の層が
+        # 埋まることを起動時に確かめる。** 1 個でも欠けたらここで落とす——
+        # `_build_pi05` が数で確かめているのと同じ理由（黙って初期値のまま
+        # 推論すると、学習の成果を使っているとは言えなくなる）。
+        return MolmoAct2Policy.from_pretrained(str(weights), config=config, strict=True)
 
     def _embed_instructions(self, texts: list[str]) -> np.ndarray:
         """同梱した SmolVLM の言語側で文を埋め込む（長さ 1 に正規化して返す）。
