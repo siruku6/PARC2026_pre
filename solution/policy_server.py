@@ -1225,6 +1225,13 @@ class MyPolicy(BasePolicy):
             )
         config.checkpoint_path = str(base_small)
 
+        # **チェックポイントの `action_mode` は `"both"`**（連続値の flow matching と
+        # 離散トークンの両方の頭を持つ）なので、推論側でどちらを使うか明示しないと
+        # `predict_action_chunk` が `ValueError` で止まる（実測・2026-09-15）。
+        # **連続値（flow matching）を選ぶ**——π0.5 と同じ制御の形で、7 次元の
+        # 連続行動をそのまま出す。離散トークン側は文章生成に近い遅い経路である。
+        config.inference_action_mode = "continuous"
+
         # **`from_pretrained` の `strict=True` で、自前の重みだけで全部の層が
         # 埋まることを起動時に確かめる。** 1 個でも欠けたらここで落とす——
         # `_build_pi05` が数で確かめているのと同じ理由（黙って初期値のまま
