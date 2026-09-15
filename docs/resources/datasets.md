@@ -19,7 +19,9 @@ TOC:
 配布データそのものの内訳（`libero_plus` や `libero_combined_20hz` の構成）は
 [reference/25_dataset_inventory.md](../reference/25_dataset_inventory.md) にある。
 このファイルは概要だけを載せ、詳しい経緯はそちらを参照する形にする。
-**ただし手元で回したローカル評価の結果は、データセットを選ぶ物差しとして 4 節に表で置く**（提出の点ではない）。
+**手元で回したローカル評価の結果（成功率・衝突率などの数値表）は
+[reference/37_local_eval_for_weight_selection.md](../reference/37_local_eval_for_weight_selection.md) に一元化した**（提出の点ではない）。
+4 節にはデータセットを選ぶための結論だけを置く。
 
 **載せていないもの**: 試したが何の手がかりも得られず、その方向を続ける予定が無い
 もの（例: 汚れデモを除いた `libero_plus_clean` は Track1/Track2 とも動かず、
@@ -32,9 +34,9 @@ TOC:
 | `libero_states` | ローカルのみ（`work/artifacts/libero_states`） | 配布元の hdf5（`yifengzhu-hf/LIBERO-datasets`）から MuJoCo の生 state/action を抜き出した下ごしらえ用データ（40 課題・2,000 デモ） | 各デモに接触判定（`contact_scores.json`）を付け、配布 LeRobot データの「どのデモが対象外に接触しているか」を機械的に判定できるようにした。**判定一覧は 9/14 に作り直した——`work/regen/contact_v2/demo_map.json`・`contact_scores.json`**（026 の一覧はこの機械に無い。値は 026 と完全一致） | `libero_plus_bowl5` の丼課題入れ替え判定や、Track3 の順方向デモ対応付けの支援ツールとして使用中 |
 | `reverse_lerobot_v2` | ローカルのみ（`work/artifacts/reverse_lerobot_v2`、397 episodes） | 順方向の手本デモを時間反転し、行動（相対差分）の符号を反転して「逆再生」の教師データを作る（Track3: 物を置いた状態から取り出す方向） | 初代（`reverse_lerobot_389`、HF `siruku6/reverse_lerobot_389`）で出た事故を修正——回転量のクリップ方式変更・不要な水平合わせ動作の除去・持ち上げ後の静止時間追加で、手本の落下事故をほぼ解消 | `jaist_mix_v2` の材料として使用中。単独では HF に上げていない |
 | `jaist_mix_v2` | HF `siruku6/jaist_mix_v2`（**公開**。`siruku6/jaist_mix_v2_x8` というリポジトリは**存在しない**——`HfApi` で 9/14 に確認済み）／ローカル `work/artifacts/jaist_mix_v2_x8`（6,176 episodes） | `libero_plus` を 75 episodes/課題に間引いたもの（3,000 本）と `reverse_lerobot_v2` を 8 倍複製したもの（3,176 本）を混合し、反転デモの比率を約 5 割まで引き上げた | 混合比を意図的に反転側へ寄せることで、順方向データに埋もれず反転動作を学習させる設計。正規化統計は既存の学習済みモデル（`rp3000`）に固定して比較を単純化 | 初代の `jaist_mix_75_x7`（HF `siruku6/jaist_mix`）の後継。この系列で初めて Track3 のローカル評価が非ゼロになった（提出は 0.000 のまま） |
-| `libero_plus_bowl5` | HF `siruku6/libero_plus_bowl5`（非公開）／ローカル `work/artifacts/libero_plus_bowl5`（14,085 episodes） | 配布データのうち衝突率が高かった「丼」5 課題ぶん（1,880 本）を外し、作り直したスクリプト操作のデモに入れ替えた | 掴む半径を縁の壁の中心に合わせ、降りる勢いを絞ることで、対象 5 課題の成功率を摂動込みで 130/150 まで改善してから収録 | **`libero_plus_bowl5_initpose` の土台。**ローカルの Track2（VAL72）では、**データだけを変えた比較（`pi05_bowl5` 対 `pi05_full_local`）で合計点 0.3656 → 0.3354 と下がった。**全パラメータで学習した `pi05_bowl5_full` は 0.4004 で 4 つの重みの中で最高だが、学習の仕方も違うのでデータの効き目とは分けられない。**同じ作り方で combined 側と比べると、Track2 の判定セットで 0.4055 対 0.3515 とはっきり上だった（9/15）。****表は 4 節**。`pi05_bowl5_full` を版 15.0.0 として 9/13 に提出済み |
+| `libero_plus_bowl5` | HF `siruku6/libero_plus_bowl5`（非公開）／ローカル `work/artifacts/libero_plus_bowl5`（14,085 episodes） | 配布データのうち衝突率が高かった「丼」5 課題ぶん（1,880 本）を外し、作り直したスクリプト操作のデモに入れ替えた | 掴む半径を縁の壁の中心に合わせ、降りる勢いを絞ることで、対象 5 課題の成功率を摂動込みで 130/150 まで改善してから収録 | **`libero_plus_bowl5_initpose` の土台。**ローカルの Track2（VAL72）では、**データだけを変えた比較（`pi05_bowl5` 対 `pi05_full_local`）で合計点 0.3656 → 0.3354 と下がった。**全パラメータで学習した `pi05_bowl5_full` は 0.4004 で 4 つの重みの中で最高だが、学習の仕方も違うのでデータの効き目とは分けられない。**同じ作り方で combined 側と比べると、Track2 の判定セットで 0.4055 対 0.3515 とはっきり上だった（9/15）。****表は [reference/37](../reference/37_local_eval_for_weight_selection.md)**。`pi05_bowl5_full` を版 15.0.0 として 9/13 に提出済み |
 | **`libero_plus_bowl5_initpose`** | **作成済み（9/14 21:28 に HF へ上げ直し、ファイル数・大きさを突き合わせ済み。止めて待つ 39 本の撃ち直しを反映）。**HF `siruku6/libero_plus_bowl5_initpose`（**公開**。比較用なので公開してよい——ユーザ 9/14）／ローカル `work/artifacts/libero_plus_bowl5_initpose`（16,820 episodes・2,712,308 コマ・40 課題・22.6 GB）。組み上げは `solution/tools/regen/build_initpose_datasets.sh`（`STAGE=p`）。部品は `work/regen/lerobot_init_pose_v2/`（撃ち直し・塊ごと）・`lerobot_scripted_v2`（台本）・`lerobot_merged_v2`（道 A）・`keep_replace_v2.json`（土台から外す番号） | **`libero_plus_bowl5`（14,085 本）を土台に、①接触している本と 300 コマを超える本（1,532 本）を外し、②同じ課題の新しい手本で同じ本数だけ埋め戻し、③余りを 40 課題へ 61 本ずつ配る。**新しい手本は計 3,972 本で、すべて**ロボットの初期姿勢を振り（モカポット 2 つを除く）、外観（照明・机と背景・カメラ）を重ねて**作る。**さらに道 A（300 コマを超えて外した手本を短くして撮り直す）の 303 本を足し、総数は 16,820 本**（14,085 − 1,532 + 3,453 + 511 + 303。枠に 8 本届かなかった） | 外観を重ねても物理が 1 ビットも変わらないことを確かめたうえで Track1 の見た目の分布を薄めない・同じデモに偏らない（1 デモ 3 本まで）・ゴールの 10 歩後で切る（配布データと同じ）・指示文を配布データの書き方に寄せる。**詳細は 2.1 節** | **組み上げ済み・門 4 つを通過。**学習の予定は無い（9/14 夜に変わった）——Blackwell の全パラメータ学習は combined 側（下の行）で回すことになった（ユーザ 9/14 夜）。RunPod で `pi05_bowl5_full` の `005500` から続ける走り（`solution/train/runpod_initpose_ft.sh`）は、HF の空きが無いので一旦見送り（ユーザ 9/14 夜）。評価はまだ無い。**今後もこのデータセットを更新していく本命**（ユーザ・9/14） |
-| **`libero_combined_bowl5_initpose`** | **作成済み（9/14 21:33 に HF へ上げ直し、ファイル数・大きさを突き合わせ済み。止めて待つ 39 本の撃ち直しを反映）。**HF `siruku6/libero_combined_bowl5_initpose`（非公開）／ローカル `work/artifacts/libero_combined_bowl5_initpose`（21,642 episodes・3,436,940 コマ・111 課題・27.6 GB）。組み上げは `build_initpose_datasets.sh`（`STAGE=c`） | **`libero_plus_bowl5_initpose` に、配布 `libero_combined_20hz` の先頭 5,186 本から残した 4,822 本を足す**（21,642 本・111 課題）。combined の後ろ 14,347 本は `libero_plus` と 1 ビットも違わないので、組み直さずに P をそのまま使う | **先頭の指の値を {0,1} から ±1 に直す**（直さないと「開く」に逆の正解が付く。`solution/tools/regen/fix_gripper_encoding.py`）。標準スイートの元データ 1,265 本は今までと同じ規則で外す（丼 5 課題 218・300 コマ超 65・接触 71）。`libero_90` 3,921 本は 300 コマ超 10 本だけ外し、接触は判定しない（ユーザ 9/14）。**詳細は 2.2 節** | **組み上げ済み・門 4 つを通過。****Blackwell で全パラメータ学習する（ユーザ 9/14 夜）。**`pi05_combined_initpose_full`：素の重みから `pi05_bowl5_full` と同じ作り方（全パラメータ・2.5e-5・5,500 歩・batch 64・種 42）。対照との差は「初期姿勢を振ったデータ」と「`libero_90` などを足したこと」の 2 つが重なる。打つコマンドは [howto/16 の 10 節](../howto/16_bowl_regen_train_eval.md)（Blackwell が空かない日は同じ設定を RunPod で回せる。10.6 節）。**9/15 に学習・評価済み。Track2 の判定セットで `pi05_bowl5_full` よりはっきり下（合計点 0.3515 対 0.4055）。表は 4.3 節** |
+| **`libero_combined_bowl5_initpose`** | **作成済み（9/14 21:33 に HF へ上げ直し、ファイル数・大きさを突き合わせ済み。止めて待つ 39 本の撃ち直しを反映）。**HF `siruku6/libero_combined_bowl5_initpose`（非公開）／ローカル `work/artifacts/libero_combined_bowl5_initpose`（21,642 episodes・3,436,940 コマ・111 課題・27.6 GB）。組み上げは `build_initpose_datasets.sh`（`STAGE=c`） | **`libero_plus_bowl5_initpose` に、配布 `libero_combined_20hz` の先頭 5,186 本から残した 4,822 本を足す**（21,642 本・111 課題）。combined の後ろ 14,347 本は `libero_plus` と 1 ビットも違わないので、組み直さずに P をそのまま使う | **先頭の指の値を {0,1} から ±1 に直す**（直さないと「開く」に逆の正解が付く。`solution/tools/regen/fix_gripper_encoding.py`）。標準スイートの元データ 1,265 本は今までと同じ規則で外す（丼 5 課題 218・300 コマ超 65・接触 71）。`libero_90` 3,921 本は 300 コマ超 10 本だけ外し、接触は判定しない（ユーザ 9/14）。**詳細は 2.2 節** | **組み上げ済み・門 4 つを通過。****Blackwell で全パラメータ学習する（ユーザ 9/14 夜）。**`pi05_combined_initpose_full`：素の重みから `pi05_bowl5_full` と同じ作り方（全パラメータ・2.5e-5・5,500 歩・batch 64・種 42）。対照との差は「初期姿勢を振ったデータ」と「`libero_90` などを足したこと」の 2 つが重なる。打つコマンドは [howto/16 の 10 節](../howto/16_bowl_regen_train_eval.md)（Blackwell が空かない日は同じ設定を RunPod で回せる。10.6 節）。**9/15 に学習・評価済み。Track2 の判定セットで `pi05_bowl5_full` よりはっきり下（合計点 0.3515 対 0.4055）。**選定では選ばれなかった**（4 節）。表は [reference/37](../reference/37_local_eval_for_weight_selection.md) |
 | `lerobot_batch1` | ローカルのみ（`work/regen/lerobot_batch1`、1,009 episodes） | 配布デモの行動列を、初期姿勢をずらした状態で実際の採点ルール通りに再生し直した「摂動下再生」データ | 配布データが薄い摂動幅（手のオフセット 2.4〜6.5cm）を狙って埋め、その帯域で成功率が落ちる問題に対応 | **`libero_plus_bowl5_initpose` に置き換わった。**12 番号だけで作られ、素の見た目だけで、62% が指示文の書き方の違いで評価に引かれない形だった（`docs/knowledge/23`）。学習には使わない |
 
 ## 2. 各データセットの補足
@@ -226,7 +228,7 @@ TOC:
   **1 条件 60 回（12 課題 × 5 本）なので、成功率は 1 回で 0.017 動く。**条件ごとの差 0.05 前後は揺らぎの範囲と見ること。
   **版 15.0.0（`pi05_bowl5_full/005500`。2026-09-13 に Track1・Track2 へ提出済み・9/14 時点でまだ採点ログなし）
   の採点ログが返ったら、この表と 4 節を更新してください。**
-- **`libero_combined_bowl5_initpose` が `libero_plus_bowl5` より下だった理由は分けられていない**（4.3 節）。
+- **`libero_combined_bowl5_initpose` が `libero_plus_bowl5` より下だった理由は分けられていない**（[reference/37 の 6 節](../reference/37_local_eval_for_weight_selection.md#6-まだ分けられていないこと)）。
   データの違いは「P（初期姿勢を振った手本への入れ替え）にした」ことと「`libero_90` などを足した」ことの 2 つが重なっている。
   **P だけで、素の重みから同じ作り方（全パラメータ 5,500 歩）で学習した対照は無い。**
 - `libero_plus_bowl5_initpose` の**外観の割合（各 25%）は、配布データの内訳を測って決めたものではない**
@@ -234,73 +236,19 @@ TOC:
 
 ## 4. ローカル評価の結果（データセットを選ぶための物差し）
 
-**提出の点ではない。**手元で `solution/tools/eval/run_final_eval.sh` を回した結果である
-（提出の点は [reference/19_weights_catalog.md](../reference/19_weights_catalog.md)）。
-**同じ評価セット・同じ本数どうしでだけ比べること。**数値は各ディレクトリの `score_composite.md` から写した。
+**手元のマシンで測った評価結果（成功率・衝突率・なめらかさなど）は
+[reference/37_local_eval_for_weight_selection.md](../reference/37_local_eval_for_weight_selection.md) に一元化した**
+（提出の点は [reference/19_weights_catalog.md](../reference/19_weights_catalog.md)）。ここには最終選定の結論だけを置く。
 
-### 4.1 Track2 VAL72（`compe/val/TRACK2_VAL72.csv`・72 行 × 5 本）
+**9/15〜16 の最終選定（判定セット 84 行 × 5 本 ＋ LIBERO90 半分 45 行 × 1 本・EGL・`decision_score.py`）:**
 
-**4 本とも同じ 72 行**（`TASKS_CSV.csv` の中身が一致）。中身は素 12 行・カメラ 24 行（方位 +45°・−60°）・ロボット初期姿勢 36 行（倍率 0.1・0.2・0.4）。
+| 候補 | 学習データ | 重み付きの点 | 選定 |
+|---|---|---|---|
+| `pi05_bowl5_full` | `libero_plus_bowl5` | **0.3412** | **選ぶ** |
+| `pi05_f4000`（F） | `libero_combined_bowl5_initpose` | 0.3280 | 差なしの幅の内（並び順で `bowl5_full` が優先） |
+| `pi05_a7000`（A） | `libero_combined_bowl5_initpose` | 0.3164 | 最高との差 −0.0248 |
+| `pi05_c005500`（C） | `libero_combined_bowl5_initpose` | 0.3096 | 最高との差 −0.0316 |
 
-| 重み | 学習データ | 学習の仕方 | **合計点** | 成功率 | 衝突率 | 結果の置き場（`work/final_eval/`） |
-|---|---|---|---|---|---|---|
-| `pi05_full_local` | `libero_plus`（配布） | 素の重みから・**action expert だけ**・24,000 歩・batch 16 | 0.3656 | 0.722 | 0.231 | `0912_171732_track2_full_local_ep5` |
-| `pi05_bowl5` | **`libero_plus_bowl5`** | **`pi05_full_local` と同じ**（データだけ違う） | 0.3354 | 0.672 | 0.225 | `0913_072903_track2_bowl5` |
-| `pi05_bowl5_full` | **`libero_plus_bowl5`** | 素の重みから・**全パラメータ**・5,500 歩・batch 64 | **0.4004** | **0.792** | **0.136** | `0913_083702_track2_bowl5_full` |
-| `pi05_ladder2500`（`002500`） | `libero_plus`（配布） | `rp3000` → `trial1500`（全パラメータ 1,500 歩）→ **全パラメータ 2,500 歩**・batch 64 | 0.3604 | 0.711 | 0.203 | `0913_225434_track2_ladder2500_val72` |
-
-**条件ごとの内訳**（合計点 ／ 成功率 ／ 衝突率）
-
-| 条件 | `pi05_full_local` | `pi05_bowl5` | `pi05_bowl5_full` | `pi05_ladder2500` |
-|---|---|---|---|---|
-| 素 | 0.426 ／ 0.817 ／ 0.150 | 0.395 ／ 0.767 ／ 0.200 | **0.453 ／ 0.883 ／ 0.067** | 0.408 ／ 0.783 ／ 0.167 |
-| カメラ 方位 +45° | 0.306 ／ 0.633 ／ 0.283 | 0.316 ／ 0.633 ／ 0.233 | **0.389 ／ 0.767 ／ 0.200** | 0.328 ／ 0.667 ／ 0.233 |
-| カメラ 方位 −60° | 0.342 ／ 0.683 ／ 0.283 | 0.225 ／ 0.483 ／ 0.350 | 0.333 ／ 0.667 ／ 0.183 | 0.321 ／ 0.650 ／ 0.233 |
-| ロボット 倍率 0.1 | 0.415 ／ 0.800 ／ 0.167 | 0.349 ／ 0.683 ／ 0.200 | **0.456 ／ 0.900 ／ 0.067** | 0.413 ／ 0.800 ／ 0.150 |
-| ロボット 倍率 0.2 | 0.367 ／ 0.733 ／ 0.217 | 0.362 ／ 0.717 ／ 0.233 | **0.389 ／ 0.767 ／ 0.150** | 0.360 ／ 0.717 ／ 0.167 |
-| ロボット 倍率 0.4 | 0.337 ／ 0.667 ／ 0.283 | 0.366 ／ 0.750 ／ 0.133 | **0.381 ／ 0.767 ／ 0.150** | 0.333 ／ 0.650 ／ 0.267 |
-
-**読み。**
-
-- **データだけの比較（`pi05_bowl5` 対 `pi05_full_local`）では、合計点が 0.030 下がった。**下げたのはほぼカメラ −60°（0.342 → 0.225）で、
-  ロボット倍率 0.4 は上がった（0.337 → 0.366・衝突率 0.283 → 0.133）。1 条件 60 回なので、条件ごとの差は揺らぎを含む。
-- **`pi05_bowl5_full` が 4 本の中で最高**（0.4004）。6 条件中 5 条件で最高で、衝突率も最も低い。**ただし全パラメータ × 配布データの対照が無い**ので、
-  データの効き目か全パラメータの効き目かは分けられない。
-- **`pi05_ladder2500` は `pi05_full_local` とほぼ同じ**（0.3604 対 0.3656）。配布データのまま全パラメータで 4,000 歩足しても、Track2 VAL72 では伸びていない。
-
-### 4.2 その他の評価セット
-
-| 評価セット | 中身 | 重み | 合計点 | 成功率 | 衝突率 | 結果の置き場 |
-|---|---|---|---|---|---|---|
-| Track2 NOISE72（`TRACK2_NOISE72.csv`） | 素 12 行・センサ雑音 60 行（gaussian 5/9・motion 5/9・zoom 9） | `trial1500/001500` | 0.3770 | 0.747 | 0.172 | `0913_142010_track2_trial1500_noise72` |
-| 同上 | 同上 | `pi05_bowl5_full` | **0.4158**（9/14 09:04 完了。以前の記述「実行中」は古い状態） | 0.808 | 0.128 | `0914_024715_track2_bowl5full_noise72` |
-| Track2 VAL58（`TRACK2_VAL58.csv`） | 素 7 行・カメラ 21 行・ロボット初期姿勢 30 行 | `trial1500/001500` | 0.3333 | 0.659 | 0.272 | `0913_170322_track2_trial1500_val58` |
-| LIBERO90（`LIBERO90.csv`） | LIBERO-90 の 90 課題・素だけ（**`pi05_bowl5_full` の学習には入っていない。combined で学習した重みには入っている**） | `pi05_bowl5_full` | 0.0663 | 0.133 | 0.550 | `0913_220005_track2_bowl5full_libero90` |
-
-`trial1500/001500` の NOISE72 の内訳（合計点 ／ 成功率 ／ 衝突率）: 素 0.421 ／ 0.817 ／ 0.133・gaussian5 0.404 ／ 0.783 ／ 0.133・
-**gaussian9 0.308 ／ 0.633 ／ 0.233**・motion5 0.407 ／ 0.800 ／ 0.150・motion9 0.368 ／ 0.733 ／ 0.217・zoom9 0.354 ／ 0.717 ／ 0.167。
-**強いぼかし（gaussian9）で最も落ちる。**
-
-`pi05_bowl5_full` の NOISE72 の内訳（合計点 ／ 成功率 ／ 衝突率）: 素 0.449 ／ 0.867 ／ 0.067・gaussian5 0.442 ／ 0.850 ／ 0.100・
-**gaussian9 0.347 ／ 0.683 ／ 0.183**・motion5 0.462 ／ 0.883 ／ 0.100・motion9 0.402 ／ 0.783 ／ 0.167・zoom9 0.393 ／ 0.783 ／ 0.150。
-**`trial1500/001500` と同様、強いぼかし（gaussian9）で最も落ちるが、`pi05_bowl5_full` は全条件で `trial1500/001500` より高い。**
-
-### 4.3 Track2 判定セットと LIBERO90 半分
-
-**`pi05_bowl5_full` と C は、素の重みから同じ作り方（全パラメータ・2.5e-5・5,500 歩・batch 64）で、データだけを変えた比べ合いである**（9/15〜16）。
-揃え方は [howto/03 の「比べる評価の揃え方」](../howto/03_gpu_eval.md)に従った。
-判定セット（`TRACK2_NOISE84.csv`・84 行 × 5 本）は 12 課題 × 7 条件（素・ロボット初期姿勢 倍率 0.4・センサ雑音 5 種）で、**カメラ視点と照明は入っていない。**
-LIBERO90 半分は `LIBERO90_HALF45.csv`・45 行 × 1 本。
-
-| 重み | 学習データ | 判定セットの合計点 | 成功率 | 衝突率 | LIBERO90 半分（合計点 ／ 成功率） | 結果の置き場（`work/final_eval/`） |
-|---|---|---|---|---|---|---|
-| `pi05_bowl5_full` | `libero_plus_bowl5` | **0.4055** | **0.798** | **0.138** | 0.0841 ／ 0.156 | `0915_205129_track2_pi05_bowl5_full_noise84x5`・`0916_001540_track2_pi05_bowl5_full_l90half` |
-| `pi05_c005500`（C。HF `siruku6/pi05_combined_initpose_full` の `005500`） | `libero_combined_bowl5_initpose` | 0.3515 | 0.705 | 0.171 | **0.1419 ／ 0.267** | `0915_171348_track2_pi05_c005500_noise84x5`・`0915_135551_track2_pi05_c005500_l90half` |
-| `pi05_f4000`（F。C から全パラメータ 4,000 歩・5e-6） | `libero_combined_bowl5_initpose` | 0.3801 | 0.755 | 0.162 | 0.1194 ／ 0.222 | `0915_184228_track2_pi05_f4000_noise84x5`・`0915_223801_track2_pi05_f4000_l90half` |
-
-**読み。**
-
-- **判定セットは `pi05_bowl5_full` が C よりはっきり上。**同じ行・同じ番号の 420 組で、片方だけ成功した組は 70 対 31（符号検定 p＜0.001）。
-  差がいちばん大きいのはロボット初期姿勢のずれ（成功 0.717 対 0.517）で、**初期姿勢を振った手本を足した C がそこで負けた。**
-- **LIBERO90 半分の 41 指示文は、すべて combined の学習データに入っている**（C・F には学習済み）。それでも成功は C 12/45・`pi05_bowl5_full` 7/45 で、差は偶然の範囲（p＝0.13）。
-- 差の原因を分けられない件は 3 節。条件ごと・課題ごとの表は `docs/talk/tmp_reply/260916_eval_results_dataset_choice.md`（git の外・この機械だけ）。
+**`libero_plus_bowl5` が、`libero_combined_bowl5_initpose`（初期姿勢データ＋`libero_90` などを足したもの）より
+同じ学習の仕方ではっきり上だった。**条件ごと・課題ごとの内訳、VAL72／NOISE72 など過去の回の数値は
+[37 節を参照](../reference/37_local_eval_for_weight_selection.md)。

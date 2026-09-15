@@ -9,6 +9,7 @@
 | 引きたいもの | ファイル |
 |---|---|
 | **流した学習・重み・版・出した点** | **[19_weights_catalog.md](19_weights_catalog.md)（実験台帳）** |
+| **手元のマシンで測った評価結果（成功率・衝突率・なめらかさ）で重み・データセットを選ぶ** | **[37_local_eval_for_weight_selection.md](37_local_eval_for_weight_selection.md)** |
 | モデルの正体（素の重み・中身の説明） | [01_base_model.md](01_base_model.md)・[09_model_explained.md](09_model_explained.md) |
 | 採点環境の構成と制限 | [02_evaluation_data.md](02_evaluation_data.md) |
 | 採点式 | [17_scoring_formula.md](17_scoring_formula.md) |
