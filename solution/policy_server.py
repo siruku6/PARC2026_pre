@@ -774,11 +774,19 @@ class MyPolicy(BasePolicy):
         # tokenizer_processor は保存時の設定に Hub の repo 名が焼き込まれている。
         # 上書きしないと起動時に Hub へ取りに行き、通信のない採点環境で失敗する。
         # **MolmoAct2 のパイプラインには `tokenizer_processor` という名の段が無い**
-        # （`make_molmoact2_pre_post_processors` は `config.checkpoint_path` から直接
-        # トークナイザ・プロセッサ設定を読む。`_build_molmoact2` で既にローカルへ
-        # 向け替えてあるので、ここで渡す上書きは無い）。
+        # 代わりに `molmoact2_pack_inputs` という段が同じ問題を持つ。
+        # **`config.checkpoint_path` を書き換えても、この段には効かない**
+        # （実測・2026-09-15）——`PolicyProcessorPipeline.from_pretrained` は
+        # 各段を `policy_preprocessor.json` に**個別に保存された** config から
+        # 復元するので、外側の `config` オブジェクトへの変更とは独立している。
+        # `preprocessor_overrides` で段ごとに上書きするのが唯一の直し方
+        # （tokenizer_processor と同じやり方）。
         _preprocessor_overrides = {"device_processor": {"device": self._device}}
-        if self._kind != "molmoact2":
+        if self._kind == "molmoact2":
+            _preprocessor_overrides["molmoact2_pack_inputs"] = {
+                "checkpoint_path": str(weights / "molmoact2_base_small")
+            }
+        else:
             _preprocessor_overrides["tokenizer_processor"] = {
                 "tokenizer_name": str(weights / "vlm")
             }
@@ -1166,9 +1174,25 @@ class MyPolicy(BasePolicy):
         （config・トークナイザ・`norm_stats.json`。約 12 MB）だけ置いた場所」へ
         向け替える**。同梱 LeRobot 側の `_load_hf_model`
         （`vendor/lerobot/policies/molmoact2/modeling_molmoact2.py`）も、
-        その場所に safetensors が無ければ `from_config`（重みを読まない組み立て）
-        へ切り替えるよう直してある。**これで 1 は「形を組むだけ」になり、
-        通信も大きな読み込みも起きない。**
+        その場所に safetensors が無ければ `_from_config`（重みを読まない組み立て。
+        この transformers 版に `from_config` は無い）へ切り替えるよう直してある。
+        **これで 1 は「形を組むだけ」になり、通信も大きな読み込みも起きない。**
+
+        **同じ問題がもう 1 か所ある——`__init__` の `make_pre_post_processors` 呼び出し。**
+        前処理パイプラインの `molmoact2_pack_inputs` 段は、`policy_preprocessor.json` に
+        **保存時のまま焼き込まれた** `checkpoint_path`（Hub の
+        `"allenai/MolmoAct2-LIBERO"`）を独自に読む——**ここでの `config.checkpoint_path`
+        書き換えは効かない**（実測・2026-09-15。各段は保存された JSON から個別に
+        復元され、外側の `config` オブジェクトとは独立している）。`__init__` 側で
+        `preprocessor_overrides={"molmoact2_pack_inputs": {"checkpoint_path": ...}}`
+        を渡して直してある。
+
+        **`discrete_action_tokenizer`（既定 `"allenai/MolmoAct2-FAST-Tokenizer"`）は
+        別扱い。** こちらは数百 KB のトークナイザなので、`checkpoint_path` のように
+        向け替えず、**HF の通常キャッシュへ事前に置いておく**方式にした
+        （`hf download allenai/MolmoAct2-FAST-Tokenizer`。`--revision` を付けずに打ち、
+        `refs/main` が作られることを確かめること——コミットハッシュだけ持たせても
+        オフラインの `revision="main"` 解決には使われない。実測で踏んだ）。
 
         Parameters
         ----------
