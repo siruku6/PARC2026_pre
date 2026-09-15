@@ -37,6 +37,19 @@
 #     DS=/workspace/data/libero_combined_bowl5_initpose \
 #     bash /workspace/pi05_code/solution/train/runpod_initpose_ft.sh
 #
+# **`TRIAL=1` なら速さだけを測って片付ける**（9/15 に足した）。上げ先を作らず、上げるループも起こさず、
+# 保存が起きない長さで起こして `TRIAL_STEPS`（既定 100）歩で止め、1 歩の秒数・GPU メモリ・
+# 「何時間で何歩回せるか」を出して出力先を消す（表は `summarize_speed.py`）。batch を変えて何度打ってもよい
+# （データと出発点は 2 回目から降ろし直さない）。**本番の歩数と batch は、これを見てから決める**
+# （学習率の下げ方は起動時の歩数で決まるので、走り出してからは変えられない）。
+#
+#   for b in 64 128; do
+#     TRIAL=1 BATCH=$b RUN=pi05_combined_ae7k INIT_REPO=siruku6/pi05_combined_initpose_full INIT_STEP=005500 \
+#       EXPERT_ONLY=1 LR=5e-6 DATA_REPO=siruku6/libero_combined_bowl5_initpose \
+#       DATASET_ID=local/libero_combined_bowl5_initpose DS=/workspace/data/libero_combined_bowl5_initpose \
+#       bash /workspace/pi05_code/solution/train/runpod_initpose_ft.sh
+#   done
+#
 # Reads:
 #   - HF `$DATA_REPO`（手元で組んだデータセット）と、その中の `bowl5_expected.json`
 #   - HF `$INIT_REPO` の `$INIT_STEP/`（出発点の重み）
@@ -76,6 +89,14 @@ else
     RANGE_NAME="全パラメータ"
 fi
 export HF_HOME="${HF_HOME:-$W/hf_home}"
+TRIAL="${TRIAL:-0}"
+TRIAL_STEPS="${TRIAL_STEPS:-100}"
+if [ "$TRIAL" = 1 ]; then
+    # **本番と同じ名前の出力先・上げ先に触らない**
+    RUN="${RUN}_trial_b${BATCH}"
+    STEPS=$(( TRIAL_STEPS + 1000 ))   # 止める前に終わらない長さ（終われば 9 GB の保存が起きる）
+    SAVE_FREQ=$STEPS
+fi
 
 step() { echo; echo "=== $* ==="; }
 die() { echo; echo "**止まった: $1**"; shift; for l in "$@"; do echo "  $l"; done; exit 1; }
@@ -129,6 +150,44 @@ PY
 echo "  実際 ${GOT//_/ } ／ 期待 ${WANT//_/ }"
 [ "$GOT" = "$WANT" ] || die "降りたデータが期待と違う" "$DS を消して打ち直す"
 WANT_EPS=${WANT%%_*}
+
+if [ "$TRIAL" = 1 ]; then
+    step "速さを測る（batch $BATCH・$RANGE_NAME・$TRIAL_STEPS 歩で止める。上げ先は作らない）"
+    NW=$(python3 -c "import os;print(min(os.cpu_count()//2, 16))")
+    echo "  CPU $(nproc) 個 → --num-workers $NW"
+    cd "$CODE_DIR" || die "$CODE_DIR へ入れない"
+    setsid nohup python train_pi05.py --run-name "$RUN" --output-root "$OUTPUT_ROOT" \
+        --dataset-repo "$DATASET_ID" --dataset-root "$DS" \
+        ${INIT_ARGS[@]+"${INIT_ARGS[@]}"} \
+        --steps "$STEPS" --batch-size "$BATCH" --num-workers "$NW" \
+        --learning-rate "$LR" --save-freq "$SAVE_FREQ" --seed 42 \
+        "${TRAIN_RANGE[@]}" \
+        -- "--policy.scheduler_warmup_steps=$WARMUP" \
+           "--policy.scheduler_decay_steps=$STEPS" \
+        > "$OUTPUT_ROOT/$RUN.nohup" 2>&1 &
+    sleep 5
+    PEAK=0
+    for _ in $(seq 1 360); do
+        grep -q "step:$TRIAL_STEPS " "$OUTPUT_ROOT/$RUN.log" 2>/dev/null && break
+        pgrep -f "train_pi05.py --run-name $RUN" >/dev/null || break
+        M=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits | head -1)
+        [ "${M:-0}" -gt "$PEAK" ] && PEAK=$M
+        sleep 10
+    done
+    pkill -f "train_pi05.py --run-name $RUN"; pkill -f 'lerobot[-_]train'
+    for _ in $(seq 1 30); do pgrep -f "train_pi05.py --run-name $RUN" >/dev/null || break; sleep 2; done
+    if grep -q "step:$TRIAL_STEPS " "$OUTPUT_ROOT/$RUN.log" 2>/dev/null; then
+        python3 "$CODE_DIR/summarize_speed.py" "$OUTPUT_ROOT/$RUN.log" --batch "$BATCH" --peak-mib "$PEAK"
+    else
+        echo "  **$TRIAL_STEPS 歩に届く前に止まった（batch $BATCH）。**"
+        grep -m3 -iE "out of memory|OutOfMemoryError|Error" "$OUTPUT_ROOT/$RUN.nohup" | sed 's/^/    /'
+        echo "  out of memory ならこの batch は載らない。小さい batch で打つ"
+    fi
+    rm -rf "${OUTPUT_ROOT:?}/$RUN" "$OUTPUT_ROOT/$RUN.log" "$OUTPUT_ROOT/$RUN.nohup"
+    echo
+    echo "=== 試し走りを片付けた。本番は TRIAL を外し、STEPS・BATCH・SAVE_FREQ を決めて打つ ==="
+    exit 0
+fi
 
 step "上げる道具と上げ先"
 for f in upload_ckpt.sh verify_upload.py; do cp "$CODE_DIR/$f" "$TOOLS/$f" || die "$f が無い"; done
