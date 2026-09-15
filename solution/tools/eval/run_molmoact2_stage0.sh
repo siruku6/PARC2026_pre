@@ -8,9 +8,12 @@
 #   1. `WEIGHTS/vlm` チェックを飛ばす（molmoact2 は vlm/ 同梱の仕組みを使わない）
 #   2. `parc2026-train-pi05` イメージに焼き込み済みの
 #      `/opt/lerobot/src/lerobot/policies/molmoact2/modeling_molmoact2.py`
-#      （重みを2回読む素の実装）を、このリポジトリの直した版で上書きマウントする
+#      （重みを2回読む素の実装）を、`solution/tools/eval/lerobot_patches/` の
+#      直した版で上書きマウントする
 #      ——`work/artifacts/vendor/lerobot/...` は最終提出 zip 用の別コピーで、
 #      ローカル評価のイメージには一切効かない（2026-09-15 に確認）。
+#      **`work/` は git の管理外なので、直した版は `solution/` 側に置いてある**
+#      （9/15。vendor 側だけに置いていた前回の直しは、実際には入っていなかった）。
 #
 # 使い方
 #
@@ -39,7 +42,7 @@ SERVER_PY="${SERVER_PY:-$REPOSITORY_ROOT/solution/policy_server.py}"
 KIT_IMAGE="${KIT_IMAGE:-parc2026-final}"
 POLICY_IMAGE="${POLICY_IMAGE:-parc2026-train-pi05}"
 MUJOCO_GL="${MUJOCO_GL:-osmesa}"
-MOLMOACT2_MODELING_PATCH="${MOLMOACT2_MODELING_PATCH:-$REPOSITORY_ROOT/work/artifacts/vendor/lerobot/policies/molmoact2/modeling_molmoact2.py}"
+MOLMOACT2_MODELING_PATCH="${MOLMOACT2_MODELING_PATCH:-$REPOSITORY_ROOT/solution/tools/eval/lerobot_patches/modeling_molmoact2.py}"
 
 if [ ! -f "$MOLMOACT2_MODELING_PATCH" ]; then
     echo "直した modeling_molmoact2.py が無い: $MOLMOACT2_MODELING_PATCH" >&2
