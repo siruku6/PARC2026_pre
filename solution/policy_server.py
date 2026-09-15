@@ -1626,10 +1626,26 @@ class MyPolicy(BasePolicy):
         self._adaptive_history.clear()
 
     def _build_batch(self, obs: dict[str, np.ndarray]) -> dict:
-        """評価パイプラインの観測を、モデルが期待する batch へ変換する。"""
+        """評価パイプラインの観測を、モデルが期待する batch へ変換する。
+
+        **画像キー名はモデルによって違う。** `LiberoProcessorStep`（下の
+        `_env_preprocessor`）は画像を回転させるだけでキー名は変えない
+        （`env_processor.py` の `_process_observation`）。**MolmoAct2 の保存済み
+        `policy_preprocessor.json` は `rename_observations_processor` の
+        `rename_map` が空**——つまり寄せ替えを一切しない前提で、
+        `config.image_keys`（`["observation.images.image",
+        "observation.images.wrist_image"]`）の名前がそのまま来ることを期待する
+        （2026-09-15、ダウンロードした重み同梱の設定を読んで確認）。
+        **ここで作らないと、SmolVLA・π0.5 と同じ `front`/`wrist` のままキーが
+        合わず画像が届かない。**
+        """
+        if self._kind == "molmoact2":
+            image_keys = ("observation.images.image", "observation.images.wrist_image")
+        else:
+            image_keys = ("observation.images.front", "observation.images.wrist")
         observation = {
-            "observation.images.front": self._to_image_tensor(obs["agentview_image"]),
-            "observation.images.wrist": self._to_image_tensor(
+            image_keys[0]: self._to_image_tensor(obs["agentview_image"]),
+            image_keys[1]: self._to_image_tensor(
                 obs["robot0_eye_in_hand_image"]
             ),
             "observation.robot_state": {
