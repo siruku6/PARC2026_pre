@@ -5,7 +5,7 @@
 「摂動とは何か・どんな強さが出るか」を書いているのに対し、こちらは
 **`work/artifacts/pi05_rp3000` が実際にどれだけ崩れたか**だけを書く。
 
-**測った経緯は [plan/10 の 7・8 節](../plan/10_eval_perturbation_suite.md) にある。**
+**測った経緯は [plan/10 の 7・8 節](../plan/archive/10_eval_perturbation_suite.md) にある。**
 あちらは時系列で、途中に撤回した読みが 2 つ入っている。**このファイルは撤回後の結論だけ**を
 持つので、判断に使うのはこちらにする。
 
@@ -189,7 +189,7 @@ Camera の方位角 45〜75° では 24 行のうち 14 行で「300 に達し�
 | ~~Robot の摂動量 0.3〜0.5 を 3 エピソードで~~ | **済（8/28）。**48 姿勢 180 ロールアウトで測り、飽和しないことと 2 cm の境目が出た。4 節の帰結 1 を逆向きに書き換えた |
 | **手先のずれ 1〜2 cm を厚く測る** | 境目が 2 cm なのか 1.5 cm なのかが分けられていない（8/28 の回は 2 cm 未満が 7 行しか無い）。**Tier2 で何 cm から作るかがこれで変わる** |
 | **摂動を含む集合で提出候補を比べること** | いま提出候補の比較に使う `compe/val/EVAL_TASKS.csv`（36 件）は **Track2 の摂動を 1 件も含まない**（Track1 の背景・照明のみ）。**採点されるのと違う条件で選んでいる** |
-| 複合摂動（Camera×Robot×Noise×Layout） | 単軸の和で近似できるか。技術検証は済み（[plan/10 の 4 節](../plan/10_eval_perturbation_suite.md)）。**本選が複合を課すかは運営 Q&A 待ち** |
+| 複合摂動（Camera×Robot×Noise×Layout） | 単軸の和で近似できるか。技術検証は済み（[plan/10 の 4 節](../plan/archive/10_eval_perturbation_suite.md)）。**本選が複合を課すかは運営 Q&A 待ち** |
 | Track2 の採点集合の構成 | 1 節の順位は「4 カテゴリが等しく出る」前提の値である。実際の出方が偏っていれば重みが変わる |
 
 ---
@@ -204,7 +204,7 @@ Camera の方位角 45〜75° では 24 行のうち 14 行で「300 に達し�
 | Camera の方位角（15〜75°） | `work/gpu_eval/0823_141340_camera_azimuth_n16_ep1_max300_ema03_blend0_s1` と `0823_201743_camera_high_control_n16_ep2_max300_ema03_blend0_s1` |
 | Sensor Noise の severity 25〜50 | `work/gpu_eval/0822_120617_sensor_noise_high_n16_ep1_max300_ema03_blend0_s1`（32 件） |
 | Robot の摂動量が平均 0.20 であること | 上記 probe16 の `VAL_TASKS.csv` の `_initstate_N` を `robots/new_init.py` の割り当て（1〜100→0.1、…、401〜500→0.5）に当てて数えた |
-| 元の 40 行 probe のカテゴリ順位（撤回した読み） | [plan/10 の 7 節](../plan/10_eval_perturbation_suite.md)。生ログは `work/gpu_eval/0822_092556_track2_probe_n16_ep1_max300_ema03_blend0_s1` |
+| 元の 40 行 probe のカテゴリ順位（撤回した読み） | [plan/10 の 7 節](../plan/archive/10_eval_perturbation_suite.md)。生ログは `work/gpu_eval/0822_092556_track2_probe_n16_ep1_max300_ema03_blend0_s1` |
 | 2 節の Robot の測り直し（2 cm の境目・飽和しないこと・向きの効き） | `work/final_eval/0828_151854_track2_robot_ladder`（60 行 180 ロールアウト）。集合の作り方と読み方は [talk/inter_sessions/002](../talk/inter_sessions/002_robot_init_pose_coverage.md) |
 | 公式 500 通りの手先のずれ（倍率ごとの中央値と最大） | `work/artifacts/robot_initstate_ladder/init_pose_validity.json` と、同じ 002 の「やること 1 の答え」 |
 | 摂動の強さを決める整数の幅・`difficulty_level` が段でないこと | [20 の 2.2 節](20_track2_perturbation_categories.md) |

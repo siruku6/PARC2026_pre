@@ -267,6 +267,30 @@ PY
 `lerobot/libero_plus` のカメラは `front` `wrist` の 2 台なので、
 **学習時と推論時で枚数が一致している。**
 
+## 【9/8 に足した】`pi05_libero_base` と学習後の重みは、4 か所で形が違う
+
+**素の重みを読み込んで比べようとして踏んだ。**推論で比べるだけでも要る
+（[knowledge/20](../knowledge/20_probe_object_choice_without_rollout.md) の 5 節）。
+
+| 違い | `lerobot/pi05_libero_base` | 私たちの学習後 |
+|---|---|---|
+| **state_dict のキー** | `action_in_proj.weight` | **`model.` が付く** |
+| **カメラの名前** | `observation.images.image` / `image2` | **`front` / `wrist`**（＋ `empty_camera_0`） |
+| **正規化統計** | **無い**（`policy_preprocessor.json` はあるが `.safetensors` が無い） | 同梱されている |
+| **`dtype`** | `float32` | **`bfloat16`** |
+| **語彙埋め込み** | `embed_tokens` が **`lm_head` と同一**（共有） | **別物になっている** |
+
+**どれも読み込みを黙って壊す。**
+
+- **接頭辞。**1 テンソルずつ写す実装は `copied: 0 / unknown: 812` になる。
+  **本体の `PI05Policy.from_pretrained` は 812 個を remap して通す。**
+- **カメラ名。**画は `config.image_features` の**順に**処理されるので、
+  **順序を保てば名前を差し替えてよい。**
+- **統計。**「json があるか」で判定すると**空の統計で組まれて入力が壊れる。**
+  **`.safetensors` の有無で判定すること。**
+- **語彙埋め込み。**base では共有だが学習後は別物なので、
+  **`lm_head` を `embed_tokens` へ写す細工は学習後の重みには当てはまらない。**
+
 ## 学習データが 2 つあり、同じものではない
 
 [01_base_model.md](01_base_model.md) が未確認として挙げていた

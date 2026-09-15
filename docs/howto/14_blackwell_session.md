@@ -346,150 +346,129 @@ import json; print('compile_model =', json.load(open(
 | `compile_model` | **False**（**9/3 に HF の `pi05_trial1500` の `001500/config.json` を降ろして読んだ。**`train_pi05.py` はこの値を上書きしない。`rp3000` も 8/29 に False を確認済み） | **True なら止める。**チェックポイントに焼き付き、評価サーバの起動に 1,177.9 秒かかって落ちる |
 | `tail` の最後の行 | `step:20 smpl:1K ... loss:... updt_s:... mem_gb:...` | 例外が出ていれば A3 の環境に戻る |
 
+### B3b 【9/8 に作った】段取りを 2 本のスクリプトに畳んだ
+
+**9/7 に手で打ったときは、作業だけで 2 時間かかった。**踏んだ穴は
+[reference/27 の 5 節](../reference/27_blackwell_environment.md#5-踏んだ罠実際に-1-度は踏んだもの)に全部並んでいる。
+**次からはこの 2 本で済む。**
+
+```bash
+hf download siruku6/pi05_code --local-dir ~/pi05_code
+cd ~/pi05_code/solution/train
+
+. ~/env_pi05.sh
+COPIES=11 bash blackwell_setup.sh          # データを作る（何度打ってもよい）
+RUN=pi05_proto21 EXPERT_ONLY=1 bash blackwell_launch.sh   # 学習と上げるループを起こす
+```
+
+| script | 何をするか |
+|---|---|
+| **`blackwell_setup.sh`** | 道具 6 つの取得 → 配布 tar の展開 → **動画の 3 桁 symlink** → 逆向きデータの取得 → **N 倍**（倍々で組む）→ align と merge → **検算と据え置き** → `rp3000` の取得 → **`~/run_env.sh` を書く** |
+| **`blackwell_launch.sh`** | 前提を 7 つ確かめる → `setsid` で学習を起こす → 上げるループを起こす → **最初の 20 歩まで待って `num_learnable_params` と `dataset.num_episodes` を突き合わせる** |
+
+**どちらも、違っていたら原因と次の一手を出して止まる。**
+
+| 性質 | 中身 |
+|---|---|
+| **何度打ってもよい** | 各段は出来上がりの本数・コマ数・タスク数を数えて、正しければ飛ばす |
+| **ターミナルが落ちても続く** | `~/run_env.sh` を `.` で読めば変数が戻る。**スクリプトを打ち直せば続きから進む** |
+| **黙って進まない** | 数が 1 つでも違えば止まる（期待値は script に書いてある） |
+| **離席の合図が出る** | `=== 走っている。離席してよい ===` が出るまで待つ。**それまでに落ちる筋は全部そこで捕まる** |
+
+**`COPIES` で逆向きデータの割合が決まる。**11 で 19.75%、5 で 10.1%、22 で 33.0%。
+**`EXPERT_ONLY=1` を渡すと action expert だけ（693M）になり、期待値も自動で切り替わる。**
+
 ### B4 チェックポイントを HF へ上げるループを始める（10 分）
+
+> **ループそのものの説明は [17](17_checkpoint_upload.md) に分けた。**摘み・ログの読み方・詰まったときはそちら。ここは打つ順番だけを持つ。
 
 **これが分かると何が決まるか: セッションが消えたときに何が残るか。
 `/opt/dlami/nvme` はインスタンス終了で消えるので、上がっていないものは失われる。**
 
+> **【9/7 に作り直した】script はここに書かず、版を管理している 2 ファイルを使う。**
+> `solution/train/upload_ckpt.sh` と `solution/train/verify_upload.py` である。
+> **9/3 に踏んだ 2 つを潰した。**
+>
+> | 踏んだこと | どう潰したか |
+> |---|---|
+> | **`000500` の次から 1 個も上がらず、跡も残らなかった** | **上げた後に HF を読んで、手元のファイルと数と大きさを突き合わせる**（`verify_upload.py`）。**一致しなければ印を付けない**ので次の巡でやり直す。**止まりうる場所の手前に必ず 1 行書く**ので跡が残る。`du` にも `timeout` を掛けた |
+> | **上げている 10 分の間に学習が終わると `break` して最後の 1 個を落とす** | **抜ける条件を「学習が終わった かつ 未上げが 0 個」にした。**学習が終わってからも上げ切るまで抜けない |
+>
+> **もう 1 つ足した。**`RUN` の学習が立ち上がるのを最大 600 秒待つ
+> （`WAIT_START`）。**待たずに入ると、未上げ 0 個・学習なしの状態で
+> 「全部上がった」の印を誤って置き、B6 がサーバを止めてしまう。**
+
 ```bash
-cat > ~/upload_ckpt.sh <<'EOF'
-#!/usr/bin/env bash
-# 出来上がったチェックポイントの pretrained_model だけを HF へ上げる。
-# 上げ終えた印は $HOME に置く（チェックポイントの中に置くと、次の上げに混ざる）。
-set -u
-OUT=/opt/dlami/nvme/out/pi05_camdrop2500
-REPO=siruku6/pi05_camdrop2500
-# 上げ終えた印は「走りごと」に分ける。~/uploaded/<歩数> という置き方だと、
-# 前のセッションの別の走りが置いた 000500 を、新しい走りの 000500 だと思って飛ばす（9/5 に踏んだ）。
-MARK=~/uploaded/$(basename "$OUT")
-mkdir -p "$MARK"
-echo "$(date -Iseconds) 印の置き場 $MARK（既にある印: $(ls "$MARK" 2>/dev/null | tr '\n' ' '))" \
-    >> ~/upload_ckpt.log
-while true; do
-  for d in "$OUT"/checkpoints/*/pretrained_model; do
-    [ -d "$d" ] || continue
-    # LeRobot は保存のたびに checkpoints/last という symlink を貼り直す。
-    # これを拾うと HF に「last」という歩数のふりをした複製が 1 個できる（9/3 に踏んだ）。
-    [ -L "${d%/pretrained_model}" ] && continue
-    step=$(basename "$(dirname "$d")")
-    [ -f "$MARK/$step" ] && continue
-    # 書き終える前に上げないよう、30 秒間サイズが変わらないことを確かめる
-    a=$(du -sb "$d" | cut -f1); sleep 30; b=$(du -sb "$d" | cut -f1)
-    [ "$a" = "$b" ] || continue
-    # timeout: 1 個 9.35 GB なので正常なら 15 分。1 時間で諦めて次の巡へ回す。
-    if timeout 3600 hf upload "$REPO" "$d" "$step" --repo-type model; then
-      date -Iseconds > "$MARK/$step"
-      echo "$(date -Iseconds) 上げた $step" >> ~/upload_ckpt.log
-      rm -rf "$(dirname "$d")/training_state"   # 16 GB。上げないので消して空きを戻す
-    else
-      # 成功しか書かないと、失敗と「1 度も試していない」を後から区別できない（9/3 に踏んだ）
-      echo "$(date -Iseconds) 失敗 $step（終了コード $?）" >> ~/upload_ckpt.log
-    fi
-  done
-  # 1 巡ごとの足跡。これが無いと、止まったときにどこで止まったかを言えない（9/3 に踏んだ）
-  echo "$(date -Iseconds) 見回り $(ls -d "$OUT"/checkpoints/*/ 2>/dev/null | wc -l) 個" \
-      >> ~/upload_ckpt.log
-  pgrep -f "train_pi05.py --run-name pi05_camdrop2500" >/dev/null || break
-  sleep 60
-done
-echo "$(date -Iseconds) 上げるループを終える" >> ~/upload_ckpt.log
-EOF
-chmod +x ~/upload_ckpt.sh
+mkdir -p ~/tools
+hf download siruku6/reverse_lerobot_389 upload_ckpt.sh   --repo-type dataset --local-dir ~/tools
+hf download siruku6/reverse_lerobot_389 verify_upload.py --repo-type dataset --local-dir ~/tools
+chmod +x ~/tools/upload_ckpt.sh
+
 export PATH="$HOME/.local/bin:$PATH"
-nohup ~/upload_ckpt.sh > ~/upload_ckpt.nohup 2>&1 &
+RUN=pi05_proto20 REPO=siruku6/pi05_proto20 \
+    setsid nohup ~/tools/upload_ckpt.sh > ~/upload_ckpt.nohup 2>&1 &
 echo "PID $!"
 ```
 
-> **【9/3 に直した】「もう一巡してから抜けるので最後の 1 個も上がる」と書いていたが、外れていた。**
-> **`pgrep` を見るのは `for` を回り終えた後なので、上げている 10 分の間に学習が終わると
-> その回で `break` し、最後のチェックポイントが上がらない。**
-> **1 個 9.35 GB あるので、この 10 分は普通に起きる。**
-> **だから最後の 1 個は、[分岐 5](#分岐-5-hf-に-000500-しか上がっていない9-3-に実際に起きた) の
-> 4 番のように手で上げて、上がったことを見てから Stop Server を押す。**
+**`setsid` を付ける。**`nohup` は SIGHUP しか防がないので、**ターミナルが
+プロセスグループごと殺されると上げるループも落ちる**（9/7 にターミナルが落ちた）。
+
+**渡すのは 2 つだけである。**`RUN` は `--run-name` と同じ文字列、`REPO` は上げ先。
+`OUT`（既定 `/opt/dlami/nvme/out/$RUN`）・`MARK`（`~/uploaded/$RUN`）・
+`LOG`（`~/upload_ckpt.log`）・`VERIFY`（`~/tools/verify_upload.py`）は上書きできる。
+
+**上げ先は公開で作る。**`hf upload` が無ければ作る（`create_repo` を打たなくてよい）。
+**枠に効くのは非公開だけである**——9/7 に数えた非公開の使用量は 47.26 GB で、
+`pi05_all111` と `pi05_camdrop2500` はどちらも公開に置いてある。
+**公開にすればチェックポイント 4 個 35 GB は枠に当たらない。**
+
+**離席する前に、ログにこの 2 行が出るのを見る。**
+
+```bash
+tail -5 ~/upload_ckpt.log
+```
+
+| 見る行 | 意味 |
+|---|---|
+| `学習を見つけた（N 秒待った）` | ループが本体を掴んだ。**これが無いまま `印は置かず終わる` が出ていたら、順番を間違えている** |
+| **`000500 **確かめた。印を付けた**`** | **1 個目が HF に在ることを数えて確かめた。****これを見るまで離席しない** |
 
 **`train_config.json` はこのループで一緒に上がる。**上げているのが
 `pretrained_model` ディレクトリまるごとだからである。**中身の在り処はこうなる。**
 
 | | 場所 |
 |---|---|
-| 機械の上 | `$OUTPUT_ROOT/pi05_camdrop2500/checkpoints/<歩数>/pretrained_model/train_config.json` |
+| 機械の上 | `$OUTPUT_ROOT/<RUN>/checkpoints/<歩数>/pretrained_model/train_config.json` |
 | **HF** | **`<歩数>/train_config.json`**（`pretrained_model/` の階層は落ちる） |
 
 **`pretrained_model/` の外には書かれない**（LeRobot v0.6.0 の
 `configs/train.py` 280 行が `save_directory`＝`pretrained_model` に書く。
 階層は `common/train_utils.py` 107〜121 行の図のとおり）。
-**上の 2 行は 8/31 の `ladder2500` の実物で確かめた**——
-HF の `pi05_trial1500` に `ladder2500/002500/train_config.json` が在る。
 
 > **1 つだけ注意。**階層が落ちるので、**HF から LeRobot の `--resume` で直に続けることはできない**
 > （`configs/train.py` 329 行は Hub 上の `<歩数>/pretrained_model/train_config.json` を探す）。
 > **`--init-from` は落ちた形のままで読めるので、いつもの続け方には影響しない。**
-> **そして `train_config.json` は設定しか持たない**——**loss の推移は B4b のログにしか無い。**
+> **そして `train_config.json` は設定しか持たない**——**loss の推移は `logs/` に上がるログにしか無い**（B4b）。
+
 
 ### B4b 学習ログを `$HOME` と HF へ写すループを始める（3 分）
 
-**これが分かると何が決まるか: loss の推移が後から読めるか。**
-**`$OUTPUT_ROOT`（`/opt/dlami/nvme/out`）はセッション終了で消える。**
-**そしてログは、やり直しでは作れない唯一のものである**——
-チェックポイントの `train_config.json` は設定を持つが、**loss の推移は持たない。**
-**9/1 に `ladder2500` の「loss は 2,000 歩かけて −2.2%」を判定できたのは、
-ログを機械が消える前に降ろしてあったからである**（`open_items.md` の `F61`）。
+> **2026-09-13 から、ここで打つものは無い。**B4 の `upload_ckpt.sh` が、チェックポイントを
+> 上げるたびにログも `logs/` へ上げ、`~/train_logs/<RUN>/` に写しを残す。
+> 理由と仕組みは [17 の 1 節](17_checkpoint_upload.md)。**以前ここにあった `sync_log.sh` は、
+> 同じことを別の置き方でする 2 つ目の道になるので消した。**
 
-**置き先は 2 か所にする。**
-
-| 置き先 | 残り方 | 落ちる筋 |
-|---|---|---|
-| **`$HOME/train_logs/`** | **セッションをまたいで残る**（自動保存の対象） | **`~/data`・`~/.cache`・`~/dataset` に置くと消える**——あの 3 つは一時領域への symlink である |
-| **HF の `pi05_camdrop2500`** | **どの機械からでも降ろせる** | 認証が切れていると黙って失敗する（だから `$HOME` 側を先に写す） |
+**確かめるのは 1 つだけである。**最初のチェックポイントが上がったあとに打つ。
 
 ```bash
-cat > ~/sync_log.sh <<'EOF'
-#!/usr/bin/env bash
-# 学習ログを $HOME と HF へ写す。1 分ごとに $HOME、10 分ごとに HF。
-set -u
-RUN=pi05_camdrop2500
-SRC=/opt/dlami/nvme/out
-DST=$HOME/train_logs          # symlink でない $HOME の実体に置く（~/data は消える）
-REPO=siruku6/pi05_camdrop2500
-mkdir -p "$DST"
-copy() {
-  for f in "$RUN.log" "$RUN.nohup"; do
-    [ -f "$SRC/$f" ] && cp "$SRC/$f" "$DST/$f"
-  done
-}
-push() {
-  if hf upload "$REPO" "$DST/$RUN.log" "logs/$RUN.log" --repo-type model >/dev/null 2>&1; then
-    echo "$(date -Iseconds) HF へ上げた"
-  else
-    echo "$(date -Iseconds) HF は失敗（~/train_logs への写しは済んでいる）"
-  fi
-}
-i=0
-while pgrep -f "train_pi05.py --run-name $RUN" >/dev/null; do
-  copy
-  i=$((i + 1))
-  [ $((i % 10)) -eq 0 ] && push
-  sleep 60
-done
-copy; push                      # 学習が終わったあと、最後に 1 回
-echo "$(date -Iseconds) ログの写しを終える"
-EOF
-chmod +x ~/sync_log.sh
-export PATH="$HOME/.local/bin:$PATH"
-nohup ~/sync_log.sh > ~/sync_log.nohup 2>&1 &
-echo "PID $!"
+. ~/run_env.sh
+ls -la ~/train_logs/$RUN/                       # <RUN>.log と <RUN>.nohup が並ぶ
+grep "ログ" ~/upload_ckpt_$RUN.log | tail -3     # 「ログ **確かめた**」が出ている
 ```
 
-**1 分後に 2 行で確かめる。**
-
-```bash
-sleep 65; ls -la ~/train_logs/
-tail -3 ~/sync_log.nohup
-```
-
-**`~/train_logs/` に 2 つ並べば、最悪の全損は防げている。**
-**10 分たっても `HF へ上げた` が出ないときは、`hf auth whoami` を打ち直す**
+**`確かめた` が出ないときは、`hf auth whoami` を打ち直す**
 （`~/.cache` が消える領域なので、トークンはセッションごとに入れ直している）。
+**写しは `~/train_logs/<RUN>/` に残っている**ので、その間も全損にはならない。
 
 ### B5 最初の 500 ステップが HF に載るまで見届ける（40 分）
 
@@ -504,51 +483,87 @@ watch -n 60 'ls -la /opt/dlami/nvme/out/pi05_camdrop2500/checkpoints/ 2>/dev/nul
 ```
 
 **確かめるのは 2 つ。**(a) `checkpoints/000500/` が出来ること、
-(b) `~/upload_ckpt.log` に「上げた 000500」が出ること。
+(b) `~/upload_ckpt.log` に `000500 **確かめた。印を付けた**` が出ること。
 **(b) が出ないうちは離席しない。**上げの道が通っていなければ、
 夜通し回しても朝には何も残らない。
 
 ### B6 監視セルを実行状態のまま残して離席する（5 分）
 
-**これが分かると何が決まるか: 待機による自動停止（1 時間）で学習が殺されないか。**
+**これが分かると何が決まるか: 待機による自動停止（1 時間）で学習が殺されないか。
+そして「上がっていないチェックポイントを消してしまわないか」。**
 
 **`nohup` で走らせた学習は「セルの実行」ではない。**セルが 1 つも動いていない状態が
 1 時間続くと自動停止する規定なので、**カーネルを動かし続けるセルを 1 つ残す。**
+
+> **【9/7 に直した】止める条件を「上げるループが居ない」から
+> 「`_all_uploaded` の印が在る」に変えた。**
+> **前の条件は、上げるループが早く抜けたときに取りこぼしたまま `DELETE` を投げる。**
+> 9/3 はループが `000500` の次から 1 個も上げないまま生きていた（[分岐 5](#分岐-5-hf-に-000500-しか上がっていない9-3-に実際に起きた)）。
+> **印は `upload_ckpt.sh` が「未上げ 0 個」を確かめてから置く**ので、
+> **印が無いのに止めることは無い。**印が置かれないときは**止めずに待つ**——
+> **GPU 時間は減るが、上がっていないチェックポイントは消えない。**
 
 ```python
 # **このセルは Notebook のセルとして実行する（`!` も `%%bash` も付けない）。**
 import os, subprocess, time, urllib.request
 
-LOG = "/opt/dlami/nvme/out/pi05_camdrop2500.log"
-alive = lambda: bool(subprocess.run(
-    ["pgrep", "-f", "train_pi05.py --run-name pi05_camdrop2500"],
-    capture_output=True).stdout)
+RUN  = "pi05_proto20"
+LOG  = f"/opt/dlami/nvme/out/{RUN}.log"
+DONE = os.path.expanduser(f"~/uploaded/{RUN}/_all_uploaded")
+ULOG = os.path.expanduser("~/upload_ckpt.log")
 
-while alive():
-    tail = subprocess.run(["tail", "-n", "1", LOG], capture_output=True, text=True).stdout
-    print(time.strftime("%H:%M"), tail.strip()[-160:], flush=True)
+alive = lambda pat: bool(subprocess.run(["pgrep", "-f", pat],
+                                        capture_output=True).stdout)
+tail = lambda path, n=1: subprocess.run(["tail", "-n", str(n), path],
+                                        capture_output=True, text=True).stdout.strip()
+
+while alive(f"train_pi05.py --run-name {RUN}"):
+    print(time.strftime("%H:%M"), tail(LOG)[-160:], flush=True)
     time.sleep(300)
 
-print("学習が終わった。上げ残しを待つ", flush=True)
-while subprocess.run(["pgrep", "-f", "upload_ckpt.sh"], capture_output=True).stdout:
+print("学習が終わった。全部上がるのを待つ", flush=True)
+while not os.path.exists(DONE):
+    if not alive("upload_ckpt.sh"):
+        # **ループが死んだのに印が無い。止めてはいけない。**
+        print("**上げるループが居ないのに _all_uploaded が無い。"
+              "サーバは止めない。手で上げること**", flush=True)
+        print(tail(ULOG, 40), flush=True)
+        break
+    print(time.strftime("%H:%M"), "上げ待ち:", tail(ULOG)[-160:], flush=True)
     time.sleep(60)
-print(open(os.path.expanduser("~/upload_ckpt.log")).read(), flush=True)
 
-# JUPYTERHUB_API の GET が 200 だったときだけ、自分でサーバを止める
-url, tok, user = (os.environ.get(k) for k in
-                  ("JUPYTERHUB_API_URL", "JUPYTERHUB_API_TOKEN", "JUPYTERHUB_USER"))
-if url and tok and user:
-    req = urllib.request.Request(f"{url}/users/{user}/server", method="DELETE",
-                                 headers={"Authorization": f"token {tok}"})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            print("Stop Server ->", r.status)
-    except Exception as e:
-        print("止められなかった。待機による自動停止に任せる:", e)
+if os.path.exists(DONE):
+    print("全部上がった:", open(DONE).read().strip(), flush=True)
+    print(tail(ULOG, 20), flush=True)
+    # **API では止まらない。**`JUPYTERHUB_API_*` への DELETE は 9/8 に効かないことを
+    # 確認した。**止めるのは UI（File > Hub Control Panel > Stop Server）だけである。**
+    # ここでは「止めてよい」と印字するに留め、待機による自動停止に任せる
+    print("**全部上がった。UI から Stop Server を押してよい**", flush=True)
+    print("  File > Hub Control Panel > Stop Server", flush=True)
+else:
+    # **印が無いままここへ来たら、待機による自動停止（1 時間）にも任せない。**
+    # セルを回し続けてカーネルを生かし、人が戻るまでディスクを保たせる。
+    print("**印が無いので、セルを回し続けてサーバを保たせる**", flush=True)
+    while True:
+        print(time.strftime("%H:%M"), "人を待っている", flush=True)
+        time.sleep(300)
 ```
 
 **このセルを実行したまま、ブラウザのタブは閉じてよい。**
 **カーネルはサーバ側で動き続ける。**
+
+**戻ったら最初に見るのはセルの出力の最後の行である。**
+
+| 最後の行 | 意味 | やること |
+|---|---|---|
+| **`全部上がった。UI から Stop Server を押してよい`** | 全部上がった | HF の一覧で歩数を数えてから **UI で止める** |
+| `人を待っている` | **取りこぼしがある。サーバは生きている** | `~/upload_ckpt.log` を読み、手で上げる（[分岐 5](#分岐-5-hf-に-000500-しか上がっていない9-3-に実際に起きた)） |
+
+> **【9/8 に確かめた】サーバは UI からしか止められない。**
+> `JUPYTERHUB_API_URL` への `DELETE` は効かない。
+> **`File > Hub Control Panel > Stop Server` を押すこと。**
+> **押すまで時間の消費は止まらない。**
+
 
 ---
 
@@ -576,14 +591,14 @@ for f in HfApi().repo_info('siruku6/pi05_camdrop2500', repo_type='model').siblin
     print(f.rfilename)"
 ```
 
-**ログも一緒に降ろす。**`logs/` に上がっている（B4b）。
+**ログも一緒に降ろす。**`logs/` に上がっている（[17 の 1 節](17_checkpoint_upload.md)）。
 
 ```bash
 hf download siruku6/pi05_camdrop2500 --include 'logs/*' \
     --local-dir work/train/pi05_camdrop2500
 ```
 
-**上がっていなければ、`$HOME` のほうに残っている**（`~/train_logs/`）。
+**上がっていなければ、`$HOME` のほうに残っている**（`~/train_logs/<RUN>/`）。
 **次のセッションで開いたときに、まずそれを降ろすこと**——`$HOME` は残るが、
 **同じ名前で次の走りを回すと上書きされる。**
 
@@ -806,7 +821,7 @@ HF に上がっていないチェックポイントは存在しないのと同�
 |---|---|
 | [B1 上げ先を用意する](#b1-上げ先を用意する10-分) | `create_repo` の名前を **`siruku6/pi05_all111`** に。**同じ script が非公開の空きを数える** |
 | [B4 上げるループ](#b4-チェックポイントを-hf-へ上げるループを始める10-分) | **3 か所**——`OUT=/opt/dlami/nvme/out/pi05_all111`・`REPO=siruku6/pi05_all111`・`pgrep -f` の `--run-name pi05_all111` |
-| [B4b ログを写すループ](#b4b-学習ログを-home-と-hf-へ写すループを始める3-分) | **2 か所**——`RUN=pi05_all111`・`REPO=siruku6/pi05_all111` |
+| [B4b ログを写すループ](#b4b-学習ログを-home-と-hf-へ写すループを始める3-分) | **打たなくてよい**——ログは B4 の `upload_ckpt.sh` が一緒に上げる（2026-09-13 から） |
 | [B5](#b5-最初の-500-ステップが-hf-に載るまで見届ける40-分)・[B6](#b6-監視セルを実行状態のまま残して離席する5-分) | 書き換えなし。**B6 を飛ばすと 1 時間の待機で学習ごと止まる** |
 
 **HF の空きはこの 1 本に足りる（9/5 に数え直した）。**
@@ -909,7 +924,7 @@ bash solution/tools/train/run_train_tests.sh
 | 手 | 戻る量 | 決めるのは |
 |---|---|---|
 | ~~`siruku6/pi05_stage1_24000` を消す~~ | **0 GB。公開なので枠を食っていない**（9/3 に分かった） | — |
-| **非公開のリポジトリを公開へ移す** | **そのリポジトリの全量。**消さずに戻る（`pi05_camdrop2500` の 46.77 GB を 9/5 にこれで戻した）。**手順は [08_hf_transfer_troubleshooting.md](08_hf_transfer_troubleshooting.md) の最後の節** | 親の判断（**公開してよい中身かを先に見る**） |
+| **非公開のリポジトリを公開へ移す** | **そのリポジトリの全量。**消さずに戻る（`pi05_camdrop2500` の 46.77 GB を 9/5 にこれで戻した）。**手順は `hf-publish` skill（`.claude/skills/hf-publish/`）** | 親の判断（**公開してよい中身かを先に見る**） |
 | `siruku6/parc2026-submission` の古い版を消して履歴を潰す（`super_squash_history`） | 8/29 に 76.4 → 57.7 GB になった実績あり | 親の判断 |
 | **上げるのを `001500` だけにする** | 要るのが 8.8 GB で済む | **その場で決めてよい。**比較の要は `001500` である |
 
@@ -1249,7 +1264,7 @@ hf upload-large-folder siruku6/pi05_camdrop2500 ~/up --repo-type=model
 | **認証していないと非公開リポジトリが `not found` に見える** | `~/.hf_token` を置く（A3）。**名前の間違いではない** |
 | **Notebook のセルが `/bin/sh` で動くことがある** | `source` が無い。**`.` で読む**（8/31 に踏んだ） |
 | **`df` が答えない共有ストレージがある** | 使用量は `du -sh`、枠は画面で見る |
-| **学習ログを `$OUTPUT_ROOT` にしか置かない** | **セッション終了で消える。****loss の推移はチェックポイントに残らないので、やり直しでは作れない。**B4b のループで `$HOME/train_logs/` と HF の 2 か所へ写す（**`~/data` は symlink で消えるので置き先にしない**） |
+| **学習ログを `$OUTPUT_ROOT` にしか置かない** | **セッション終了で消える。****loss の推移はチェックポイントに残らないので、やり直しでは作れない。**`upload_ckpt.sh` が `~/train_logs/<RUN>/` と HF の `logs/` の 2 か所へ写す（[17 の 1 節](17_checkpoint_upload.md)） |
 | **ディスクが埋まると書いている途中のファイルが壊れる** | 書く前に空きを見る。**`policy_server.py` を実際に 0 バイトにした** |
 | **前のセッションの「上げた印」が残っていて、上げるループが黙って飛ばす** | **9/5 に踏んだ。**`~/uploaded/000500` は 9/3 の `camdrop2500` が置いたものである。**印は走りごとに分ける**（上の B4 の `MARK`）。**症状は [分岐 6](#分岐-6-上げるループが見回りだけを書いて上げない)** |
 | **`--learning-rate` を省くと 10 倍から再スタートする** | 必ず `5e-6` を書く |

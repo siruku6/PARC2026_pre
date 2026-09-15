@@ -190,6 +190,39 @@ def command_check(args: argparse.Namespace) -> None:
     print("**書き出しは Python 3.12 の環境で `build` を実行する。**")
 
 
+def _instruction_map(instructions: set[str]) -> dict[str, str]:
+    """bddl の言い方を、**学習データの 40 種**の言い方へ寄せる対応表を作る。
+
+    **これを通さないと、作った手本は評価で一度も使われない。**
+    採点側が方策へ渡す文は bddl の書き方（`Pick the akita black bowl on the
+    cookies box and place it on the plate`）だが、`policy_server.py` は
+    **入り口でそれを学習データの書き方へ寄せてから**モデルに渡す
+    （`InstructionNormalizer`。40 種すべて正しく寄ることを実測済み）。
+    **だから学習データ側は、寄せた先の書き方で入っていなければならない。**
+    bddl の書き方のまま入れると、**41 番目の課題**になって誰も引かない。
+
+    **寄せる実装は `policy_server.py` のものをそのまま呼ぶ。**書き写すと
+    必ず片方が古くなる。
+    """
+    import sys as _sys
+
+    # **読み込みは `check_instruction_normalization.py` の口を借りる。**
+    # `policy_server.py` はサーバーでもあるので HTTP 側の依存を import するが、
+    # 寄せる部分はそれを 1 つも使わない。代役を置く手はあちらが持っている。
+    _sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "suite"))
+    from check_instruction_normalization import _load_normalizer_class
+
+    normalizer_class, _ = _load_normalizer_class()
+    normalizer = normalizer_class()
+    mapping: dict[str, str] = {}
+    for text in sorted(instructions):
+        target, how, score = normalizer.normalize(text)
+        mapping[text] = target
+        mark = "" if how != "none" else "   ** 寄せられなかった **"
+        print(f"  {how:<8} {score:5.2f}  {text}\n           → {target}{mark}")
+    return mapping
+
+
 def command_build(args: argparse.Namespace) -> None:
     """npz を集めて 1 つの LeRobot データセットにする。
 
@@ -201,6 +234,11 @@ def command_build(args: argparse.Namespace) -> None:
     paths = sorted(args.npz_dir.glob("*.npz"))
     if not paths:
         raise SystemExit(f"npz が 1 つも無い: {args.npz_dir}")
+    mapping: dict[str, str] = {}
+    if args.normalize_instructions:
+        print("=== 指示文を学習データの書き方へ寄せる ===")
+        mapping = _instruction_map({SavedEpisode(path).instruction
+                                    for path in paths})
     _prepare_output(args.output)
 
     dataset = LeRobotDataset.create(
@@ -226,12 +264,14 @@ def command_build(args: argparse.Namespace) -> None:
                 "observation.images.wrist": wrist[index],
                 "observation.state": state[index],
                 "action": action[index],
-                "task": episode.instruction,
+                "task": mapping.get(episode.instruction,
+                                    episode.instruction),
             })
         dataset.save_episode()
         total_frames += len(state)
         written += 1
-        print(f"  {path.name}: {len(state)} コマ  「{episode.instruction}」")
+        print(f"  {path.name}: {len(state)} コマ  "
+              f"「{mapping.get(episode.instruction, episode.instruction)}」")
 
     dataset.finalize()
     # **本数は自分で数えた値を出す。** `meta.episodes` は読み出しのときだけ
@@ -315,9 +355,14 @@ def _prepare_output(path: Path) -> None:
 
 
 def _feature_shape(feature: dict[str, Any]) -> tuple:
-    """比べるべき中身だけを取り出す。**飾りは見ない。**"""
-    return (feature.get("dtype"), tuple(feature.get("shape", ())),
-            tuple(feature.get("names") or ()))
+    """比べるべき中身だけを取り出す。**飾りは見ない。**
+
+    **`names` は見ない。**軸の名前は綴りが揃っていないことがあり
+    （配布 `libero_combined_20hz` は画像の 3 番目を `rgb`、こちらは `channel`）、
+    **形が同じなら意味も同じである。**食い違ったときは `command_align` が
+    どう変えたかを 1 行ずつ印字するので、黙って通ることはない。
+    """
+    return (feature.get("dtype"), tuple(feature.get("shape", ())))
 
 
 def command_align(args: argparse.Namespace) -> None:
@@ -329,10 +374,19 @@ def command_align(args: argparse.Namespace) -> None:
     データセットは、古い版で作られた `lerobot/libero_plus` と一致しない。**
     実際に食い違ったのは 2 つで、どちらも意味は同じである。
 
-    | | こちら（v0.6.0 で作った） | libero_plus（古い版） |
+    | | こちら（v0.6.0 で作った） | 配布データ |
     |---|---|---|
     | 非動画の列 | `fps` が無い | `'fps': 20` がある |
     | 動画の `info` | `is_depth_map` | `video.is_depth_map` |
+    | **画像の軸名** | **`('height','width','channel')`** | **`('height','width','rgb')`**（`libero_combined_20hz`） |
+    | **state / action の軸名** | `state_0…` / `action_0…` | 配布側の綴り |
+
+    **軸名は写して構わない。**`names` を見るのは
+    `dataset_to_policy_features` の HWC→CHW の判定（3 番目が `channel` か）と
+    `action_feature_names`（相対行動を使うときだけ）の 2 か所で、
+    **チェックポイントから学習を始めるときは `input_features` が既に埋まっている
+    ので、どちらも効かない。**そして `merge` は base の features を残すので、
+    **混ぜた結果は base（配布データ）の綴りになる。**
 
     そこで**相手の `features` をそのまま写す。** 写す前に
     **`dtype`・`shape`・`names` が一致することを確かめる**ので、
@@ -360,17 +414,23 @@ def command_align(args: argparse.Namespace) -> None:
     if missing:
         raise SystemExit(f"相手に無い列がある: {sorted(missing)}")
 
-    changed = []
+    changed, renamed = [], []
     for name, feature in add_features.items():
         ours, theirs = _feature_shape(feature), _feature_shape(base_features[name])
         if ours != theirs:
             raise SystemExit(
                 f"{name} の形が違う: こちら {ours}、相手 {theirs}\n"
                 "  **これは飾りではない。データを作り直すこと。**")
+        if feature.get("names") != base_features[name].get("names"):
+            renamed.append((name, feature.get("names"),
+                            base_features[name].get("names")))
         if feature != base_features[name]:
             changed.append(name)
 
     print(f"=== {args.add} の features を {args.base} に合わせる ===")
+    for name, ours_names, their_names in renamed:
+        print(f"  **{name}: 軸名が違う** {ours_names} → {their_names}"
+              "（形は同じ。写す）")
     for name in changed:
         print(f"  {name}: 形は同じ。飾りだけ書き換える")
     if not changed:
@@ -422,6 +482,77 @@ def command_merge(args: argparse.Namespace) -> None:
     _print_summary(args.output)
 
 
+def command_subset(args: argparse.Namespace) -> None:
+    """課題ごとに均等に選んで、小さいデータセットを書き出す。
+
+    **なぜ要るか。**`lerobot/libero_plus` は 14,347 本 15.8 GB あり、
+    ディスクの狭い機械（JAIST サーバは空き 11 GB）には置けない。
+    **配布データを混ぜる目的は「忘れないように繋ぎ止める」ことなので、
+    全部は要らない。**課題を 1 つも落とさずに本数だけ減らす。
+
+    **選び方は 2 通りある。**既定は「課題ごとに、通し番号で等間隔」である
+    （先頭から N 本取ると、データセットの並び順の偏りをそのまま拾う）。
+    **`--keep-file` を渡すと、そのファイルに書かれた番号だけを残す。**
+    接触が起きているデモを外すときのように、**残す相手が計算で決まっている**
+    場合に使う（`solution/tools/contact_clean/`）。
+
+    Reads:
+      - <root>/meta/episodes/*.parquet
+      - <keep_file> … `{"episodes": [番号, …]}` の JSON（渡したときだけ）
+    Generates:
+      - <output>/ … 選んだ本数だけのデータセット
+    """
+    import pandas as pd
+    from lerobot.datasets.dataset_tools import split_dataset
+    from lerobot.datasets.lerobot_dataset import LeRobotDataset
+
+    files = sorted((args.root / "meta" / "episodes").rglob("*.parquet"))
+    if not files:
+        raise SystemExit(f"メタデータが無い: {args.root}/meta/episodes/*.parquet")
+    frame = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+    frame["task"] = frame["tasks"].apply(
+        lambda cell: cell if isinstance(cell, str) else str(cell[0]))
+
+    if args.keep_file:
+        chosen = sorted(set(int(x) for x in
+                            json.loads(args.keep_file.read_text())["episodes"]))
+        # **無い番号を渡されたら黙って減らさない。**元データを取り違えていても
+        # split_dataset は通ってしまい、本数が合わないことに後で気付く。
+        missing = set(chosen) - set(frame["episode_index"].astype(int))
+        if missing:
+            raise SystemExit(
+                f"{args.keep_file} の番号 {len(missing)} 件が {args.root} に無い"
+                f"（例 {sorted(missing)[:5]}）。元データセットの取り違えを疑うこと")
+        how = f"{args.keep_file.name} が指す {len(chosen)} 本"
+    else:
+        chosen = []
+        for _, group in frame.groupby("task"):
+            indices = sorted(group["episode_index"].astype(int).tolist())
+            count = min(args.per_task, len(indices))
+            if count == len(indices):
+                picks = indices
+            elif count == 1:
+                picks = [indices[len(indices) // 2]]
+            else:
+                picks = [indices[round(rank * (len(indices) - 1) / (count - 1))]
+                         for rank in range(count)]
+            chosen.extend(picks)
+        chosen = sorted(set(chosen))
+        how = f"課題 {frame['task'].nunique()} 種 × 1 課題あたり最大 {args.per_task} 本"
+
+    kept = frame[frame["episode_index"].isin(chosen)]
+    print(f"=== {args.root} から {len(frame)} 本中 {len(chosen)} 本を選ぶ ===")
+    print(f"  選び方 {how}")
+    print(f"  課題 {frame['task'].nunique()} 種 → {kept['task'].nunique()} 種")
+    print(f"  コマ数 {int(frame['length'].sum()):,} → {int(kept['length'].sum()):,}")
+
+    name = args.output.name
+    _prepare_output(args.output)
+    dataset = LeRobotDataset(args.repo_id, root=args.root)
+    split_dataset(dataset, {name: chosen}, output_dir=args.output.parent)
+    _print_summary(args.output)
+
+
 def _print_summary(root: Path) -> None:
     """書き出されたものの宣言を印字する。**混ぜる前に目視で突き合わせる。**
 
@@ -450,6 +581,10 @@ def _parse_args() -> argparse.Namespace:
                        help="データセットの書き出し先")
     build.add_argument("--repo-id", default="local/scripted_demos",
                        help="データセットの名前（学習時に渡すもの）")
+    build.add_argument("--normalize-instructions", action="store_true",
+                       help="指示文を**学習データの 40 種**へ寄せる。"
+                            "**足さないと、作った手本は評価で一度も使われない**"
+                            "（`policy_server.py` が入り口で寄せるため）")
     build.add_argument("--keep-failures", action="store_true",
                        help="失敗した回も入れる（**通常は入れない**）")
 
@@ -481,13 +616,24 @@ def _parse_args() -> argparse.Namespace:
     merge.add_argument("--add-repo-id", default="local/scripted_demos")
     merge.add_argument("--output", type=Path, required=True)
     merge.add_argument("--output-repo-id", default="local/libero_plus_scripted")
+
+    subset = subparsers.add_parser("subset", help="課題ごとに均等に選んで小さくする")
+    subset.add_argument("--root", type=Path, required=True, metavar="DIR")
+    subset.add_argument("--output", type=Path, required=True, metavar="DIR")
+    subset.add_argument("--repo-id", default="local/source", metavar="REPO_ID")
+    subset.add_argument("--per-task", type=int, default=75,
+                        help="1 課題あたり何本残すか（既定 75）")
+    subset.add_argument("--keep-file", type=Path, default=None, metavar="JSON",
+                        help="残すエピソード番号の一覧（`{\"episodes\": [...]}`）。"
+                             "渡すと --per-task は使わない")
     return parser.parse_args()
 
 
 def main() -> None:
     args = _parse_args()
     {"check": command_check, "build": command_build, "align": command_align,
-     "inspect": command_inspect, "merge": command_merge}[args.command](args)
+     "inspect": command_inspect, "merge": command_merge,
+     "subset": command_subset}[args.command](args)
 
 
 if __name__ == "__main__":

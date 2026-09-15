@@ -6,6 +6,13 @@
 
 発見日: 2026-08-27。**きっかけは学習ではなく、配布キットの課題定義を読んだことである。**
 
+> **【9/12 追記】16 文の中身を 1 行ずつ判定できる形にした。**
+> **[reference/36](../reference/36_instruction_rewriting_table.md)** に、
+> 採点器が送る文とモデルが見る文の対応表（出典の行番号つき）・
+> 入れ替わった語・3 段階の分類・しきい値 3 点の比較がある。
+> **ここで反転を見つけた文は、あちらの 5.3 節で bddl の `:init` と `:goal` を
+> 読んで裏が取れている**——寄せ先は `:goal` の逆ではなく、**`:init` そのもの**だった。
+
 | # | 節 | 結論 |
 |---|---|---|
 | 1 | [何が起きていたか](#1-何が起きていたか) | 0.607 の弱い一致で意味が反転した |
@@ -103,7 +110,7 @@
 ## 確かめ直すコマンド
 
 ```bash
-cd /home/ubuntu/lab/PARC2026_pre
+cd /home/ubuntu/src/PARC2026_pre
 python - <<'PY'
 import sys, types, pathlib, csv
 for name in ("msgpack","fastapi","uvicorn","torch"):
@@ -113,12 +120,12 @@ src = pathlib.Path("solution/policy_server.py").read_text()
 ns = {"__name__": "x"}
 exec(compile(src[:src.index("class MyPolicy")], "policy_server.py", "exec"), ns)
 N = ns["InstructionNormalizer"]()
-base = "/home/ubuntu/lab/b_PARC2026_final/compe"
+base = "/home/ubuntu/src/b_PARC2026_final/compe"
 for t in ("t1", "t2"):
     for r in csv.DictReader(open(f"{base}/{t}/T{t[1]}_TASKS.csv")):
         print(t, "%.3f" % N.normalize(r["instruction"])[2], N.normalize(r["instruction"])[1])
 PY
-grep -h ":language" /home/ubuntu/lab/b_PARC2026_final/compe/t3/assets/bddl_files/libero_t3/*.bddl
+grep -h ":language" /home/ubuntu/src/b_PARC2026_final/compe/t3/assets/bddl_files/libero_t3/*.bddl
 ```
 
 **`policy_server.py` は `msgpack` を import するので、そのまま読み込むと止まる。**

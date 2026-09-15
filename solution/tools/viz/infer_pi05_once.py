@@ -179,18 +179,41 @@ def _resolve_tokenizer(requested: str) -> str:
 
 
 def _read_config(weights: Path, device: str, n_action_steps: int,
-                 num_inference_steps: int):
+                 num_inference_steps: int, features_from: Path | None = None):
     """チェックポイントの設定を読み、呼び出し側の設定値で上書きして返す。
 
     Parameters
     ----------
     n_action_steps, num_inference_steps : int
         0 なら設定の値をそのまま使う。
+    features_from : Path | None
+        **入出力の「列の名前」を別のチェックポイントから借りる。**
+        `lerobot/pi05_libero_base` はカメラを `image` / `image2` と呼ぶが、
+        私たちの学習後の重みは `front` / `wrist` である
+        （[reference/10](../../../docs/reference/10_observation_interface.md)）。
+        **画は `config.image_features` の順に処理されるので、順序を保てば
+        名前を差し替えて構わない。**dtype も借りる——比べる相手が bf16 で
+        動いているのに、こちらだけ fp32 では条件が揃わない。
     """
+    import json
+
     from lerobot.configs import PreTrainedConfig
 
     config = PreTrainedConfig.from_pretrained(weights)
     config.device = device
+    if features_from is not None:
+        other = json.loads((features_from / "config.json").read_text())
+        mine = list(config.input_features)
+        borrowed = list(other["input_features"])
+        if mine != borrowed:
+            print(f"[infer] 列の名前を借りる: {mine} → {borrowed}")
+            config.input_features = PreTrainedConfig.from_pretrained(
+                features_from).input_features
+            config.output_features = PreTrainedConfig.from_pretrained(
+                features_from).output_features
+        if getattr(config, "dtype", None) != other.get("dtype"):
+            print(f"[infer] dtype を借りる: {config.dtype} → {other['dtype']}")
+            config.dtype = other["dtype"]
     if n_action_steps > 0:
         config.n_action_steps = n_action_steps
     if num_inference_steps > 0:
@@ -296,7 +319,8 @@ def _stream_weights(policy, weights: Path) -> dict[str, int]:
 
 def load_policy(weights: Path, device: str, *, load_mode: str = "lowmem",
                 n_action_steps: int = 0, num_inference_steps: int = 0,
-                tokenizer: str = "auto"):
+                tokenizer: str = "auto", processor_root: Path | None = None,
+                features_from: Path | None = None):
     """チェックポイントを読み、方策と前後処理を組み立てて返す。
 
     **`replay_pi05_on_dataset.py` からも呼ぶので `_` を付けない。**
@@ -313,6 +337,12 @@ def load_policy(weights: Path, device: str, *, load_mode: str = "lowmem",
         0 ならチェックポイントの値のまま。
     tokenizer : str
         `auto` なら `$HF_HOME` を探す。
+    features_from : Path | None
+        入出力の列の名前と dtype をここから借りる（`_read_config` 参照）。
+    processor_root : Path | None
+        前後処理をここから読む（既定は `weights` と同じ）。
+        **`lerobot/pi05_libero_base` は正規化統計を同梱していない**ので、
+        比べるときは別の重みから借りる。**借りたことは呼び側が明示すること。**
 
     Returns
     -------
@@ -330,7 +360,8 @@ def load_policy(weights: Path, device: str, *, load_mode: str = "lowmem",
     from lerobot.policies.factory import make_pre_post_processors
     from lerobot.policies.pi05.modeling_pi05 import PI05Policy
 
-    config = _read_config(weights, device, n_action_steps, num_inference_steps)
+    config = _read_config(weights, device, n_action_steps, num_inference_steps,
+                          features_from=features_from)
 
     tally: dict[str, int] | None = None
     if load_mode == "builtin":
@@ -344,7 +375,7 @@ def load_policy(weights: Path, device: str, *, load_mode: str = "lowmem",
 
     preprocessor, postprocessor = make_pre_post_processors(
         config,
-        str(weights),
+        str(processor_root or weights),
         preprocessor_overrides={
             "device_processor": {"device": device},
             "tokenizer_processor": {"tokenizer_name": _resolve_tokenizer(tokenizer)},

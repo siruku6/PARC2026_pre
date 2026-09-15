@@ -277,7 +277,7 @@ CPU 描画（osmesa）だけなので GPU が要らず、GPU マシン側の学�
 
 **古いのは焼き込まれた `train_pi05.py` と `train.py` だけである。**RunPod では
 現在のコードを `/workspace` へ展開してそこから起動するので、焼き込まれた版は使わない
-（[../plan/15_runpod_fullparam_with_augment.md](../plan/15_runpod_fullparam_with_augment.md)）。
+（[../howto/06_runpod_pi05.md](../howto/06_runpod_pi05.md) 14.2 節）。
 **作り直すと 1 時間のビルドと 9.7 GB の上りを払って、得るものが無い。**
 
 **イメージが見つからない・動かないときの逃げ道**は、RunPod の公式テンプレート ＋

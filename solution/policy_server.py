@@ -173,7 +173,16 @@
 #          50 ステップで選ぶと**捨てる区間が選択を奪う**（作った例で再現した）。
 #          版 3.4.0 で samples=3 に差が出なかったのは、**n=2 のとき距離の 96% が
 #          実行しない行動から来ていた**ためという疑いが濃い。
-__version__ = "4.6.0"
+#   8.2.0  **歩数の切り替え（adaptive replanning）を足した。既定は切ってある**
+#          （`PARC_ADAPTIVE_CADENCE=0` なので、立てない限り 8.1.0 と同じ挙動）。
+#          **`samples` 本引いたときの互いの離れ具合が大きい場面だけ、消費する歩数を
+#          16 → 8 に縮める。**離れ具合は medoid が既に計算している総当たり距離から
+#          取るので、**推論は 1 回も増えない。**しきい値は測らず、
+#          **そのエピソードでこれまでに見た値の中央値**と比べる（記事の 0.669／1.570 は
+#          別のモデルの単位なので持ち込めない）。設計と秒数は
+#          `docs/reference/32_adaptive_replanning.md`。
+#          **重みは 8.1.0（`ladder2500/002500`）と同一で、これは設定だけの版である。**
+__version__ = "8.2.0"
 
 import argparse
 import math
@@ -630,9 +639,12 @@ class MyPolicy(BasePolicy):
         # 置いてある重みが SmolVLA なら 3.7.0 と同じ道をそのまま通る（版 3.8.0）。
         self._kind = str(config.type)
 
-        if self._kind != "pi05":
+        if self._kind == "smolvla":
             # VLM の重みはチェックポイントに含まれる。True のままだと Hub へ
             # 取りに行き、通信が遮断された採点環境では起動に失敗する。
+            # **MolmoAct2 にはこの `vlm/` 同梱の仕組みが無い**（独自の
+            # `checkpoint_path` 経由でトークナイザ・プロセッサ設定を読む。
+            # `_build_molmoact2` を参照）ので、smolvla だけに絞る。
             config.load_vlm_weights = False
             # 設定とトークナイザは同梱物から読む（本体の重みは含めていない）。
             config.vlm_model_name = str(weights / "vlm")
@@ -683,8 +695,12 @@ class MyPolicy(BasePolicy):
         # 16 は範囲内。1 ステップの見込みは 0.084 秒で、`/act` の 10 秒に対して桁違いに余裕。
         # SmolVLA の既定は 8 のままである。設定値の名前は共通なので、
         # `PARC_N_ACTION_STEPS` を渡せばどちらも同じように上下できる。
+        # **MolmoAct2 の既定は 10**——チェックポイント同梱の `train_config.json`
+        # が chunk 長 10・1 chunk から実行する歩数 10 と書いている
+        # （`docs/talk/inter_sessions/032_molmoact2_libero_adoption.md` 4.1 節）。
+        _default_n_action_steps = {"pi05": "16", "molmoact2": "10"}.get(self._kind, "8")
         config.n_action_steps = int(os.environ.get(
-            "PARC_N_ACTION_STEPS", "16" if self._kind == "pi05" else "8"
+            "PARC_N_ACTION_STEPS", _default_n_action_steps
         ))
 
         if self._kind == "pi05":
@@ -702,6 +718,8 @@ class MyPolicy(BasePolicy):
             if steps:
                 config.num_inference_steps = int(steps)
             self._policy = self._build_pi05(config, weights)
+        elif self._kind == "molmoact2":
+            self._policy = self._build_molmoact2(config, weights)
         else:
             from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
 
@@ -755,13 +773,27 @@ class MyPolicy(BasePolicy):
 
         # tokenizer_processor は保存時の設定に Hub の repo 名が焼き込まれている。
         # 上書きしないと起動時に Hub へ取りに行き、通信のない採点環境で失敗する。
+        # **MolmoAct2 のパイプラインには `tokenizer_processor` という名の段が無い**
+        # 代わりに `molmoact2_pack_inputs` という段が同じ問題を持つ。
+        # **`config.checkpoint_path` を書き換えても、この段には効かない**
+        # （実測・2026-09-15）——`PolicyProcessorPipeline.from_pretrained` は
+        # 各段を `policy_preprocessor.json` に**個別に保存された** config から
+        # 復元するので、外側の `config` オブジェクトへの変更とは独立している。
+        # `preprocessor_overrides` で段ごとに上書きするのが唯一の直し方
+        # （tokenizer_processor と同じやり方）。
+        _preprocessor_overrides = {"device_processor": {"device": self._device}}
+        if self._kind == "molmoact2":
+            _preprocessor_overrides["molmoact2_pack_inputs"] = {
+                "checkpoint_path": str(weights / "molmoact2_base_small")
+            }
+        else:
+            _preprocessor_overrides["tokenizer_processor"] = {
+                "tokenizer_name": str(weights / "vlm")
+            }
         self._preprocessor, self._postprocessor = make_pre_post_processors(
             config,
             str(weights),
-            preprocessor_overrides={
-                "device_processor": {"device": self._device},
-                "tokenizer_processor": {"tokenizer_name": str(weights / "vlm")},
-            },
+            preprocessor_overrides=_preprocessor_overrides,
         )
         self._env_preprocessor = PolicyProcessorPipeline(steps=[LiberoProcessorStep()])
 
@@ -824,6 +856,15 @@ class MyPolicy(BasePolicy):
         seed_text = os.environ.get("PARC_SEED", "0")
         self._seed = int(seed_text) if seed_text else None
         self._episode_index = 0
+        # **`/reset` が受け取った種を使うか。既定は使わない**（＝提出時の挙動を変えない）。
+        #
+        # **なぜ opt-in にするか。**既定の引きは `PARC_SEED + 内部のリセット回数`で、
+        # **「その run の何本目か」で決まる。**測りには向かない——**同じ課題・同じ
+        # 初期状態でも、前に何本回したかで引きが変わる**（9/10 に踏んだ。最接近が
+        # 43.7 mm と 183.4 mm になった）。一方これを既定にすると、キットが送ってくる
+        # 種で引きが決まり、**過去に出した版の点と対応が取れなくなる。**
+        # **だから測るときだけ `PARC_RESET_SEED=1` を渡す。**
+        self._use_reset_seed = os.environ.get("PARC_RESET_SEED", "") == "1"
 
         # chunk を何回引くか。1 なら素の挙動。
         # 版 3.4.0 で 3 にして本番で測ったが、0.166 → 0.168（0.04 本ぶん）で
@@ -834,8 +875,56 @@ class MyPolicy(BasePolicy):
         # **外れを 16 ステップぶん引きずるのは n が大きいときだけ**で、そこは未測定。
         # π0.5 は n=16 なので、軸を開け直して測る。
         self._samples = int(os.environ.get("PARC_SAMPLES", "1"))
+
+        # ------------------------------------------------------------------
+        # adaptive replanning（版 14.0.0）。**既定は切ってある。**
+        #
+        # **何をするか。** `samples` 本引いたときの「互いの離れ具合」は、その場面で
+        # モデルがどれだけ迷っているかの目安になる。**迷っている場面だけ、引き直す
+        # までの歩数を縮める**（16 → 8）。迷っていない場面は 16 のままで、
+        # 推論の回数を無駄に増やさない。
+        #
+        # **離れ具合は既に計算している。** medoid は `torch.cdist` で総当たりの
+        # 距離を出して、その合計が最小の 1 本を選んでいる（`_install_chunk_sampler`）。
+        # **同じ行列の平均を取れば、それが散らばりである。**推論は 1 回も増えない。
+        #
+        # **しきい値は測らずに、そのエピソードの中で目盛りを作る。**
+        # 記事が報告している 0.669 / 1.570 は**別のモデルの、別の行動の単位**で
+        # 決めた値なので持ち込めない。代わりに
+        # **「このエピソードでこれまでに見た散らばりの中央値より大きいか」**で判定する。
+        # こうするとモデルの出力の単位が何であっても自動的に合う。
+        #
+        # **`PARC_ADAPTIVE_MIN_SAMPLES` 回ぶん溜まるまでは切り替えない。**
+        # 目盛りが 1〜2 点で決まってしまうのを避けるためである。
+        #
+        # **秒数の見立て**（採点ログ 14 本から出した `/act` 1 回 0.083 秒 ＋
+        # 引き直し 1 回 0.447 秒）。Track3 は `/act` 2,400 なので、
+        # 全部 8 歩になる最悪でも約 602 秒で、**上限 3,600 秒に 6 倍の余裕**がある。
+        # 1 回の推論の秒数は切り替えても変わらない（K=3 の約 1.34 秒）。
+        self._adaptive_enabled = os.environ.get(
+            "PARC_ADAPTIVE_CADENCE", "0"
+        ) not in ("0", "", "false")
+        self._adaptive_cadence = int(os.environ.get("PARC_ADAPTIVE_CADENCE_HIGH", "8"))
+        self._adaptive_min_samples = int(
+            os.environ.get("PARC_ADAPTIVE_MIN_SAMPLES", "3")
+        )
+        # このエピソードで見た散らばり。中央値を取るために全部持つ（1 本 300 歩・
+        # 16 歩ごとなら 19 個ぶんなので、量は問題にならない）。
+        self._adaptive_history: list[float] = []
+        self._adaptive_switches = 0
+        self._adaptive_fell_back = False
+        # 切り替えから戻す先。**`samples=1` でも起動行が読むので必ず持たせる。**
+        self._default_cadence = self._n_action_steps
+        self._last_disagreement = 0.0
+
         if self._samples > 1:
             self._install_chunk_sampler()
+        elif self._adaptive_enabled:
+            # **1 本しか引かないと散らばりが測れない。**黙って効かないより落とす。
+            raise SystemExit(
+                "PARC_ADAPTIVE_CADENCE を立てるなら PARC_SAMPLES を 2 以上にすること"
+                f"（いまは {self._samples}）"
+            )
 
         # RTC（Real-Time Chunking）。**既定は切ってある。**
         # `blend_steps` が「出た行動を後からならす」のに対し、RTC は
@@ -863,10 +952,10 @@ class MyPolicy(BasePolicy):
         self._normalizer: InstructionNormalizer | None = None
         if os.environ.get("PARC_NORMALIZE_INSTRUCTION", "1") != "0":
             self._normalizer = InstructionNormalizer()
-            # **π0.5 では埋め込みでの寄せを切る。** `_embed_instructions` は
-            # SmolVLA の `model.vlm_with_expert` を直に触る実装で、π0.5 には
-            # その属性が無い。文字列での寄せ（lexical）はそのまま効く。
-            use_embedding = self._kind != "pi05" and os.environ.get(
+            # **π0.5・MolmoAct2 では埋め込みでの寄せを切る。** `_embed_instructions` は
+            # SmolVLA の `model.vlm_with_expert` を直に触る実装で、その属性が無い
+            # 模型では `AttributeError` になる。文字列での寄せ（lexical）はそのまま効く。
+            use_embedding = self._kind == "smolvla" and os.environ.get(
                 "PARC_NORM_EMBED", "1" if _USE_EMBEDDING else "0"
             ) != "0"
             if use_embedding:
@@ -884,6 +973,7 @@ class MyPolicy(BasePolicy):
             f"gain=({self._gain_translation},{self._gain_rotation})  "
             f"seed={self._seed if self._seed is not None else 'off'}  "
             f"rtc={f'on(horizon={self._rtc_horizon})' if self._rtc_enabled else 'off'}  "
+            f"adaptive={f'on({self._default_cadence}->{self._adaptive_cadence})' if self._adaptive_enabled else 'off'}  "
             f"normalize={self._normalize_mode()}  "
             f"quant_serve={quant_mode or 'off'}"
             + (f"({os.environ.get('QUANT_SERVE_SCOPE', 'vision_only')})" if quant_mode else ""),
@@ -1067,6 +1157,87 @@ class MyPolicy(BasePolicy):
               f"（{time.perf_counter() - started:.1f} 秒）", flush=True)
         return policy
 
+    def _build_molmoact2(self, config, weights):
+        """MolmoAct2-LIBERO-LeRobot のチェックポイントを、重みを 2 回読まずに組む。
+
+        **同梱 LeRobot の `MolmoAct2Policy.__init__` は、素の状態では起動のたびに
+        2 回重みを読む**（`docs/talk/inter_sessions/032_molmoact2_libero_adoption.md`
+        4.3 節）。
+
+        1. `config.checkpoint_path`（既定は Hub の `"allenai/MolmoAct2"`）が指す
+           **素の HF 重みを読む**。採点環境は `HF_HUB_OFFLINE=1` なので、
+           ローカルに無ければここで起動が落ちる。
+        2. そのあと `from_pretrained` が、**こちらの追加学習した
+           `model.safetensors` を上から載せる**（すべて上書きされる）。
+
+        1 は 2 で全部上書きされるので、**`checkpoint_path` を「小さいファイル
+        （config・トークナイザ・`norm_stats.json`。約 12 MB）だけ置いた場所」へ
+        向け替える**。同梱 LeRobot 側の `_load_hf_model`
+        （`vendor/lerobot/policies/molmoact2/modeling_molmoact2.py`）も、
+        その場所に safetensors が無ければ `_from_config`（重みを読まない組み立て。
+        この transformers 版に `from_config` は無い）へ切り替えるよう直してある。
+        **これで 1 は「形を組むだけ」になり、通信も大きな読み込みも起きない。**
+
+        **同じ問題がもう 1 か所ある——`__init__` の `make_pre_post_processors` 呼び出し。**
+        前処理パイプラインの `molmoact2_pack_inputs` 段は、`policy_preprocessor.json` に
+        **保存時のまま焼き込まれた** `checkpoint_path`（Hub の
+        `"allenai/MolmoAct2-LIBERO"`）を独自に読む——**ここでの `config.checkpoint_path`
+        書き換えは効かない**（実測・2026-09-15。各段は保存された JSON から個別に
+        復元され、外側の `config` オブジェクトとは独立している）。`__init__` 側で
+        `preprocessor_overrides={"molmoact2_pack_inputs": {"checkpoint_path": ...}}`
+        を渡して直してある。
+
+        **`discrete_action_tokenizer`（既定 `"allenai/MolmoAct2-FAST-Tokenizer"`）は
+        別扱い。** こちらは数百 KB のトークナイザなので、`checkpoint_path` のように
+        向け替えず、**HF の通常キャッシュへ事前に置いておく**方式にした
+        （`hf download allenai/MolmoAct2-FAST-Tokenizer`。`--revision` を付けずに打ち、
+        `refs/main` が作られることを確かめること——コミットハッシュだけ持たせても
+        オフラインの `revision="main"` 解決には使われない。実測で踏んだ）。
+
+        Parameters
+        ----------
+        config : PreTrainedConfig
+            チェックポイントから読んだ設定（`device` と `n_action_steps` は
+            呼び出し側で入れてある）。
+        weights : Path
+            `model_weights` ディレクトリ。**`model.safetensors` に加えて、
+            `molmoact2_base_small/`（`config.json`・`processor_config.json`・
+            `tokenizer.json`・`tokenizer_config.json`・`chat_template.jinja`・
+            `norm_stats.json`）を同梱すること。**
+
+        Returns
+        -------
+        policy : MolmoAct2Policy
+            重みを読み終えた方策（`to` と `eval` は呼び出し側で行う）。
+
+        Reads:
+          - <weights>/model.safetensors
+          - <weights>/molmoact2_base_small/*（`checkpoint_path` の向け先）
+        """
+        from lerobot.policies.molmoact2.modeling_molmoact2 import MolmoAct2Policy
+
+        base_small = weights / "molmoact2_base_small"
+        if not base_small.is_dir():
+            raise RuntimeError(
+                f"{base_small} が無い。MolmoAct2 の起動には config・トークナイザ・"
+                "norm_stats.json だけを置いた場所が要る"
+                "（032 の 4.3 節・0-2 の huggingface-cli download を参照）。"
+            )
+        config.checkpoint_path = str(base_small)
+
+        # **チェックポイントの `action_mode` は `"both"`**（連続値の flow matching と
+        # 離散トークンの両方の頭を持つ）なので、推論側でどちらを使うか明示しないと
+        # `predict_action_chunk` が `ValueError` で止まる（実測・2026-09-15）。
+        # **連続値（flow matching）を選ぶ**——π0.5 と同じ制御の形で、7 次元の
+        # 連続行動をそのまま出す。離散トークン側は文章生成に近い遅い経路である。
+        config.inference_action_mode = "continuous"
+
+        # **`from_pretrained` の `strict=True` で、自前の重みだけで全部の層が
+        # 埋まることを起動時に確かめる。** 1 個でも欠けたらここで落とす——
+        # `_build_pi05` が数で確かめているのと同じ理由（黙って初期値のまま
+        # 推論すると、学習の成果を使っているとは言えなくなる）。
+        return MolmoAct2Policy.from_pretrained(str(weights), config=config, strict=True)
+
     def _embed_instructions(self, texts: list[str]) -> np.ndarray:
         """同梱した SmolVLM の言語側で文を埋め込む（長さ 1 に正規化して返す）。
 
@@ -1140,16 +1311,55 @@ class MyPolicy(BasePolicy):
         policy = self._policy
         torch = self._torch
         count = self._samples
+        # **距離を測る窓は固定する。** 歩数を切り替えても窓が動くと、
+        # 散らばりの目盛りがエピソードの途中で変わってしまう。
         horizon = self._n_action_steps
 
         def pick_medoid(chunks):
-            """引いた複数の chunk から、他との距離の総和が最小の 1 本を返す。"""
+            """引いた複数の chunk から、他との距離の総和が最小の 1 本を返す。
+
+            **同時に、その総当たり距離から「散らばり」を出して控える。**
+            adaptive replanning はこの値だけを使う（推論は 1 回も増えない）。
+            """
             # 距離は姿勢 6 次元だけで測る。グリッパは ±1 に振れるため、
             # 含めるとそこだけで距離が決まってしまう。
             # さらに、実行するステップ数までに切る（上の docstring を参照）。
             flat = chunks[:, :, :horizon, _POSE_DIMS].reshape(count, -1)
-            distances = torch.cdist(flat, flat).sum(dim=1)
+            pairwise = torch.cdist(flat, flat)
+            distances = pairwise.sum(dim=1)
+            # 散らばり＝総当たり距離の平均（対角の 0 を除く）。
+            # `count * (count - 1)` で割るので、K が変わっても目盛りが揃う。
+            self._last_disagreement = float(
+                pairwise.sum() / (count * (count - 1))
+            )
             return chunks[int(distances.argmin())]
+
+        def apply_adaptive_cadence() -> None:
+            """散らばりを見て、次に消費する歩数を決める。
+
+            **`select_action` は `predict_action_chunk` が返った後に
+            `config.n_action_steps` を読む**（同梱 lerobot の
+            `modeling_pi05.py` の `select_action`）。だから**ここで代入すれば、
+            その回の消費歩数がそれになる。**待ち行列を自分で持つ必要が無い。
+
+            判定は「このエピソードでこれまでに見た散らばりの中央値より大きいか」。
+            **溜まるまでは既定の歩数のままにする**（目盛りが 1〜2 点で決まるのを避ける）。
+            """
+            value = self._last_disagreement
+            history = self._adaptive_history
+            if len(history) >= self._adaptive_min_samples:
+                ordered = sorted(history)
+                middle = len(ordered) // 2
+                if len(ordered) % 2:
+                    median = ordered[middle]
+                else:
+                    median = 0.5 * (ordered[middle - 1] + ordered[middle])
+                if value > median:
+                    policy.config.n_action_steps = self._adaptive_cadence
+                    self._adaptive_switches += 1
+                else:
+                    policy.config.n_action_steps = self._default_cadence
+            history.append(value)
 
         if self._kind == "pi05":
             original_predict = policy.predict_action_chunk
@@ -1167,7 +1377,15 @@ class MyPolicy(BasePolicy):
                 chunks = torch.stack(
                     [original_predict(batch, **kwargs).clone() for _ in range(count)]
                 )
-                return pick_medoid(chunks)
+                picked = pick_medoid(chunks)
+                # **一度も採点環境で走っていない道なので、落ちても 0 点にしない。**
+                # 例外が出たら歩数を既定へ戻し、以降は切り替えをやめる。
+                if self._adaptive_enabled and not self._adaptive_fell_back:
+                    try:
+                        apply_adaptive_cadence()
+                    except Exception as error:  # noqa: BLE001
+                        self._fall_back_from_adaptive(error)
+                return picked
 
             policy.predict_action_chunk = sampled_predict
             return
@@ -1181,6 +1399,22 @@ class MyPolicy(BasePolicy):
             return pick_medoid(chunks)
 
         policy._get_action_chunk = sampled_chunk
+
+    def _fall_back_from_adaptive(self, error: Exception) -> None:
+        """切り替えで例外が出たら、以降は既定の歩数へ戻す。
+
+        **一度も採点環境で走っていない道なので、落ちても 0 点にしない。**
+        `_adaptive_fell_back` を立てると `sampled_predict` が二度と呼ばなくなる。
+        medoid（K 本引いて真ん中を選ぶ）はそのまま生き続ける。
+        """
+        self._adaptive_enabled = False
+        self._adaptive_fell_back = True
+        self._policy.config.n_action_steps = self._default_cadence
+        print(
+            f"[parc] adaptive cadence 失敗のため既定の歩数へ戻す: "
+            f"{type(error).__name__}: {error}",
+            flush=True,
+        )
 
     def _install_rtc(self) -> None:
         """継ぎ目を「後からならす」のでなく「つながるように生成させる」ようにする。
@@ -1361,7 +1595,7 @@ class MyPolicy(BasePolicy):
             return "off"
         return "on+embed" if self._normalizer.uses_embeddings else "on"
 
-    def reset(self, instruction: str = "") -> None:
+    def reset(self, instruction: str = "", seed: int | None = None) -> None:
         # **エピソードごとには何も出さない。** 指示文も、寄せた決め方も、点数も。
         #
         # 版 3.5.0 は点数まで出していた。**それが漏れになっていた。** 採点 8 本の
@@ -1385,15 +1619,31 @@ class MyPolicy(BasePolicy):
         # **種を渡されているときだけ、このエピソードの乱数を固定する。**
         # 既定（`PARC_SEED` 無し）では何もしない＝提出時の挙動は変わらない。
         # 何のためかは `__init__` の `PARC_SEED` の注記にある。
+        #
+        # **既定の引きは「この run の何本目か」で決まる**（`_episode_index`）。
+        # **`PARC_RESET_SEED=1` のときだけ、呼ぶ側が渡した種をそのまま使う**ので、
+        # **同じ課題・同じ初期状態がいつでも同じ引きになる**（測りに要る）。
         if self._seed is not None:
             import torch
 
-            seed = self._seed + self._episode_index
-            torch.manual_seed(seed)
+            if self._use_reset_seed and seed is not None:
+                draw = self._seed + int(seed)
+            else:
+                draw = self._seed + self._episode_index
+            torch.manual_seed(draw)
             if torch.cuda.is_available():
-                torch.cuda.manual_seed_all(seed)
-            np.random.seed(seed % (2**32))
+                torch.cuda.manual_seed_all(draw)
+            np.random.seed(draw % (2**32))
         self._episode_index += 1
+
+        # **歩数を既定へ戻すのは `self._policy.reset()` より先でなければならない。**
+        # 同梱 lerobot の `reset()` は待ち行列を
+        # `deque(maxlen=self.config.n_action_steps)` で作り直す（`modeling_pi05.py`）。
+        # **前エピソードの最後が 8 歩だと `maxlen=8` の行列ができ、次に 16 歩ぶん
+        # 入れたとき先頭 8 歩が黙って捨てられる**——腕が chunk の途中から動き出す。
+        # 順番を入れ替えるだけで防げるので、ここに置く。
+        if self._samples > 1:
+            self._policy.config.n_action_steps = self._default_cadence
 
         # chunk のキャッシュを捨てる。忘れると前エピソードの action を出し続ける。
         self._policy.reset()
@@ -1402,12 +1652,31 @@ class MyPolicy(BasePolicy):
         # RTC の持ち物も捨てる。**前エピソードの計画を手がかりにしてはいけない。**
         self._rtc_queue.clear()
         self._rtc_previous_tail = None
+        # **散らばりの目盛りもエピソードごとに捨てる。** 課題が違えば散らばりの
+        # 大きさも違うので、前のエピソードの中央値を持ち越すと判定がずれる。
+        self._adaptive_history.clear()
 
     def _build_batch(self, obs: dict[str, np.ndarray]) -> dict:
-        """評価パイプラインの観測を、モデルが期待する batch へ変換する。"""
+        """評価パイプラインの観測を、モデルが期待する batch へ変換する。
+
+        **画像キー名はモデルによって違う。** `LiberoProcessorStep`（下の
+        `_env_preprocessor`）は画像を回転させるだけでキー名は変えない
+        （`env_processor.py` の `_process_observation`）。**MolmoAct2 の保存済み
+        `policy_preprocessor.json` は `rename_observations_processor` の
+        `rename_map` が空**——つまり寄せ替えを一切しない前提で、
+        `config.image_keys`（`["observation.images.image",
+        "observation.images.wrist_image"]`）の名前がそのまま来ることを期待する
+        （2026-09-15、ダウンロードした重み同梱の設定を読んで確認）。
+        **ここで作らないと、SmolVLA・π0.5 と同じ `front`/`wrist` のままキーが
+        合わず画像が届かない。**
+        """
+        if self._kind == "molmoact2":
+            image_keys = ("observation.images.image", "observation.images.wrist_image")
+        else:
+            image_keys = ("observation.images.front", "observation.images.wrist")
         observation = {
-            "observation.images.front": self._to_image_tensor(obs["agentview_image"]),
-            "observation.images.wrist": self._to_image_tensor(
+            image_keys[0]: self._to_image_tensor(obs["agentview_image"]),
+            image_keys[1]: self._to_image_tensor(
                 obs["robot0_eye_in_hand_image"]
             ),
             "observation.robot_state": {
@@ -1497,11 +1766,15 @@ def health():
 async def reset_policy(request: Request):
     body = await request.body()
     instruction = ""
+    seed = None
     if body:
         import json
         data = json.loads(body)
         instruction = data.get("instruction", "")
-    _policy.reset(instruction=instruction)
+        # **呼ぶ側が種を送ってくる**（`pipeline/remote_policy.py` の `reset`）。
+        # 使うかどうかは `PARC_RESET_SEED` が決める。**既定は使わない。**
+        seed = data.get("seed")
+    _policy.reset(instruction=instruction, seed=seed)
     return {"status": "ok"}
 
 

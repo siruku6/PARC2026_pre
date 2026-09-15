@@ -10,7 +10,7 @@ Track3 だけである**——ただし本番の採点は非公開タスクを�
 
 | 節 | 中身 |
 |---|---|
-| 1 | 配布された 4 件と、その目標条件 |
+| 1 | 配布された 4 件と、その目標条件。**対応する順方向の在処**（1.1）・**指示文は init 50 行を覆える**（1.2）・**同じ場面で色だけが違う課題は手元にある**（1.3）・**two mugs の場面はマグ 3 個**（1.4）・**位置が物の同一性を決めている**（1.5） |
 | 2 | **運営の開示（8/28）—— Track3 は「逆向きのタスク」である** |
 | 3 | **混入した検査スクリプトから読める母集団の作り** |
 | 4 | **トークナイザは Track3 のボトルネックではない**（9/3 に測った） |
@@ -32,6 +32,223 @@ Track3 だけである**——ただし本番の採点は非公開タスクを�
 | **目標は「机の狭い領域に置くこと」** | 黄色い本の課題の目標は `(On yellow_book_2 study_table_yellow_book_left_init_region)` で、**領域の広さは 15 cm 角ほど**（`:ranges` が `-0.125 -0.325 0.025 -0.175`）。**`..._init_region` は、その物の元の置き場である** |
 | **指示文は定義ファイルの中のほうが詳しい** | ファイル名より長い。例: `take the yellow book off the top of the shelf and put it back on the table on the left` |
 | **棚そのものが `:obj_of_interest` に入っている**（`wooden_two_layer_shelf_1`） | つまり**棚を動かしても 1 mm の衝突判定では失格にならない** |
+
+### 1.1 対応する順方向がどこにあるか（**two mugs だけ別扱い**）
+
+**逆向きデータは順方向デモの時刻反転で作る**ので、4 件それぞれに「対応する
+順方向」が要る。3 件は `libero_90` に bddl・init・デモが揃っているが、
+**two mugs だけ揃っていない。**
+
+| T3 の課題 | 対応する順方向 | bddl / init | デモ |
+|---|---|---|---|
+| 缶 | `LIVING_ROOM_SCENE3_pick_up_the_alphabet_soup_and_put_it_in_the_tray` | libero_90 | あり |
+| 赤マグ | `LIVING_ROOM_SCENE5_put_the_red_mug_on_the_left_plate` | libero_90 | あり |
+| 本 | `STUDY_SCENE4_pick_up_the_book_on_the_left_and_place_it_on_top_of_the_shelf` | libero_90 | あり |
+| **two mugs** | `LIVING_ROOM_SCENE5_put_the_white_mug_on_the_left_plate_and_put_the_yellow_and_white_mug_on_the_right_plate` | **libero_90 に無い**。016 が組み立てたもの（`work/probe_016/t3assets`）を使う。**公式配布ではない** | **配布データセットに `task_index 30` で 313 本**（214〜330 コマ） |
+
+**「順方向 2 本の合成が要る」は誤りである。**組み合わせタスクのデモは 1 本で
+丸ごと入っている。`libero_90` にあるのは単体 2 本
+（`..._put_the_white_mug_on_the_left_plate` と
+`..._put_the_yellow_and_white_mug_on_the_right_plate`）だが、**そちらを合成する
+必要は無い。**
+
+**two mugs の順方向は `libero_90` ではなく `libero_10` にある。**bddl は
+`libero_10` と `libero_mix` に **203 個ずつ**（摂動版）あり、デモ 313 本は
+**その 203 シーンに散っている**。1 シーンあたり 1〜2 本しかないので、
+**素のシーン 1 つで再生すると半分は再現しない**（実測で 20 本中 10 本）。
+数の関係は [reference/06 の末尾](06_training_data_composition.md)。
+
+**two mugs の goal だけ述語が 2 つある。**
+
+```
+(And (On porcelain_mug_1   living_room_table_porcelain_mug_init_region)
+     (On white_yellow_mug_1 living_room_table_white_yellow_mug_init_region))
+```
+
+つまり**1 本の中で 2 つの物を別々の場所へ置く**。逆向きの作り方は
+[reference/30 の 7 節](30_reverse_grasp_pose.md) にある。
+
+**こちらの逆向きデータが覆えたのは 3 件である**（2026-09-09 に数え直した）。
+
+| T3 の課題 | 逆向き（`take … off`） | 順方向（`put … on`） |
+|---|---|---|
+| 缶 | **100 本** | あり |
+| 赤マグ | **147 本** | あり |
+| 本 | **150 本** | あり |
+| **two mugs** | **0 本** | **75 本**（v2 混合の中に順方向だけ入っている） |
+
+**two mugs は「皿に置く」ほうだけが学習データに入っている。**T3 が要求するのは
+「皿から取る」ほうで、**順方向 75 本はその代わりにならない**——黄本と缶は
+**逆向きを入れたときだけ**正解が 1 位になった（[../knowledge/20](../knowledge/20_probe_object_choice_without_rollout.md) 3 節）。
+**Track3 の配点の 25% がここで空いている。**
+
+### 1.2 指示文は 1 つで init 50 行すべてを覆えるか——**覆える**（2026-09-07 に測った）
+
+**指示文は bddl に 1 つしかない**（`env.language_instruction`）。init が振るのは
+**物の出発点**で、目標領域は bddl 固定なので、原理的には 1 つで足りる。**ただし
+「左の」「後ろに」のような相対表現は、基準になる物の位置が init ごとに変わる。**
+そこだけ数えた。実装は
+[`check_instruction_coverage.py`](../../solution/tools/track3_reversal/check_instruction_coverage.py)。
+
+**LIBERO に相対位置の述語は無い**（`VALIDATE_PREDICATE_FN_DICT` は
+`on` / `in` / `up` / `open` / `close` / `turnon` / `turnoff` だけ）ので幾何で測る。
+**向きの規約は推測せず、名前の付いた領域で固定した:**
+
+- `plate_left_region` は y = -0.30、`plate_right_region` は y = +0.30、
+  `study_table_yellow_book_left_init_region` も y = -0.25
+  → **左 = y が小さい**
+- 前後は 2 タスクが独立に整合した → **`in front of` = x が大きい /
+  `behind` = x が小さい**
+
+結果（**指示文が名前を挙げている物**に対する余裕。正 = 指示文が成り立つ向き）:
+
+| 課題 | 相対表現 | 余裕 最小 / 中央 / 最大 | 判定 |
+|---|---|---|---|
+| 本 | **無い** | — | **init に依らない** |
+| 缶 | `in front of the ketchup` | 126 / 150 / 174 mm | **○ 領域の端でも安全** |
+| 赤マグ | `behind the other two mugs` | 75 / 92 / 123 mm | **○ 領域の端でも安全** |
+| two mugs | 白マグが `to the left of the red mug` | 125 / 146 / 175 mm | **○ 領域の端でも安全** |
+| two mugs | 黄白マグが `to the right of the red mug` | **75** / 104 / 125 mm | ○ 全 50 行で向きは正しいが、**領域の半サイズ 115 mm より狭い** |
+
+**4 件とも、50 行すべてで指示文は正しい。**引っかかるのは最後の 1 行だけで、
+**目標領域が指示文が成り立つ範囲より広い**（半サイズ 115 mm に対し余裕 75 mm）。
+つまり領域の端（y が小さい側）に置くと「赤マグの右」が嘘になる。
+
+**実際の置き場所は中心の近くなので問題にならない。**生成した 8 本の実測で、
+黄白マグの y ずれは**最悪 -16.2 mm**（余裕を食う向き）で、余裕 75.2 mm に対して
+4.6 倍の安全側にある。**領域いっぱいに散らす作り方に変えるなら、ここは
+測り直すこと。**
+
+### 1.3 同じ場面で色だけが違う課題はすでに手元にある（2026-09-09 に数えた）
+
+**T3 で色が手がかりになるのは赤マグと two mugs の 2 課題で、どちらも
+`LIVING_ROOM_SCENE5` である。**この場面のマグは 3 個とも同じ形で、
+**色以外に見分ける手がかりが少ない。**
+
+**その色を教えるデータを新しく撮る必要は無い。**逆向きの元データ
+（`libero_combined_20hz`・111 課題）に、**同じ場面で色だけが違う組が 3 場面ぶん入っている。**
+
+| 場面 | task_index | 本数 | 平均コマ | 指示文 |
+|---|---|---|---|---|
+| `LIVING_ROOM_SCENE5` | 59 | 34 | 141 | put the **red** mug on the **left** plate（**赤マグの順方向**） |
+| | 96 | 45 | 138 | put the **red** mug on the **right** plate |
+| | 90 | 45 | 107 | put the **white** mug on the **left** plate |
+| | 49 | 48 | 106 | put the **yellow and white** mug on the **right** plate |
+| | 30 | 313 | 260 | 白と黄白の両方（**two mugs の順方向**・1.1 節） |
+| `LIVING_ROOM_SCENE6` | 55 | 44 | 132 | put the **red** mug on the plate |
+| | 81 | 43 | 157 | put the **white** mug on the plate |
+| `STUDY_SCENE3` | 89 | 46 | 118 | pick up the **red** mug and place it to the right of the caddy |
+| | 85 | 46 | 102 | pick up the **white** mug and place it to the right of the caddy |
+| `STUDY_SCENE1` | 61 | 45 | 126 | pick up the **yellow and white** mug and place it to the right of the caddy |
+| `KITCHEN_SCENE6` | 80 | 44 | 125 | put the yellow and white mug to the front of the white mug |
+
+**合計は 5 場面・11 件・753 本である。**このうち
+**two mugs の順方向 313 本（`task_index 30`）とすでに逆向きにした赤マグ 34 本（同 59）を除くと、
+新しく足せるのは 9 件・406 本**になる。
+
+**ただし、この 11 件はどれも「色を読まないと解けない」課題ではない**（**9/9 に bddl で確かめて訂正した。
+ここには当初「`LIVING_ROOM_SCENE6` と `STUDY_SCENE3` は色だけが違うので解けない」と書いていた**）。
+**2 つのマグの初期領域が重ならないので、位置で対象が決まってしまう**（1.5 節の実測）。
+
+| 場面 | 色を読まないと解けるか | 取れる対比 |
+|---|---|---|
+| `LIVING_ROOM_SCENE6`・`STUDY_SCENE3` | **解ける。**行き先は同じだが、2 つのマグの初期領域が 10〜15 cm 離れている | 同じ行き先で対象が違う組 |
+| `LIVING_ROOM_SCENE5` | **解ける。**3 個とも別の 5 cm 角に居る | **赤が左右の皿の両方に出る**ので「同じ色で行き先が違う」組が取れる |
+| `KITCHEN_SCENE6` | **解ける。**白と黄白が同じ文に出るが、居場所は別 | 参照物も色で指す文型 |
+
+**それでも足す値打ちがある。**同じ色が**複数の場面・複数の行き先**に出るので、
+**「1 つの絶対位置＝1 つの色」では覚えきれなくなる。**
+**ただし「場面 ＋ 位置」の 11 通りを覚えるだけで済む余地は残る。**
+
+**色を必須にするには、位置と同一性の相関を自分で切る必要がある**——
+**同じ場面で 2 つのマグの初期領域を入れ替えた bddl を作る。**
+設計は [../plan/22 の 4.2 節](../plan/22_grasp_and_color_next_moves.md#42-色で見分けるデータを足す)。
+
+**なお、1 つの場面で指示文の色語だけを差し替えるのは、いちばん効かない**——
+配置が同じなら位置で解けるので、色語は捨ててよい信号のままである
+（[knowledge/20 の 4.1](../knowledge/20_probe_object_choice_without_rollout.md)）。
+
+### 1.4 T3 two mugs の場面には**マグが 3 個ある**——赤は邪魔者である
+
+`take_the_two_mugs_off_the_plates_and_place_them_on_the_table.bddl` の `:init` はこうである。
+
+| 物体 | 初期位置 | 役割 |
+|---|---|---|
+| `porcelain_mug_1`（**白**） | `plate_1`（**左の皿**） | 対象 |
+| `white_yellow_mug_1`（**黄白**） | `plate_2`（**右の皿**） | 対象 |
+| `red_coffee_mug_1`（**赤**） | 机の上 | **邪魔者**（`obj_of_interest` に入らない） |
+
+**赤マグの課題とは対象と邪魔者が入れ替わっている。**
+**2 課題は同じ 3 個のマグを共有し、指示文の色語だけが対象を決めている。**
+
+### 1.5 **どの学習場面でも「位置」が物の同一性を決めている**——T3 の赤マグだけが例外（2026-09-09）
+
+**なぜ調べたか。**逆向きデータを足しても**赤マグだけが直らない**
+（[../knowledge/20](../knowledge/20_probe_object_choice_without_rollout.md) の 3.1）。
+**学習中の場面と T3 で何が違うのかを bddl で突き合わせた。**
+
+**LIBERO はどの場面でも、物ごとに専用の初期領域を持たせている。**領域は 5 cm 角で、
+**互いに重ならない。**
+
+| 場面 | 物 | 初期領域（x 下限 y 下限 x 上限 y 上限） |
+|---|---|---|
+| `LIVING_ROOM_SCENE5` | 白（`porcelain_mug`） | −0.125 −0.175 −0.075 −0.125 |
+| | 黄白（`white_yellow_mug`） | −0.075 +0.075 −0.025 +0.125 |
+| | **赤（`red_coffee_mug`）** | **−0.225 −0.025 −0.175 +0.025** |
+| `LIVING_ROOM_SCENE6` | 白 | −0.125 −0.175 −0.075 −0.125 |
+| | **赤** | **−0.225 −0.025 −0.175 +0.025** |
+
+**つまり「赤いマグ」は、学習中はいつも机の中央奥（−0.2, 0.0）に居る。**
+**位置を覚えれば色を読む必要が無い。**これが
+[../knowledge/20 の 4.1](../knowledge/20_probe_object_choice_without_rollout.md) の
+「データが色を要求していない」の正体である——**同じ場面で色語だけが違う 3 組
+（1.3 節）でさえ、位置で解けてしまう。**
+
+**T3 の赤マグだけが、この対応を壊している。**
+
+| T3 赤マグの `:init` | 場所 | 学習中の定位置か |
+|---|---|---|
+| `porcelain_mug_1`（白） | `porcelain_mug_init_region` | **定位置** |
+| `white_yellow_mug_1`（黄白） | `white_yellow_mug_init_region` | **定位置** |
+| **`red_coffee_mug_1`（赤）** | **`plate_1`（左の皿）** | **違う。定位置から約 30 cm** |
+
+**目標は赤を `red_coffee_mug_init_region` へ戻すことである。**
+**つまり「赤マグの定位置」は、T3 では出発点ではなく行き先になっている。**
+
+**実測がこの読みと合う。**`rp3000` は「左の皿の赤マグ」と言われて
+**定位置に居る白マグ**（`porcelain_mug_1`・cos +0.972）へ向かう。
+**位置で覚えたモデルの振る舞いそのものである。**
+
+**ただし指示文には位置の手がかりもある**——`off the left plate` である。
+**皿に載っているマグは赤だけなので、位置だけで一意に決まる。**
+それでも `proto20` は**空いている右の皿**（`plate_2`・cos +0.768）へ向かい、
+**赤マグは cos −0.761 で真逆である。左右を取り違えている疑いがある。**
+
+**画の向きの不整合ではない**（9/9 に実物で確かめた）。
+`reverse_lerobot_v2` と配布 `libero_plus` の 1 コマ目を並べると、
+**どちらも腕が上・机が下で同じ向き**である（書き出しは `dataset_image()` が
+`[::-1, ::-1]` を当て、評価側は `LiberoProcessorStep` が当てる）。
+
+**摂動を掛けても、この対応は 1 度も崩れない**（9/9 に 203 変種すべてで確かめた）。
+配布データは 1 課題を 203 通りに振っているが（`_language` 50・`_light` 50・`_add` 30・
+`_table` 28・`_tb` 22・`_levelN_sampleM` 20）、**物を動かすのは `_levelN_sampleM` だけで、
+そのずれは最大でも 49.3 mm である。**
+
+| 難易度 | 初期領域の最大のずれ |
+|---|---|
+| level 1 | 9.5 mm |
+| level 2 | 17.0 mm |
+| level 3 | 29.1 mm |
+| level 4 | 36.0 mm |
+| **level 5** | **49.3 mm** |
+
+**マグの初期領域の中心どうしは 180〜255 mm 離れている。**
+**最大の摂動でも 3.7 倍の余裕があり、位置が入れ替わることはない。**
+
+**つまり「同じ色の物が別の場所に来る」課題は、配布データに 1 件も存在しない。**
+**位置と同一性の相関を切ったデータは、作らないと手に入らない。**
+
+**次に打つ手は [../plan/22](../plan/22_grasp_and_color_next_moves.md) の 3.5 節にある。**
 
 ## 2. 運営の開示（8/28）—— Track3 は「逆向きのタスク」である
 

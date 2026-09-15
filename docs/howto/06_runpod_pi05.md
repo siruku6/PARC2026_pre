@@ -9,10 +9,10 @@
 「フルパラメータ学習が本当に通るか」を確かめてから**、バッチサイズを探り、
 最後に本番のステップ数へ進む——という順で書く。
 
-**2 回目の学習（フルパラメータ ＋ 画像拡張）の 1 回分の設計は
-[../plan/15_runpod_fullparam_with_augment.md](../plan/15_runpod_fullparam_with_augment.md)
-にある。**1 回目との差分・歩数と費用・立ち上がりの確認 3 点はそちら。
-**このファイルは何度でも使う手順（イメージ・Pod・batch の探り方・間引き・持ち帰り）を持つ。**
+**2 回目の学習（フルパラメータ ＋ 画像拡張）の 1 回分の設計は、
+このファイルの 14 節に移した。** 1 回目との差分・歩数と費用（14.1）・
+立ち上がりの確認 3 点（14.5）はすべてこちら。
+**0〜13 節は何度でも使う手順（イメージ・Pod・batch の探り方・間引き・持ち帰り）を持つ。**
 
 > **いますぐ長い学習を回すなら 14 節へ飛ぶ。** 2026-08-29 に決めた 6,000 歩の段取りが、
 > 確認コマンドと期待される出力の対、踏みそうな穴ごとの対処、見張りの時刻表まで
@@ -941,7 +941,7 @@ PY
 **(a) 送るファイルにカメラ拡張が入っているか**（このマシンで打つ）
 
 ```bash
-grep -c "camera.viewpoint.augment" /home/ubuntu/lab/PARC2026_pre/solution/train/train_pi05.py
+grep -c "camera.viewpoint.augment" /home/ubuntu/src/PARC2026_pre/solution/train/train_pi05.py
 ```
 
 **期待する出力: `2`。** `0` なら送るファイルが古い。**Pod のイメージ `:v2` に
@@ -951,7 +951,7 @@ grep -c "camera.viewpoint.augment" /home/ubuntu/lab/PARC2026_pre/solution/train/
 **(b) Hugging Face の非公開の枠がいくら空いているか**（このマシンで打つ）
 
 ```bash
-cd /home/ubuntu/lab/PARC2026_pre && python3 - <<'PY'
+cd /home/ubuntu/src/PARC2026_pre && python3 - <<'PY'
 from huggingface_hub import HfApi
 api = HfApi()
 total = 0
@@ -973,7 +973,7 @@ PY
 **(c) ログインできているか**（このマシンで打つ）
 
 ```bash
-cd /home/ubuntu/lab/PARC2026_pre && hf auth whoami
+cd /home/ubuntu/src/PARC2026_pre && hf auth whoami
 ```
 
 **期待する出力: `user=siruku6`。**違うなら `hf auth login` をやり直す。
@@ -996,7 +996,7 @@ Pod を作ったあと、管理画面の **`Estimated time left` が 20 時間�
 **最初の重みが出るのは学習開始から 4 時間 16 分後**なので、それまでに消せば間に合う。
 
 ```bash
-cd /home/ubuntu/lab/PARC2026_pre && python3 -c \
+cd /home/ubuntu/src/PARC2026_pre && python3 -c \
   "from huggingface_hub import HfApi; HfApi().delete_repo('siruku6/parc2026-submission')"
 ```
 
@@ -1029,7 +1029,7 @@ ssh root@<IP> -p <port> -i ~/.ssh/id_ed25519
 ### 4. 学習スクリプトを送る（このマシンで打つ）
 
 ```bash
-cd /home/ubuntu/lab/PARC2026_pre/solution/train && \
+cd /home/ubuntu/src/PARC2026_pre/solution/train && \
 tar czf - --exclude='__pycache__' experiments train.py train_pi05.py | \
 ssh -p <port> -i ~/.ssh/id_ed25519 root@<IP> 'tar xzf - -C /opt/pi05 --no-same-owner'
 ```

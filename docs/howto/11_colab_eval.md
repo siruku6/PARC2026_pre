@@ -108,7 +108,7 @@ Colab の接続が保たない。**しかもこの 195 秒は下限である** �
 
 ```bash
 # π0.5（Track2）—— 手元の 36 件評価と同じ集合を渡す
-cd /home/ubuntu/lab/PARC2026_pre
+cd /home/ubuntu/src/PARC2026_pre
 python3 solution/tools/colab/collect_colab_files.py \
     --val-tasks compe/val/EVAL_TASKS.csv
 open work/colab_upload
@@ -260,6 +260,11 @@ Drive への退避まで通る。前の関数が作ったものが無ければ�
 
 それでも `av` 関連で落ちるときは、`pip uninstall -y datasets` で分岐そのものを
 通らなくする方が確実である。この評価では `datasets` を使わない。
+
+**これは Colab に限らない。** `datasets` が入った環境で lerobot 0.6.0 の
+`LeRobotDataset` を import すると、どのマシンでも同じ経路を通る
+（2026-09-05・RTX6000 で `libero_combined_20hz` を読もうとして踏んだ。
+素で入れた `av` が 18.1.0 で `av.option` が無く、`av==15.1.0` に落として通した）。
 
 ## Colab は速くない。GPU マシンが空いていればそちらで回す
 

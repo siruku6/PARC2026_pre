@@ -578,7 +578,7 @@ Track1 で 1 本増やしても **+0.020** である（Track1 の 1 本は 0.061
 | 1 本で 0.125 動くこと・成功 1 本 = 0.061 点 | 同 |
 | `3_Omni` と `4_最終` が別の集合であること | 採点ログの `[evaluate] タスク用途` 行 |
 | 本選ではエラーでも枠を消費すること | [../howto/02_build_submission.md](../howto/02_build_submission.md) |
-| 008 の歩数と保存の間隔 | [../talk/inter_sessions/008_runpod_long_full_training.md](../talk/inter_sessions/008_runpod_long_full_training.md) |
+| RunPod の長い学習の歩数と保存の間隔（008・9/8 に消した依頼の成果物） | [../howto/06_runpod_pi05.md](../howto/06_runpod_pi05.md) の 14 節 |
 | **最終提出枠の規定 7 つ**（6 節） | **`docs/materials/PARC2026開発コンペティション_本選_v1.1.pdf`** の「本選 1/2/3 最終評価用提出フォームについて」1/2・2/2 |
 | **6.1.0 の採点と、エピソードごとの歩数**（2.1・2.2 節） | `b_PARC2026_final/outputs/submission_logs/track{1,2}/260830_pi0.5_6.1.0.txt`。**読み出しは `python3 solution/tools/analysis/parse_grading_log.py <基準のログ> <比べるログ>`** |
 | **Track3 の首位 0.09603** | 8/31 にユーザがリーダーボードを見た |

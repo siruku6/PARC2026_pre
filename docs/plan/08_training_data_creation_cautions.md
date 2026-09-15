@@ -1,11 +1,11 @@
 # 08. 学習用データ（動画・画像）を作る際の注意点
 
 **「Track2 対策の方針をどう変えるか」の前段として、学習用デモ動画・画像データを
-作成する際に踏むべき注意点を整理する記録である。方針（[07_track2_preparation.md](07_track2_preparation.md)
+作成する際に踏むべき注意点を整理する記録である。方針（[07_track2_preparation.md](archive/07_track2_preparation.md)
 の 2 節・3 節）の再検討はこの整理の後に行う。**
 
 - 出典は `docs/materials/qiita_OpenVLA-OFT+.md`（PARC2026 に取り組んだ別チームの体験談、**2 次情報**）と、
-  松尾研講義第6回（一次資料、[07_track2_preparation.md](07_track2_preparation.md) で既読の続き）、
+  松尾研講義第6回（一次資料、[07_track2_preparation.md](archive/07_track2_preparation.md) で既読の続き）、
   および模倣学習の一般文献（researcher エージェントに調査を委任）。
 - Qiita 記事は自チームの提出物ではなく他者の記録である点に注意する。**数値（80 episode
   の adapter-check 結果等）は「その人の環境での 1 回の観測」であり、そのまま自チームの
@@ -95,7 +95,7 @@ Background、Light、multi-object の悪化が埋もれる」と明記してい�
 
 **「弱そうなタスクほど多くデータを作る」を機械的にやると、シミュレータ側の不安定さ
 （成功判定のばらつき・接触の不安定さ）まで大量に学習データへ焼き込んでしまう危険がある。**
-scripted policy で Tier 2（Robot・Layout の再収集、[07_track2_preparation.md](07_track2_preparation.md) 2.1 節）を
+scripted policy で Tier 2（Robot・Layout の再収集、[07_track2_preparation.md](archive/07_track2_preparation.md) 2.1 節）を
 行う際、**対象タスクを増やす前に、まず少数サンプルで成功判定・接触の安定性を確認し、
 不安定なタスクは対象から外すか原因を切り分けてから増量する**、という順序が要る。
 
@@ -108,7 +108,7 @@ scripted policy で Tier 2（Robot・Layout の再収集、[07_track2_preparatio
 記事の推論実装は「2 画像を 180 度回転し、center crop を適用する」という手順を踏んでいる。
 **この前処理（回転・crop・resize・カメラの順序）が学習データ生成時と推論時で 1 ピクセルでも
 食い違うと、把持点がずれるバグになる。** Track2 対策として Tier 1（カメラ設定を変えて作り直す、
-[07_track2_preparation.md](07_track2_preparation.md) 2.1 節）を行う際、**生成したデータの前処理と、
+[07_track2_preparation.md](archive/07_track2_preparation.md) 2.1 節）を行う際、**生成したデータの前処理と、
 提出物 `policy_server.py` 側の前処理が一致しているかを確認する工程を、データ生成パイプラインに
 組み込む必要がある。**
 
@@ -120,7 +120,7 @@ scripted policy で Tier 2（Robot・Layout の再収集、[07_track2_preparatio
 
 **データを作っただけでは何も証明されない。** 生成したデータ（Tier 1/Tier 2）を追加学習に
 混ぜた後は、**追加学習前後で suite・scene・condition を揃えた再評価**を必ず行う必要がある
-（[07_track2_preparation.md](07_track2_preparation.md) 3 節の 1 番目のアクションで作る
+（[07_track2_preparation.md](archive/07_track2_preparation.md) 3 節の 1 番目のアクションで作る
 ローカル疑似検証スイートが、この「揃えた再評価」の土台になる）。
 
 ### 1.7 データ量・タスク範囲の限界を明記する
@@ -141,7 +141,7 @@ scripted policy で Tier 2（Robot・Layout の再収集、[07_track2_preparatio
 テキスト抽出。委任した researcher エージェントは `pdftoppm` 未導入のためページ画像として
 開けなかったので、この節は自分で読んで書いた一次確認）。第6回は実機データが対象だが、
 **「集めたデータをどう疑い、どう検証するか」という考え方はシミュレータ生成データにも
-そのまま当てはまる。** Track2 対策の Tier 1/Tier 2 データ生成（[07_track2_preparation.md](07_track2_preparation.md)
+そのまま当てはまる。** Track2 対策の Tier 1/Tier 2 データ生成（[07_track2_preparation.md](archive/07_track2_preparation.md)
 2.1 節）に効く記述を、ページ番号付きで並べる。
 
 ### 2.1 データの価値は「量×多様性×実行品質×ラベル品質」の掛け算（p42）
@@ -198,7 +198,7 @@ Tier 1/Tier 2 で数百〜数千本規模のデータを生成する場合、**�
 
 **「見た目が綺麗な成功デモ」を増やすことが必ずしも Track2 の弱点（Camera・Robot 摂動）への
 耐性向上に直結するとは限らない。** Tier 1/Tier 2 でデータを作った後は、**「見た目の品質」
-ではなく「[07_track2_preparation.md](07_track2_preparation.md) 3節の疑似検証スイートでの
+ではなく「[07_track2_preparation.md](archive/07_track2_preparation.md) 3節の疑似検証スイートでの
 実測」で効果を判定する**（1.6 節と同じ結論に、別の角度から到達している）。
 
 ### 2.6 Filter・Relabel・Condition の 3 択（p54）
@@ -244,7 +244,7 @@ Tier 1（カメラ設定だけ変えて作り直す）は、**action 列は使�
 > 何を主張したいかで単位を選ぶ。未知環境への汎化を主張するなら environment 単位で切る。
 
 **これは Track2 の評価設計に直接効く。** Track2 は「同一タスク・未知ドメイン」（
-[07_track2_preparation.md](07_track2_preparation.md) 1.1 節）であり、**Tier 1/Tier 2 で
+[07_track2_preparation.md](archive/07_track2_preparation.md) 1.1 節）であり、**Tier 1/Tier 2 で
 増産した学習データを検証データと分けるとき、単純に episode をランダムに train/val
 分割するのではなく、「学習で見せたカメラ角度・初期姿勢・物体配置の集合」と「検証で使う
 集合」を意図的に分離（environment 単位に相当する分割）しないと、Track2 が測ろうとしている
@@ -273,7 +273,7 @@ scripted policy を数百〜数千通りの初期条件で自動実行する以�
 
 ReMix（p47）は「混合比の分布ロバスト最適化」で対処する、と紹介されている。
 **Tier 1/Tier 2 で作ったデータを既存の `lerobot/libero_plus` に `merge` する際
-（[07_track2_preparation.md](07_track2_preparation.md) 2.2 節）、単純に全部混ぜて
+（[07_track2_preparation.md](archive/07_track2_preparation.md) 2.2 節）、単純に全部混ぜて
 増量するのではなく、混合比（既存データ：Tier1：Tier2 の比率）を検証データでの
 成績を見ながら調整する余地を残す必要がある。**
 
@@ -289,7 +289,7 @@ ReMix（p47）は「混合比の分布ロバスト最適化」で対処する、
 ## 3. 模倣学習の一般文献からの補足
 
 別の researcher エージェントに Web 調査を委任した。**「本文まで確認」「要旨のみ確認」
-「未確認（伝聞）」を明記**する既存の方針（[07_track2_preparation.md](07_track2_preparation.md)
+「未確認（伝聞）」を明記**する既存の方針（[07_track2_preparation.md](archive/07_track2_preparation.md)
 1.3.3 節と同じ）を踏襲している。
 
 ### 3.1 学習データの分布から少しずつ外れていく問題と DAgger（本文まで確認）
@@ -322,7 +322,7 @@ scripted policy による自動生成には直接使えない（学習方策が�
 72% に低下）ことも確認されている ── **最適なノイズ量が存在し、多いほど良いわけではない。**
 
 **これは自チームの scripted policy（`scripted_demo.py`）に直接応用できる発想である。** scripted policy は
-「実測の位置から目標への差分を計算する」閉ループ制御（[07_track2_preparation.md](07_track2_preparation.md)
+「実測の位置から目標への差分を計算する」閉ループ制御（[07_track2_preparation.md](archive/07_track2_preparation.md)
 2.1 節）なので、**scripted policy が出力する action に意図的にノイズを乗せて実行すれば、閉ループの
 性質上、scripted policy 自身が目標へ引き戻そうとする軌道になる。** つまり、「わざと失敗させてから
 expert が補正する」という 2 段階の手書きシナリオ（1.1 節の Qiita のやり方）を作らなくても、
@@ -427,7 +427,7 @@ discarded"（成功したもののみ採用）と明記している。**
 
 ## 4. 整理の小括（1〜3節を踏まえて）
 
-3 節すべてが揃ったところで、[07_track2_preparation.md](07_track2_preparation.md) の
+3 節すべてが揃ったところで、[07_track2_preparation.md](archive/07_track2_preparation.md) の
 Tier 1/Tier 2 計画に対する**追加の作業項目**をまとめる。**この小括が「方針の再検討」への
 入力であり、07 の 2 節・3 節をどう直すかは次の作業で行う（まだ直していない）。**
 
@@ -436,7 +436,7 @@ Tier 1/Tier 2 計画に対する**追加の作業項目**をまとめる。**こ
 1.1 節（Qiita）は「意図的に失敗させ、expert が補正する」という**2 段階を手で書くシナリオ**
 だった。3.2 節（DART）は、**閉ループ方策自身の action にノイズを乗せるだけで、方策が
 自然に目標へ引き戻す軌道（recovery 相当）を作れる**ことを示している。自チームの scripted policy は
-既に閉ループ制御（[07_track2_preparation.md](07_track2_preparation.md) 2.1 節）なので、
+既に閉ループ制御（[07_track2_preparation.md](archive/07_track2_preparation.md) 2.1 節）なので、
 
 > **「scripted policy を書き換えて意図的な失敗シナリオを追加する」よりも先に、「scripted policy の出力 action に
 > ノイズを乗せて実行するだけで recovery 相当のデータが作れるか」を試す価値がある。**
@@ -464,7 +464,7 @@ Tier 1/Tier 2 計画に対する**追加の作業項目**をまとめる。**こ
 
 1.3 節（Qiita の条件別層別）を一歩進める論点が 2.8 節（講義第6回 p59）にある。
 
-> **Track2 の疑似検証スイート（[07_track2_preparation.md](07_track2_preparation.md) 3 節の
+> **Track2 の疑似検証スイート（[07_track2_preparation.md](archive/07_track2_preparation.md) 3 節の
 > 1 番目）を作る際、学習データで使ったカメラ角度・初期姿勢・物体配置の集合と、検証で使う
 > 集合を明確に分離する（講義でいう environment 単位の分割に相当）。** そうしないと、
 > Track2 が測ろうとしている「未知ドメインへの汎化」を実際には測っておらず、**見たことの
@@ -475,7 +475,7 @@ Tier 1/Tier 2 計画に対する**追加の作業項目**をまとめる。**こ
 Simchowitz et al. の理論的知見（専門家デモが状態空間を十分広く覆っていれば、素朴な
 behavior cloning でも誤りが指数関数的に積み重なる事態を避けられる）は、**「action chunking
 を使っているから安心」ではなく、Tier 1/Tier 2 で視点・初期姿勢・配置の覆う範囲そのものを
-広げる作業に独立した価値がある**ことを支持する。[07_track2_preparation.md](07_track2_preparation.md)
+広げる作業に独立した価値がある**ことを支持する。[07_track2_preparation.md](archive/07_track2_preparation.md)
 1.4 節・2.1 節の Tier 1/Tier 2 方針の正当性を補強する材料である。
 
 ### 4.5 前処理一致・チェックポイント選定・混合比・ログ規律（実務上の非機能要件）
@@ -508,7 +508,7 @@ behavior cloning でも誤りが指数関数的に積み重なる事態を避け
 | 事実 | 出典 |
 |---|---|
 | Qiita 記事の全内容（データ構成・失敗切り分け・検証方法） | `docs/materials/qiita_OpenVLA-OFT+.md`（2 次情報・他チームの体験談） |
-| scripted policy が成功軌道のみを作る設計であること・閉ループ制御であること | `solution/tools/scripted_demo/scripted_demo.py`（[07_track2_preparation.md](07_track2_preparation.md) 2.1 節で既読） |
+| scripted policy が成功軌道のみを作る設計であること・閉ループ制御であること | `solution/tools/scripted_demo/scripted_demo.py`（[07_track2_preparation.md](archive/07_track2_preparation.md) 2.1 節で既読） |
 | 松尾研講義第6回の補足内容（2節） | `docs/materials/第6回 講義資料.pdf` p42-61・p77・p80（`pypdf` でテキスト抽出し実際に読んだ。ページ番号は本文中に明記） |
 | DAgger・covariate shift（3.1節） | Ross, Gordon, Bagnell 2011, arXiv:1011.0686（researcher エージェントが ar5iv で本文確認） |
 | DART・デモ収集時のノイズ注入（3.2節） | Laskey et al. 2017, arXiv:1703.09327, CoRL 2017（同上、本文確認） |

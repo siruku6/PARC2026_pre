@@ -15,10 +15,18 @@
 | **本番は 8 エピソードで決まる** | [22_production_scale.md](22_production_scale.md) |
 | 採点のタスクの母集団（Track1 の母集団） | [04_track1_population.md](04_track1_population.md) |
 | 学習データ 14,347 本の中身 | [06_training_data_composition.md](06_training_data_composition.md) |
+| **自分でエピソードを作るとき、1 本に何が要るか**（形式・中継物の npz・既にある変換器） | **[29_training_data_requirements.md](29_training_data_requirements.md)** |
+| **逆向きエピソードの掴む姿勢の決め方**（順方向から移せる条件・「立つ軸」の測り方・真上からの握り・順方向デモのふるい・**1 本のデモが何度も掴むときのサイクル分割**） | **[30_reverse_grasp_pose.md](30_reverse_grasp_pose.md)** |
+| **逆向きエピソードの運び方と置き方**（下の皿やトレイを擦らない・空中で放して落とさない・傾けたまま置かない・**打ち切り 300 コマに収める**） | **[31_reverse_place_without_contact.md](31_reverse_place_without_contact.md)** |
 | 学習の条件と、次にどこを直すか | [11_training_schedule.md](11_training_schedule.md) |
+| **学習ログの `grdn` の読み方と、指令が上限ちょうどに積み上がると何が起きるか**（AdamW ではクリップされても更新量は変わらない・v2 の行動指令の分布の実測・複製の倍率と正規化の尺度） | **[33_gradient_norm_and_action_saturation.md](33_gradient_norm_and_action_saturation.md)** |
+| **軌道とデータを作り直す外部の道具と先端研究**（手作り 5 つの置き換え先・**人が動画を見て直す道具**・なめらかさで手本を選ぶ・時間反転の対称性・ライセンス） | **[34_trajectory_regeneration_toolchain_survey.md](34_trajectory_regeneration_toolchain_survey.md)** |
+| **自作デモの指令を配布データと同じ形にする**（028 の 4 条件では見えない「停止の塊」と「立ち上がりの遅さ」・**Ruckig の入れ方と実測**・共有モジュール `solution/tools/motion/`） | **[35_command_profile_and_ruckig.md](35_command_profile_and_ruckig.md)** |
+| **採点器が送る 16 文が、モデルに何として届くか**（対応表・入れ替わった語・3 段階の分類・**しきい値 0.50/0.65/0.99 の比較**・`task_id` との答え合わせ） | **[36_instruction_rewriting_table.md](36_instruction_rewriting_table.md)** |
 | LoRA をどこに当てるか | [12_lora_targets.md](12_lora_targets.md) |
 | 検証用に取り分けたエピソード | [13_holdout_episodes.md](13_holdout_episodes.md) |
 | 学習後に変えてよい設定 | [07_chunk_params.md](07_chunk_params.md) |
+| **迷った場面だけ引き直しを早める仕掛け**（ばらつきの測り方・しきい値を測らずに決める・秒数の見積もり・**待ち行列の `maxlen` の罠**） | **[32_adaptive_replanning.md](32_adaptive_replanning.md)** |
 | 観測がどう渡るか | [10_observation_interface.md](10_observation_interface.md) |
 | 摂動のカテゴリ（3 本の分担は [20](20_track2_perturbation_categories.md) の冒頭） | [05](05_perturbation_categories.md)・[20](20_track2_perturbation_categories.md)・[21](21_weakness_map.md) |
 | 見た目の振れ幅 | [08_appearance_spread.md](08_appearance_spread.md) |

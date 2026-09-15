@@ -20,8 +20,9 @@ training data contains zero reverse-direction examples, which reads as the main 
 that replaying a demo forward satisfies task 92's `:goal` only 0 times out of 3, and lists
 three candidate causes. Candidate **(b) is "action convention drift (gripper polarity, step
 size)"**. While measuring that same `action` column for
-[014](014_verify_raw_states_for_time_reversal.md), **I found it contradicts the convention the
-prototype declares in its own docstrings.** 014 was scoped to "is `state` usable for time
+014 (**closed 9/7; its findings now live in
+[reference/25](../../reference/25_dataset_inventory.md) §8.7–8.8**),
+**I found it contradicts the convention the prototype declares in its own docstrings.** 014 was scoped to "is `state` usable for time
 reversal", so I cannot settle this from here — **it needs the side that has the simulator.**
 
 What is already established, and what is out of scope:

@@ -30,8 +30,7 @@
 3. 残ったリンクを消すか、移し先へ差し替える
 4. ファイルを消す
 
-**引用の中に `talk/…:123` のような出典が残ることはある**（`260828_word_audit.md` の
-語の洗い出しなど）。**引用した文そのものが書き写してあれば、それは残してよい**——
+**引用の中に `talk/…:123` のような出典が残ることはある。****引用した文そのものが書き写してあれば、それは残してよい**——
 リンクではなく記録である。
 
 ## いま置いてあるもの
@@ -39,10 +38,10 @@
 | ファイル | 何のためのものか | 消す目安 |
 |---|---|---|
 | [open_items.md](open_items.md) | **本選 1 の `open_items.md`。**候補と「決めた — 蒸し返さない」 | 本選が終わるまで残す |
+| [now.md](now.md) | **着手中の手だけを持つ板。**元 `reference/32`（9/11 に移動） | 本選が終わるまで残す |
 | [open_items_notes.md](open_items_notes.md) | `open_items.md` の各行の根拠と経緯 | 同上 |
 | [archive_qualifier_board.md](archive_qualifier_board.md) | 予選の `open_items.md` の退避先。**Track2 準備期（8/21〜8/26）のぶんは 9/2 に消した** | 同上 |
 | [lessons_learned.md](lessons_learned.md) | 次のコンペへ持ち越すもの | **成果物である。**コンペ後も残す |
 | `YYMMDD_today.md`（例: `260831_today.md`。**8/31 分は消した**） | **その日にやること 1 枚。**移動中に読める形 | **その日が終わったら消す。**残す値や結論は上の表の行き先へ移す |
-| [260828_word_audit.md](260828_word_audit.md) | 日本語の言い換え候補 44 語の洗い出し | 置き換えが終わった語から消していく |
 | [handoff_stove_script.md](handoff_stove_script.md) | 別セッションへの引き継ぎ | 受け取られたら消す |
 | [inter_sessions/](inter_sessions/) | 別セッションへの依頼 1 件 1 ファイル | 閉じたら消す（[その README](inter_sessions/README.md)） |

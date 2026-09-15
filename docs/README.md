@@ -2,68 +2,31 @@
 
 **説明はすべてここにある。** `solution/` には動かすファイルだけを置く。
 
+## 最重要な入り口
+
 | 探しているもの | 行き先 |
 |---|---|
-| **今なにをやるべきか（候補の `open_items.md`）** | **[talk/open_items.md](talk/open_items.md)** ── 1 行ごとに「何が決まるか・誰が・資源・所要・前提・打つもの」を持つ。**アイデアを思いついたらここへ足す** |
-| **手を動かす手順** | [howto/](howto/) |
-| **測った数字** | [strategy/05_実測結果.md](strategy/05_実測結果.md) |
-| **次にどこを直して学習するか** | **[plan/04_training_targets.md](plan/04_training_targets.md)** |
-| **本選 Track2（位置・視点・ノイズ）の準備** | **[plan/07_track2_preparation.md](plan/07_track2_preparation.md)** |
-| **これから作るものの設計** | [plan/](plan/) |
-| **提出物のしくみ** | [solution/README.md](solution/README.md) |
-| **次のコンペに持ち越すこと** | [talk/lessons_learned.md](talk/lessons_learned.md) |
-| **レポートの必須欄と締切** | [knowledge/01_report_requirements.md](knowledge/01_report_requirements.md)（**書く値そのものは実験台帳とライセンスの 2 つから引く**——下の [reference/19](reference/19_weights_catalog.md)・[knowledge/04](knowledge/04_licenses.md)） |
-| **流した学習・重み・版・出した点（実験台帳）** | **[reference/19_weights_catalog.md](reference/19_weights_catalog.md)** |
-| **今使える計算資源・docker image は何か** | **[resources/infra_and_docker.md](resources/infra_and_docker.md)** |
-| **Blackwell で測った速さ・容量・パスの実体・踏んだ罠** | **[reference/27_blackwell_environment.md](reference/27_blackwell_environment.md)**（**手順は [howto/14_blackwell_session.md](howto/14_blackwell_session.md)**。値はこの 1 つだけが持つ） |
-| **HF にどのモデルが置いてあるか・ローカルの重みに控えがあるか** | **[resources/huggingface.md](resources/huggingface.md)** |
-| **ディスクを空けたい** | **[howto/09_free_disk_space.md](howto/09_free_disk_space.md)** |
-| **このマシンを作り替える／作り替えた** | **[howto/10_rebuild_machine.md](howto/10_rebuild_machine.md)** |
+| **いま手を動かしているタスク** | **[talk/now.md](talk/now.md)** ── 着手中のものだけ。候補の全体は [plan/22](plan/22_grasp_and_color_next_moves.md) |
+| **今なにをやるべきか** | **[talk/open_items.md](talk/open_items.md)** ── アイデアを思いついたらここへ足す |
+| **流した学習・重み・版・出した点** | **[reference/19_weights_catalog.md](reference/19_weights_catalog.md)（実験台帳）** |
+| **次にどこを直して学習するか** | **[reference/11_training_schedule.md](reference/11_training_schedule.md)** |
+| **手を動かす手順** | **[howto/](howto/)** ── 頻繁に使う手順書の一覧 |
+| **今使える計算資源** | **[resources/infra_and_docker.md](resources/infra_and_docker.md)** |
 
 ## ディレクトリ
 
-| パス | 中身 |
-|---|---|
-| [materials/](materials/) | **外部から取得した資料の現物。**ルールの PDF・運営 Q&A の CSV・運営の告知・講義資料。**一次資料はここを見る**（[knowledge/11_primary_sources.md](knowledge/11_primary_sources.md)）。**ここのファイルは書き換えない** |
-| [talk/](talk/) | いま抱えているものと、その優先順位。**まずここ。**ただし**一時ファイルの置き場なので、他のディレクトリの文書からここを指してはいけない**（[talk/README.md](talk/README.md)。指したくなったら情報を `howto/`・`knowledge/`・`reference/` へ移す） |
-| [howto/](howto/) | 手順書。上から順にやれば終わる形で書いてある。**何度も使うものだけを置く。**1 回だけの回・1 回だけの設定は [plan/](plan/) へ、踏んだ事故と回避策は [knowledge/](knowledge/) へ |
-| [solution/](solution/) | 提出物と Colab の説明。コード本体は `../solution/` |
-| [strategy/](strategy/) | 何を狙うか、なぜそうするか。判断の材料 |
-| [reference/](reference/) | 調べて分かった事実（モデル・評価データ・採点のタスクの母集団・設定の意味） |
-| [resources/](resources/) | **今使える** 計算資源・ディスク・メモリ・docker image・HF 上のモデルの一覧。状態が変わるたびに上書きする（履歴は残さない）。**手順や Tips は書かない**（[resources/README.md](resources/README.md) の線引き） |
-| [plan/](plan/) | **1 つずつの手の設計。** 何を測り、出た数字で何を決めるか |
-| [outputs/submission_logs/](../outputs/submission_logs/) | 本番採点の生ログ。**トラックごとに `<日付>_<版>.txt`**（本選は `b_PARC2026_final/outputs/submission_logs/`） |
-
-## よく開くファイル
-
-| ファイル | いつ |
-|---|---|
-| **[talk/open_items.md](talk/open_items.md)** | **作業を始めるとき、次の手に迷ったとき。本選 1 の `open_items.md`**（8/27 に作り直した。それ以前（8/21〜8/26）のぶんは消した） |
-| [talk/archive_qualifier_board.md](talk/archive_qualifier_board.md) | **予選の `open_items.md` の退避先。**他の文書が「`open_items.md` の 29」のように**番号で指しているものはここにある** |
-| [talk/lessons_learned.md](talk/lessons_learned.md) | コンペが終わったあと。**次の 3 日の組み立て方**まで書いてある |
-| [howto/01_retrain.md](howto/01_retrain.md) | 追加学習を回すとき |
-| [howto/02_build_submission.md](howto/02_build_submission.md) | zip を作って出すとき |
-| **[howto/03_gpu_eval.md](howto/03_gpu_eval.md)** | **評価を回すとき（GPU マシン。放っておける）** |
-| **[howto/05_scripted_demos.md](howto/05_scripted_demos.md)** | **手本を scripted policy で作るとき（エピソードの作成は手元の Mac の Docker。GPU が要るのは学習だけ）** |
-| **[howto/08_hf_transfer_troubleshooting.md](howto/08_hf_transfer_troubleshooting.md)** | **借りた GPU マシンから重みを運ぶとき。`hf upload` が 403 で止まったら** |
-| **[howto/09_free_disk_space.md](howto/09_free_disk_space.md)** | **`df` の空きが減ってきたとき。消してよいものの判定と、「消したのに空かない」3 つの罠** |
-| **[howto/10_rebuild_machine.md](howto/10_rebuild_machine.md)** | **マシンを作り替えてディスクが消えるとき。持ち出す 1 本のスクリプト・秘密の 4 件・常駐コンテナの起動コマンド** |
-| **[knowledge/16_docker_group_needs_session_restart.md](knowledge/16_docker_group_needs_session_restart.md)** | **`usermod -aG docker` を入れたのに `permission denied` が続くとき。`id -nG` での切り分けと、VS Code の Remote-SSH で必要になる操作** |
-| **[plan/15_runpod_fullparam_with_augment.md](plan/15_runpod_fullparam_with_augment.md)** | **RunPod でフルパラメータ ＋ 画像拡張を回す 1 回分の設計。**歩数と費用の表・立ち上がりの確認 3 点・何と比べられるか |
-| **[howto/14_blackwell_session.md](howto/14_blackwell_session.md)** | **配布 GPU 環境（Blackwell サーバ）に初めて入るとき。60 時間の減り方・下見・配布データの数え方・止め方。自分の Docker は持ち込めない** |
-| **[howto/11_colab_eval.md](howto/11_colab_eval.md)** | **評価を回すとき（Colab。8 ファイルを上げてセルを 5 つ。π0.5 も回せる。T4 で動くかは未確認）** |
-| [strategy/05_実測結果.md](strategy/05_実測結果.md) | 判断する前。数字はすべてここ |
-| **[strategy/06_scripted_demos.md](strategy/06_scripted_demos.md)** | **手本が 300 ステップに収まらないタスクを扱うとき。scripted policy で手本を自分で作る** |
-| **[plan/04_training_targets.md](plan/04_training_targets.md)** | **学習を流す前と、評価が出た直後。**ものさし・天井・候補・外したもの・記録が 1 枚にある |
-| [plan/01_failure_accounting.md](plan/01_failure_accounting.md) | 評価の結果を読むとき。**ゴール到達と衝突の読み分け方** |
-| **[plan/07_track2_preparation.md](plan/07_track2_preparation.md)** | **本選 Track2 に手をつけるとき。摂動 4 カテゴリの中身・関連研究・対策・推奨アクションが 1 枚にある。まず 2.0 節（方針改訂）と 3 節（推奨アクション）** |
-| **[plan/08_training_data_creation_cautions.md](plan/08_training_data_creation_cautions.md)** | **学習用デモを作る前。成功例だけでは復帰を学べない等、データ作成の落とし穴。07 の方針改訂の根拠** |
-| **[reference/19_weights_catalog.md](reference/19_weights_catalog.md)** | **学習を流したあと、点が返ってきたあと、`pi05/full_local_024000` のような名前を見たとき。流した学習・重み・版ごとの設定・本選のトラック別の点が 1 ファイルに並ぶ** |
-| [reference/04_track1_population.md](reference/04_track1_population.md) | 採点のタスクの母集団を確かめるとき |
-| **[reference/05_perturbation_categories.md](reference/05_perturbation_categories.md)** | **摂動 7 カテゴリの中身と、どれが出るか（運営回答の原文つき）** |
-| **[reference/06_training_data_composition.md](reference/06_training_data_composition.md)** | **学習データ 14,347 本の中身。摂動カテゴリで絞れるかの判定** |
-| [reference/07_chunk_params.md](reference/07_chunk_params.md) | 学習後に変えてよい設定はどれか（`n_action_steps` と `chunk_size`） |
-| **[reference/12_lora_targets.md](reference/12_lora_targets.md)** | **LoRA をどこに当てるか。候補 4 つと、採用したものの理由** |
+| パス | 使用頻度 | 中身 |
+|---|:---:|---|
+| **[talk/](talk/)** | ★★★ | **いま抱えているものと、その優先順位。まずここ。**一時ファイルの置き場なので、他のディレクトリの文書からここを指してはいけない（[README](talk/README.md)。指したくなったら情報を移す）。[open_items.md](talk/open_items.md)・[inter_sessions/](talk/inter_sessions/) |
+| **[howto/](howto/)** | ★★★ | **手順書。作業前に確認。**上から順にやれば終わる形。何度も使うものだけを置く。1 回だけの回は [plan/](plan/) へ、踏んだ事故と回避策は [knowledge/](knowledge/) へ。[01_retrain.md](howto/01_retrain.md)・[03_gpu_eval.md](howto/03_gpu_eval.md)・[05_scripted_demos.md](howto/05_scripted_demos.md) |
+| **[reference/](reference/)** | ★★★ | **調べて分かった事実。判断の前に確認。**モデル・評価データ・採点のタスクの母集団・設定の意味。実験台帳 [19_weights_catalog.md](reference/19_weights_catalog.md)・学習条件 [11_training_schedule.md](reference/11_training_schedule.md)・失敗の内訳 [18_failure_breakdown.md](reference/18_failure_breakdown.md) |
+| [knowledge/](knowledge/) | ★★ | **踏んだ穴・外した読み・成果物の材料。**1 項目 1 ファイル。レポート必須欄 [01_report_requirements.md](knowledge/01_report_requirements.md)・ライセンス [04_licenses.md](knowledge/04_licenses.md)・採点ログ全記録 [05_score_history.md](knowledge/05_score_history.md) |
+| [plan/](plan/) | ★★ | **1 つずつの手の設計。**何を測り、出た数字で何を決めるか。本選 1 の手の一覧 [22_grasp_and_color_next_moves.md](plan/22_grasp_and_color_next_moves.md)・GPU と提出枠 [14_finals1_gpu_and_submission_plan.md](plan/14_finals1_gpu_and_submission_plan.md) |
+| **[resources/](resources/)** | ★ | **今使える** 計算資源・ディスク・メモリ・docker image・HF 上のモデルの一覧。状態が変わるたびに上書き（履歴は残さない）。手順や Tips は書かない（[README](resources/README.md) の線引き）。[infra_and_docker.md](resources/infra_and_docker.md)・[huggingface.md](resources/huggingface.md) |
+| [strategy/](strategy/) | ★ | 何を狙うか、なぜそうするか。判断の材料。実測結果 [05_実測結果.md](strategy/05_実測結果.md) |
+| [solution/](solution/) | — | 提出物と Colab の説明。コード本体は `../solution/` |
+| [materials/](materials/) | — | **外部から取得した資料の現物。**ルールの PDF・運営 Q&A の CSV・運営の告知・講義資料。一次資料はここを見る（[knowledge/11_primary_sources.md](knowledge/11_primary_sources.md)）。**ここのファイルは書き換えない** |
+| [outputs/submission_logs/](../outputs/submission_logs/) | — | 本番採点の生ログ。トラックごとに `<日付>_<版>.txt`（本選は `b_PARC2026_final/outputs/submission_logs/`） |
 
 ## 説明とコードの分け方
 

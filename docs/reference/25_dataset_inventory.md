@@ -14,7 +14,7 @@
 | 5 | **トラックごとに使うべきデータセット**（**9/2 に書き換えた。配布 tar 1 つで足りる**） |
 | 6 | 追加の観点（`no_noops`・エピソード長・`libero_90` の 73・Track2 の非公開セット） |
 | 7 | **公開版の `meta/` を落として数え直した**（8/31。形式・大きさ・指示文と場面の重なり） |
-| **8** | **配布 tar `libero_combined_20hz` の中身**（**9/2。`total_tasks` は 111・乗り換えで踏む穴・`splits` は無視してよい**）＋ **9/5: 逆向きタスク 3/4 の順方向デモが tar にある** |
+| **8** | **配布 tar `libero_combined_20hz` の中身**（**9/2。`total_tasks` は 111・乗り換えで踏む穴・`splits` は無視してよい**）＋ **9/5: 逆向きタスク 3/4 の順方向デモが tar にある・`action` の規約と gripper の符号化混在（8.7）・`state` の読み方と相対回転の組み方（8.8）** |
 | 数え方 | 打ったコマンド |
 
 ## 調査結果の要約
@@ -103,7 +103,7 @@ EOF
 
 ```bash
 # 抽出コマンド
-ls -1 /home/ubuntu/lab/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_10/*.bddl \
+ls -1 /home/ubuntu/src/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_10/*.bddl \
   | sed 's|.*/||' | sed 's|\.bddl$||' \
   | grep -E "^(KITCHEN|LIVING_ROOM|STUDY)_SCENE[0-9]+" \
   | grep -v "_add_" | grep -v "_view_" | grep -v "_language_" | grep -v "_level" | grep -v "copy" | grep -v "_sample" \
@@ -111,7 +111,7 @@ ls -1 /home/ubuntu/lab/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/li
   | wc -l
 # 結果: 10
 
-ls -1 /home/ubuntu/lab/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_90/*.bddl \
+ls -1 /home/ubuntu/src/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_90/*.bddl \
   | sed 's|.*/||' | sed 's|\.bddl$||' \
   | wc -l
 # 結果: 90
@@ -189,7 +189,7 @@ ls -1 /home/ubuntu/lab/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/li
 
 **Track3 の根拠（詳細）:**
 
-運営の検査スクリプト `/home/ubuntu/lab/b_PARC2026_final/scripts/check_no_leaks.py` にある禁止語:
+運営の検査スクリプト `/home/ubuntu/src/b_PARC2026_final/scripts/check_no_leaks.py` にある禁止語:
 
 ```python
 r"(KITCHEN|LIVING_ROOM|STUDY)_SCENE\d+"
@@ -375,7 +375,7 @@ for r in ['IPEC-COMMUNITY/libero_spatial_no_noops_1.0.0_lerobot',
 EOF
 
 # 重なりを数える（H は ~/.cache/huggingface/hub）
-cd ~/lab/PARC2026_pre && H=~/.cache/huggingface/hub
+cd ~/src/PARC2026_pre && H=~/.cache/huggingface/hub
 python3 solution/tools/analysis/count_dataset_overlap.py \
   --meta libero_spatial=$(ls -d $H/datasets--IPEC-COMMUNITY--libero_spatial_no_noops_1.0.0_lerobot/snapshots/*/)meta \
   --meta libero_object=$(ls -d $H/datasets--IPEC-COMMUNITY--libero_object_no_noops_1.0.0_lerobot/snapshots/*/)meta \
@@ -423,7 +423,7 @@ EOF
 
 ```bash
 # libero_10 の元タスク（variant を除く）
-ls -1 /home/ubuntu/lab/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_10/*.bddl \
+ls -1 /home/ubuntu/src/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_10/*.bddl \
   | sed 's|.*/||' | sed 's|\.bddl$||' \
   | grep -E "^(KITCHEN|LIVING_ROOM|STUDY)_SCENE[0-9]+" \
   | grep -v "_add_" | grep -v "_view_" | grep -v "_language_" | grep -v "_level" | grep -v "copy" | grep -v "_sample" \
@@ -431,7 +431,7 @@ ls -1 /home/ubuntu/lab/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/li
   | wc -l
 
 # libero_90 の元タスク（variant なし）
-ls -1 /home/ubuntu/lab/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_90/*.bddl | wc -l
+ls -1 /home/ubuntu/src/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_90/*.bddl | wc -l
 ```
 
 ### SCENE 名タスクの一覧を出力
@@ -454,8 +454,8 @@ def get_true_base_tasks(path):
         base_tasks.append(f)
     return sorted(base_tasks)
 
-libero_10_path = Path('/home/ubuntu/lab/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_10')
-libero_90_path = Path('/home/ubuntu/lab/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_90')
+libero_10_path = Path('/home/ubuntu/src/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_10')
+libero_90_path = Path('/home/ubuntu/src/PARC2026_pre/work/LIBERO-plus/libero/libero/bddl_files/libero_90')
 
 libero_10_base = get_true_base_tasks(libero_10_path)
 libero_90_base = get_true_base_tasks(libero_90_path)
@@ -697,7 +697,22 @@ d0..d(T-1) で x0 → xT へ動くなら、戻る経路は -d(T-1)..-d0 であ�
 | エピソード番号 | 値 | 意味 | 本数 |
 |---|---|---|---|
 | 0〜5047 | `{0, 1}` | **1 = 開く・0 = 閉じる** | 4,827 |
-| 5186〜19532 | `{-1, +1}` | **-1 = 開く・+1 = 閉じる**（robosuite そのまま） | 14,347 |
+| 5186〜19532 | `{-1, +1}` | **-1 = 開く・+1 = 閉じる**（robosuite そのまま） | 13,736 |
+| 2222〜5185 | `+1` のみ（**最後まで一定**） | 掴まないデモ。`{0,1}` 系なので **+1 ＝ 開いたまま** | 359 |
+| 5193〜19454 | `-1` のみ（**最後まで一定**） | 掴まないデモ。±1 系なので **-1 ＝ 開いたまま** | 611 |
+
+**4 行を足すと 19,533 になる**（13,736 + 4,827 + 611 + 359）。
+下の 2 行は**開閉が 1 度も起きないデモ**で、指令が 1 値しか出てこない。
+
+> **⚠ 復号はエピソード番号の範囲で分岐してはいけない。「負の値が出るか」で判定する。**
+> 上の表の範囲は**重なっている**——`+1` 一定の 359 本は 2222〜5185 に散らばり、
+> そのうち **138 本は `{0,1}` 系の上限 5047 を越えて 5048〜5185 に居る**。
+> 「`ep <= 5047` なら `{0,1}` 系」と書くと、この 138 本が ±1 系と誤判定され、
+> **`+1`（開いたまま）が「ずっと閉じる」に反転する。**
+> 指の開き幅で確かめた結果、`+1` 一定の 359 本は全て幅 0.078 m（開）である
+> （0〜5047 で平均 0.0788・5048〜5185 で平均 0.0782）。**±1 系で `+1` 一定＝
+> ずっと閉じている、というエピソードはこのデータセットには 1 本も無い**ので、
+> 符号による判定は 19,533 本すべてで正しく効く。
 
 指の開き幅（`state[6] - state[7]`）と突き合わせて確認した。
 例（ep 4061・0/1 系）: f0-52 は `+1` で幅 0.078（開いている）、f53-132 は `0` で
@@ -711,3 +726,151 @@ d0..d(T-1) で x0 → xT へ動くなら、戻る経路は -d(T-1)..-d0 であ�
 
 **シム側の落とし穴**（状態復元で復らないもの・据え置きの配置・predicate の呼び方）は
 [28_mppi_data_regeneration_survey.md](28_mppi_data_regeneration_survey.md) の 5.1 節。
+
+### 8.8 `observation.state` の読み方と、姿勢を組み直すときの落とし穴（2026-09-05）
+
+**`observation.state` は「フレーム毎の絶対姿勢」として健全である。**
+2 本（ep 5195・92 コマ／ep 5225・184 コマ）を読んで確かめた——8 次元が全コマ揃い、
+NaN は 0、eef_pos は静的コピーではない（先頭 50 コマで 237〜247 mm 動く）。
+**逆向きデモの初期姿勢を元デモの最終コマから取る、という使い方はこの列で成立する。**
+
+| 中身 | 実測 |
+|---|---|
+| `[0:3]` eef_pos | 生の m。範囲 ±0.48 |
+| `[3:6]` 姿勢 | **軸角**（回転ベクトル）。ノルムが回転角 |
+| `[6:8]` 指 qpos | **左右で符号が対称**（`state[7] ≒ -state[6]`）。**開き幅は `state[6] - state[7]`** で 0.004〜0.080 m |
+
+指の値は **0/1 の離散値ではなく連続なサーボ位置**である（閉 0.002 m ↔ 開 0.040 m／指 1 本）。
+±1 のバンバンは `action` 側の表現であって、`state` 側には無い。
+
+#### ⚠ 相対回転は必ず SO(3) の合成で組む。軸角の引き算は誤り
+
+姿勢を差分に直すとき、**軸角ベクトルを成分ごとに引いてはいけない**
+（`np.diff(state[:, 3:6])`）。これは相対回転ではないので、姿勢が単位行列から離れるほど壊れる。
+**`R_rel = R[t+1] @ R[t].T`（world 座標系）**を組んでから軸角に戻すこと。
+
+| 組み方 | `action[3:6]` との成分相関（ep 5195／5225） |
+|---|---|
+| **world `R[t+1] @ R[t].T`** | **0.814／0.802** |
+| body `R[t].T @ R[t+1]` | −0.225／−0.182（**符号が反転する**） |
+| 軸角の引き算（誤り） | 0.221／0.335 |
+
+**body で組むと相関が負に振れる**ので、取り違えると静かに逆向きの回転が入る。
+
+#### `action[t]` は `t → t+1` の差分（1 コマ遅れではない）
+
+並進の成分相関で判定した: `action[t]` ↔ `t→t+1` が 0.9525／0.9501、
+`action[t]` ↔ `t-1→t` が 0.8891／0.9271。**前者を採る。**
+
+#### 応答比はエピソードごとに当て直す
+
+8.7 節の応答比（≒0.2）は**定数ではない**。全 19,533 本から 20 本を無作為抽出して
+当て直すと、**並進は平均 0.01110 m/単位・標準偏差 0.00211（±19%）・範囲 0.00580〜0.01293**、
+回転は平均 0.10149 rad/単位・±10%。接触や荷重で変わるためで、データの異常ではない。
+**平均値を焼き込まないこと**——最小の 0.0058 は平均の半分である。
+
+**なお逆向きデモの生成にこの定数は要らない。** 保存された `action` を
+`-actions[::-1]` で符号反転して使うのが実装（8.7 節）で、そこに応答比は現れない。
+定数が要るのは「state から action を組み直す」経路を採る場合だけである。
+
+#### 出どころ
+
+`~/src/train_data/verify014_calib.py`（`offset`／`scale`／`lag`／`sweep`／`gripper`／
+`roundtrip` の 6 チェック・1.4 秒）。**リポジトリ外**にあるので、必要になったら
+`solution/tools/track3_reversal/` へ移すこと。展開済みデータは
+`~/src/train_data/libero_combined_20hz_extracted/`。
+
+### 8.9 **14,347 本は 1,681 個の物理の焼き直しである**——本家デモとの対応表がある（2026-09-09）
+
+**「本数」と「動きの種類」は別である。**配布データを増やす／減らす判断は、
+どちらを動かすのかで意味が変わるので、実測した内訳をここに置く。
+
+**全エピソードの `action` 列と `observation.state` 列を突き合わせて数えた。**
+
+| 数えたもの | 値 |
+|---|---|
+| エピソード | 14,347 |
+| **行動列が 1 ビットも違わない組** | **1,681** |
+| 状態列（手先・向き・指 2 本、全コマ）が 1 ビットも違わない組 | **1,681**（行動列の組と完全に一致） |
+| 1 組あたりのエピソード | 10 本が 1,175 組・5 本が 477 組（**平均 8.5**） |
+
+**指の開き具合まで一致するので、組の中では物の配置も同じである。違うのは画だけ**
+（カメラ位置・照明・質感・雑音）。**つまり動きの種類は 1,681 通りしか無く、
+見た目は 1 つの動きあたり 8.5 通り用意されている。**
+
+**帰結が 2 つ。**
+
+- **1 本ずつ調べる作業は 1,681 回で済む。**14,347 回は要らない
+- **1 組を外すと平均 8.5 本が消える。**エピソード単位で間引く刻みはこの粗さになる
+
+#### 本家 hdf5 の生の状態が引ける —— `libero_states` と `demo_map.json`
+
+**配布データには物体の位置が 1 列も無い**（`meta/info.json` の列は
+`observation.state` 8 次元と `action` 7 次元だけ）。**だから接触も物体の姿勢も、
+配布データからは判定できない。**
+
+**本家 `yifengzhu-hf/LIBERO-datasets` の hdf5 には MuJoCo の状態がまるごと入っている。**
+そこから `states` と `actions` だけを抜いたものが手元にある。
+
+| 何 | どこ | 中身 |
+|---|---|---|
+| 抜き出した生の状態 | `work/artifacts/libero_states/` | **40 課題 / 2,000 デモ / 338,575 コマ**（`states` は 79〜110 次元 ＝ `1 + nq + nv`） |
+| **1,681 組 ↔ 本家デモの対応表** | **`work/artifacts/libero_states/demo_map.json`** | **1,681 / 1,681（100%）・14,347 / 14,347 本（100%）が対応。**指示文の食い違い 0 件 |
+| 接触の判定 | `work/artifacts/libero_states/contact_scores.json` | 1 組 1 行 |
+
+**対応づけの鍵は行動列そのものである。****両側から「前 6 次元がすべて 0 のコマ」を
+落としてから突き合わせる**——`no_noops` の処理で消えたコマがあるので、片側にだけ掛けると
+50 組中 49 組で止まる。**両側に掛けると 50/50 になる。**
+
+**作る道具は `solution/tools/contact_clean/` にある**（`fetch_libero_states.py` →
+`map_demos.py` → `score_contact.py`）。**再生は 1 回もしていない**——記録された
+`states` を読むだけなので、再生の誤りが入らない。
+
+
+### 8.10 **手本の 4 本に 1 本以上は、そのままでは使えない**（2026-09-10）
+
+**配布データの元になった本家 2,000 デモを、採点ハーネスと同じ手順で撃ち直して数えた**
+（40 課題 × 10 デモ = 400 本。道具は `solution/tools/regen/replay_yield.py`）。
+
+| 内訳 | 割合 |
+|---|---|
+| **再生してもゴールに届かない** | **16.0%** |
+| 届くが、対象外の物体を 1 mm 超動かす | **11.8%** |
+| そのまま使える | **72.2%** |
+
+**接触だけが汚れではない。**「再生しても再現しない」ほうが多い。
+
+**再生は記録より汚く出る。**`put_the_bowl_on_the_plate` は記録を読む判定では
+9/49 組（18%）が汚いが、再生では 10 本中 4 本（40%）が 1 mm を超えた。
+一方 `turn_on_the_stove` は記録の 0/50 と再生の 10/10 clean が一致する。
+**記録を読む判定（8.9 節の `contact_scores.json`）と再生の判定は別物なので、
+どちらの数字かを必ず書くこと。**
+
+### 8.11 **LeRobot 形式へ書き出す費用**——`build` は 1 本 9 秒、`merge` は再符号化しない（2026-09-11）
+
+**データを作る計画は、この 2 つの速さで決まる。**026 が「`split_dataset` は AV1 を
+再符号化し直すので 12,216 本なら 100 時間を超える」と測っているが、
+**`build` と `merge` の費用は測られていなかった。**
+
+| 段 | 実測 | 中身 |
+|---|---|---|
+| **`npz_to_lerobot build`** | **9.0 秒/本**（1 コマ 約 40 ms） | **lerobot が 1 コマずつ一時 PNG を経由する。**生の AV1 符号化だけなら 1 コマ 1.4〜4.2 ms なので、**10 倍以上の上乗せがある** |
+| **`npz_to_lerobot merge`** | **1.0 秒/本** | **再符号化しない。** |
+
+**`merge` が再符号化しないことは、圧縮ビットストリームを直接突き合わせて確かめた**
+——統合後の mp4 から取り出した**先頭 200 パケットが、元の mp4 と md5 まで一致する**
+（両カメラ）。合計サイズの差は **−797 バイト**（mp4 のヘッダ 1 つ分）だけである。
+
+**帰結が 2 つ。**
+
+- **何度 `merge` しても画質は劣化しない。**世代損失を気にせず段階的に足せる
+- **律速は `build` である。**`build` を N 分割して並列に回し、あとから `merge` で
+  繋ぐと速くなる（`merge` の費用は出力の本数に比例するので、木の形に繋ぐ）
+
+**1,000 本を作る費用の実測。**
+
+| | 所要 |
+|---|---|
+| 生成（14 並列・歩留まり 16.7%） | **1.3 時間** |
+| `build`（1 プロセス） | **2.5 時間** |
+| `build` を 4 分割 ＋ 木で `merge` | **約 1 時間** |

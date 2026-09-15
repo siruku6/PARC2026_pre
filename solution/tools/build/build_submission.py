@@ -18,7 +18,7 @@ Omnicampus へ出す zip は `policy_server.py` が**ルート直下**に来る�
 本物のディレクトリを退避させずに済ませるため**である。
 
     python3 solution/tools/build/build_submission.py \\
-        --weights work/artifacts/model_weights_pi05_024000 \\
+        --weights work/artifacts/pi05_rp3000 \\
         --output work/submission_pi05.zip
 
 Reads:
@@ -29,6 +29,12 @@ Reads:
 Generates:
   - work/submission.zip
   - work/submission.sha256（レポートに記載するハッシュ値）
+
+組み終わると、`docs/reference/19_weights_catalog.md`（実験台帳）への記載を促す
+メッセージを出す。**行を自動で書きはしない**——重みの出自の系譜や、前の版との
+1 変数の比較はこのスクリプトの引数からは分からず、空の行を先に作ると
+「書いたつもりになる」落とし穴になる（2026-09-13）。メッセージには
+sha256・大きさ・重みのパス・zip の中の設定など、**ここで分かる事実だけ**を埋める。
 """
 
 from __future__ import annotations
@@ -36,8 +42,14 @@ from __future__ import annotations
 import argparse
 import hashlib
 import re
+import sys
 import zipfile
 from pathlib import Path
+
+# `patch_zip_policy_server.py` の `_INTERESTING`（設定を抜き出す正規表現）を再利用する。
+# 同じディレクトリのスクリプトなので、実行時の sys.path[0] に頼らず明示的に足す。
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from patch_zip_policy_server import _INTERESTING  # noqa: E402
 
 # solution/tools/build/build_submission.py の 3 階層上がリポジトリルート。
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -263,6 +275,65 @@ def _verify_zip(output: Path, entries: list[tuple[Path, str]]) -> None:
     print(f"[build] 検証     {len(expected)} エントリ一致、必須構成あり")
 
 
+def _extract_version(solution: Path) -> str:
+    """組んだ `policy_server.py` の `__version__` を読む。台帳の見出しに使う。"""
+    text = (solution / "policy_server.py").read_text(encoding="utf-8")
+    match = re.search(r'__version__ = "([^"]+)"', text)
+    return match.group(1) if match else "?"
+
+
+def _extract_settings(solution: Path) -> list[str]:
+    """`_INTERESTING`（`patch_zip_policy_server.py` と共通）で設定行を抜き出す。"""
+    text = (solution / "policy_server.py").read_text(encoding="utf-8")
+    lines: list[str] = []
+    for pattern in _INTERESTING:
+        for m in re.finditer(pattern, text, re.M):
+            lines.append(m.group(0).strip())
+    return lines
+
+
+def _print_catalog_reminder(
+    *, version: str, weights: Path | None, output: Path,
+    checksum: str, entries: int, size_mb: float, settings: list[str],
+) -> None:
+    """台帳（`docs/reference/19_weights_catalog.md`）への記載を促す。
+
+    **ここで自動で行を書かない。** 台帳に要る事実の半分（重みの出自の系譜、
+    何を変えたか、データの内容）はこのスクリプトの引数からは分からず、
+    空の行を先に作ると「書いたつもりになる」落とし穴になる
+    （2026-09-13、ユーザの指摘）。**代わりに、ここで分かる事実だけを
+    埋めて、書く作業そのものは急かすだけにする。**
+
+    Parameters
+    ----------
+    version : str
+        `__version__`。台帳の版番号の見出しに使う。
+    weights : Path | None
+        `--weights` で渡された重みの置き場。**出自の系譜はこれだけでは分からない**
+        （学習の設定・出発点・歩数は `train_config.json` を読むか、学習側の記録から
+        補うこと）。
+    settings : list[str]
+        `_INTERESTING` で抜き出した設定行。前の版との 1 変数の比較に使える。
+    """
+    print()
+    print("=" * 60)
+    print(f"[build] 台帳への記載を忘れずに —— docs/reference/19_weights_catalog.md")
+    print(f"[build]   版        : {version}")
+    print(f"[build]   重み      : {weights or '（既定の model_weights/）'}")
+    print(f"[build]   sha256    : {checksum}")
+    print(f"[build]   大きさ    : {entries} エントリ・{size_mb:.0f} MB")
+    print(f"[build]   出力      : {output}")
+    print("[build]   中の設定  :")
+    for line in settings:
+        print(f"[build]     {line}")
+    print("[build]")
+    print("[build]   この呼び出しだけでは分からず、自分で書く必要があるもの:")
+    print("[build]     - 重みの出自（どの学習・何ステップ・何から出発したか）")
+    print("[build]     - 前の版との 1 変数の比較（設定／重み／データのどれを変えたか）")
+    print("[build]     - 提出したら、出した先のトラックと日付")
+    print("=" * 60)
+
+
 def main() -> None:
     args = _parse_args()
     solution: Path = args.solution.resolve()
@@ -287,6 +358,16 @@ def main() -> None:
     print(f"[build] {len(entries)} files / {output.stat().st_size / 1e6:.0f} MB")
     print(f"[build] sha256 {checksum}")
     print(f"[build] ハッシュを保存: {checksum_path}")
+
+    _print_catalog_reminder(
+        version=_extract_version(solution),
+        weights=weights,
+        output=output,
+        checksum=checksum,
+        entries=len(entries),
+        size_mb=output.stat().st_size / 1e6,
+        settings=_extract_settings(solution),
+    )
 
 
 if __name__ == "__main__":

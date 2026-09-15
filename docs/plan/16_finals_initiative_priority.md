@@ -361,7 +361,7 @@ F20 は①だけを指す。**
 **行動側だけの学習は打ち止めである**（24,000 歩で loss は -1.0〜-3.3%、
 **しかもデータの 17% しか見ていない**——ログの `epch:0.17`）。
 **平らな谷を横に動いているだけで、凍結された画像側が上限を決めている。**
-手順は [plan/15](15_runpod_fullparam_with_augment.md)。
+手順は [../howto/06_runpod_pi05.md](../howto/06_runpod_pi05.md) の 14 節。
 
 ### 4.3 Track1 —— 到達しているのに衝突で失う分を拾う
 
@@ -765,8 +765,8 @@ Evo-0 の論文は学習量を書いていない。
 | 本番のエピソード本数が 8 本であること | [reference/22](../reference/22_production_scale.md) |
 | 摂動ごとにどれだけ崩れるか | [reference/21](../reference/21_weakness_map.md) |
 | 摂動の強さを指定する書き方 | [reference/20](../reference/20_track2_perturbation_categories.md) 2.3 節 |
-| RunPod の手順（4.2 節） | [plan/15](15_runpod_fullparam_with_augment.md) |
-| Tier1 の実装と 2D 近似（8 番） | [plan/11](11_tier1_camera_augmentation.md) |
+| RunPod の手順 | [../howto/06_runpod_pi05.md](../howto/06_runpod_pi05.md) の 14 節 |
+| Tier1 の実装と 2D 近似（8 番） | [plan/11](archive/11_tier1_camera_augmentation.md) |
 | Tier2 のエピソード作成の仕様（保留） | [plan/12](12_tier2_recording_spec.md) |
 | 学習の記録と重みの一覧 | [reference/19](../reference/19_weights_catalog.md) |
 | 成功率が使えずステップ数を読む理由 | [knowledge/06](../knowledge/06_step_count_drives_score.md) |

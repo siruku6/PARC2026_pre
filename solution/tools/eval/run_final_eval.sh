@@ -9,7 +9,7 @@
 #
 # 先に配布キットのイメージを 1 度だけ作る（30〜60 分・30 GB 前後）。
 #
-#   cd /home/ubuntu/lab/b_PARC2026_final && docker build -t parc2026-final .
+#   cd /home/ubuntu/src/b_PARC2026_final && docker build -t parc2026-final .
 #
 # 使い方
 #
@@ -17,11 +17,18 @@
 #   TRACK_EPISODES=1 bash solution/tools/eval/run_final_eval.sh track2
 #
 # 環境変数（省略時の既定）
-#   TRACK_EPISODES=2  タスクあたりの本数
+#   TRACK_EPISODES=2  タスクあたりの本数。**比べる実行どうしは必ず同じ本数にする。**
+#                     1 行の中で episode 番号ごとに初期状態が決まっていて（`init_states[ep_id]`）、
+#                     番号によって難しさが違う。本数が違うと別の初期状態の混ざりを比べることになる
+#                     （9/15 に 1・3・5 本の実行を並べて重みを選びかけた。docs/howto/03 の「比べる評価の揃え方」）
 #   MAX_STEPS=300     本番と同じ打ち切り
 #   RECORD=1          各タスクの 1 本目を mp4 に残す（成功／失敗が名前に入る）
 #   WEIGHTS           測る重み。既定は 4.2.0 の重み（work/artifacts/pi05_rp3000）
 #   LABEL             出力先の名前に足す語
+#   SERVER_PY         起こす policy_server.py。既定は solution/ のもの。
+#                     **提出物を検証するときは zip から取り出した方を渡す**——
+#                     版としきい値は zip の中身が正であり、solution/ は
+#                     組んだ後に戻していることがある（[howto/02](../../../docs/howto/02_build_submission.md)）。
 #   PARC_*            推論の設定値。空なら policy_server.py の既定が効く
 #   MUJOCO_GL=osmesa  描画のやり方。**JAIST サーバの vGPU は OpenGL に対応しないので
 #                     osmesa（CPU 描画）のままにする。** 会社の RTX6000（Pass-Through の
@@ -30,7 +37,7 @@
 #                     **存在確認にしか使わない**（pipeline は評価イメージの中にある）
 #
 # Reads:
-#   - solution/policy_server.py
+#   - $SERVER_PY（既定 solution/policy_server.py）
 #   - work/artifacts/<重み>/**
 # Generates:
 #   - work/final_eval/<日時>_<トラック>_<LABEL>/results/*.json・server.log
@@ -50,6 +57,7 @@ esac
 TRACK_EPISODES="${TRACK_EPISODES:-2}"
 MAX_STEPS="${MAX_STEPS:-300}"
 WEIGHTS="${WEIGHTS:-$REPOSITORY_ROOT/work/artifacts/pi05_rp3000}"
+SERVER_PY="${SERVER_PY:-$REPOSITORY_ROOT/solution/policy_server.py}"
 KIT_IMAGE="${KIT_IMAGE:-parc2026-final}"
 POLICY_IMAGE="${POLICY_IMAGE:-parc2026-train-pi05}"
 MUJOCO_GL="${MUJOCO_GL:-osmesa}"
@@ -78,6 +86,10 @@ label="$TRACK"
 [ -n "${LABEL:-}" ] && label="${label}_${LABEL}"
 OUTPUT_DIR="$REPOSITORY_ROOT/work/final_eval/$(date +%m%d_%H%M%S)_${label}"
 mkdir -p "$OUTPUT_DIR/results"
+# **比べるための条件を実行ディレクトリへ残す**（9/15 に踏んだ：本数と描き方が違う実行を並べて重みを選びかけた）。
+# `decision_score.py` がこれを読み、候補どうしで本数・描き方・行の一覧が違えば止まる。
+printf '{"track": "%s", "episodes": %s, "max_steps": %s, "mujoco_gl": "%s", "tasks_csv": "%s", "weights": "%s"}\n' \
+    "$TRACK" "$TRACK_EPISODES" "$MAX_STEPS" "$MUJOCO_GL" "${TASKS_CSV:-}" "$WEIGHTS" > "$OUTPUT_DIR/eval_conditions.json"
 
 # **端末が消えても読めるように、この先の出力を run.log にも落とす。**
 # バックグラウンドへ回したあと SSH を切ると、端末への書き込みが失敗して
@@ -118,7 +130,7 @@ if [ ! -d "$WEIGHTS/vlm" ]; then
     exit 1
 fi
 
-echo "== 本選評価  トラック=$TRACK  本数=$TRACK_EPISODES  打ち切り=$MAX_STEPS"
+echo "== 本選評価  トラック=$TRACK  本数=$TRACK_EPISODES  打ち切り=$MAX_STEPS  描画=$MUJOCO_GL"
 echo "   重み: $WEIGHTS"
 echo "   出力: $OUTPUT_DIR"
 
@@ -148,7 +160,7 @@ done
 
 echo "-- 方策サーバーを起動する（重みの読み込みに 1〜2 分）"
 docker run -d --name "$POLICY_HOST" --gpus all --network "$NETWORK" \
-    -v "$REPOSITORY_ROOT/solution/policy_server.py:/app/policy_server.py:ro" \
+    -v "$SERVER_PY:/app/policy_server.py:ro" \
     -v "$REPOSITORY_ROOT/solution/geometry_graft.py:/app/geometry_graft.py:ro" \
     -v "$REPOSITORY_ROOT/work/artifacts/vendor/vggt:/app/vendor/vggt:ro" \
     -v "$WEIGHTS:/app/model_weights:ro" \

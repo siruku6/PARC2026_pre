@@ -49,37 +49,16 @@
 | [17_track3_picks_the_wrong_object.md](17_track3_picks_the_wrong_object.md) | **Track3 で方策は順方向をやっている**（別の物を掴んでトレイへ入れた） | 3, 4 |
 | [18_local_eval_missed_the_gain.md](18_local_eval_missed_the_gain.md) | **手元の 72 行は、採点側で 2 トラックとも上がった重みを「効果なし」と読んだ** | 2, 3, 4 |
 | [19_infer_less_count_first.md](19_infer_less_count_first.md) | **推し量る前に数える。**配布物の中身・崖のある制約・期限が切れる資格情報の 3 件 | 2, 3 |
+| [21_track3_stops_short_of_the_object.md](21_track3_stops_short_of_the_object.md) | **Track3 で掴めないのは迷いではない。**邪魔な物を場外へ移しても掴めず、**手先が 6〜20 cm 手前で止まる。**測る前に 2 回、嘘の数が出た | 3, 4 |
+| [22_reverse_data_interferes_with_same_objects.md](22_reverse_data_interferes_with_same_objects.md) | **逆向きデータは、同じ物体を使う順方向の課題を壊す。**共有する行は −24 ポイント、残りは −3 ポイント。**引き換えに Track3 が 11 提出ぶりに動いた**（0.000 → 0.0235） | 3, 4 |
+| [23_self_made_demos_need_the_instruction_the_model_sees.md](23_self_made_demos_need_the_instruction_the_model_sees.md) | **自作した手本は、評価でモデルが実際に見る文で入れないと 1 度も引かれない。**摂動下再生 1,009 本のうち 626 本（62%）がこれを踏んでいた。**沈黙して失敗する**——学習は通り、損失も下がる | 2, 3 |
+| [20_probe_object_choice_without_rollout.md](20_probe_object_choice_without_rollout.md) | **対象物を選べているかはロールアウト無しで測れる。**系譜 6 点で何を得て何を失ったか・**色はほとんど見ていない**（元から） | 3, 4 |
 
 
-## 成果物 2 —— 出来た skill の日本語版（確認用）
+## 作成済みの成果物
 
-**skill の本体は英語で `~/.claude/skills/` に置いた**（機械向けは英語、という規約）。
-**中身を確認・調整するための日本語版**をここに置く。
-
-| 日本語版 | skill 本体 | 中身 |
+| 成果物 | 置き場 | 概要 |
 |---|---|---|
-| [skill_ja.md](skill_ja.md) | `ml-competition-workflow`（397 行） | **中身を読めない採点器にどう当たるか。**失格条件・手元の評価の限界と 2 つの対策・切り口・設定の探索・ベース重みが何をどこまで学習済みか・最終日の決め方 |
-| [skill_bookkeeping_ja.md](skill_bookkeeping_ja.md) | `experiment-bookkeeping`（276 行＋例 5 本） | **長期プロジェクトの事務管理。**ディレクトリの分け方・実行と設定と重みとログとスコアの結び付け・台帳・消す順番・未決事項の一覧 |
-
-**事務管理は元は競技側の skill に入っていたが、コンペ固有ではないので分けた。**
-
-## 成果物 4 —— 社内向けの参加報告
-
-**`../report/internal_briefing.md`。**読者は同僚のエンジニアとチームリーダーで、
-システム開発には習熟しているが Physical AI の経験は無い、という前提で書いた。
-**見出し 1 つがスライド 1 枚に対応する形**（S1〜S24 ＋ 付録 A1〜A3・31 分ぶん）。
-
-| 使った材料 | どのスライドに入ったか |
-|---|---|
-| [06](06_step_count_drives_score.md) ステップ数 | S7・S8・S9・S11・S18 |
-| [07](07_local_eval_cannot_rank.md) 手元評価の限界 | S6・S10 |
-| [08](08_chunk_length_follows_model_strength.md) chunk 長 | S12 |
-| [09](09_two_stage_training.md) 学習を 2 回に分ける | S20 |
-| [10](10_deciding_under_deadline.md) 締切下の判断 | S21 |
-| [11](11_primary_sources.md) 1 次資料 | S16 |
-| [12](12_workbench_accidents.md) 作業環境の事故 | S14 |
-| [02](02_model_identity.md) [03](03_training_info.md) [05](05_score_history.md) の値 | S2〜S5・付録 A2 |
-| [05](05_score_history.md) の公開された順位 | **S4**（42 位・分布の形）・S23 |
-
-**次は成果物 3（人間側で意識すること）。**06〜13 の「人間側」の欄が材料になる。
+| **Claude skill（2 本）** | `~/.claude/skills/` | `ml-competition-workflow`・`experiment-bookkeeping`（日本語版: [skill_ja.md](skill_ja.md)・[skill_bookkeeping_ja.md](skill_bookkeeping_ja.md)） |
+| **社内向けの参加報告** | `../report/internal_briefing.md` | スライド形式（31 分ぶん）。このディレクトリの材料を使って作成 |
 

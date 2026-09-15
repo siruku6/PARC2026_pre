@@ -9,9 +9,9 @@
 | [21_weakness_map.md](21_weakness_map.md) | **カテゴリごとに、この方策がどれだけ崩れるか。**投資先を決めるための実測 |
 
 **Track2（本選、8/24〜）の「位置・視点・ノイズ」という文言が何を指すかの前提を、
-1 か所にまとめた記録である。** これまで [07_track2_preparation.md](../plan/07_track2_preparation.md)
+1 か所にまとめた記録である。** これまで [07_track2_preparation.md](../plan/archive/07_track2_preparation.md)
 の §1.1・§1.2 に埋め込まれていた事実に、[08_training_data_creation_cautions.md](../plan/08_training_data_creation_cautions.md)・
-[09_demo_perturbation_pipeline.md](../plan/09_demo_perturbation_pipeline.md)・自チームの
+[09_demo_perturbation_pipeline.md](../plan/archive/09_demo_perturbation_pipeline.md)・自チームの
 Track2 疑似検証スイート実測（2026-08-22）を合わせて、**単一の参照先**にした。
 Track1 の 7 カテゴリ全体の事実は [05_perturbation_categories.md](05_perturbation_categories.md)
 （本ファイルは Track2 に絞った続き）。
@@ -21,6 +21,7 @@ Track1 の 7 カテゴリ全体の事実は [05_perturbation_categories.md](05_p
 | 1 | 対応関係は推測であり、確定は本選開始後の Q&A 待ち |
 | 2 | 4 カテゴリそれぞれの中身・母集団・難易度分布 |
 | 2.2 | **強さを決める数値と、その幅**（どこまで強い摂動が出るのか） |
+| 2.4 | **初期姿勢の番号 500 個の、実際の手先のずれ**（番号は強さの順に並ばない） |
 | 3 | 外部文献（LIBERO-plus 論文）が他モデルで報告する脆さ |
 | 4 | 自チームの実測（Track2 疑似検証スイート、2026-08-22） |
 | 4.1 | **Camera Viewpoints の方位角スイープ実測**（48 行、2026-08-23） |
@@ -46,7 +47,7 @@ Track1 についてもカテゴリ名を挙げず、こちらが Q&A No.21 の�
 
 **本選開始後に配布される Track2 の説明・Q&A を最優先で確認し、この対応が正しいかを
 裏取りする**ことが、本選 1 日目にやるべき最初のタスクとして残っている
-（[07 §4](../plan/07_track2_preparation.md#4-わからないこと確認が必要なこと) の項目 1）。
+（[07 §4](../plan/archive/07_track2_preparation.md#4-わからないこと確認が必要なこと) の項目 1）。
 
 ---
 
@@ -65,7 +66,7 @@ Track1 についてもカテゴリ名を挙げず、こちらが Q&A No.21 の�
 
 難易度 1〜5 の分布は 972 / 1,454 / 1,328 / 1,153 / 1,368 で、大きな偏りは無い。
 suite 別も libero_goal 1,621・libero_object 1,619・libero_10 1,573・libero_spatial 1,462
-とほぼ均等（[07 §1.1](../plan/07_track2_preparation.md#11-track2-の位置視点ノイズとは何か)）。
+とほぼ均等（[07 §1.1](../plan/archive/07_track2_preparation.md#11-track2-の位置視点ノイズとは何か)）。
 
 **各カテゴリの実体**は、`LIBERO-plus/libero/libero/envs/` 配下の実装コードを直接読んで
 確認した一次情報である。
@@ -81,7 +82,7 @@ suite 別も libero_goal 1,621・libero_object 1,619・libero_10 1,573・libero_
 物理そのものを変える。** 同じロールアウトを別のカメラ設定・画質で作り直しても行動ラベル
 （action）は変わらないが、初期姿勢や物体配置が変わると既存の行動列をそのまま再生しても
 正しい観測・行動対にはならない。この違いが学習データの作り方（Tier 1 と Tier 2 の区別、
-[09 §2](../plan/09_demo_perturbation_pipeline.md#2-シナリオ--摂動--程度)）に直結する。
+[09 §2](../plan/archive/09_demo_perturbation_pipeline.md#2-シナリオ--摂動--程度)）に直結する。
 
 ### 2.1 Sensor Noise は「いつ・どこで」画像にかかるか
 
@@ -190,6 +191,47 @@ Camera で 1 度、それぞれ実際に読み違えかけた）。
 
 実際に 2 回確認した。高強度 Sensor Noise の 32 行のうち 4 行、方位角スイープの 40 行
 すべてが一覧に無い組み合わせだが、いずれも全件が最後まで走った。
+
+### 2.4 **初期姿勢の番号 500 個を、実際の手先のずれで測った**（2026-09-11）
+
+**2.2 節は「`_initstate_N` の N は 1〜500」までしか書いていない。**`difficulty_level` が
+強さの段でないことは分かっていたが、**番号そのものも強さの順に並ばない。**
+`new_init.py` は「乱数の単位ベクトル × 倍率」で姿勢を作るので、**同じ倍率でも
+向きによって手先の動く量が 10 倍違う。**
+
+**500 番号すべてを実測した。**測り方は採点ハーネスと同じ
+（`reset` → `set_state_from_flattened` → **ゼロ行動 10 歩**）で、摂動なしの手先からの距離を取る。
+道具は [`screen_initstates.py`](../../solution/tools/regen/screen_initstates.py)。
+
+**ずれは場面に依らない。**2 つの課題（`KITCHEN_SCENE3` と `on_the_cookie_box`）で測った差は
+**中央 0.090 cm・最大 1.398 cm** である。**関節角と土台だけで決まる**という読みが
+500 番号すべてで確かめられた。
+
+| | ずれの中央 | 最小 | 最大 | **2 cm 以上の割合** |
+|---|---|---|---|---|
+| 倍率 0.1（1〜100） | 1.03 cm | 0.31 cm | 2.11 cm | 1% |
+| 倍率 0.2（101〜200） | 2.45 cm | 0.64 cm | 5.48 cm | 66% |
+| 倍率 0.3（201〜300） | 3.78 cm | 0.63 cm | 7.25 cm | 92% |
+| 倍率 0.4（301〜400） | 4.74 cm | 0.97 cm | 11.49 cm | 95% |
+| 倍率 0.5（401〜500） | 6.12 cm | 0.68 cm | 16.97 cm | 99% |
+| **全 500** | **3.53 cm** | **0.18 cm** | **16.97 cm** | **70.6%** |
+
+**倍率 0.1 でも 2 cm を超える番号があり、倍率 0.5 でも 2 cm に届かない番号がある。**
+**番号を倍率で選んではいけない**——実例として `initstate_170`（倍率 0.2）は **0.88 cm** しか
+動かず、`initstate_330`（倍率 0.4）は **3.93 cm** 動く。
+
+**ずれの帯ごとの番号の数。**
+
+| 帯 | 0〜1 cm | 1〜2 cm | 2〜3 cm | 3〜4 cm | 4〜6 cm | 6 cm 以上 |
+|---|---|---|---|---|---|---|
+| 番号の数 | 59 | 88 | **81** | **76** | **105** | **91** |
+
+**方策が崩れ始めるのは 2 cm から**（[21_weakness_map.md](21_weakness_map.md) の 2 節）なので、
+**採点で出る番号のうち 70.6% が崩れる側にある。**
+
+**測った値は `work/regen/initstate_offsets.json` にある**（番号 → cm）。
+
+---
 
 ---
 
@@ -337,7 +379,7 @@ Base 223→300（+35%）・125→300（+140%）・82→300（+266%）で、こ�
   **300 → 219 → 170 歩**で、除いた理由が「そのタスクが遅い」ではなく
   「その 1 回が転んだ」だった。**24 行のうち 14 行で 3 回の結果が割れる。**
   詳細と、この揺れの中でも結論が残ること（Base 2/24 対 45〜75° 31/72、p=0.0023）は
-  [plan/10 の 7.1 節 (10)〜(12)](../plan/10_eval_perturbation_suite.md)。
+  [plan/10 の 7.1 節 (10)〜(12)](../plan/archive/10_eval_perturbation_suite.md)。
 - ステップ比の n は 6 以下で、上の表のとおり打ち切りを外すと 3 まで落ちる。
 
 生ログは
@@ -359,9 +401,9 @@ Objects Layout と近い水準（+17.5% 対 +15.6%）**である。
 候補として、**このスイートの Sensor Noise 8 行が `_noise_3`〜`_noise_14`——LIBERO-plus の
 5 種の画質劣化のうち最も軽い motion_blur・gaussian_blur の低〜中強度しか使っておらず、
 より崩れの大きい zoom_blur・fog・glass_blur を 1 件も試していないこと**が判明している
-（[09 §3.2](../plan/09_demo_perturbation_pipeline.md#32-高強度sensor-noiseの追加実験実行済み2026-08-22)）。
+（[09 §3.2](../plan/archive/09_demo_perturbation_pipeline.md#32-高強度sensor-noiseの追加実験実行済み2026-08-22)）。
 **この確認のための追加実験（`SENSOR_NOISE_HIGH_PROBE.csv`、32 行）は実行済みである
-（2026-08-22、[09 §3.2](../plan/09_demo_perturbation_pipeline.md#32-高強度sensor-noiseの追加実験実行済み2026-08-22)）。**
+（2026-08-22、[09 §3.2](../plan/archive/09_demo_perturbation_pipeline.md#32-高強度sensor-noiseの追加実験実行済み2026-08-22)）。**
 結果は総合成功率 90.6%（29/32）——severity を上げても崩れなかった。つまり文献値との
 食い違いは「強度の違い」では説明できず、**LIBERO-plus の合成画質劣化は π0.5 系モデルに
 対して CRT 論文が報告するほどの崩れを起こしていない**、という結論になった
@@ -373,7 +415,7 @@ Objects Layout と近い水準（+17.5% 対 +15.6%）**である。
 `make_track2_probe.py`の`_pick_variant`が各カテゴリで「難易度が中央値の1件」しか
 選ばないこと（中央値＝難易度3）による見落としなのかを、難易度5（分類表上の最大）の
 追加probe（16行）で確認した（2026-08-23、
-[09 §3.3](../plan/09_demo_perturbation_pipeline.md#33-高強度robot-initial-statesの追加実験実行済み2026-08-23)）。
+[09 §3.3](../plan/archive/09_demo_perturbation_pipeline.md#33-高強度robot-initial-statesの追加実験実行済み2026-08-23)）。
 
 **variant** = 元のタスク 1 つに摂動を 1 つ当てたもの（`.bddl` 1 個）。初期配置は元タスクのものを共有するので、**1 つの variant から最大 50 エピソード作れる。**
 
@@ -398,7 +440,7 @@ Base（2/8）・15°（0/8）・30°（1/8）と明確に分かれる。ただ�
 **【8/24 訂正】「強度を上げて悪化するのは Camera だけ」＝「効くのは Camera だけ」では
 なかった。** エピソードを 3 倍に増やして 16 タスクで測り直すと、**いちばん歩数が伸びるのは
 Robot Initial States（+47.8%）で、Camera（+16.6%）の 3 倍近い**
-（[plan/10 の 8.2 節](../plan/10_eval_perturbation_suite.md)）。
+（[plan/10 の 8.2 節](../plan/archive/10_eval_perturbation_suite.md)）。
 
 **この節が Robot を「文献ほど突出していない」と読んでいたのは、測り方の誤りによる。**
 Robot の効き方は「Base が安定して速いタスクを 300 に張り付かせる」形（`turn_on_the_stove`
@@ -411,7 +453,7 @@ Robot の効き方は「Base が安定して速いタスクを 300 に張り付�
 既に効いており、そこから上げても増えない（飽和している）。** 文献（mix-SFT 後も伸びが
 最小の弱点カテゴリ）との食い違いは、これで解消する。
 
-**投資の順は Robot Initial States → Camera Viewpoints である**（[plan/10 の 8.5 節](../plan/10_eval_perturbation_suite.md)）。
+**投資の順は Robot Initial States → Camera Viewpoints である**（[plan/10 の 8.5 節](../plan/archive/10_eval_perturbation_suite.md)）。
 
 ---
 
@@ -419,23 +461,24 @@ Robot の効き方は「Base が安定して速いタスクを 300 に張り付�
 
 | 事実 | 出典 |
 |---|---|
-| Track2 の文言・4 カテゴリへの対応づけが推測であること | `docs/materials/PARC2026開発コンペティション_予選.pdf` p8、[07 §1.1](../plan/07_track2_preparation.md#11-track2-の位置視点ノイズとは何か) |
+| Track2 の文言・4 カテゴリへの対応づけが推測であること | `docs/materials/PARC2026開発コンペティション_予選.pdf` p8、[07 §1.1](../plan/archive/07_track2_preparation.md#11-track2-の位置視点ノイズとは何か) |
 | 4 カテゴリの件数・接尾辞・難易度分布 | `work/LIBERO-plus/libero/libero/benchmark/task_classification.json`（revision `4976dc3`）を実際に数えた |
 | 各カテゴリの実装詳細 | `LIBERO-plus/libero/libero/envs/env_wrapper.py`・`libero_tabletop_manipulation.py`・`robots/new_init.py` |
 | Sensor Noise が「毎フレーム・agentview のみ・後処理」であること | `env_wrapper.py:207-233`（`_noise_N` の解析）・`285-309`（`step()`）・`311-348`（`reset()`） |
 | Sensor Noise 5 種の劣化関数の実装 | `env_wrapper.py:26-174`（ImageNet-C 系）。原典は Hendrycks & Dietterich, *Benchmarking Neural Network Robustness to Common Corruptions and Perturbations*, ICLR 2019（<https://arxiv.org/abs/1903.12261>）、公式実装 <https://github.com/hendrycks/robustness> |
-| 他モデルでの成功率・mix-SFT の効果 | arXiv:2510.13626（researcher エージェントが HTML 版を複数回取得、[07 §1.3.1](../plan/07_track2_preparation.md) に確認度を明記） |
+| 他モデルでの成功率・mix-SFT の効果 | arXiv:2510.13626（researcher エージェントが HTML 版を複数回取得、[07 §1.3.1](../plan/archive/07_track2_preparation.md) に確認度を明記） |
 | 自チームの Track2 疑似検証スイート実測（生ログ） | `work/gpu_eval/0822_092556_track2_probe_n16_ep1_max300_ema03_blend0_s1/summary.txt`・`eval.log` |
 | 手元の成功率は本番の順位を付けられないこと | [knowledge/07_local_eval_cannot_rank.md](../knowledge/07_local_eval_cannot_rank.md) |
 | ステップ数（基準完走件）が本番と繋がる量であること（r=−0.868） | [knowledge/06_step_count_drives_score.md](../knowledge/06_step_count_drives_score.md) |
 | カテゴリ別のステップ数の読み直し（訂正後の数字） | `solution/tools/probe/summarize_probe_by_category.py` を実行して算出 |
-| Sensor Noise 8 行が低〜中強度の劣化しか含まないこと・高強度追加実験の準備 | [09 §3.2](../plan/09_demo_perturbation_pipeline.md#32-高強度sensor-noiseの追加実験準備済み実行待ち)、`work/robot_init_sanity/SENSOR_NOISE_HIGH_PROBE.csv` |
+| Sensor Noise 8 行が低〜中強度の劣化しか含まないこと・高強度追加実験の準備 | [09 §3.2](../plan/archive/09_demo_perturbation_pipeline.md#32-高強度sensor-noiseの追加実験準備済み実行待ち)、`work/robot_init_sanity/SENSOR_NOISE_HIGH_PROBE.csv` |
 | TRACK2_PROBE.csv が「順位付けツールで本評価ではない」こと | `solution/tools/probe/make_track2_probe.py` の docstring |
 | 強さを決める整数の幅・方位角が二山であること（2.2 節） | `work/LIBERO-plus/libero/libero/benchmark/task_classification.json`（revision `4976dc3`）の全件からタスク名の整数を取り出して数えた |
 | タスク名の整数がそのまま設定に使われ、確認されるのは元の `.bddl` だけであること（2.3 節） | `env_wrapper.py:207-221`（文字列の分解）・`235-237`（`assert os.path.exists`） |
 | `_add_N` が bddl の番号で、物体数と相関 0.939 であること（2.2 節） | `bddl_files/libero_mix/KITCHEN_SCENE3_..._add_*.bddl` 60 件の `(:objects)` を数えた |
+| **初期姿勢の番号 500 個の手先のずれ（2.4 節）** | **2026-09-11 に `eng003sasaki01` で実測。**[`screen_initstates.py`](../../solution/tools/regen/screen_initstates.py)・値は `work/regen/initstate_offsets.json` |
 | 方位角スイープの実測（4.1 節） | `work/gpu_eval/0823_141340_camera_azimuth_n16_ep1_max300_ema03_blend0_s1/summary.txt`・`eval.log`、入力は `work/logs/robot_init_sanity/CAMERA_AZIMUTH_PROBE.csv` |
 | ステップ比が 300 の打ち切りに引きずられること（4.1 節） | 上記 `eval.log` の 48 行を、打ち切られた組を含む場合と外した場合で計算し直した。同じ理由と対処は `solution/tools/analysis/compare_steps.py:95-118` に既にある |
 | 推論に乱数が入り seed を固定していないこと（4.1 節） | `solution/policy_server.py:1050-1054`（`_get_action_chunk` に `noise=None` を渡す）。`work/gpu_eval/` の全 49 回が `n_total_episodes == n_tasks`（1 タスク 1 エピソード） |
 | 学習データに摂動カテゴリ別の内訳が特定できないこと | [06_training_data_composition.md](06_training_data_composition.md) |
-| π0.5 系提出物が手首カメラを使っていること | `solution/policy_server.py`（`robot0_eye_in_hand_image` を観測に使用）、[07 §4](../plan/07_track2_preparation.md#4-わからないこと確認が必要なこと) |
+| π0.5 系提出物が手首カメラを使っていること | `solution/policy_server.py`（`robot0_eye_in_hand_image` を観測に使用）、[07 §4](../plan/archive/07_track2_preparation.md#4-わからないこと確認が必要なこと) |

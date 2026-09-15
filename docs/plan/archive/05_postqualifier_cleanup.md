@@ -12,7 +12,7 @@
 | 場所 | 使用量 | 空き |
 |---|---|---|
 | `/`（`/dev/mapper/ubuntu--vg-ubuntu--lv`） | 258 GB / 298 GB（87%） | **41 GB** → **8/18 に 157 GB まで空けた**（6 章） |
-| うち `/home/ubuntu/lab` | 136 GB | — |
+| うち `/home/ubuntu/src` | 136 GB | — |
 | うち Docker（イメージ＋ビルド用の中間結果） | 約 114 GB | — |
 | うち `~/.cache/huggingface` | 33 GB | — |
 | うち `/home/ubuntu/src`（tampura。PARC とは別件） | 9.0 GB | — |
@@ -73,7 +73,7 @@ scripted_mix は 8 件だけで 0.000、lora20k は 0.016）。`smolvla/base` �
 `docs/knowledge/05_score_history.md` は「出典は `outputs/` の採点ログそのもの」と
 書いていて、**本番スコアの一次資料はここにしか無い。**HuggingFace にも無い。
 
-`/home/ubuntu/lab/tmp/リーダーボード.txt`（2.6 KB）も同じ立場にある。ただしこれは
+`/home/ubuntu/src/tmp/リーダーボード.txt`（2.6 KB）も同じ立場にある。ただしこれは
 他の参加者のアカウント名を含むので、リポジトリには持ち込まない方針だった。
 
 ## 2. 残すもの
@@ -270,7 +270,7 @@ CONFIRM=yes .venv/bin/python work/admin/cleanup_hf.py  # 実行
 | 1 | `parc2026-archive` が消えたのは意図的か。違うなら、同じことが起きない置き方にする | ユーザー |
 | 2 | `/home/ubuntu/src/tampura`（8.8 GB）・`vGPU`（3.1 GB）・`nvidia-linux-grid-535…deb`（374 MB）は PARC とは別件。消してよいか | ユーザー |
 | 3 | `tampura-tampura` の Docker イメージ（0.94 GB）も同じ | ユーザー |
-| 4 | `リーダーボード.txt` を git に入れるか。他の参加者名を含むので、いまは `lab/tmp/` に置いたまま | ユーザー |
+| 4 | `リーダーボード.txt` を git に入れるか。他の参加者名を含むので、いまは `src/tmp/` に置いたまま | ユーザー |
 | 5 | ~~`parc2026-submission` の履歴を畳んでよいか~~ | **8/18 に畳んだ** |
 
 ## 6. 実測の結果（8/18・5〜9 番を実行したあと）

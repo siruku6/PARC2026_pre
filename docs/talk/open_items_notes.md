@@ -35,7 +35,7 @@
 |---|---|---|---|---|
 | **F48** | 私（設定）＋あなた（組んで出す） | **学習は済んだ。**残りは zip 1 本＝**Mac で 40 分**（この機械は空きが 11 GB しかなく、要る 19 GB に足りない） | **満たした**（HF `siruku6/pi05_all111` に 4 個） | [../howto/02_build_submission.md](../howto/02_build_submission.md)「zip を 1 本組んで出す」。**渡す 3 つ**——**①Mac で組む ②版は `13.0.0`（6 文字なので道 A）③`vlm/` は無いので足す。****重みは `siruku6/pi05_all111` の `002000`**（**濃さを 5.0.1 と揃えた点**。歩数を揃えた `001500` は次の日の枠に取っておく）。**3 トラックとも出す**（1007・1008・1009） |
 | **F27** | 別セッション | RTX6000 1 日 | 無し。**Blackwell を使わないので `F48` と並行できる** | [inter_sessions/006](inter_sessions/006_track3_reverse_direction.md) |
-| **F75** | あなた | RTX6000・1〜2 時間（parquet の読み出しだけなので Blackwell と並行できる） | `~/dataset/lerobot/` に `libero_combined_20hz` があること | [inter_sessions/014](inter_sessions/014_verify_raw_states_for_time_reversal.md) |
+| **F75** | あなた | RTX6000・1〜2 時間（parquet の読み出しだけなので Blackwell と並行できる） | `~/dataset/lerobot/` に `libero_combined_20hz` があること | **済**。中身は [reference/25](../reference/25_dataset_inventory.md) の 8.8 節 |
 | **F79** | 私 | GPU 不要・半日 | ユーザの判断 | HF の原典カードとファイル一覧を見る／手元で 1 回起動する |
 | **F72** | 私（実装）＋あなた（評価） | RTX6000・実装 2 時間 ＋ 評価 1 回 | 無し | [../howto/03_gpu_eval.md](../howto/03_gpu_eval.md)「RTX6000 で Track3 を測る」 |
 | **F77** | 私（提出はユーザ） | 提出枠 1 つ・GPU 不要 | ユーザの判断 | `policy_server.py` の `_MIN_LEXICAL` を 0.50 にして zip を組み直す（[../howto/02_build_submission.md](../howto/02_build_submission.md)） |
@@ -45,7 +45,7 @@
 | **F8** | あなた | JAIST か RTX6000・10 分 | 学習の完走（済） | `WEIGHTS=.../024000/pretrained_model` で `run_final_eval.sh track2` |
 | **F12** | 私が zip・あなたが提出 | 提出枠 1 つ・私 5 分 | **学習は完走した**（8/27 23:21・終了コード 0）。あとは chown | `sudo chown -R ubuntu:ubuntu work/train/stage4_b16_24k` |
 | **F31** | あなた | RTX6000 30 分（約 100 ロールアウト） | **`F30` の結果**（2 cm 以上で 12 件が埋まるなら急がない） | `make_robot_initstate_ladder.py` に cm で層を作る口を足す |
-| **F71** | 私（1 行を渡す）＋あなた（起動） | Blackwell・学習 4 時間 46 分・実装ゼロ | 引数は実装済み。**`F48` とは同時に回せない**（batch 64 で 49.4 GB） | [260902_two_week_plan.md](260902_two_week_plan.md) 15 節の④ |
+| **F71** | 私（1 行を渡す）＋あなた（起動） | Blackwell・学習 4 時間 46 分・実装ゼロ | 引数は実装済み。**`F48` とは同時に回せない**（batch 64 で 49.4 GB） | `. ~/env_pi05.sh` のあと `cd "$CODE_DIR"` して `time python train_pi05.py --run-name pi05_fast250 --init-from /opt/dlami/nvme/weights/trial1500/001500 --steps 2500 --batch-size 64 --num-workers 8 --learning-rate 5e-6 --save-freq 500 --freeze-vision-encoder false --train-expert-only false --camera-viewpoint-augment --max-demo-steps 250`（8.0.0 を作った学習と最後の 1 引数だけ違う。依頼の 011・16 は 9/8 に消したので、1 行はここに置く） |
 | **F73** | 私 | GPU 不要・30 分 | 無し | `solution/tools/analysis/parse_grading_log.py` の出力 2 本を [../reference/26_score_formula_fit.md](../reference/26_score_formula_fit.md) の当てはめに足す |
 | **F60** | 私（設計）＋学習 1 本 | 設計が未定 | 無し | **まだ無い**（何を変えるかが決まっていない） |
 | **F5** | あなた＋私 | RTX6000・20 分 | `git pull`（採点器の差し替え） | `RECORD=1 ... run_final_eval.sh track2` |
@@ -66,6 +66,11 @@
 （`git log --all -- 'docs/plan/22*'` が空）。**元になったのは 9/4 の他チームの発表と
 [../materials/slack_talks/](../materials/slack_talks/) である。**
 だから 3 件の中身をここへ写し、`open_items.md` からのリンクもここへ向け直した。
+
+**2026-09-09 に `plan/22` は別の文書に使われた**——
+[../plan/22_grasp_and_color_next_moves.md](../plan/22_grasp_and_color_next_moves.md)
+（把持の切り分けと色の弁別）。**「`plan/22` の出典」と書かれた古い記述を見たら、
+それはこの文書ではなく、上に書いた幻の出典のことである。**
 
 ### F79. 基盤モデルを MolmoAct2-LIBERO に差し替える下調べ
 
@@ -1052,7 +1057,7 @@ tail -f work/gpu_eval/launcher.log
 | 初衝突 N 歩 | 前半なら近づき方、後半なら置き方の話 |
 
 集計にも節が増えた。**読み方（どの数字が出たら何をするか）は先に決めてある** —
-[plan/01_failure_accounting.md](../plan/01_failure_accounting.md)。
+[reference/18_failure_breakdown.md](../reference/18_failure_breakdown.md)。
 
 ```
   ゴール到達率 0.333  (28/84)
@@ -1225,7 +1230,7 @@ RECORD=1 bash solution/tools/eval/smoke_test_suite.sh   # 5 タスク・20 ス�
 **全データを使えばこの問題は自然に消える。** 拡張はそのあとの上積みとして考える。
 
 測り方は残してある（方策を動かさずに数分で終わる） —
-[plan/02_appearance_and_data.md](../plan/02_appearance_and_data.md)。
+[reference/08_appearance_spread.md](../reference/08_appearance_spread.md)。
 
 ### ~~8. 指示文の正規化~~ — **閉じた（8/11）。測ったら効かないと分かった**
 
@@ -1330,7 +1335,6 @@ RECORD=1 bash solution/tools/eval/smoke_test_suite.sh   # 5 タスク・20 ス�
 
 > **物体の動きはデータセットに入っていない。** 測るには物理だけ再生する
 > 必要があり、**LeRobot のエピソード番号と初期状態の対応**を先に確かめる関門がある。
-> 見通しは [plan/02_appearance_and_data.md](../plan/02_appearance_and_data.md)。
 
 ### 10 → 11. 調べる前に、判断の材料を決める
 

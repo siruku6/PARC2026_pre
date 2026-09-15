@@ -68,7 +68,7 @@
 ## 1. 作り替える前に走らせる 1 本のスクリプト
 
 ```bash
-cd ~/lab/PARC2026_pre
+cd ~/src/PARC2026_pre
 bash solution/tools/machine/backup_machine_state.sh --with-transcripts
 ```
 
@@ -79,7 +79,7 @@ bash solution/tools/machine/backup_machine_state.sh --with-transcripts
 | `manifest/` | 元の姿の実測値。`pip freeze`・`apt-mark showmanual`・`docker inspect`・`nvidia-smi`・HF キャッシュに居たリポジトリの一覧 |
 | `manifest/docker-run-recovered.sh` | **常駐コンテナの起動コマンドを `docker inspect` から組み立てたもの。** 6 節と同じ内容が機械的に出る |
 | `manifest/git-unsaved.md` | git に取り残しがあるリポジトリと、リモートに無いブランチ |
-| `files/` | git にも HF にも無い一次資料。訓練ログ 20 本・評価 57 回分（mp4 を外して 44 MB）・`NOW.md`・`lab/.claude/`・`~/.claude` の設定と memory |
+| `files/` | git にも HF にも無い一次資料。訓練ログ 20 本・評価 57 回分（mp4 を外して 44 MB）・`NOW.md`・`src/.claude/`・`~/.claude` の設定と memory |
 | `SECRETS_TODO.md` | 2 節と同じ内容 |
 
 **`manifest/git-unsaved.md` が空になるまで作り替えを始めないこと。** 空でなければ、
@@ -172,7 +172,7 @@ Claude Code は `~/.local/bin/claude` に 2.1.241 が入っていた。`apt` の
 tar を `~/machine_backup/machine_state/` に展開してあるものとして、次で戻る。
 
 ```bash
-cd ~/lab/PARC2026_pre
+cd ~/src/PARC2026_pre
 python3.10 -m venv .venv
 grep -v '^Python ' ~/machine_backup/machine_state/manifest/host-venv.txt > /tmp/host-venv-requirements.txt
 .venv/bin/pip install -r /tmp/host-venv-requirements.txt
@@ -188,7 +188,7 @@ grep -v '^Python ' ~/machine_backup/machine_state/manifest/host-venv.txt > /tmp/
 作り替え前は image が 7 つあったが、**自分でビルドするのは 3 つだけ**である。
 
 ```bash
-cd ~/lab/PARC2026_pre
+cd ~/src/PARC2026_pre
 docker build -t parc2026 .                                                    # 配布キット
 docker build -t parc2026-train solution/train                                 # 学習（SmolVLA 系）
 docker build -t parc2026-train-pi05 -f solution/train/Dockerfile.pi05 solution/train   # 学習（π0.5）
@@ -269,7 +269,7 @@ docker run -d --name quant_train \
   --user "$(id -u):$(id -g)" \
   --network bridge \
   -v "$HOME/.cache/huggingface:/hf_home" \
-  -v "$HOME/lab/PARC2026_pre/work/train:/out" \
+  -v "$HOME/src/PARC2026_pre/work/train:/out" \
   parc2026-train-pi05 sleep infinity
 
 # ② 配布キット側の確認用。GPU もネットワークも使わない
