@@ -28,6 +28,11 @@
 # その 10 倍から始まる（`train_pi05._resolve_init_from` の注意）。**揃えると決めたうえでそうしている。**
 # **9/15 に `LR`・`WARMUP` を渡せるようにした。**続きの学習で頂点に戻したくないときに使う。
 #
+# **`DECAY_LR` は下げ切る先の学習率**（9/16 に足した。**渡さなければ今までどおり LeRobot 既定の 2.5e-6**）。
+# `LR` と同じ値を渡すと下がらなくなる（`alpha = decay_lr / peak_lr` が 1 になる）。上流 openpi の
+# `pi05_libero` は「warmup のあと一定」だが、**あちらは EMA 0.999 と組で使っている**——LeRobot に EMA は
+# 無いので、1 本で終える走りでは頂点の 1 割まで下げるほうが締まる（[reference/38](../../docs/reference/38_lr_lineage.md)）。
+#
 # **`EXPERT_ONLY=1` なら action expert だけを動かす**（9/15 に足した。既定 0 ＝全パラメータ）。
 # 画像側と言語側を凍結し、20 歩の検算は 693,422,112 と突き合わせる。
 #
@@ -78,6 +83,8 @@ SAVE_FREQ="${SAVE_FREQ:-2750}"
 BATCH="${BATCH:-64}"
 LR="${LR:-2.5e-5}"
 WARMUP="${WARMUP:-500}"
+# 空なら渡さない＝LeRobot 既定（2.5e-6 まで下げる）。`LR` と同じ値なら下がらない。
+DECAY_LR="${DECAY_LR:-}"
 EXPERT_ONLY="${EXPERT_ONLY:-0}"
 if [ "$EXPERT_ONLY" = 1 ]; then
     TRAIN_RANGE=(--freeze-vision-encoder true --train-expert-only true)
@@ -164,6 +171,7 @@ if [ "$TRIAL" = 1 ]; then
         "${TRAIN_RANGE[@]}" \
         -- "--policy.scheduler_warmup_steps=$WARMUP" \
            "--policy.scheduler_decay_steps=$STEPS" \
+           ${DECAY_LR:+"--policy.scheduler_decay_lr=$DECAY_LR"} \
         > "$OUTPUT_ROOT/$RUN.nohup" 2>&1 &
     sleep 5
     PEAK=0
@@ -210,6 +218,7 @@ setsid nohup python train_pi05.py --run-name "$RUN" --output-root "$OUTPUT_ROOT"
     "${TRAIN_RANGE[@]}" \
     -- "--policy.scheduler_warmup_steps=$WARMUP" \
        "--policy.scheduler_decay_steps=$STEPS" \
+       ${DECAY_LR:+"--policy.scheduler_decay_lr=$DECAY_LR"} \
     > "$OUTPUT_ROOT/$RUN.nohup" 2>&1 &
 sleep 5
 pgrep -f "train_pi05.py --run-name $RUN" >/dev/null \
