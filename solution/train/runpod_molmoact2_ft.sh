@@ -47,6 +47,23 @@
 # コンテナを挟まずに `accelerate launch` を直に叩くので、**ここだけは入っている lerobot を上書きする**。
 # 使い捨ての pod なので元に戻せるようにしてある（`.orig`）。
 #
+# ## `--policy.path` を使うと必ず踏む 2 つのバグ（`lerobot_patches/lerobot_train.py` で両方直す）
+#
+# 1. **前処理ステップ名の不一致。** `lerobot_train.py` は前処理の上書きキーを
+#    `normalizer_processor` / `unnormalizer_processor` に決め打ちしているが、MolmoAct2 は
+#    自前の名前（`molmoact2_masked_normalizer` / `molmoact2_masked_unnormalizer`）で
+#    登録している。直さないと `--policy.path` から学習しようとした瞬間に
+#    `KeyError`（`_validate_overrides_used`）で **100% 落ちる**（CKPT_MODE に関係ない）。
+# 2. **前処理側でも素の重みを二重に読んでしまう。** `MolmoAct2PackInputsProcessorStep`
+#    は保存済みパイプラインの `checkpoint_path`（チェックポイントの publisher が使った値。
+#    たいてい素の `allenai/MolmoAct2-LIBERO` のまま）から自分を再構築する。
+#    `--policy.checkpoint_path`（＝上の 1 の話）の上書きはこのステップには効かないので、
+#    **`CKPT_MODE=small` で 1 回目の重み読み込みを避けても、このステップだけは毎回
+#    21.8 GB を裏でネットワークから取りに行ってしまう**（9/16 に実測・検証済み）。
+#
+# **どちらも lerobot_train.py 側の話であり、上の `modeling_molmoact2.py` の直しとは別物。**
+# 詳細と検証手順は `lerobot_patches/lerobot_train.py` の先頭コメントを参照。
+#
 # ## 使い方
 #
 #   # 1. まず速さと VRAM を測る（上げ先を作らず、短く回して片付ける）
@@ -84,6 +101,7 @@ OUTPUT_ROOT="$W/out"
 TOOLS="$W/tools"
 CODE_DIR="${CODE_DIR:-$W/pi05_code/solution/train}"
 PATCH="${PATCH:-$W/pi05_code/solution/tools/eval/lerobot_patches/modeling_molmoact2.py}"
+TRAIN_PATCH="${TRAIN_PATCH:-$W/pi05_code/solution/tools/eval/lerobot_patches/lerobot_train.py}"
 # 直しは lerobot v0.6.0 の同ファイルの写しなので、**別の版に当てると他の直しごと巻き戻る**
 WANT_LEROBOT="${WANT_LEROBOT:-0.6.0}"
 STEPS="${STEPS:-6000}"
@@ -235,6 +253,19 @@ elif [ -f "$TARGET.orig" ]; then
 else
     echo "  直しは当てない（素の重みを読む）"
 fi
+
+step "--policy.path から読むときの直し（前処理ステップ名・二重ダウンロード。CKPT_MODE によらず要る）"
+[ -f "$TRAIN_PATCH" ] || die "直しが無い: $TRAIN_PATCH" "pi05_code を取り直す"
+grep -q "is_molmoact2" "$TRAIN_PATCH" || die "直しの中身が違う（is_molmoact2 が無い）"
+[ "$LEROBOT_VERSION" = "$WANT_LEROBOT" ] || die \
+    "直しは lerobot $WANT_LEROBOT の写しだが、入っているのは $LEROBOT_VERSION" \
+    "当てると他の直しごと巻き戻る。WANT_LEROBOT を確かめる"
+TRAIN_TARGET=$(python3 -c "import lerobot,os;print(os.path.join(os.path.dirname(lerobot.__file__),'scripts/lerobot_train.py'))")
+[ -f "$TRAIN_TARGET.orig" ] || cp "$TRAIN_TARGET" "$TRAIN_TARGET.orig" || die "元ファイルを控えられない"
+cp "$TRAIN_PATCH" "$TRAIN_TARGET" || die "直しを当てられない: $TRAIN_TARGET"
+python3 -c "import lerobot.scripts.lerobot_train" \
+    || die "直しを当てたら import できなくなった" "cp $TRAIN_TARGET.orig $TRAIN_TARGET で戻す"
+echo "  当てた: $TRAIN_TARGET（元は $TRAIN_TARGET.orig）"
 
 TRAIN_ARGS=(
     --policy.path="$INIT_DIR"
