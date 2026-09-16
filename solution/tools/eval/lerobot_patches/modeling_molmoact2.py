@@ -12,7 +12,15 @@
 # 上流の中を直すとマシンごとに中身がズレる。`run_molmoact2_stage0.sh` が
 # `/opt/lerobot/src/lerobot/policies/molmoact2/modeling_molmoact2.py` へ上書きマウントする。
 #
-# **差分は `_load_hf_model` の 1 か所だけである**（`has_base_weights` で検索）。
+# **差分は 2 か所である。**
+#
+# 1. `_load_hf_model`（`has_base_weights` で検索）……上の分岐。
+# 2. `_load_as_safetensor`（LoRA のときだけ働く）……**LoRA は `__init__` の中、つまり
+#    保存済み重みを読む前に当たる。**PEFT が名前へ `base_model.model.` と `.base_layer.` を
+#    挟むため、素の名前で保存された safetensors が 1 個も一致せず、1 の分岐で作った
+#    未初期化の重みのまま学習が始まる（9/16 に実測。`--policy.path` と LoRA を併せると
+#    1 歩目から loss が nan。action expert だけの学習では起きない）。名前を戻して読む。
+#
 # ほかの行は上流のまま。上流は Apache 2.0 で、著作権表示は下にそのまま残してある。
 
 # Copyright 2026 The Allen Institute for Artificial Intelligence and The HuggingFace Inc. team. All rights reserved.
@@ -1797,3 +1805,39 @@ class MolmoAct2Policy(PreTrainedPolicy):
         del peft_config
         if not self.config.checkpoint_path:
             raise ValueError("MolmoAct2 LoRA fine-tuning requires `policy.checkpoint_path`.")
+
+    @classmethod
+    def _load_as_safetensor(cls, model, model_file: str, map_location: str, strict: bool):
+        # PARC2026 patch: LoRA は `__init__` の中、つまり保存済みの重みを読む**前**に当たる。
+        # PEFT が名前へ `base_model.model.` と `.base_layer.` を挟むので、素の名前で
+        # 保存された safetensors は 1 個も一致せず、`no_init_weights` で作った
+        # **未初期化のまま**学習に入る（9/16 実測。1 歩目から loss が nan になる）。
+        # 名前を戻して読み、1 個でも対応付かなければ黙って進まず止める。
+        if not any(".lora_" in name for name, _ in model.named_parameters()):
+            return super()._load_as_safetensor(model, model_file, map_location, strict)
+
+        target_names = set(model.state_dict())
+        plain_to_actual = {
+            name.replace("base_model.model.", "", 1).replace(".base_layer.", "."): name
+            for name in target_names
+            if ".lora_" not in name
+        }
+        saved = load_safetensors_file(model_file, device=map_location)
+        remapped: dict[str, Tensor] = {}
+        unknown: list[str] = []
+        for key, value in saved.items():
+            actual = plain_to_actual.get(key) or (key if key in target_names else None)
+            if actual is None:
+                unknown.append(key)
+            else:
+                remapped[actual] = value
+        missing, unexpected = model.load_state_dict(remapped, strict=False)
+        stranded = sorted(unknown) + sorted(k for k in missing if ".lora_" not in k) + sorted(unexpected)
+        if stranded:
+            raise RuntimeError(
+                f"MolmoAct2 LoRA: {model_file} の重みのうち {len(stranded)} 個を "
+                f"PEFT の名前と対応付けられなかった（例 {stranded[:3]}）。"
+                "未初期化のまま学習すると loss が nan になるのでここで止める。"
+            )
+        logger.info("MolmoAct2 LoRA: 保存済みの重み %d 個を PEFT の名前に直して読んだ。", len(remapped))
+        return model
