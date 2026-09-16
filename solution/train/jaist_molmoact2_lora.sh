@@ -97,6 +97,16 @@ LOG_FREQ="${LOG_FREQ:-20}"
 # **設定側が「両立しない」と弾く組み合わせを作れないよう、口を 1 つにしてある**
 # ——`train_action_expert_only` は `enable_lora_vlm` と併用できず、`action_mode=continuous`
 # を要求するので、`expert` のときは `ACTION_MODE` もここで合わせる。
+# **`RESUME=1` は、同じ `RUN` の続きから再開する。**止めたあと（`docker rm -f` など）に使う。
+# 保存済みの `train_config.json` が設定を全部持っているので、学習率も歩数もここでは渡さない
+# ——**渡した値は無視される**。続きは `checkpoints/last` から始まる。
+RESUME="${RESUME:-0}"
+# **画像を崩す細工（拡張）。既定は入れる。**出発点の重みは、これを当てて作られている
+# （同梱の `train_config.json`。明るさ・コントラスト・彩度・色相・くっきりさ・回転±5°・平行移動5%
+# を 1 枚に最大 3 つ）。**LeRobot の既定は「切」なので明示的に渡す**——依頼 032 の 4.6 節。
+# 回転と平行移動は Track2 の弱点（カメラ視点・初期姿勢）にそのまま当たる。
+# 中身は LeRobot の既定値が出発点の設定と一致しているので、有効にするだけでよい。
+IMAGE_TFS="${IMAGE_TFS:-true}"
 SCOPE="${SCOPE:-lora}"
 case "$SCOPE" in
     lora)   SCOPE_LABEL="LoRA（VLM）＋ action expert フル学習"
@@ -174,7 +184,13 @@ python3 -c "import lerobot.policies.molmoact2.modeling_molmoact2; import lerobot
     || die "直しを当てたら import できない" "$LEROBOT_DIR 配下の .orig から戻す"
 
 step "出力先の確認"
+if [ "$RESUME" = 1 ]; then
+    [ -d "$OUT/$RUN/checkpoints/last" ] || die "続きを始める先が無い: $OUT/$RUN/checkpoints/last" \
+        "保存が 1 個も終わっていない走りは続けられない。RESUME を外して打ち直す"
+    echo "  続きから始める: $(readlink -f "$OUT/$RUN/checkpoints/last")"
+else
 [ -e "$OUT/$RUN" ] && die "出力先が既にある: $OUT/$RUN" "別の RUN 名にするか消す"
+fi
 NCKPT=$(( STEPS / SAVE_FREQ ))
 FREE=$(df -BG --output=avail "$OUT" | tail -1 | tr -dc 0-9)
 echo "  空き ${FREE} GB（チェックポイント約 $NCKPT 個 × 11GB）"
@@ -185,6 +201,13 @@ printf '  %-14s %s\n' RUN "$RUN" データ "$DS" \
     歩数 "$STEPS" batch "$BATCH" 学習率 "本体 $LR ／ ViT $VIT_LR ／ つなぎ $CONNECTOR_LR ／ action expert $EXPERT_LR" \
     動かす範囲 "$SCOPE_LABEL"
 
+if [ "$RESUME" = 1 ]; then
+    # **続きのときは設定を渡さない。**保存済みの train_config.json がそのまま使われる
+    TRAIN_ARGS=(
+        --config_path="$OUT/$RUN/checkpoints/last/pretrained_model/train_config.json"
+        --resume=true
+    )
+else
 TRAIN_ARGS=(
     --policy.path="$INIT_DIR"
     --policy.checkpoint_path="$SMALL_DIR"
@@ -207,7 +230,7 @@ TRAIN_ARGS=(
     --dataset.repo_id="$DATASET_ID"
     --dataset.root="$DS"
     --dataset.video_backend=pyav
-    --dataset.image_transforms.enable=false
+    --dataset.image_transforms.enable="$IMAGE_TFS"
     --rename_map="$RENAME_MAP"
     --output_dir="$OUT/$RUN"
     --job_name="$RUN"
@@ -221,6 +244,7 @@ TRAIN_ARGS=(
     --env_eval_freq=-1
     --wandb.enable=false
 )
+fi
 
 # **`FOREGROUND=1` なら切り離さずに前面で走らせる。**Docker のコンテナから呼ぶときは、
 # 切り離すとこのスクリプトが終わった時点でコンテナごと落ちる。

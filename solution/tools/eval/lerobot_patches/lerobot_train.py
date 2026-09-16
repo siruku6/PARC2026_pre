@@ -30,7 +30,9 @@
 # lerobot_patches/modeling_molmoact2.py と同じ理由で、上流の中を直すと
 # マシンごとに中身がズレる。
 #
-# **差分は 2 か所である**（`is_molmoact2` で検索）。ほかの行は上流のまま。
+# **差分は 3 か所である**（`is_molmoact2` と `PARC2026 patch` で検索）。
+# 3 つ目は、端末でないときに進捗バーを出さないようにするもの（ログが 1 歩 1 行で
+# 溜まるのを止める。`log_freq` ごとの `step:…` の行だけを残す）。ほかの行は上流のまま。
 # 上流は Apache 2.0 で、著作権表示は下にそのまま残してある。
 
 #!/usr/bin/env python
@@ -611,11 +613,15 @@ def train(cfg: TrainPipelineConfig, accelerator: "Accelerator | None" = None):
     )
 
     if is_main_process:
+        # PARC2026 patch: 端末でないとき（`docker run -d` の中や nohup）は進捗バーを出さない。
+        # tqdm は 1 歩ごとに `\r` で上書きするつもりで書くが、端末でない先では上書きが効かず
+        # **1 歩 1 行として溜まる**（40,000 歩で 4 万行）。切ると、残るのは `log_freq` ごとの
+        # `step:… loss:…` の行だけになる。**進捗は tqdm の残り時間ではなく、その行で見る。**
         progbar = tqdm(
             total=cfg.steps - step,
             desc="Training",
             unit="step",
-            disable=inside_slurm(),
+            disable=inside_slurm() or not sys.stderr.isatty(),
             position=0,
             leave=True,
         )

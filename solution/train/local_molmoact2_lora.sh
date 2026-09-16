@@ -71,9 +71,14 @@ run_once() {
 
     docker ps -a --format '{{.Names}}' | grep -qx "$container" \
         && die "同じ名前のコンテナが在る: $container" "docker rm -f $container で消すか RUN を変える"
-    [ -e "$OUT/$run" ] && die "出力先が既にある: $OUT/$run" "RUN を変えるか消す"
+    [ "${RESUME:-0}" = 1 ] || [ ! -e "$OUT/$run" ] \
+        || die "出力先が既にある: $OUT/$run" "RUN を変えるか消す。続きからなら RESUME=1"
 
-    step "学習を起こす（$IMAGE・batch $batch・$steps 歩）"
+    if [ "${RESUME:-0}" = 1 ]; then
+        step "続きから起こす（$IMAGE・batch と歩数は保存済みの設定のまま）"
+    else
+        step "学習を起こす（$IMAGE・batch $batch・$steps 歩）"
+    fi
     docker run -d --name "$container" --gpus all --shm-size="$SHM_SIZE" \
         --user "$(id -u):$(id -g)" \
         -e RUN="$run" -e VENV=none -e FOREGROUND=1 \
@@ -81,6 +86,7 @@ run_once() {
         -e INIT_DIR=/init -e SMALL_DIR=/init/molmoact2_base_small -e OUT=/out \
         -e BATCH="$batch" -e STEPS="$steps" -e SAVE_FREQ="$save_freq" -e NUM_WORKERS="$NUM_WORKERS" \
         -e ACTION_MODE="${ACTION_MODE:-both}" -e LOG_FREQ="${LOG_FREQ:-20}" -e SCOPE="${SCOPE:-lora}" \
+        -e RESUME="${RESUME:-0}" -e IMAGE_TFS="${IMAGE_TFS:-true}" \
         -v "$REPO:/repo:ro" -v "$DS:/data:ro" -v "$INIT_DIR:/init:ro" -v "$OUT:/out" \
         -v "$HOME/.cache/huggingface:/hf_home" \
         -v "$PATCH:$LEROBOT_ROOT/policies/molmoact2/modeling_molmoact2.py:ro" \
