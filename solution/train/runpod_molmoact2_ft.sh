@@ -115,6 +115,9 @@ VIT_LR="${VIT_LR:-5e-6}"
 CONNECTOR_LR="${CONNECTOR_LR:-5e-6}"
 EXPERT_LR="${EXPERT_LR:-5e-5}"
 DECAY_LR="${DECAY_LR:-1e-6}"
+# **`ACTION_MODE`。** 既定は出発点の重みと同じ `both`。`jaist_molmoact2_lora.sh` 側と
+# 同じ口で、離散の行動の損失を外して回したいときだけ `continuous` にする。
+ACTION_MODE="${ACTION_MODE:-both}"
 TRIAL="${TRIAL:-0}"
 TRIAL_STEPS="${TRIAL_STEPS:-100}"
 export HF_HOME="${HF_HOME:-$W/hf_home}"
@@ -271,7 +274,7 @@ TRAIN_ARGS=(
     --policy.path="$INIT_DIR"
     --policy.checkpoint_path="$BASE_DIR"
     --policy.device=cuda
-    --policy.action_mode=both
+    --policy.action_mode="$ACTION_MODE"
     --policy.model_dtype=bfloat16
     --policy.chunk_size=10
     --policy.n_action_steps=10

@@ -1,0 +1,41 @@
+# MolmoAct2-LIBERO の追加学習（依頼 032 の段階 3）用のイメージ。
+#
+#   docker build -t parc2026-train-molmoact2 -f solution/train/Dockerfile.molmoact2 solution/train
+#
+# **土台は `parc2026-train-pi05`（[Dockerfile.pi05](Dockerfile.pi05)）をそのまま使う。**
+# 段階 0・1（9/15 の実測）は、このイメージで MolmoAct2 の推論まで通っている。
+# 同梱 LeRobot v0.6.0 の追加指定を見比べると、足りないのは 1 つだけである。
+#
+#     pi        = transformers + scipy
+#     molmoact2 = transformers + scipy + **peft**
+#
+# つまり**追加学習に足りないのは `peft` だけ**で、torch・torchcodec・torchvision・
+# lerobot の重いレイヤー（回線しだいで 15〜30 分）は焼き直さない。
+# **土台のイメージが無いマシンでは、先に Dockerfile.pi05 をビルドすること。**
+#
+#   docker build -t parc2026-train-pi05 -f solution/train/Dockerfile.pi05 solution/train
+#
+# **直した lerobot のファイルはここでは焼かない。**`modeling_molmoact2.py` と
+# `lerobot_train.py` の 2 つは、評価（`run_molmoact2_stage0.sh`）と学習
+# （`local_molmoact2_lora.sh`）のどちらも `solution/tools/eval/lerobot_patches/` から
+# 読み取り専用で bind-mount する。**焼くと、直すたびにビルドし直しになるうえ、
+# イメージの中と repo の中で版が 2 系統になる。**
+#
+# 走らせ方は pi05 と同じで、`--user` と `/hf_home` の扱いも変わらない
+# （理由は Dockerfile.pi05 の冒頭に書いてある）。
+FROM parc2026-train-pi05
+
+# **`peft` を足す。**版は同梱 LeRobot の `molmoact2` 追加指定
+# （`peft>=0.18.0,<1.0.0`）に解かせる。extras 名で入れれば、上流が版を上げたときに
+# ここを書き換え忘れる事故が起きない。`training,pi` は土台に入っているので、
+# 実際に増えるのは peft とその依存だけである。
+RUN pip install --no-cache-dir -e "/opt/lerobot[training,pi,molmoact2]"
+
+# 版の対が揃っていることを**ビルド時に**確かめる。実行時まで持ち越さない。
+RUN python -c "\
+import peft, transformers, scipy; \
+from lerobot.policies.molmoact2.modeling_molmoact2 import MolmoAct2Policy; \
+print(f'peft {peft.__version__} / transformers {transformers.__version__} '\
+      f'/ scipy {scipy.__version__} OK')"
+
+CMD ["python", "-c", "print('学習は local_molmoact2_lora.sh から起こす（docs/howto/20 参照）')"]

@@ -23,5 +23,6 @@
 | [17_checkpoint_upload.md](17_checkpoint_upload.md) | 学習したチェックポイントを HF へ運ぶ |
 | [18_inspect_weights.md](18_inspect_weights.md) | 重みの素性（sha256・公開/非公開・使用量・学習の種類・推論の設定）をコマンドで引く |
 | [19_train_l90clean_runpod.md](19_train_l90clean_runpod.md) | `libero_combined_bowl5_initpose_l90clean` で 1 本学習する（RunPod・π0.5 と MolmoAct2 の選び方と手順） |
+| [20_train_molmoact2_local.md](20_train_molmoact2_local.md) | MolmoAct2 をこのマシン（H100 20GB・1 枚）で LoRA 学習する（Docker） |
 
 **12 は欠番である**（削除済み）。

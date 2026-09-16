@@ -448,6 +448,9 @@ MUJOCO_GL=egl TRACK_EPISODES=2 \
 12. **LoRA で、行動を出す小さな模型は全部学習する**（4.6 節）。
 13. **学習データは、依頼 026 で作った掃除済みデータ
     （`work/artifacts/libero_plus_clean`・12,396 本・39 課題）を使う。**
+    **【9/16】ユーザの指示で、HF の `siruku6/libero_combined_bowl5_initpose_l90clean`
+    （21,642 本・111 課題・27.8 GB・非公開）に差し替わった**
+    （[howto/20](../../howto/20_train_molmoact2_local.md) の 3 節）。
 14. **画像を崩す細工を明示的に入れる**（既定では切れている）。
 15. 保存は 500〜1,000 歩ごと。
 
@@ -512,6 +515,9 @@ MUJOCO_GL=egl TRACK_EPISODES=2 \
 ### 8.2 どこまで学習するか
 
 **段階 3 で当てる学習を、LoRA と全部学習のどちらにするか。**
+
+**【9/16】LoRA に決まった（ユーザの判断）。**
+**打つものは [howto/20](../../howto/20_train_molmoact2_local.md) の 3 節（このマシン・20 GB・1 枚）か [howto/19](../../howto/19_train_l90clean_runpod.md) の 4 節（RunPod）にある**——`--policy.enable_lora_vlm=true`・行動を出す小さな模型は全部学習（既定）。**batch は 20 GB なら 2、24 GB なら 8 まで**（9/16 の実測）。
 
 | | 良くなること | 悪くなること |
 |---|---|---|
