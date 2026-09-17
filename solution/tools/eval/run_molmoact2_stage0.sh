@@ -83,10 +83,17 @@ for image in "$KIT_IMAGE" "$POLICY_IMAGE"; do
 done
 
 POLICY_IMAGE_ID="$(docker image inspect -f '{{.Id}}' "$POLICY_IMAGE" | cut -d: -f2 | cut -c1-12)"
-SERVER_IMAGE="${POLICY_IMAGE}-server-${POLICY_IMAGE_ID}"
+# **MolmoAct2 専用のイメージを分けて作る。** `parc2026-train-pi05` は extras が
+# `pi` で建っており **`peft` が入っていない**（`solution/train/Dockerfile.pi05` の
+# 冒頭。本体の `Dockerfile` は `smolvla,peft`）。**LoRA の重みは PEFT の名前で
+# 保存されているので、`MolmoAct2Policy.__init__` の `_apply_lora_adapters()` が
+# `peft` を要求して落ちる**（9/17 に実測。`ImportError: 'peft' is required`）。
+# **版は学習に使ったものへ合わせる**（`solution/train/jaist_molmoact2_lora.sh`）。
+# π0.5 側の `run_final_eval.sh` は別のタグを使うので、この変更は当たらない。
+SERVER_IMAGE="${POLICY_IMAGE}-molmoact2-${POLICY_IMAGE_ID}"
 if ! docker image inspect "$SERVER_IMAGE" >/dev/null 2>&1; then
-    echo "-- $SERVER_IMAGE を作る（HTTP サーバーの依存 3 つを足すだけ）"
-    printf 'FROM %s\nRUN pip install --no-cache-dir "fastapi>=0.68" "uvicorn>=0.15" "msgpack>=1.0"\n' \
+    echo "-- $SERVER_IMAGE を作る（HTTP サーバーの依存 3 つ ＋ peft）"
+    printf 'FROM %s\nRUN pip install --no-cache-dir "fastapi>=0.68" "uvicorn>=0.15" "msgpack>=1.0" "peft>=0.18.0,<1.0.0"\n' \
         "$POLICY_IMAGE" | docker build -t "$SERVER_IMAGE" -f - . >/dev/null
 fi
 
@@ -107,9 +114,13 @@ cleanup() {
 trap cleanup EXIT
 
 policy_environment=()
+# **adaptive 系は 9/17 に足した。** それまで一覧に無く、渡しても
+# コンテナに届かなかった（黙って adaptive=off で走る）。
 for name in PARC_N_ACTION_STEPS PARC_NUM_INFERENCE_STEPS PARC_SAMPLES \
             PARC_EMA_ALPHA PARC_BLEND_STEPS PARC_SEED PARC_NORMALIZE_INSTRUCTION \
-            PARC_GAIN_TRANSLATION PARC_GAIN_ROTATION PARC_GEO_IMAGE_SIZE; do
+            PARC_GAIN_TRANSLATION PARC_GAIN_ROTATION PARC_GEO_IMAGE_SIZE \
+            PARC_ADAPTIVE_CADENCE PARC_ADAPTIVE_CADENCE_HIGH \
+            PARC_ADAPTIVE_MIN_SAMPLES PARC_ADAPTIVE_TRACE; do
     if [ -n "${!name:-}" ]; then
         policy_environment+=(-e "$name=${!name}")
     fi
