@@ -182,6 +182,17 @@
 #          別のモデルの単位なので持ち込めない）。設計と秒数は
 #          `docs/reference/32_adaptive_replanning.md`。
 #          **重みは 8.1.0（`ladder2500/002500`）と同一で、これは設定だけの版である。**
+#
+#   【2026-09-17】**MolmoAct2 でも `PARC_SAMPLES` > 1 と切り替えが使えるようにした。**
+#          それまで `_install_chunk_sampler` は「π0.5 か、それ以外（`_get_action_chunk`）」の
+#          2 択で、**`_get_action_chunk` を持たない MolmoAct2 は起動時に落ちた。**
+#          **歩数の減らし方は π0.5 と別である**——MolmoAct2 の
+#          `predict_action_chunk` は返る前に `config.n_action_steps` で切るので、
+#          代入すると生成の長さまで縮む。**代入せず、返す段で切る。**
+#          `PARC_ADAPTIVE_CADENCE_HIGH` は既定 8 のままなので、
+#          **MolmoAct2 で使うなら 5 を渡すこと**（既定の歩数が 10 のため）。
+#          **既定は `PARC_SAMPLES=1`・`PARC_ADAPTIVE_CADENCE=0` のままで、
+#          立てない限り 19.0.0（採点済み）と同じ挙動である。**
 __version__ = "8.2.0"
 
 import argparse
@@ -913,6 +924,14 @@ class MyPolicy(BasePolicy):
         self._adaptive_history: list[float] = []
         self._adaptive_switches = 0
         self._adaptive_fell_back = False
+        # **切り替えが何回起きたかは、既定では出さない。** エピソードごとの出力は
+        # 課題を特定できる材料になりうる（`reset` の注記・運営 Q&A No.33）。
+        # **手元で測るときだけ `PARC_ADAPTIVE_TRACE=1` で出す。提出では立てない。**
+        # 立てないと「切り替えが一度も起きていない」ことに気づけないので、
+        # 手元の評価では必ず立てること。
+        self._adaptive_trace = os.environ.get(
+            "PARC_ADAPTIVE_TRACE", "0"
+        ) not in ("0", "", "false")
         # 切り替えから戻す先。**`samples=1` でも起動行が読むので必ず持たせる。**
         self._default_cadence = self._n_action_steps
         self._last_disagreement = 0.0
@@ -1232,6 +1251,15 @@ class MyPolicy(BasePolicy):
         # 連続行動をそのまま出す。離散トークン側は文章生成に近い遅い経路である。
         config.inference_action_mode = "continuous"
 
+        # **LoRA で学習した重みは `peft` が要る。** `MolmoAct2Policy.__init__` は
+        # 保存済み重みを読む前に `_apply_lora_adapters()` を通るので、
+        # **入っていないと起動時に `ImportError` で落ちる**（2026-09-17 に実測）。
+        # 提出物では `solution/requirements.txt` の `peft` 行がそれを賄う。
+        #
+        # TODO（本選 2 に入る前・今日やらない）: **LoRA を土台へ畳んだ重みに差し替える。**
+        # 畳めばここは素の重みと同じ道になり、`peft` の行も消せる。手順と確かめ方は
+        # `solution/requirements.txt` の同じ TODO に書いた。
+        #
         # **`from_pretrained` の `strict=True` で、自前の重みだけで全部の層が
         # 埋まることを起動時に確かめる。** 1 個でも欠けたらここで落とす——
         # `_build_pi05` が数で確かめているのと同じ理由（黙って初期値のまま
@@ -1301,6 +1329,8 @@ class MyPolicy(BasePolicy):
         - SmolVLA: `select_action` が `_get_action_chunk` を直接呼ぶ
         - π0.5: `select_action` が `predict_action_chunk` を呼ぶ
           （`modeling_pi05.py` の `select_action`）
+        - MolmoAct2: 同じく `predict_action_chunk`。**ただし歩数の減らし方が
+          π0.5 と違う**（その分岐の注記）。`_get_action_chunk` は持っていない
 
         **距離は「実際に実行するステップ数」だけで測る。** chunk は 50 ステップぶん作られるが、
         実行するのは `n_action_steps` 歩（π0.5 の既定 16）だけである。
@@ -1334,19 +1364,19 @@ class MyPolicy(BasePolicy):
             )
             return chunks[int(distances.argmin())]
 
-        def apply_adaptive_cadence() -> None:
-            """散らばりを見て、次に消費する歩数を決める。
-
-            **`select_action` は `predict_action_chunk` が返った後に
-            `config.n_action_steps` を読む**（同梱 lerobot の
-            `modeling_pi05.py` の `select_action`）。だから**ここで代入すれば、
-            その回の消費歩数がそれになる。**待ち行列を自分で持つ必要が無い。
+        def cadence_from_disagreement() -> int:
+            """散らばりを見て、次に消費する歩数を**返す。代入はしない。**
 
             判定は「このエピソードでこれまでに見た散らばりの中央値より大きいか」。
             **溜まるまでは既定の歩数のままにする**（目盛りが 1〜2 点で決まるのを避ける）。
+
+            **返すだけにしてあるのは、歩数の減らし方がモデルで違うからである。**
+            π0.5 は `config.n_action_steps` へ代入してよいが、**MolmoAct2 は
+            同じ欄が生成の長さも兼ねている**ので代入できない（下の分岐の注記）。
             """
             value = self._last_disagreement
             history = self._adaptive_history
+            cadence = self._default_cadence
             if len(history) >= self._adaptive_min_samples:
                 ordered = sorted(history)
                 middle = len(ordered) // 2
@@ -1355,11 +1385,20 @@ class MyPolicy(BasePolicy):
                 else:
                     median = 0.5 * (ordered[middle - 1] + ordered[middle])
                 if value > median:
-                    policy.config.n_action_steps = self._adaptive_cadence
+                    cadence = self._adaptive_cadence
                     self._adaptive_switches += 1
-                else:
-                    policy.config.n_action_steps = self._default_cadence
             history.append(value)
+            return cadence
+
+        def apply_adaptive_cadence() -> None:
+            """π0.5 用。決めた歩数を `config.n_action_steps` へ代入する。
+
+            **`select_action` は `predict_action_chunk` が返った後に
+            `config.n_action_steps` を読む**（同梱 lerobot の
+            `modeling_pi05.py` の `select_action`）。だから**ここで代入すれば、
+            その回の消費歩数がそれになる。**待ち行列を自分で持つ必要が無い。
+            """
+            policy.config.n_action_steps = cadence_from_disagreement()
 
         if self._kind == "pi05":
             original_predict = policy.predict_action_chunk
@@ -1388,6 +1427,53 @@ class MyPolicy(BasePolicy):
                 return picked
 
             policy.predict_action_chunk = sampled_predict
+            return
+
+        if self._kind == "molmoact2":
+            # **MolmoAct2 では `config.n_action_steps` へ代入してはならない。**
+            # π0.5 は生成の長さ（chunk 50）と消費の長さ（`n_action_steps` 16）が
+            # **別の欄**で、切るのは `select_action` の側である
+            # （`modeling_pi05.py` の `predict_action_chunk(batch)[:, : n_action_steps]`）。
+            # **MolmoAct2 は `predict_action_chunk` が返る前に自分で切る**
+            # （`modeling_molmoact2.py` の
+            # `return actions[:, : self.config.n_action_steps, :action_dim]`）。
+            # つまり同じ欄が生成の長さも兼ねているので、π0.5 と同じく代入すると
+            # **次の回に包んだ関数が受け取る chunk がその長さに縮み**、
+            # medoid の窓（起動時の歩数に固定）が測れなくなる。
+            # **目盛りがエピソードの途中で変わる**——`docs/reference/32` の 3 節が
+            # 禁じた状態そのものである。
+            #
+            # **だから chunk は既定の長さのまま受け取り、返す段で切る。**
+            #
+            #   - ばらつきは常に同じ窓で測れる（目盛りが動かない）
+            #   - `reset()` が作る `deque(maxlen=config.n_action_steps)` は常に
+            #     既定の長さで、入れるのはそれ以下。**入る側が必ず maxlen 以下**なので、
+            #     32 の 7 節の「先頭が黙って捨てられる」罠が起きる道が無い
+            #   - 呼び出し元の `[:, : config.n_action_steps]` は素通りになる
+            #
+            # **切っても推論は軽くならない。** 生成そのものは
+            # `_generation_action_horizon()`＝`chunk_size` で走るためで、
+            # 切り替えが変えるのは「引き直す頻度」だけである（π0.5 と同じ）。
+            original_predict = policy.predict_action_chunk
+
+            def sampled_predict_and_trim(batch, **kwargs):
+                # **`.clone()` が要る理由は π0.5 の分岐と同じ。** MolmoAct2 の
+                # 設定も `enable_inference_cuda_graph=True` である。
+                chunks = torch.stack(
+                    [original_predict(batch, **kwargs).clone() for _ in range(count)]
+                )
+                picked = pick_medoid(chunks)
+                cadence = self._default_cadence
+                # **一度も採点環境で走っていない道なので、落ちても 0 点にしない。**
+                if self._adaptive_enabled and not self._adaptive_fell_back:
+                    try:
+                        cadence = cadence_from_disagreement()
+                    except Exception as error:  # noqa: BLE001
+                        self._fall_back_from_adaptive(error)
+                        cadence = self._default_cadence
+                return picked[:, :cadence]
+
+            policy.predict_action_chunk = sampled_predict_and_trim
             return
 
         original_chunk = policy._get_action_chunk
@@ -1654,6 +1740,17 @@ class MyPolicy(BasePolicy):
         self._rtc_previous_tail = None
         # **散らばりの目盛りもエピソードごとに捨てる。** 課題が違えば散らばりの
         # 大きさも違うので、前のエピソードの中央値を持ち越すと判定がずれる。
+        # **`reset` はエピソードの「先頭」で呼ばれる**ので、ここで出せるのは
+        # 1 つ前のエピソードの集計である。**1 本目の前は空なので出さない。**
+        # **最後のエピソードのぶんは出ない**（その後に `reset` が来ないため）。
+        # 切り替えが起きているかを確かめるには足りる。
+        if self._adaptive_trace and self._adaptive_history:
+            print(
+                f"[parc] adaptive trace  1 つ前のエピソード: "
+                f"引き直し={len(self._adaptive_history)}  "
+                f"切り替え累計={self._adaptive_switches}",
+                flush=True,
+            )
         self._adaptive_history.clear()
 
     def _build_batch(self, obs: dict[str, np.ndarray]) -> dict:
