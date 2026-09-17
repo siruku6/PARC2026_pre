@@ -193,7 +193,7 @@
 #          **MolmoAct2 で使うなら 5 を渡すこと**（既定の歩数が 10 のため）。
 #          **既定は `PARC_SAMPLES=1`・`PARC_ADAPTIVE_CADENCE=0` のままで、
 #          立てない限り 19.0.0（採点済み）と同じ挙動である。**
-__version__ = "8.2.0"
+__version__ = "24.0.0"
 
 import argparse
 import math
@@ -719,7 +719,9 @@ class MyPolicy(BasePolicy):
             # `n_action_steps` は「推論と推論の間隔」を変えるだけで 1 回の秒数は
             # 変えないので、**`/act` の 10 秒制限に効くのはこちらだけ**である。
             # 既定はチェックポイントの値（10）のまま。減らしたときの質は未測定。
-            # **既定を 20 にした（版 3.12.0）。** 手元 36 件で
+            # **一度 20 にしたが（版 3.12.0）、版 4.5.0 で 10 に戻した。**
+            # 4.2.0 対 4.3.0 で 10 と 20 を直接比べた結果で、以後の提出は全部 10 である。
+            # 20 にしたときの根拠は次のとおり（戻した今も測定自体は有効）。手元 36 件で
             # ゴール到達 30 → 34（上限は 34。落下物 2 件は誰も取れない）、
             # 打ち切り張り付き 6 → 2、**両方が成功した 23 件のステップ数は ±0（+0.9%）**。
             # **秒数だけ払ってステップ数を買う形**で、blend/RTC のように遅くならない
@@ -797,6 +799,20 @@ class MyPolicy(BasePolicy):
             _preprocessor_overrides["molmoact2_pack_inputs"] = {
                 "checkpoint_path": str(weights / "molmoact2_base_small")
             }
+            # **行動を離散化するトークナイザも同梱物から読む（版 24.0.0）。**
+            # 既定は `"allenai/MolmoAct2-FAST-Tokenizer"` という Hub の名前で、
+            # `action_tokenizer.py` の `_resolve_tokenizer_location` は
+            # **その文字列がローカルのパスとして存在すればそれを使い、無ければ
+            # `snapshot_download` へ落ちる。**採点環境は `HF_HUB_OFFLINE=1` なので、
+            # **落ちた先で必ず起動に失敗する**——23.0.0 を Track3 の枠へ出して
+            # `OfflineModeIsEnabled` で 0 点になった（2026-09-17）。
+            # 手元のリハーサルが通っていたのは、この台に HF のキャッシュがあったためで、
+            # **通信の無い経路は一度も通っていなかった。**
+            _fast_tokenizer = weights / "fast_action_tokenizer"
+            if _fast_tokenizer.is_dir():
+                _preprocessor_overrides["molmoact2_pack_inputs"][
+                    "discrete_action_tokenizer"
+                ] = str(_fast_tokenizer)
         else:
             _preprocessor_overrides["tokenizer_processor"] = {
                 "tokenizer_name": str(weights / "vlm")
