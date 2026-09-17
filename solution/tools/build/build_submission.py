@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import re
 import sys
 import zipfile
@@ -62,6 +63,16 @@ _DEFAULT_OUTPUT = _REPO_ROOT / "work" / "submission.zip"
 # ファイルを同梱する**——形が食い違うと学習した重みが意味を失う。幾何を接いでいない
 # 重みでも `policy_server.py` は読み込まないので、入れておいて害は無い。
 _SOLUTION_FILES = ("policy_server.py", "requirements.txt", "geometry_graft.py")
+
+# **ライセンス全文を同梱する**（予選のレポート 4 節の宿題。Apache License 2.0 第 4 条 (a) は
+# 頒布物に LICENSE 全文を入れることを求めており、予選の提出物はこれを欠いていた）。
+# `solution/licenses/` から zip の `licenses/` へそのまま入れる。
+_LICENSE_DIR_NAME = "licenses"
+_LICENSE_FILES = ("LICENSE-Apache-2.0-lerobot.txt", "LICENSE-MIT-LIBERO.txt")
+
+# **NOTICE は模型で中身が違う**（π0.5 の土台は Gemma Terms of Use、MolmoAct2 は Apache 2.0）。
+# `model_weights/config.json` の `type` で選び、zip の中では `NOTICE.md` の 1 つになる。
+_NOTICE_BY_KIND = {"pi05": "NOTICE-pi05.md", "smolvla": "NOTICE-pi05.md", "molmoact2": "NOTICE-molmoact2.md"}
 
 # work/artifacts/ から取るディレクトリ（名前をそのまま zip 内のパスにする）。
 _ARTIFACT_DIRS = ("model_weights", "vendor")
@@ -176,6 +187,19 @@ def _collect_entries(solution: Path, artifacts: Path,
             raise FileNotFoundError(f"必須ファイルがありません: {path}")
         entries.append((path, name))
 
+    license_dir = solution / _LICENSE_DIR_NAME
+    for name in _LICENSE_FILES:
+        path = license_dir / name
+        if not path.is_file():
+            raise FileNotFoundError(f"ライセンス全文がありません: {path}")
+        entries.append((path, f"{_LICENSE_DIR_NAME}/{name}"))
+
+    weights_dir = weights if weights is not None else artifacts / "model_weights"
+    notice = license_dir / _notice_name_for(weights_dir)
+    if not notice.is_file():
+        raise FileNotFoundError(f"NOTICE がありません: {notice}")
+    entries.append((notice, "NOTICE.md"))
+
     sources = {name: artifacts / name for name in _ARTIFACT_DIRS}
     if weights is not None:
         sources["model_weights"] = weights
@@ -219,6 +243,25 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _notice_name_for(weights: Path) -> str:
+    """重みの `config.json` の `type` から、同梱する NOTICE を選ぶ。
+
+    **読み違えると、載っていない土台のライセンスを名乗ることになる。**
+    分からないときは止める——提出物の権利表示を推測で埋めない。
+    """
+    config = weights / "config.json"
+    if not config.is_file():
+        raise FileNotFoundError(f"重みの設定がありません: {config}")
+    kind = str(json.loads(config.read_text()).get("type", ""))
+    try:
+        return _NOTICE_BY_KIND[kind]
+    except KeyError:
+        raise ValueError(
+            f"NOTICE を選べません（config.json の type が {kind!r}）。"
+            f"solution/licenses/ に NOTICE を足して _NOTICE_BY_KIND へ登録すること"
+        ) from None
+
+
 def _verify_zip(output: Path, entries: list[tuple[Path, str]]) -> None:
     """書き終えた zip を開き直し、中身が意図どおりかを確かめる。
 
@@ -257,10 +300,15 @@ def _verify_zip(output: Path, entries: list[tuple[Path, str]]) -> None:
         for required in ("model_weights/model.safetensors", "model_weights/config.json"):
             if required not in actual:
                 raise ValueError(f"zip に {required} がありません")
-        if not any(name.startswith("model_weights/vlm/") for name in actual):
+        # **トークナイザの同梱先は模型で違う。**π0.5・SmolVLA は `model_weights/vlm/`、
+        # MolmoAct2 は `model_weights/molmoact2_base_small/` である
+        # （`policy_server.py` の `_build_molmoact2`。MolmoAct2 には `vlm/` 同梱の
+        # 仕組みが無い）。**どちらも無ければ採点環境が Hub へ取りに行って失敗する。**
+        _tokenizer_dirs = ("model_weights/vlm/", "model_weights/molmoact2_base_small/")
+        if not any(name.startswith(_tokenizer_dirs) for name in actual):
             raise ValueError(
-                "zip に model_weights/vlm/ がありません"
-                "（トークナイザが無いと採点環境で Hub へ取りに行って失敗します）"
+                "zip に model_weights/vlm/ も model_weights/molmoact2_base_small/ も"
+                "ありません（トークナイザが無いと採点環境で Hub へ取りに行って失敗します）"
             )
         if not any(name.startswith("vendor/lerobot/") for name in actual):
             raise ValueError("zip に vendor/lerobot/ がありません")
