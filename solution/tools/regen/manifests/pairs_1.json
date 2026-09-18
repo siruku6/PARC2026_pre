@@ -1,0 +1,13 @@
+[
+ {
+  "episode_index": 57,
+  "npz": "KITCHEN_SCENE4_put_the_black_bowl_in_the_bottom_drawer_of_the_cabinet_and_close_it__demo048__init285__open_loop.npz",
+  "task": "KITCHEN_SCENE4_put_the_black_bowl_in_the_bottom_drawer_of_the_cabinet_and_close_it",
+  "suite": "libero_10",
+  "demo": 48,
+  "initstate": 285,
+  "pos_cm": 2.058,
+  "rot_deg": 10.75,
+  "steps": 235
+ }
+]

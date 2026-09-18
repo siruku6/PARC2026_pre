@@ -1,0 +1,27 @@
+{
+  "pick_up_the_black_bowl_between_the_plate_and_the_ramekin_and_place_it_on_the_plate": [
+    14,
+    0,
+    1
+  ],
+  "pick_up_the_black_bowl_next_to_the_cookie_box_and_place_it_on_the_plate": [
+    5,
+    18,
+    9
+  ],
+  "pick_up_the_black_bowl_next_to_the_ramekin_and_place_it_on_the_plate": [
+    12,
+    0,
+    1
+  ],
+  "pick_up_the_black_bowl_on_the_cookie_box_and_place_it_on_the_plate": [
+    18,
+    9,
+    1
+  ],
+  "pick_up_the_black_bowl_on_the_ramekin_and_place_it_on_the_plate": [
+    3,
+    16,
+    2
+  ]
+}
