@@ -46,9 +46,12 @@ git の外にあった。**つまり 1 台のマシンにしか無かった。**
 | `robot_initstates_used.json` | 実際に使った初期姿勢 | `generate_scripted.py` |
 | `quota_4000.json` | **40 課題へ何本ずつ配るかの割り当て** | `build_initpose_datasets.sh` |
 | `index.json` | `libero_states`（下ごしらえ用の生 state/action）の索引 | `contact_clean/*` |
+| `head_keep.json` | **配布 `libero_combined_20hz` の先頭 5,186 本から残す 4,822 本** | `build_initpose_datasets.sh`（`STAGE=c`） |
+| `grader_texts.txt` | 指示文を採点器の書き方に寄せるための対照表 | 同上 |
 | `pairs_1.json`・`pairs_10.json`・`pick_demos.json`・`prealign_video_pairs.json`・`*_smoke.json` | 動作確認・見比べ用の小さな組（**組み上げには要らない**） | `render_*.py` |
 
 **組み上げの手順そのものは [../../../../docs/resources/datasets.md](../../../../docs/resources/datasets.md) の 2.1・2.2 節にある。**
+**別のマシンで組み直す手順は [../../../../docs/howto/20_rebuild_l90clean_elsewhere.md](../../../../docs/howto/20_rebuild_l90clean_elsewhere.md) にある**——`build_initpose_datasets.sh` は台帳を `work/regen/` の下で探すので、**置き直す必要がある。**
 
 ## 3. `l90clean` の段（2026-09-18 に台帳を書き出した）
 
