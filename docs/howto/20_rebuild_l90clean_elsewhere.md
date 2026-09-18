@@ -3,7 +3,7 @@
 TOC:
 - [0. このファイルの役割](#0-このファイルの役割)
 - [1. 先に確かめること](#1-先に確かめること)
-- [2. 落とすもの・運ぶもの](#2-落とすもの運ぶもの)
+- [2. 材料を揃える](#2-材料を揃える)
 - [3. 組む](#3-組む)
 - [4. 一致したか確かめる](#4-一致したか確かめる)
 - [5. 通っていないところ](#5-通っていないところ)
@@ -27,14 +27,14 @@ TOC:
 | **ディスクの空き** | `df -h .` | **120 GB 以上**（下の内訳） |
 | git が最新か | `git log --oneline -1` | `solution/tools/regen/rebuild_l90clean.sh` があること |
 | python の環境 | `python3 -c "import pyarrow, numpy, pandas; print('ok')"` | LeRobot v0.6.0 の入った環境 |
-| **配布 tar が運べるか** | — | **`libero_combined_20hz.tar` は HF に無い。**2 節を先に読む |
+| **配布データの版** | `meta/info.json` の `codebase_version` | **`v3.0`。**v2.1 の配布物もあるので取り違えない（2 節） |
 
 **空きの内訳。**
 
 | 何 | 大きさ |
 |---|---|
 | `libero_plus_bowl5_initpose`（落とす） | 22.6 GB |
-| 配布 `libero_combined_20hz`（**運ぶ**・展開する） | tar 21 GB ＋ 展開 20 GB |
+| 配布 `libero_combined_20hz`（落とすか運ぶ・展開する） | tar 21 GB ＋ 展開 20 GB |
 | 親 `libero_combined_bowl5_initpose`（組む） | 27.6 GB |
 | `libero_90_clean`（落とす） | 3.6 GB |
 | 出来上がり（組む） | 27.8 GB |
@@ -44,7 +44,7 @@ TOC:
 （`rebuild_dataset.py` の冒頭に理由がある）。上の「組む」ぶんは、
 メタデータと parquet だけの目安である。
 
-## 2. 落とすもの・運ぶもの
+## 2. 材料を揃える
 
 ```bash
 # 部品（撮り直した実演。これが無いと組めない）
@@ -55,25 +55,40 @@ hf download siruku6/libero_90_clean --repo-type dataset \
 
 ```
 
-**配布データ `libero_combined_20hz` だけは落とせない。**
-**`lerobot/libero_combined_20hz` は Hugging Face に無く、運営が本選で配布した tar が唯一の出どころである**
-（[reference/25 の 31 行](../reference/25_dataset_inventory.md)・[howto/14](14_blackwell_session.md)）。
-**置いてあるのは 2 か所しかない。**
+**配布データ `libero_combined_20hz` は Hugging Face には無いが、配布はされている。**
+**運営が Google Drive でも配っている**
+（[materials/notifications/260914_1000](../materials/notifications/260914_1000_location_of_libero_combined_20hz.txt)）。
+手元やほかの台から運んでもよい。
 
-| 置き場 | 形 |
+| 取り方 | 置き場 |
 |---|---|
-| 会社の RTX6000（`eng003sasaki01`） | `/home/ubuntu/src/train_data/libero_combined_20hz.tar`（21 GB）／展開済み `libero_combined_20hz_extracted/libero_combined_20hz`（20 GB） |
-| Blackwell サーバ | `~/dataset/lerobot/` |
+| **Google Drive から落とす** | 上の通知にリンクがある（Omnicampus の配布環境経由でも取れる） |
+| 会社の RTX6000 から運ぶ | `/home/ubuntu/src/train_data/libero_combined_20hz.tar`（21 GB）／展開済み `libero_combined_20hz_extracted/libero_combined_20hz` |
+| Blackwell サーバから運ぶ | `~/dataset/lerobot/` |
 
-**組む台へは、このどちらかから運ぶ**（`scp` か、外付けに載せる）。
-**運ぶのは tar 1 つで済む**——21 GB である。
+**配布は 2 種類あるので、取り違えないこと。**
+
+| 名前 | LeRobot の版 | 使うか |
+|---|---|---|
+| **`libero_combined_20hz`** | **v3.0** | **こちらを使う** |
+| `libero_combined_20hz_v2` | v2.1 | **使わない** |
+
+**v3.0 でなければならない理由がある。**`rebuild_dataset.py` が動画を作り直さずに済むのは、
+**v3.0 が「1 本の mp4 に何十本ものエピソードを詰め、開始時刻で切り出して読む」形だから**である。
+v2.1 を渡すと、この前提が崩れる。**手元のデータセットはすべて v3.0 で作ってある**
+（`meta/info.json` の `codebase_version` で確かめられる）。
+
+**取ったものが同じかは数で確かめる。**
 
 ```bash
-# 例: RTX6000 から組む台へ
-scp eng003sasaki01:/home/ubuntu/src/train_data/libero_combined_20hz.tar .
-tar xf libero_combined_20hz.tar -C <展開先>
-# $COMBINED は、展開先の中の libero_combined_20hz ディレクトリを指す
+python3 -c "
+import json; i=json.load(open('<展開先>/libero_combined_20hz/meta/info.json'))
+print(i['codebase_version'], i['total_episodes'], i['total_tasks'])"
+# v3.0 19533 111 になること
 ```
+
+**なお、配布の統合データを使わずに `libero_plus` などを個別に落として組み上げることもできる。**
+手間は増えるが、Google Drive を通さずに済む。
 
 **台帳は git に入っているので落とす必要はない。**ただし `build_initpose_datasets.sh` は
 `work/regen/` の下を見るので、**そこへ置き直す。**

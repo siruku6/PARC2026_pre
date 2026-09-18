@@ -1,0 +1,16 @@
+【配布データセット・ベースライン重みのGoogle Driveでの配布について】
+Omnicampusの配布環境経由だけでなく、他の手段でも配布データセットにアクセスしたいとのご要望をいただいたため、Google Driveでの配布を開始しました。
+以下をご確認いただき、必要に応じてご活用ください。
+------------
+■ Google Driveでの配布内容
+
+配布データセット（2種類）
+libero_combined_20hz（LeRobot v3.0）
+ libero_combined_20hz_v2（LeRobot v2.1）
+
+ベースライン重み（ZIPファイル）
+
+
+■ 以下よりアクセスいただけます。
+▶︎ Google Drive：https://drive.google.com/drive/folders/1bVmGmBZSgDUJ9QrcwxAmJlP82s7R6UXx?usp=sharing
+------------

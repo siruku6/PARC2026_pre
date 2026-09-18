@@ -72,7 +72,7 @@ listed by whether they hold any.
 | Class | If lost | Policy |
 |---|---|---|
 | **Re-downloadable** (LIBERO / LIBERO-plus originals) | download again | **do not store** |
-| **Distributed by the organizers** (`libero_combined_20hz.tar`, 21 GB) | **cannot be downloaded again** — it is not on the Hub; the distributed tar is the only source | **keep**, on the two machines that hold it |
+| **Distributed by the organizers** (`libero_combined_20hz`, 21 GB) | **re-downloadable** — not on the Hub, but distributed via Google Drive | **need not be stored**, though it is slow to fetch, so keep it on machines that use it |
 | **Mixtures** (determined by components + manifests + scripts) | rebuildable, given the manifests | **keep only those a published model points to** |
 | **Re-recorded demonstrations** | **never reproducible identically** (requires re-running the scripted policy) | **always keep, as separate components** |
 
