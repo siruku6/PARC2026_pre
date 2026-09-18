@@ -27,10 +27,16 @@
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 
-PARENT="${PARENT:-work/artifacts/libero_combined_bowl5_initpose}"
-POOL="${POOL:-work/artifacts/libero_90_clean}"
-OUT="${OUT:-work/artifacts/libero_combined_bowl5_initpose_l90clean_rebuilt}"
-WORK="${WORK:-work/regen/l90clean_rebuild}"
+# **置き場をまるごと移せる**（`build_initpose_datasets.sh` と同じ約束）。
+WORK_ROOT="${WORK_ROOT:-work}"
+case "$WORK_ROOT" in
+    /*) export MOUNTS="${MOUNTS:-}${MOUNTS:+ }$WORK_ROOT" ;;
+esac
+
+PARENT="${PARENT:-$WORK_ROOT/artifacts/libero_combined_bowl5_initpose}"
+POOL="${POOL:-$WORK_ROOT/artifacts/libero_90_clean}"
+OUT="${OUT:-$WORK_ROOT/artifacts/libero_combined_bowl5_initpose_l90clean_rebuilt}"
+WORK="${WORK:-$WORK_ROOT/regen/l90clean_rebuild}"
 MANIFEST=solution/tools/regen/manifests/l90clean_replace.json
 
 die() { echo "** $1" >&2; [ $# -gt 1 ] && echo "   $2" >&2; exit 1; }
@@ -92,10 +98,11 @@ R solution/tools/regen/merge_many.py \
 
 # **コンテナで書いたものは root のものになる。**走り終えたら持ち主を戻す。
 if [ "$NATIVE" != 1 ] && [ -d "$OUT" ]; then
-    docker run --rm -v "$PWD/$OUT:/out" --entrypoint chown "$IMAGE" \
-        -R "$(id -u):$(id -g)" /out >/dev/null 2>&1 || true
-    docker run --rm -v "$PWD/$WORK:/out" --entrypoint chown "$IMAGE" \
-        -R "$(id -u):$(id -g)" /out >/dev/null 2>&1 || true
+    for d in "$OUT" "$WORK"; do
+        case "$d" in /*) ;; *) d="$PWD/$d" ;; esac
+        docker run --rm -v "$d:/out" --entrypoint chown "$IMAGE" \
+            -R "$(id -u):$(id -g)" /out >/dev/null 2>&1 || true
+    done
 fi
 
 echo "-- 5. 数を突き合わせる"

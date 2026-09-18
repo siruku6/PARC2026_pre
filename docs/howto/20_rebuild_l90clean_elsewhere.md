@@ -47,14 +47,7 @@ TOC:
 
 ## 2. 材料を揃える
 
-```bash
-# 部品（撮り直した実演。これが無いと組めない）
-hf download siruku6/libero_plus_bowl5_initpose --repo-type dataset \
-    --local-dir work/artifacts/libero_plus_bowl5_initpose
-hf download siruku6/libero_90_clean --repo-type dataset \
-    --local-dir work/artifacts/libero_90_clean
-
-```
+**部品（撮り直した実演）は Hugging Face にある。**落とし先は下の「置き場を決める」で決める。
 
 **配布データ `libero_combined_20hz` は Hugging Face には無いが、配布はされている。**
 **運営が Google Drive でも配っている**
@@ -91,14 +84,38 @@ print(i['codebase_version'], i['total_episodes'], i['total_tasks'])"
 **なお、配布の統合データを使わずに `libero_plus` などを個別に落として組み上げることもできる。**
 手間は増えるが、Google Drive を通さずに済む。
 
-**台帳は git に入っているので落とす必要はない。**ただし `build_initpose_datasets.sh` は
-`work/regen/` の下を見るので、**そこへ置き直す。**
+### 置き場を決める
+
+**既定はリポジトリ直下の `work/` だが、`WORK_ROOT` でまるごと移せる。**
+**リポジトリの外——別のディスクでもよい。**
 
 ```bash
-mkdir -p work/regen/combined
-cp solution/tools/regen/manifests/head_keep.json      work/regen/combined/head_keep.json
-cp solution/tools/regen/manifests/keep_replace_v2.json work/regen/keep_replace_v2.json
-cp solution/tools/regen/manifests/grader_texts.txt     work/regen/grader_texts.txt
+export WORK_ROOT=/Volumes/ext/parc_work    # 絶対パスで書く
+```
+
+**絶対パスを渡すと、コンテナにも同じ絶対パスで挿す**ので、中と外で道が一致する。
+`WORK_ROOT` を渡さなければ、これまでどおり `work/` を使う。
+**配布データの置き場（`COMBINED`）も同じで、絶対パスならリポジトリの外で構わない。**
+
+以下、`$WORK_ROOT` と書いてある所は、渡していなければ `work` と読む。
+
+```bash
+hf download siruku6/libero_plus_bowl5_initpose --repo-type dataset \
+    --local-dir "$WORK_ROOT/artifacts/libero_plus_bowl5_initpose"
+hf download siruku6/libero_90_clean --repo-type dataset \
+    --local-dir "$WORK_ROOT/artifacts/libero_90_clean"
+```
+
+### 台帳を置き直す
+
+**台帳は git に入っているので落とす必要はない。**ただしスクリプトは
+`$WORK_ROOT/regen/` の下を見るので、**そこへ写す。**
+
+```bash
+mkdir -p "$WORK_ROOT/regen/combined"
+cp solution/tools/regen/manifests/head_keep.json       "$WORK_ROOT/regen/combined/head_keep.json"
+cp solution/tools/regen/manifests/keep_replace_v2.json "$WORK_ROOT/regen/keep_replace_v2.json"
+cp solution/tools/regen/manifests/grader_texts.txt     "$WORK_ROOT/regen/grader_texts.txt"
 ```
 
 ## 3. 組む
@@ -182,7 +199,7 @@ GPUS= IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \
 | | |
 |---|---|
 | リポジトリ | `-v <リポジトリ>:/workspace/repo -w /workspace/repo` で丸ごと挿す |
-| **だから出力はリポジトリの下に置く** | `work/artifacts/...` のままでよい。**リポジトリの外を指すと中から見えない** |
+| リポジトリの外を使いたいとき | **`MOUNTS` に絶対パスを空白区切りで渡すと、中にも同じ絶対パスで挿す。**`WORK_ROOT` と `COMBINED` は、絶対パスなら自動で渡る |
 | 入り口 | `--entrypoint python`。**渡すのは python スクリプトの引数**である |
 | 持ち主 | **コンテナは root で走るので、書いたファイルは root のものになる。**`CHOWN_PATH` を渡すと走り終えたあとに戻す |
 

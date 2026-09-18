@@ -43,7 +43,8 @@ else
     R()     { IMAGE="$IMAGE" bash solution/tools/regen/run_in_container.sh "$@"; }
     pyrun() { IMAGE="$IMAGE" bash solution/tools/regen/run_in_container.sh "$@"; }
 fi
-own() { docker run --rm -v "$PWD/$1:/out" --entrypoint chown "$IMAGE" \
+own() { case "$1" in /*) d="$1" ;; *) d="$PWD/$1" ;; esac
+        docker run --rm -v "$d:/out" --entrypoint chown "$IMAGE" \
             -R "$(id -u):$(id -g)" /out >/dev/null 2>&1 || true; }
 die() { echo; echo "**止まった: $1**"; shift; for l in "$@"; do echo "  $l"; done; exit 1; }
 # **`date -Is` は GNU にしか無い**（macOS の BSD date は -I を取らない）。
@@ -72,18 +73,31 @@ field() { python3 -c "import json;print(json.load(open('$1/meta/info.json'))['$2
 
 STAGE="${STAGE:-all}"
 UPLOAD="${UPLOAD:-0}"
-BOWL5=work/artifacts/libero_plus_bowl5
-KEEP=work/regen/keep_replace_v2.json
-WORK=work/regen/assembly
+# **置き場をまるごと移せる。**`WORK_ROOT` に絶対パスを渡せば、材料も出来上がりも
+# そこに集まる（既定はリポジトリ直下の `work`）。**リポジトリの外を指したときは、
+# コンテナにも同じ絶対パスで挿す**ので、中と外で道が一致する。
+#   WORK_ROOT=/Volumes/ext/parc_work bash solution/tools/regen/build_initpose_datasets.sh
+WORK_ROOT="${WORK_ROOT:-work}"
+case "$WORK_ROOT" in
+    /*) export MOUNTS="${MOUNTS:-}${MOUNTS:+ }$WORK_ROOT" ;;
+esac
+
+BOWL5=$WORK_ROOT/artifacts/libero_plus_bowl5
+KEEP=$WORK_ROOT/regen/keep_replace_v2.json
+WORK=$WORK_ROOT/regen/assembly
 BASE=$WORK/bowl5_keep
-P=work/artifacts/libero_plus_bowl5_initpose
+P=$WORK_ROOT/artifacts/libero_plus_bowl5_initpose
 P_REPO=siruku6/libero_plus_bowl5_initpose
 COMBINED="${COMBINED:-/home/ubuntu/src/train_data/libero_combined_20hz_extracted/libero_combined_20hz}"
-HEAD_KEEP=work/regen/combined/head_keep.json
+# **配布データもリポジトリの外で構わない。**絶対パスならコンテナへ同じ道で挿す。
+case "$COMBINED" in
+    /*) export MOUNTS="${MOUNTS:-}${MOUNTS:+ }$COMBINED" ;;
+esac
+HEAD_KEEP=$WORK_ROOT/regen/combined/head_keep.json
 HEAD=$WORK/combined_head
-C=work/artifacts/libero_combined_bowl5_initpose
+C=$WORK_ROOT/artifacts/libero_combined_bowl5_initpose
 C_REPO=siruku6/libero_combined_bowl5_initpose
-GRADER=work/regen/grader_texts.txt
+GRADER=$WORK_ROOT/regen/grader_texts.txt
 mkdir -p "$WORK"
 
 gripper_gate() {   # $1 = データセット。指の値が ±1 だけか（全コマ）
@@ -131,14 +145,14 @@ print('  上げ先 $2（private=$3）')" || die "上げ先を作れない"
 # ================================================================= P
 if [ "$STAGE" = p ] || [ "$STAGE" = all ]; then
     step "P0. 撃ち直しの全塊の変換が終わるのを待つ"
-    until grep -q "=== 出来たもの ===" work/regen/logs/init_pose_v2.log; do sleep 120; done
+    until grep -q "=== 出来たもの ===" "$WORK_ROOT/regen/logs/init_pose_v2.log"; do sleep 120; done
     # **部品の一覧は PARTS_FILE（1 行 1 ディレクトリ）で差し替えられる。**9/14 夜に「止めて待つ」39 本を
     # 撃ち直したときは、元の塊から 39 本を抜いた部品と撃ち直した部品を並べた一覧を渡した（work/regen/release/parts.txt）。
     if [ -n "${PARTS_FILE:-}" ]; then
         mapfile -t PARTS < <(grep -v '^\s*$' "$PARTS_FILE")
     else
-        mapfile -t PARTS < <(ls -d work/regen/lerobot_init_pose_v2/c*/ | sed 's:/$::'; \
-                             echo work/regen/lerobot_scripted_v2; echo work/regen/lerobot_merged_v2)
+        mapfile -t PARTS < <(ls -d "$WORK_ROOT"/regen/lerobot_init_pose_v2/c*/ | sed 's:/$::'; \
+                             echo "$WORK_ROOT/regen/lerobot_scripted_v2"; echo "$WORK_ROOT/regen/lerobot_merged_v2")
         [ "${#PARTS[@]}" = 19 ] || die "部品が 19 個でない（${#PARTS[@]} 個）" "塊が欠けていないか ls する"
     fi
     ADD_EPS=0; ADD_FRAMES=0
