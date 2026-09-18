@@ -59,16 +59,6 @@ if [ -d "$VENDOR" ]; then
                   -e "PYTHONPATH=/vendor:/workspace/LIBERO-plus:/workspace:/workspace/compe")
 fi
 
-# **リポジトリの外に出したいものは `MOUNTS` で渡す**（空白区切り。中の見え方は
-# ホストと同じ絶対パスにするので、渡す側は絶対パスで書けばそのまま通じる）。
-#   MOUNTS="/Volumes/ext/parc_work" bash run_in_container.sh ...
-EXTRA=()
-for path in ${MOUNTS:-}; do
-    [ -e "$path" ] || { echo "MOUNTS に無い道: $path" >&2; exit 1; }
-    abs="$(cd "$(dirname "$path")" && pwd)/$(basename "$path")"
-    EXTRA+=(-v "$abs:$abs")
-done
-
 status=0
 # **`-i` を付けてある。**`python - <<PY` の形で渡す使い方があるので、
 # 標準入力を繋いでおく（`-t` は付けない。走らせる先は端末ではない）。
@@ -77,7 +67,6 @@ docker run --rm -i ${GPUS} \
     -e OMP_NUM_THREADS=1 -e MKL_NUM_THREADS=1 \
     "${PASS_THROUGH[@]+"${PASS_THROUGH[@]}"}" \
     "${VENDOR_MOUNT[@]+"${VENDOR_MOUNT[@]}"}" \
-    "${EXTRA[@]+"${EXTRA[@]}"}" \
     -v "$REPOSITORY_ROOT:/workspace/repo" \
     -w /workspace/repo \
     --entrypoint python \
