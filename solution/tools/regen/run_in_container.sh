@@ -12,9 +12,18 @@ GL="${GL:-egl}"
 # データの組み上げ（`merge_many.py`・`rebuild_dataset.py`）は GPU を使わないので、
 # 外しても結果は変わらない。物理を回す道具は GPU が要る。
 #
-# **`:-` ではなく `-` である。**`:-` は「空」も「未設定」と同じ扱いにするので、
-# `GPUS=` を渡しても既定へ戻ってしまう（2026-09-18 に実際に踏んだ）。
-GPUS="${GPUS-"--gpus all"}"
+# **渡されなければ自分で見る。**`GPUS` を明示したときはそれに従い（空なら付けない）、
+# 何も言われていないときだけ nvidia ランタイムの有無で決める。
+# **`:-` ではなく `+set` で見ているのは、`:-` が「空」も「未設定」と同じ扱いに
+# するからである**（`GPUS=` を渡しても既定へ戻ってしまう。2026-09-18 に実際に踏んだ）。
+if [ -z "${GPUS+set}" ]; then
+    if docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q nvidia; then
+        GPUS="--gpus all"
+    else
+        GPUS=""
+        echo "run_in_container.sh: nvidia ランタイムが見えないので --gpus all を付けない" >&2
+    fi
+fi
 
 # コンテナは root で走るので、書いたファイルは root のものになる。
 # **`CHOWN_PATH` を渡すと、走り終えたあとに持ち主を戻す**（`run_final_eval.sh` と同じ手）。
