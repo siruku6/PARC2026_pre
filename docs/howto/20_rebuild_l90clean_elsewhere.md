@@ -3,7 +3,7 @@
 TOC:
 - [0. このファイルの役割](#0-このファイルの役割)
 - [1. 先に確かめること](#1-先に確かめること)
-- [2. 落とすもの](#2-落とすもの)
+- [2. 落とすもの・運ぶもの](#2-落とすもの運ぶもの)
 - [3. 組む](#3-組む)
 - [4. 一致したか確かめる](#4-一致したか確かめる)
 - [5. 通っていないところ](#5-通っていないところ)
@@ -27,13 +27,14 @@ TOC:
 | **ディスクの空き** | `df -h .` | **120 GB 以上**（下の内訳） |
 | git が最新か | `git log --oneline -1` | `solution/tools/regen/rebuild_l90clean.sh` があること |
 | python の環境 | `python3 -c "import pyarrow, numpy, pandas; print('ok')"` | LeRobot v0.6.0 の入った環境 |
+| **配布 tar が運べるか** | — | **`libero_combined_20hz.tar` は HF に無い。**2 節を先に読む |
 
 **空きの内訳。**
 
 | 何 | 大きさ |
 |---|---|
 | `libero_plus_bowl5_initpose`（落とす） | 22.6 GB |
-| 配布 `libero_combined_20hz`（落とす・展開する） | 約 30 GB |
+| 配布 `libero_combined_20hz`（**運ぶ**・展開する） | tar 21 GB ＋ 展開 20 GB |
 | 親 `libero_combined_bowl5_initpose`（組む） | 27.6 GB |
 | `libero_90_clean`（落とす） | 3.6 GB |
 | 出来上がり（組む） | 27.8 GB |
@@ -43,7 +44,7 @@ TOC:
 （`rebuild_dataset.py` の冒頭に理由がある）。上の「組む」ぶんは、
 メタデータと parquet だけの目安である。
 
-## 2. 落とすもの
+## 2. 落とすもの・運ぶもの
 
 ```bash
 # 部品（撮り直した実演。これが無いと組めない）
@@ -52,8 +53,26 @@ hf download siruku6/libero_plus_bowl5_initpose --repo-type dataset \
 hf download siruku6/libero_90_clean --repo-type dataset \
     --local-dir work/artifacts/libero_90_clean
 
-# 配布データ（標準スイートと libero_90 の元）
-#   置き場は $COMBINED で渡す。展開した tar の中の libero_combined_20hz を指す
+```
+
+**配布データ `libero_combined_20hz` だけは落とせない。**
+**`lerobot/libero_combined_20hz` は Hugging Face に無く、運営が本選で配布した tar が唯一の出どころである**
+（[reference/25 の 31 行](../reference/25_dataset_inventory.md)・[howto/14](14_blackwell_session.md)）。
+**置いてあるのは 2 か所しかない。**
+
+| 置き場 | 形 |
+|---|---|
+| 会社の RTX6000（`eng003sasaki01`） | `/home/ubuntu/src/train_data/libero_combined_20hz.tar`（21 GB）／展開済み `libero_combined_20hz_extracted/libero_combined_20hz`（20 GB） |
+| Blackwell サーバ | `~/dataset/lerobot/` |
+
+**組む台へは、このどちらかから運ぶ**（`scp` か、外付けに載せる）。
+**運ぶのは tar 1 つで済む**——21 GB である。
+
+```bash
+# 例: RTX6000 から組む台へ
+scp eng003sasaki01:/home/ubuntu/src/train_data/libero_combined_20hz.tar .
+tar xf libero_combined_20hz.tar -C <展開先>
+# $COMBINED は、展開先の中の libero_combined_20hz ディレクトリを指す
 ```
 
 **台帳は git に入っているので落とす必要はない。**ただし `build_initpose_datasets.sh` は
@@ -74,7 +93,7 @@ cp solution/tools/regen/manifests/grader_texts.txt     work/regen/grader_texts.t
 ```bash
 # 前段: 親 libero_combined_bowl5_initpose を作る
 #   STAGE=p は飛ばす——その出力 libero_plus_bowl5_initpose は HF から落としてある
-COMBINED=<展開した配布 tar>/libero_combined_20hz \
+COMBINED=<2 節で展開した先>/libero_combined_20hz \
 STAGE=c bash solution/tools/regen/build_initpose_datasets.sh
 
 # 後段: 汚れた 250 本を外し、綺麗な 250 本を末尾に足す
