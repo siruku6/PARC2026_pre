@@ -51,7 +51,9 @@ if [ -d "$VENDOR" ]; then
 fi
 
 status=0
-docker run --rm ${GPUS} \
+# **`-i` を付けてある。**`python - <<PY` の形で渡す使い方があるので、
+# 標準入力を繋いでおく（`-t` は付けない。走らせる先は端末ではない）。
+docker run --rm -i ${GPUS} \
     -e "MUJOCO_GL=${GL}" -e PYTHONUNBUFFERED=1 \
     -e OMP_NUM_THREADS=1 -e MKL_NUM_THREADS=1 \
     "${PASS_THROUGH[@]+"${PASS_THROUGH[@]}"}" \

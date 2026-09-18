@@ -26,8 +26,8 @@ TOC:
 |---|---|---|
 | **ディスクの空き** | `df -h .` | **120 GB 以上**（下の内訳） |
 | git が最新か | `git log --oneline -1` | `solution/tools/regen/rebuild_l90clean.sh` があること |
-| 素の python | `python3 -c "import pyarrow, numpy, pandas; print('ok')'"` | `rebuild_dataset.py` はこれだけで動く |
-| **lerobot の入った環境** | `docker image inspect parc2026-train-pi05` | **`merge_many.py` と `npz_to_lerobot.py` が `lerobot` を import する。**無ければ 3 節で立てる（`NATIVE=1` で素の python にもできる） |
+| 素の python | `python3 -c "import json; print('ok')"` | **標準ライブラリだけあればよい。**数を数える所しか使わない |
+| **コンテナ** | `docker image inspect parc2026-train-pi05` | **numpy・pyarrow・pandas・lerobot が要る呼び出しはすべてここへ回る。**無ければ 3 節で立てる（自分で環境を用意したなら `NATIVE=1`） |
 | **配布データの版** | `meta/info.json` の `codebase_version` | **`v3.0`。**v2.1 の配布物もあるので取り違えない（2 節） |
 
 **空きの内訳。**
@@ -108,12 +108,20 @@ cp solution/tools/regen/manifests/grader_texts.txt     work/regen/grader_texts.t
 | 要るもの | なぜ | 無いときの代わり |
 |---|---|---|
 | `solution/` 以下（git） | 台帳もスクリプトもここに入っている | — |
-| **Docker イメージ `parc2026-train-pi05`** | **`merge_many.py` と `npz_to_lerobot.py align` が `lerobot` を import する** | **lerobot v0.6.0 を入れて `NATIVE=1`**（`rebuild_l90clean.sh` のみ対応） |
+| **Docker イメージ `parc2026-train-pi05`** | **重い処理はすべてこの中で回る**（下） | **自分で環境を用意して `NATIVE=1`** |
 | 配布データ `libero_combined_20hz` | 標準スイートと `libero_90` の元 | 2 節 |
 | HF の部品 2 つ | 撮り直した実演 | 2 節 |
 
-**`rebuild_dataset.py` は `numpy`・`pyarrow`・`pandas` だけで動く**ので、
-外す・抜くの段はコンテナが無くても通る。**繋ぐ段だけが lerobot を要る。**
+**手元の python3 には何も入れなくてよい。**必要なものは 2 段階に分かれていて、
+**どちらもコンテナへ回すようにしてある。**
+
+| 何が要るか | どの呼び出しか |
+|---|---|
+| `numpy`・`pyarrow`・`pandas` | `rebuild_dataset.py`（外す・抜く）・`fix_gripper_encoding.py`・門の判定 |
+| 上に加えて `lerobot` | `merge_many.py`（繋ぐ）・`npz_to_lerobot.py align` |
+
+**手元の python3 を使うのは、`meta/info.json` の数を読む所だけである**（標準ライブラリのみ）。
+**`NATIVE=1` を渡すと全部を手元の python3 で回す**——上の 4 つを自分で入れている場合だけ。
 
 ### コンテナを立てる
 

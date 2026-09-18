@@ -37,10 +37,15 @@ die() { echo "** $1" >&2; [ $# -gt 1 ] && echo "   $2" >&2; exit 1; }
 # **lerobot が要るものはコンテナで回す。**`rebuild_dataset.py` は numpy と pyarrow
 # だけなので素の python でよい（だから下で使い分けている）。
 NATIVE="${NATIVE:-0}"
+IMAGE="${IMAGE:-parc2026-train-pi05}"
 if [ "$NATIVE" = 1 ]; then
-    R() { python3 "$@"; }
+    R()     { python3 "$@"; }
+    pyrun() { python3 "$@"; }
 else
-    R() { IMAGE="${IMAGE:-parc2026-train-pi05}" bash solution/tools/regen/run_in_container.sh "$@"; }
+    # **`rebuild_dataset.py` は numpy・pyarrow・pandas を要る。**素の python3 に
+    # それが入っている保証は無いので、既定ではこれもコンテナへ回す。
+    R()     { IMAGE="$IMAGE" bash solution/tools/regen/run_in_container.sh "$@"; }
+    pyrun() { IMAGE="$IMAGE" bash solution/tools/regen/run_in_container.sh "$@"; }
 fi
 [ -d "$PARENT/meta" ] || die "親が無い: $PARENT" "build_initpose_datasets.sh STAGE=c で作る"
 [ -d "$POOL/meta" ]   || die "部品が無い: $POOL" "hf download siruku6/libero_90_clean --repo-type dataset --local-dir $POOL"
@@ -72,11 +77,11 @@ print(f"   残す {len(kept)} 本 / 足す {len(sources)} 本")
 PY
 
 echo "-- 2. 親から 250 本を外す"
-python3 solution/tools/contact_clean/rebuild_dataset.py \
+pyrun solution/tools/contact_clean/rebuild_dataset.py \
     --root "$PARENT" --output "$WORK/parent_kept" --keep-file "$WORK/keep_parent.json"
 
 echo "-- 3. 部品から 250 本を台帳の順に抜く"
-python3 solution/tools/contact_clean/rebuild_dataset.py \
+pyrun solution/tools/contact_clean/rebuild_dataset.py \
     --root "$POOL" --output "$WORK/replacements" --keep-file "$WORK/keep_pool.json"
 
 echo "-- 4. 末尾に繋ぐ（lerobot が要るのでコンテナで回す）"
@@ -84,6 +89,14 @@ R solution/tools/regen/merge_many.py \
     --base "$WORK/parent_kept" --base-repo-id local/l90clean_base \
     --add "$WORK/replacements" \
     --output "$OUT" --output-repo-id local/libero_combined_bowl5_initpose_l90clean
+
+# **コンテナで書いたものは root のものになる。**走り終えたら持ち主を戻す。
+if [ "$NATIVE" != 1 ] && [ -d "$OUT" ]; then
+    docker run --rm -v "$PWD/$OUT:/out" --entrypoint chown "$IMAGE" \
+        -R "$(id -u):$(id -g)" /out >/dev/null 2>&1 || true
+    docker run --rm -v "$PWD/$WORK:/out" --entrypoint chown "$IMAGE" \
+        -R "$(id -u):$(id -g)" /out >/dev/null 2>&1 || true
+fi
 
 echo "-- 5. 数を突き合わせる"
 python3 - "$OUT" "$MANIFEST" <<'PY'

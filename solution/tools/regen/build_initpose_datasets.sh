@@ -29,11 +29,45 @@
 set -uo pipefail
 
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-R() { IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh "$@"; }
-own() { docker run --rm -v "$PWD/$1:/out" --entrypoint chown parc2026-final \
+
+# **素の python3 には頼らない。** numpy・pyarrow・pandas が要る呼び出しは
+# すべてコンテナへ回す（`pyrun`）。lerobot が要るものは `R`。
+# **`NATIVE=1` を渡すと両方とも手元の python3 で走る**——lerobot と
+# numpy/pyarrow/pandas の入った環境を自分で用意している場合だけ。
+IMAGE="${IMAGE:-parc2026-train-pi05}"
+NATIVE="${NATIVE:-0}"
+if [ "$NATIVE" = 1 ]; then
+    R()     { python3 "$@"; }
+    pyrun() { python3 "$@"; }
+else
+    R()     { IMAGE="$IMAGE" bash solution/tools/regen/run_in_container.sh "$@"; }
+    pyrun() { IMAGE="$IMAGE" bash solution/tools/regen/run_in_container.sh "$@"; }
+fi
+own() { docker run --rm -v "$PWD/$1:/out" --entrypoint chown "$IMAGE" \
             -R "$(id -u):$(id -g)" /out >/dev/null 2>&1 || true; }
 die() { echo; echo "**止まった: $1**"; shift; for l in "$@"; do echo "  $l"; done; exit 1; }
-step() { echo; echo "=== $* === $(date -Is)"; }
+# **`date -Is` は GNU にしか無い**（macOS の BSD date は -I を取らない）。
+step() { echo; echo "=== $* === $(date '+%Y-%m-%dT%H:%M:%S%z')"; }
+
+# **ハードリンクで木を写す。** `cp -al` は GNU の書き方で、macOS の cp には無い。
+# 写し（実体のコピー）にならないよう、ハードリンクを張れる手を順に試す。
+hardlink_tree() {   # $1 = 元  $2 = 先
+    cp -al "$1" "$2" 2>/dev/null && return 0
+    rm -rf "$2"
+    mkdir -p "$2" && (cd "$1" && pax -rw -l . "$OLDPWD/$2") 2>/dev/null && return 0
+    rm -rf "$2"
+    python3 - "$1" "$2" <<'PY'
+import os, sys
+src, dst = sys.argv[1:3]
+for root, _, files in os.walk(src):
+    out = os.path.join(dst, os.path.relpath(root, src))
+    os.makedirs(out, exist_ok=True)
+    for name in files:
+        target = os.path.join(out, name)
+        if not os.path.exists(target):
+            os.link(os.path.join(root, name), target)
+PY
+}
 field() { python3 -c "import json;print(json.load(open('$1/meta/info.json'))['$2'])" 2>/dev/null || echo 0; }
 
 STAGE="${STAGE:-all}"
@@ -53,7 +87,7 @@ GRADER=work/regen/grader_texts.txt
 mkdir -p "$WORK"
 
 gripper_gate() {   # $1 = データセット。指の値が ±1 だけか（全コマ）
-    python3 - "$1" <<'PY'
+    pyrun - "$1" <<'PY'
 import glob, sys
 import numpy as np, pyarrow.parquet as pq
 values = set()
@@ -65,7 +99,7 @@ sys.exit(0 if values <= {-1.0, 1.0} else 1)
 PY
 }
 stats_gate() {     # $1 = 組んだもの  $2 = 比べる相手。std が 2 倍以上動いたら止める
-    python3 - "$1" "$2" <<'PY'
+    pyrun - "$1" "$2" <<'PY'
 import json, sys
 import numpy as np
 out, ref = (json.load(open(f"{p}/meta/stats.json")) for p in sys.argv[1:3])
@@ -118,7 +152,7 @@ if [ "$STAGE" = p ] || [ "$STAGE" = all ]; then
     step "P1. 土台から 1,532 本を外す（動画はハードリンク）"
     if [ "$(field "$BASE" total_episodes)" != 12553 ]; then
         rm -rf "$BASE"
-        python3 solution/tools/contact_clean/rebuild_dataset.py --root "$BOWL5" --output "$BASE" \
+        pyrun solution/tools/contact_clean/rebuild_dataset.py --root "$BOWL5" --output "$BASE" \
             --keep-file "$KEEP" || die "外せない"
     fi
     [ "$(field "$BASE" total_episodes)" = 12553 ] || die "残りが 12,553 本でない"
@@ -147,7 +181,7 @@ if [ "$STAGE" = p ] || [ "$STAGE" = all ]; then
     step "P 門 3. 指の値が ±1 だけか（生成の「止めて待つ」コマの 0 を直前の値で埋めてから見る）"
     # 9/14 までの生成は、撃ち切ってもゴールが立たないと行動 7 次元すべて 0 で待っていた（39 本・238 コマ）。
     # 何度打っても同じ結果になる（埋める 0 が無ければ何もしない）。
-    python3 solution/tools/regen/fix_gripper_encoding.py --root "$P" --mode hold || die "指の 0 を埋められない"
+    pyrun solution/tools/regen/fix_gripper_encoding.py --root "$P" --mode hold || die "指の 0 を埋められない"
     gripper_gate "$P" || die "P 門 3 で落ちた"
     step "P 門 4. 正規化の尺度（libero_plus_bowl5 と比べる）"
     stats_gate "$P" "$BOWL5" || die "P 門 4 で落ちた"
@@ -165,12 +199,12 @@ if [ "$STAGE" = c ] || [ "$STAGE" = all ]; then
     step "C1. combined の先頭から残す $HEAD_EPS 本を抜く（動画はハードリンク）"
     if [ "$(field "$HEAD" total_episodes)" != "$HEAD_EPS" ]; then
         rm -rf "$HEAD"
-        python3 solution/tools/contact_clean/rebuild_dataset.py --root "$COMBINED" --output "$HEAD" \
+        pyrun solution/tools/contact_clean/rebuild_dataset.py --root "$COMBINED" --output "$HEAD" \
             --keep-file "$HEAD_KEEP" || die "抜けない"
         [ "$(field "$HEAD" total_episodes)" = "$HEAD_EPS" ] || die "抜いた本数が違う"
         step "C2. 指の値を ±1 に直す"
-        python3 solution/tools/regen/fix_gripper_encoding.py --root "$HEAD" || die "直せない"
-        python3 solution/tools/track3_reversal/link_video_index_width.py --root "$HEAD" \
+        pyrun solution/tools/regen/fix_gripper_encoding.py --root "$HEAD" || die "直せない"
+        pyrun solution/tools/track3_reversal/link_video_index_width.py --root "$HEAD" \
             || die "動画の名前の桁を揃えられない"
     fi
     gripper_gate "$HEAD" || die "先頭に ±1 以外が残っている" "rm -rf $HEAD して打ち直す"
@@ -186,7 +220,7 @@ if [ "$STAGE" = c ] || [ "$STAGE" = all ]; then
     fi
 
     step "C 門 1. 本数・コマ数・課題数"
-    WANT_TASKS=$(python3 - "$P" "$HEAD" <<'PY'
+    WANT_TASKS=$(pyrun - "$P" "$HEAD" <<'PY'
 import sys, pyarrow.parquet as pq
 names = set()
 for root in sys.argv[1:3]:
@@ -207,11 +241,11 @@ PY
     step "C 門 4. 繋いだ先頭が、元の combined と同じコマを指しているか（画素・state・指の直し）"
     # コンテナから見えるのはリポジトリだけなので、元データをハードリンクで置く（容量は増えない）。
     LINK=$WORK/combined_link
-    [ -f "$LINK/meta/info.json" ] || cp -al "$COMBINED" "$LINK" || die "ハードリンクを張れない"
+    [ -f "$LINK/meta/info.json" ] || hardlink_tree "$COMBINED" "$LINK" || die "ハードリンクを張れない"
     R solution/tools/regen/verify_appended_frames.py --merged "$C" --offset "$(field "$P" total_episodes)" \
         --source "$LINK" --keep-file "$HEAD_KEEP" --expect-gripper-fix || die "C 門 4 で落ちた"
     expected "$C"
     echo "  大きさ $(du -sh "$C" | cut -f1)"
     [ "$UPLOAD" = 1 ] && { step "C を上げる（非公開）"; upload "$C" "$C_REPO" True; }
 fi
-echo; echo "END_OF_BUILD $(date -Is)"
+echo; echo "END_OF_BUILD $(date '+%Y-%m-%dT%H:%M:%S%z')"
