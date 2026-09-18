@@ -186,10 +186,11 @@ GPUS= IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \
 | 入り口 | `--entrypoint python`。**渡すのは python スクリプトの引数**である |
 | 持ち主 | **コンテナは root で走るので、書いたファイルは root のものになる。**`CHOWN_PATH` を渡すと走り終えたあとに戻す |
 
-**詰まりやすいのは 2 つである。**
+**詰まりやすいのは 3 つである。**
 
 | 症状 | 理由と手当て |
 |---|---|
+| 印字の途中で、何も言わずに止まる | **コンテナが殺されている。**終了コード 137 なら Docker に割り当てたメモリ不足。**Docker Desktop の既定は小さい**（2026-09-18 の Mac で 1.9 GB だった）。`docker info --format '{{.MemTotal}}'` で見て、Settings → Resources で **8 GB 以上**にする |
 | `could not select device driver "" with capabilities: [[gpu]]` | `run_in_container.sh` が既定で `--gpus all` を付けている。**`GPUS=` を頭に付けて外す**（上の確認の一行と同じ形）。繋ぐ段に GPU は要らない |
 | 出来たファイルが root のもので消せない | `CHOWN_PATH=<出力先> IMAGE=... bash solution/tools/regen/run_in_container.sh ...` で戻す。**`rebuild_l90clean.sh` は渡していない**ので、走り終えたあとに `sudo chown -R "$(id -u):$(id -g)" work/` が要ることがある |
 

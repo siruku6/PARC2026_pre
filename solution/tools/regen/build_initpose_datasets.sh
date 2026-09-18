@@ -80,7 +80,14 @@ for root, _, files in os.walk(src):
             os.link(os.path.join(root, name), target)
 PY
 }
-field() { python3 -c "import json;print(json.load(open('$1/meta/info.json'))['$2'])" 2>/dev/null || echo 0; }
+# **必ず数を返す。**空を返すと、呼んだ先の `$(( ))` が構文エラーで落ち、
+# 代入されなかった変数を次の行が読んで `unbound variable` になる——
+# **本当の原因（データセットが出来ていない）が見えなくなる**（2026-09-18 に踏んだ）。
+field() {
+    v=$(python3 -c "import json;print(json.load(open('$1/meta/info.json'))['$2'])" 2>/dev/null) || v=0
+    case "$v" in ''|*[!0-9]*) v=0 ;; esac
+    echo "$v"
+}
 
 STAGE="${STAGE:-all}"
 UPLOAD="${UPLOAD:-0}"
