@@ -7,6 +7,12 @@ REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 IMAGE="${IMAGE:-parc2026-final}"
 GL="${GL:-egl}"
 
+# **GPU の無い台では `GPUS=` を渡して外す。**付けたまま GPU が無いと
+# `could not select device driver "" with capabilities: [[gpu]]` で起動しない。
+# データの組み上げ（`merge_many.py`・`rebuild_dataset.py`）は GPU を使わないので、
+# 外しても結果は変わらない。物理を回す道具は GPU が要る。
+GPUS="${GPUS:---gpus all}"
+
 # コンテナは root で走るので、書いたファイルは root のものになる。
 # **`CHOWN_PATH` を渡すと、走り終えたあとに持ち主を戻す**（`run_final_eval.sh` と同じ手）。
 CHOWN_PATH="${CHOWN_PATH:-}"
@@ -42,7 +48,7 @@ if [ -d "$VENDOR" ]; then
 fi
 
 status=0
-docker run --rm --gpus all \
+docker run --rm ${GPUS} \
     -e "MUJOCO_GL=${GL}" -e PYTHONUNBUFFERED=1 \
     -e OMP_NUM_THREADS=1 -e MKL_NUM_THREADS=1 \
     "${PASS_THROUGH[@]+"${PASS_THROUGH[@]}"}" \

@@ -158,21 +158,16 @@ Dockerfile.pi05:116
 `lerobot.datasets` だけである。**`WITH_QUANT=0` で飛ばした像は学習には使えないが、
 繋ぐ段には使える。**
 
-**それでも駄目なら x86_64 を翻訳して回す。**時間はかかるが、
-上げてある像がそのまま使える。
-
-```bash
-docker pull --platform linux/amd64 sirukufarios/parc2026-train-pi05:v2
-docker tag  sirukufarios/parc2026-train-pi05:v2 parc2026-train-pi05
-```
-
 **立てられたか確かめる。**
 
 ```bash
-IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \
+GPUS= IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \
     -c "import lerobot; print(lerobot.__version__)"
 # 0.6.0 と出れば通っている
 ```
+
+**`GPUS=` は「GPU を渡さない」という意味である。**GPU のある台では外してよい。
+組み上げは GPU を使わないので、付けなくても結果は変わらない。
 
 **コンテナの中で何が起きるか**（`run_in_container.sh` が組み立てる）。
 
@@ -187,7 +182,7 @@ IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \
 
 | 症状 | 理由と手当て |
 |---|---|
-| `could not select device driver "" with capabilities: [[gpu]]` | `run_in_container.sh` が **`--gpus all` を付けている。**繋ぐ段に GPU は要らないので、**GPU の無い台では `--gpus all` を外した写しを使う**（`sed 's/--gpus all //' solution/tools/regen/run_in_container.sh > /tmp/run_nogpu.sh`） |
+| `could not select device driver "" with capabilities: [[gpu]]` | `run_in_container.sh` が既定で `--gpus all` を付けている。**`GPUS=` を頭に付けて外す**（上の確認の一行と同じ形）。繋ぐ段に GPU は要らない |
 | 出来たファイルが root のもので消せない | `CHOWN_PATH=<出力先> IMAGE=... bash solution/tools/regen/run_in_container.sh ...` で戻す。**`rebuild_l90clean.sh` は渡していない**ので、走り終えたあとに `sudo chown -R "$(id -u):$(id -g)" work/` が要ることがある |
 
 
@@ -202,6 +197,7 @@ COMBINED=<2 節で展開した先>/libero_combined_20hz \
 STAGE=c bash solution/tools/regen/build_initpose_datasets.sh
 
 # 後段: 汚れた 250 本を外し、綺麗な 250 本を末尾に足す
+GPUS= IMAGE=parc2026-train-pi05 \
 PARENT=work/artifacts/libero_combined_bowl5_initpose \
 POOL=work/artifacts/libero_90_clean \
 bash solution/tools/regen/rebuild_l90clean.sh
