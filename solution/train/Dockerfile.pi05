@@ -113,8 +113,22 @@ RUN mkdir -p /tmp/torchinductor_trainer && chmod 1777 /tmp/torchinductor_trainer
 # - torchao は最新 0.18.0 が torch 2.12（nightly）向けのビルドで、この
 #   torch==2.11.0+cu128 に対しては 0.17.0 が対応版
 #   （github.com/pytorch/ao/issues/2919 の対応表、2026-08-20 確認）。
-RUN pip install --no-cache-dir "bitsandbytes==0.49.2" \
-    && pip install --no-cache-dir "torchao==0.17.0" --index-url ${TORCH_INDEX}
+#
+# **`--build-arg WITH_QUANT=0` で丸ごと飛ばせる（既定は 1 ＝ 従来と同じ）。**
+# 飛ばした像は**学習には使えない**が、`merge_many.py` などデータ組み上げ側は
+# `lerobot.datasets` しか import しないので通る。飛ばす必要があるのは
+# **arm64（Apple Silicon）で組むとき**である —— `download.pytorch.org/whl/cu128`
+# には torchao の aarch64 wheel が無く、`No matching distribution found for
+# torchao==0.17.0` でここだけが落ちる（2026-09-18 に Mac で確認）。
+# x86_64 の像が欲しいなら `--platform linux/amd64` でも回避できるが、
+# Rosetta の翻訳ぶん遅くなる。
+ARG WITH_QUANT=1
+RUN if [ "${WITH_QUANT}" = "1" ]; then \
+        pip install --no-cache-dir "bitsandbytes==0.49.2" \
+        && pip install --no-cache-dir "torchao==0.17.0" --index-url ${TORCH_INDEX}; \
+    else \
+        echo "WITH_QUANT=0: 量子化ライブラリを入れない（この像は学習に使えない）"; \
+    fi
 
 RUN python -c "\
 import torch, torchcodec, torchvision; \
@@ -127,10 +141,10 @@ print(f'torch {torch.__version__} / torchcodec {torchcodec.__version__} '\
 # 実際に動く（8bit optimizer の step・4bit 量子化・float8 変換）かは GPU が
 # 要るため、本当の確認は GPU 機での smoke test で行う
 # （work/quant_sweep/CANDIDATES.md 参照）。
-RUN python -c "\
+RUN if [ "${WITH_QUANT}" = "1" ]; then python -c "\
 import bitsandbytes, torchao; \
 print(f'bitsandbytes {bitsandbytes.__version__} / torchao {torchao.__version__} import OK'\
-      '（GPU 実行時の確認は別途）')"
+      '（GPU 実行時の確認は別途）')"; fi
 
 # **RunPod で使うための追い足し（ローカル実行には影響しない）。**
 # 1. openssh-server: RunPod の「Basic SSH」は RunPod のサーバを経由する簡易接続で

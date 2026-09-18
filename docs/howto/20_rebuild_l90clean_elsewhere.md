@@ -131,6 +131,41 @@ docker pull sirukufarios/parc2026-train-pi05:v2
 docker tag  sirukufarios/parc2026-train-pi05:v2 parc2026-train-pi05
 ```
 
+**ただし上げてあるのは x86_64 の像だけである。**Apple Silicon の Mac では
+`no matching manifest` で落とせない（2026-09-18 に確認）。**組むほうに回ること。**
+
+#### arm64（Apple Silicon）で組むとき
+
+**`--build-arg WITH_QUANT=0` を付ける。**
+
+```bash
+docker build --build-arg WITH_QUANT=0 \
+    -t parc2026-train-pi05 -f solution/train/Dockerfile.pi05 solution/train
+```
+
+**理由。**`Dockerfile.pi05` は学習用なので、量子化スイープ用の
+`bitsandbytes` と `torchao` を入れる層を持っている。
+**`download.pytorch.org/whl/cu128` には `torchao` の aarch64 wheel が無く、
+そこだけが落ちる。**
+
+```
+ERROR: Could not find a version that satisfies the requirement torchao==0.17.0
+       (from versions: none)
+Dockerfile.pi05:116
+```
+
+**この 2 つは組み上げには要らない。**`merge_many.py` が import するのは
+`lerobot.datasets` だけである。**`WITH_QUANT=0` で飛ばした像は学習には使えないが、
+繋ぐ段には使える。**
+
+**それでも駄目なら x86_64 を翻訳して回す。**時間はかかるが、
+上げてある像がそのまま使える。
+
+```bash
+docker pull --platform linux/amd64 sirukufarios/parc2026-train-pi05:v2
+docker tag  sirukufarios/parc2026-train-pi05:v2 parc2026-train-pi05
+```
+
 **立てられたか確かめる。**
 
 ```bash
