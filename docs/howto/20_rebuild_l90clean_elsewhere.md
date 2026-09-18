@@ -231,24 +231,22 @@ merged_tasks: 111（台帳 111）OK
 ```bash
 hf download siruku6/libero_combined_bowl5_initpose_l90clean --repo-type dataset \
     --local-dir work/artifacts/l90clean_published
-python3 - <<'PY'
-import glob, hashlib
-import numpy as np, pandas as pd
 
-def frames(root):
-    return pd.concat([pd.read_parquet(f) for f in sorted(
-        glob.glob(f"{root}/data/**/*.parquet", recursive=True))], ignore_index=True)
-
-def signature(df, index):
-    actions = np.stack(df.loc[df["episode_index"] == index, "action"].to_numpy())
-    return hashlib.sha256(np.ascontiguousarray(actions, dtype=np.float32).tobytes()).hexdigest()
-
-a = frames("work/artifacts/l90clean_published")
-b = frames("work/artifacts/libero_combined_bowl5_initpose_l90clean_rebuilt")
-same = sum(signature(a, i) == signature(b, i) for i in range(21642))
-print(f"行動列が一致した本: {same} / 21642")
-PY
+GPUS= IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \
+    solution/tools/regen/compare_action_signatures.py \
+    --a work/artifacts/l90clean_published \
+    --b work/artifacts/libero_combined_bowl5_initpose_l90clean_rebuilt
 ```
+
+```
+  A 21642 本 / B 21642 本
+行動列が一致した本: 21642 / 21642
+```
+
+**手元の python3 では回さない**——numpy と pyarrow が要る。
+**parquet を 1 ファイルずつ読む**ので、両方を丸ごと載せずに済む
+（21,642 本・343 万コマ × 2 は 8 GB では足りない）。
+食い違えば、違う番号を先頭 20 件まで並べて終了コード 1 で止まる。
 
 **21,642 / 21,642 になったら、公開してある混合データセットを消してよい。**
 
