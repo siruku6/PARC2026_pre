@@ -27,7 +27,7 @@ TOC:
 | **ディスクの空き** | `df -h .` | **120 GB 以上**（下の内訳） |
 | git が最新か | `git log --oneline -1` | `solution/tools/regen/rebuild_l90clean.sh` があること |
 | 素の python | `python3 -c "import pyarrow, numpy, pandas; print('ok')'"` | `rebuild_dataset.py` はこれだけで動く |
-| **lerobot の入った環境** | `docker image inspect parc2026-train-pi05` | **`merge_many.py` と `npz_to_lerobot.py` が `lerobot` を import する。**コンテナが無ければ lerobot v0.6.0 を入れて `NATIVE=1` で回す |
+| **lerobot の入った環境** | `docker image inspect parc2026-train-pi05` | **`merge_many.py` と `npz_to_lerobot.py` が `lerobot` を import する。**無ければ 3 節で立てる（`NATIVE=1` で素の python にもできる） |
 | **配布データの版** | `meta/info.json` の `codebase_version` | **`v3.0`。**v2.1 の配布物もあるので取り違えない（2 節） |
 
 **空きの内訳。**
@@ -114,6 +114,47 @@ cp solution/tools/regen/manifests/grader_texts.txt     work/regen/grader_texts.t
 
 **`rebuild_dataset.py` は `numpy`・`pyarrow`・`pandas` だけで動く**ので、
 外す・抜くの段はコンテナが無くても通る。**繋ぐ段だけが lerobot を要る。**
+
+### コンテナを立てる
+
+**イメージは `solution/train/Dockerfile.pi05` から作る**（git に入っている・出来上がりは 5.1 GB）。
+
+```bash
+docker build -t parc2026-train-pi05 -f solution/train/Dockerfile.pi05 solution/train
+```
+
+**Docker Hub にも上げてある**（`sirukufarios/parc2026-train-pi05:v2`）。
+落とすほうが速ければそちらでよい。
+
+```bash
+docker pull sirukufarios/parc2026-train-pi05:v2
+docker tag  sirukufarios/parc2026-train-pi05:v2 parc2026-train-pi05
+```
+
+**立てられたか確かめる。**
+
+```bash
+IMAGE=parc2026-train-pi05 bash solution/tools/regen/run_in_container.sh \
+    -c "import lerobot; print(lerobot.__version__)"
+# 0.6.0 と出れば通っている
+```
+
+**コンテナの中で何が起きるか**（`run_in_container.sh` が組み立てる）。
+
+| | |
+|---|---|
+| リポジトリ | `-v <リポジトリ>:/workspace/repo -w /workspace/repo` で丸ごと挿す |
+| **だから出力はリポジトリの下に置く** | `work/artifacts/...` のままでよい。**リポジトリの外を指すと中から見えない** |
+| 入り口 | `--entrypoint python`。**渡すのは python スクリプトの引数**である |
+| 持ち主 | **コンテナは root で走るので、書いたファイルは root のものになる。**`CHOWN_PATH` を渡すと走り終えたあとに戻す |
+
+**詰まりやすいのは 2 つである。**
+
+| 症状 | 理由と手当て |
+|---|---|
+| `could not select device driver "" with capabilities: [[gpu]]` | `run_in_container.sh` が **`--gpus all` を付けている。**繋ぐ段に GPU は要らないので、**GPU の無い台では `--gpus all` を外した写しを使う**（`sed 's/--gpus all //' solution/tools/regen/run_in_container.sh > /tmp/run_nogpu.sh`） |
+| 出来たファイルが root のもので消せない | `CHOWN_PATH=<出力先> IMAGE=... bash solution/tools/regen/run_in_container.sh ...` で戻す。**`rebuild_l90clean.sh` は渡していない**ので、走り終えたあとに `sudo chown -R "$(id -u):$(id -g)" work/` が要ることがある |
+
 
 
 **2 段に分かれる。**前段（親を作る）は既存のスクリプト、後段（250 本の入れ替え）は
