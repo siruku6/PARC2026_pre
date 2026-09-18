@@ -15,12 +15,15 @@
 from __future__ import annotations
 
 import glob
+import hashlib
 import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 MERGED = Path("work/artifacts/libero_combined_bowl5_initpose_l90clean")
+POOL = Path("work/artifacts/libero_90_clean")
 STATES = Path("work/artifacts/libero_90_states")
 OUT = Path("solution/tools/regen/manifests/l90clean_replace.json")
 
@@ -32,19 +35,42 @@ def _first_task(value: object) -> str:
     return str(value[0])
 
 
+def _read(root: Path, kind: str) -> pd.DataFrame:
+    paths = sorted(glob.glob(str(root / kind / "**/*.parquet"), recursive=True))
+    return pd.concat([pd.read_parquet(path) for path in paths], ignore_index=True)
+
+
+def _action_signature(frames: pd.DataFrame, episode_index: int) -> str:
+    """1 本の行動列の指紋。**どの本がどの本から来たかを、名前ではなく中身で決める。**"""
+    actions = np.stack(frames.loc[frames["episode_index"] == episode_index, "action"].to_numpy())
+    return hashlib.sha256(np.ascontiguousarray(actions, dtype=np.float32).tobytes()).hexdigest()
+
+
 def main() -> int:
     summary = json.loads((STATES / "dirty_summary.json").read_text())
     dropped = sorted(summary["dirty"])
 
-    episodes = pd.concat(
-        [pd.read_parquet(path) for path in sorted(
-            glob.glob(str(MERGED / "meta/episodes/**/*.parquet"), recursive=True))],
-        ignore_index=True,
-    )
+    episodes = _read(MERGED, "meta/episodes")
     info = json.loads((MERGED / "meta/info.json").read_text())
 
     # **置き換えた本はデータセットの末尾に付いている**（本数は外した数と同じ）。
     appended = episodes.tail(len(dropped))[["episode_index", "tasks", "length"]]
+
+    # **どの本がどの本から来たかを、行動列の指紋で決める。**
+    # 名前や長さの一致では 250 本を一意に決められないが、指紋なら決まる。
+    merged_frames = _read(MERGED, "data")
+    pool_frames = _read(POOL, "data")
+    pool_episodes = _read(POOL, "meta/episodes")
+    pool_by_signature = {
+        _action_signature(pool_frames, int(index)): int(index)
+        for index in pool_episodes["episode_index"].to_numpy()
+    }
+    source_of = {
+        int(index): pool_by_signature.get(_action_signature(merged_frames, int(index)))
+        for index in appended["episode_index"].to_numpy()
+    }
+    matched = sum(1 for value in source_of.values() if value is not None)
+    print(f"  行動列が部品と一致した本: {matched} / {len(appended)}")
 
     manifest = {
         "dataset": "siruku6/libero_combined_bowl5_initpose_l90clean",
@@ -63,17 +89,20 @@ def main() -> int:
             "note": "長さ超過（300 コマ超）で外した本はこの段では 1 本も無い",
         },
         "replacement_pool": {
-            "path": "work/artifacts/libero_90_clean_appearance",
-            "episodes": 3705,
-            "frames": 521185,
+            "repo": "siruku6/libero_90_clean",
+            "path": "work/artifacts/libero_90_clean",
+            "episodes": 3911,
+            "frames": 560254,
             "tasks": 73,
-            "note": "外観（照明・机と背景・カメラ）を重ねた libero_90 の綺麗な手本。"
-                    "**HF には上がっていない**——この台帳と一緒に上げること",
+            "note": "libero_90 の綺麗な手本（外観は重ねていない）。"
+                    "**末尾 250 本の行動列は、この部品の本とバイト単位で一致する**"
+                    "（下の appended_episodes の source_episode_index）",
         },
         "dropped_episode_indices": dropped,
         "appended_episodes": [
             {
                 "episode_index": int(row.episode_index),
+                "source_episode_index": source_of[int(row.episode_index)],
                 "task": _first_task(row.tasks),
                 "length": int(row.length),
             }
