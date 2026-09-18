@@ -1,0 +1,1531 @@
+{
+ "dataset": "siruku6/libero_combined_bowl5_initpose_l90clean",
+ "parent": "siruku6/libero_combined_bowl5_initpose（削除済み。本数 21,642・コマ 3,436,940）",
+ "built": "2026-09-16（手で実施。この台帳は 2026-09-18 に書き出した）",
+ "what_changed": "親の libero_90 部分 3,911 本（番号 17731〜21641）のうち、対象外の物体に接触している 250 本を外し、同じ数の綺麗な手本を末尾に足した。本数と課題ごとの本数は変わらず、コマ数だけ 5,803 減る。",
+ "criterion": {
+  "rule": "対象外の物体への接触があれば外す",
+  "source": "work/artifacts/libero_90_states/contact_scores_full.json（4,500 デモ）",
+  "dropped_for_contact": 250,
+  "dropped_for_length": 0,
+  "note": "長さ超過（300 コマ超）で外した本はこの段では 1 本も無い"
+ },
+ "replacement_pool": {
+  "path": "work/artifacts/libero_90_clean_appearance",
+  "episodes": 3705,
+  "frames": 521185,
+  "tasks": 73,
+  "note": "外観（照明・机と背景・カメラ）を重ねた libero_90 の綺麗な手本。**HF には上がっていない**——この台帳と一緒に上げること"
+ },
+ "dropped_episode_indices": [
+  17784,
+  17918,
+  17925,
+  17930,
+  17931,
+  17935,
+  17938,
+  17941,
+  17944,
+  17946,
+  17948,
+  17963,
+  17973,
+  18101,
+  18107,
+  18124,
+  18333,
+  18354,
+  18356,
+  18462,
+  18467,
+  18469,
+  18494,
+  18497,
+  18499,
+  18504,
+  18505,
+  18506,
+  18507,
+  18508,
+  18509,
+  18510,
+  18511,
+  18512,
+  18513,
+  18514,
+  18515,
+  18516,
+  18517,
+  18518,
+  18519,
+  18520,
+  18521,
+  18522,
+  18523,
+  18524,
+  18525,
+  18526,
+  18527,
+  18528,
+  18529,
+  18530,
+  18531,
+  18532,
+  18533,
+  18534,
+  18535,
+  18536,
+  18537,
+  18538,
+  18539,
+  18540,
+  18541,
+  18542,
+  18543,
+  18544,
+  18545,
+  18546,
+  18547,
+  18548,
+  18549,
+  18550,
+  18551,
+  18552,
+  18578,
+  18587,
+  18595,
+  18598,
+  18611,
+  18613,
+  18631,
+  18640,
+  18723,
+  18769,
+  18777,
+  18781,
+  18786,
+  18787,
+  18790,
+  18793,
+  18796,
+  18800,
+  18806,
+  18808,
+  18817,
+  18818,
+  18828,
+  18832,
+  18834,
+  18838,
+  18844,
+  18846,
+  18848,
+  18854,
+  18861,
+  18868,
+  18974,
+  18997,
+  18998,
+  19007,
+  19115,
+  19169,
+  19175,
+  19227,
+  19228,
+  19278,
+  19302,
+  19316,
+  19319,
+  19325,
+  19387,
+  19391,
+  19415,
+  19632,
+  19648,
+  19666,
+  19668,
+  19669,
+  19670,
+  19673,
+  19675,
+  19677,
+  19678,
+  19679,
+  19681,
+  19683,
+  19684,
+  19685,
+  19686,
+  19689,
+  19695,
+  19696,
+  19697,
+  19698,
+  19699,
+  19705,
+  19708,
+  19709,
+  19717,
+  19726,
+  19758,
+  19765,
+  19779,
+  19796,
+  19848,
+  19860,
+  19871,
+  19881,
+  19893,
+  19897,
+  19912,
+  19913,
+  19914,
+  19969,
+  19974,
+  19976,
+  19985,
+  19988,
+  19989,
+  20129,
+  20285,
+  20294,
+  20295,
+  20296,
+  20298,
+  20299,
+  20308,
+  20311,
+  20317,
+  20327,
+  20382,
+  20406,
+  20534,
+  21054,
+  21057,
+  21063,
+  21080,
+  21095,
+  21242,
+  21243,
+  21244,
+  21246,
+  21263,
+  21264,
+  21270,
+  21272,
+  21277,
+  21278,
+  21279,
+  21286,
+  21289,
+  21313,
+  21348,
+  21351,
+  21406,
+  21547,
+  21548,
+  21549,
+  21550,
+  21551,
+  21552,
+  21553,
+  21554,
+  21555,
+  21556,
+  21557,
+  21558,
+  21559,
+  21560,
+  21561,
+  21562,
+  21563,
+  21564,
+  21565,
+  21566,
+  21567,
+  21568,
+  21569,
+  21570,
+  21571,
+  21572,
+  21573,
+  21574,
+  21575,
+  21576,
+  21577,
+  21578,
+  21579,
+  21580,
+  21581,
+  21582,
+  21583,
+  21584,
+  21585,
+  21586,
+  21587,
+  21588,
+  21589,
+  21590,
+  21591
+ ],
+ "appended_episodes": [
+  {
+   "episode_index": 21392,
+   "task": "close the top drawer of the cabinet and put the black bowl on top of it",
+   "length": 244
+  },
+  {
+   "episode_index": 21393,
+   "task": "put the black bowl in the top drawer of the cabinet",
+   "length": 122
+  },
+  {
+   "episode_index": 21394,
+   "task": "put the butter at the back in the top drawer of the cabinet and close it",
+   "length": 176
+  },
+  {
+   "episode_index": 21395,
+   "task": "put the butter at the front in the top drawer of the cabinet and close it",
+   "length": 191
+  },
+  {
+   "episode_index": 21396,
+   "task": "put the chocolate pudding in the top drawer of the cabinet and close it",
+   "length": 167
+  },
+  {
+   "episode_index": 21397,
+   "task": "put the chocolate pudding in the top drawer of the cabinet and close it",
+   "length": 159
+  },
+  {
+   "episode_index": 21398,
+   "task": "put the chocolate pudding in the top drawer of the cabinet and close it",
+   "length": 180
+  },
+  {
+   "episode_index": 21399,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 123
+  },
+  {
+   "episode_index": 21400,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 131
+  },
+  {
+   "episode_index": 21401,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 156
+  },
+  {
+   "episode_index": 21402,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 116
+  },
+  {
+   "episode_index": 21403,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 137
+  },
+  {
+   "episode_index": 21404,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 139
+  },
+  {
+   "episode_index": 21405,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 155
+  },
+  {
+   "episode_index": 21406,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 147
+  },
+  {
+   "episode_index": 21407,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 131
+  },
+  {
+   "episode_index": 21408,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 146
+  },
+  {
+   "episode_index": 21409,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 141
+  },
+  {
+   "episode_index": 21410,
+   "task": "put the black bowl at the front on the plate",
+   "length": 122
+  },
+  {
+   "episode_index": 21411,
+   "task": "stack the black bowl at the front on the black bowl in the middle",
+   "length": 126
+  },
+  {
+   "episode_index": 21412,
+   "task": "stack the black bowl at the front on the black bowl in the middle",
+   "length": 120
+  },
+  {
+   "episode_index": 21413,
+   "task": "stack the middle black bowl on the back black bowl",
+   "length": 127
+  },
+  {
+   "episode_index": 21414,
+   "task": "put the frying pan on the stove",
+   "length": 228
+  },
+  {
+   "episode_index": 21415,
+   "task": "turn on the stove and put the frying pan on it",
+   "length": 272
+  },
+  {
+   "episode_index": 21416,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 100
+  },
+  {
+   "episode_index": 21417,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 130
+  },
+  {
+   "episode_index": 21418,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 121
+  },
+  {
+   "episode_index": 21419,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 122
+  },
+  {
+   "episode_index": 21420,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 117
+  },
+  {
+   "episode_index": 21421,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 110
+  },
+  {
+   "episode_index": 21422,
+   "task": "put the black bowl in the bottom drawer of the cabinet",
+   "length": 121
+  },
+  {
+   "episode_index": 21423,
+   "task": "put the black bowl on top of the cabinet",
+   "length": 168
+  },
+  {
+   "episode_index": 21424,
+   "task": "put the black bowl on top of the cabinet",
+   "length": 164
+  },
+  {
+   "episode_index": 21425,
+   "task": "put the black bowl on top of the cabinet",
+   "length": 143
+  },
+  {
+   "episode_index": 21426,
+   "task": "put the black bowl in the top drawer of the cabinet",
+   "length": 121
+  },
+  {
+   "episode_index": 21427,
+   "task": "put the black bowl on top of the cabinet",
+   "length": 140
+  },
+  {
+   "episode_index": 21428,
+   "task": "put the black bowl on top of the cabinet",
+   "length": 147
+  },
+  {
+   "episode_index": 21429,
+   "task": "put the black bowl on top of the cabinet",
+   "length": 135
+  },
+  {
+   "episode_index": 21430,
+   "task": "close the microwave",
+   "length": 103
+  },
+  {
+   "episode_index": 21431,
+   "task": "close the microwave",
+   "length": 128
+  },
+  {
+   "episode_index": 21432,
+   "task": "close the microwave",
+   "length": 65
+  },
+  {
+   "episode_index": 21433,
+   "task": "close the microwave",
+   "length": 72
+  },
+  {
+   "episode_index": 21434,
+   "task": "close the microwave",
+   "length": 89
+  },
+  {
+   "episode_index": 21435,
+   "task": "close the microwave",
+   "length": 95
+  },
+  {
+   "episode_index": 21436,
+   "task": "close the microwave",
+   "length": 88
+  },
+  {
+   "episode_index": 21437,
+   "task": "close the microwave",
+   "length": 103
+  },
+  {
+   "episode_index": 21438,
+   "task": "close the microwave",
+   "length": 80
+  },
+  {
+   "episode_index": 21439,
+   "task": "close the microwave",
+   "length": 91
+  },
+  {
+   "episode_index": 21440,
+   "task": "close the microwave",
+   "length": 110
+  },
+  {
+   "episode_index": 21441,
+   "task": "close the microwave",
+   "length": 110
+  },
+  {
+   "episode_index": 21442,
+   "task": "put the right moka pot on the stove",
+   "length": 224
+  },
+  {
+   "episode_index": 21443,
+   "task": "put the frying pan under the cabinet shelf",
+   "length": 196
+  },
+  {
+   "episode_index": 21444,
+   "task": "pick up the alphabet soup and put it in the basket",
+   "length": 136
+  },
+  {
+   "episode_index": 21445,
+   "task": "put the white mug on the left plate",
+   "length": 102
+  },
+  {
+   "episode_index": 21446,
+   "task": "put the white mug on the plate",
+   "length": 198
+  },
+  {
+   "episode_index": 21447,
+   "task": "pick up the book and place it in the left compartment of the caddy",
+   "length": 130
+  },
+  {
+   "episode_index": 21448,
+   "task": "pick up the yellow and white mug and place it to the right of the caddy",
+   "length": 143
+  },
+  {
+   "episode_index": 21449,
+   "task": "pick up the book in the middle and place it on the cabinet shelf",
+   "length": 155
+  },
+  {
+   "episode_index": 21450,
+   "task": "pick up the book in the middle and place it on the cabinet shelf",
+   "length": 140
+  },
+  {
+   "episode_index": 21451,
+   "task": "pick up the book in the middle and place it on the cabinet shelf",
+   "length": 144
+  },
+  {
+   "episode_index": 21452,
+   "task": "pick up the book on the left and place it on top of the shelf",
+   "length": 159
+  },
+  {
+   "episode_index": 21453,
+   "task": "pick up the book on the right and place it on the cabinet shelf",
+   "length": 83
+  },
+  {
+   "episode_index": 21454,
+   "task": "pick up the book on the right and place it under the cabinet shelf",
+   "length": 126
+  },
+  {
+   "episode_index": 21455,
+   "task": "close the top drawer of the cabinet and put the black bowl on top of it",
+   "length": 205
+  },
+  {
+   "episode_index": 21456,
+   "task": "put the black bowl in the top drawer of the cabinet",
+   "length": 126
+  },
+  {
+   "episode_index": 21457,
+   "task": "put the butter at the back in the top drawer of the cabinet and close it",
+   "length": 212
+  },
+  {
+   "episode_index": 21458,
+   "task": "put the butter at the front in the top drawer of the cabinet and close it",
+   "length": 179
+  },
+  {
+   "episode_index": 21459,
+   "task": "put the chocolate pudding in the top drawer of the cabinet and close it",
+   "length": 181
+  },
+  {
+   "episode_index": 21460,
+   "task": "put the chocolate pudding in the top drawer of the cabinet and close it",
+   "length": 193
+  },
+  {
+   "episode_index": 21461,
+   "task": "put the chocolate pudding in the top drawer of the cabinet and close it",
+   "length": 180
+  },
+  {
+   "episode_index": 21462,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 135
+  },
+  {
+   "episode_index": 21463,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 132
+  },
+  {
+   "episode_index": 21464,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 161
+  },
+  {
+   "episode_index": 21465,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 115
+  },
+  {
+   "episode_index": 21466,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 126
+  },
+  {
+   "episode_index": 21467,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 155
+  },
+  {
+   "episode_index": 21468,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 143
+  },
+  {
+   "episode_index": 21469,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 136
+  },
+  {
+   "episode_index": 21470,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 138
+  },
+  {
+   "episode_index": 21471,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 165
+  },
+  {
+   "episode_index": 21472,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 142
+  },
+  {
+   "episode_index": 21473,
+   "task": "put the black bowl at the front on the plate",
+   "length": 170
+  },
+  {
+   "episode_index": 21474,
+   "task": "stack the black bowl at the front on the black bowl in the middle",
+   "length": 126
+  },
+  {
+   "episode_index": 21475,
+   "task": "stack the black bowl at the front on the black bowl in the middle",
+   "length": 101
+  },
+  {
+   "episode_index": 21476,
+   "task": "stack the middle black bowl on the back black bowl",
+   "length": 100
+  },
+  {
+   "episode_index": 21477,
+   "task": "put the frying pan on the stove",
+   "length": 194
+  },
+  {
+   "episode_index": 21478,
+   "task": "turn on the stove and put the frying pan on it",
+   "length": 290
+  },
+  {
+   "episode_index": 21479,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 111
+  },
+  {
+   "episode_index": 21480,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 122
+  },
+  {
+   "episode_index": 21481,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 111
+  },
+  {
+   "episode_index": 21482,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 105
+  },
+  {
+   "episode_index": 21483,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 118
+  },
+  {
+   "episode_index": 21484,
+   "task": "close the bottom drawer of the cabinet and open the top drawer",
+   "length": 200
+  },
+  {
+   "episode_index": 21485,
+   "task": "put the black bowl in the bottom drawer of the cabinet",
+   "length": 146
+  },
+  {
+   "episode_index": 21486,
+   "task": "put the black bowl on top of the cabinet",
+   "length": 141
+  },
+  {
+   "episode_index": 21487,
+   "task": "put the black bowl on top of the cabinet",
+   "length": 163
+  },
+  {
+   "episode_index": 21488,
+   "task": "put the black bowl on top of the cabinet",
+   "length": 147
+  },
+  {
+   "episode_index": 21489,
+   "task": "put the black bowl in the top drawer of the cabinet",
+   "length": 129
+  },
+  {
+   "episode_index": 21490,
+   "task": "put the black bowl on top of the cabinet",
+   "length": 154
+  },
+  {
+   "episode_index": 21491,
+   "task": "put the black bowl on top of the cabinet",
+   "length": 158
+  },
+  {
+   "episode_index": 21492,
+   "task": "put the black bowl on top of the cabinet",
+   "length": 164
+  },
+  {
+   "episode_index": 21493,
+   "task": "close the microwave",
+   "length": 71
+  },
+  {
+   "episode_index": 21494,
+   "task": "close the microwave",
+   "length": 119
+  },
+  {
+   "episode_index": 21495,
+   "task": "close the microwave",
+   "length": 93
+  },
+  {
+   "episode_index": 21496,
+   "task": "close the microwave",
+   "length": 79
+  },
+  {
+   "episode_index": 21497,
+   "task": "close the microwave",
+   "length": 80
+  },
+  {
+   "episode_index": 21498,
+   "task": "close the microwave",
+   "length": 106
+  },
+  {
+   "episode_index": 21499,
+   "task": "close the microwave",
+   "length": 128
+  },
+  {
+   "episode_index": 21500,
+   "task": "close the microwave",
+   "length": 125
+  },
+  {
+   "episode_index": 21501,
+   "task": "close the microwave",
+   "length": 101
+  },
+  {
+   "episode_index": 21502,
+   "task": "close the microwave",
+   "length": 88
+  },
+  {
+   "episode_index": 21503,
+   "task": "close the microwave",
+   "length": 99
+  },
+  {
+   "episode_index": 21504,
+   "task": "close the microwave",
+   "length": 89
+  },
+  {
+   "episode_index": 21505,
+   "task": "close the microwave",
+   "length": 81
+  },
+  {
+   "episode_index": 21506,
+   "task": "put the right moka pot on the stove",
+   "length": 194
+  },
+  {
+   "episode_index": 21507,
+   "task": "put the frying pan under the cabinet shelf",
+   "length": 177
+  },
+  {
+   "episode_index": 21508,
+   "task": "pick up the tomato sauce and put it in the basket",
+   "length": 156
+  },
+  {
+   "episode_index": 21509,
+   "task": "put the white mug on the left plate",
+   "length": 105
+  },
+  {
+   "episode_index": 21510,
+   "task": "put the white mug on the plate",
+   "length": 128
+  },
+  {
+   "episode_index": 21511,
+   "task": "pick up the book and place it in the left compartment of the caddy",
+   "length": 163
+  },
+  {
+   "episode_index": 21512,
+   "task": "pick up the book and place it in the right compartment of the caddy",
+   "length": 114
+  },
+  {
+   "episode_index": 21513,
+   "task": "pick up the book in the middle and place it on the cabinet shelf",
+   "length": 169
+  },
+  {
+   "episode_index": 21514,
+   "task": "pick up the book in the middle and place it on the cabinet shelf",
+   "length": 146
+  },
+  {
+   "episode_index": 21515,
+   "task": "pick up the book in the middle and place it on the cabinet shelf",
+   "length": 144
+  },
+  {
+   "episode_index": 21516,
+   "task": "pick up the book on the right and place it on the cabinet shelf",
+   "length": 91
+  },
+  {
+   "episode_index": 21517,
+   "task": "pick up the book on the right and place it on the cabinet shelf",
+   "length": 98
+  },
+  {
+   "episode_index": 21518,
+   "task": "close the top drawer of the cabinet and put the black bowl on top of it",
+   "length": 191
+  },
+  {
+   "episode_index": 21519,
+   "task": "put the black bowl in the top drawer of the cabinet",
+   "length": 146
+  },
+  {
+   "episode_index": 21520,
+   "task": "put the butter at the back in the top drawer of the cabinet and close it",
+   "length": 224
+  },
+  {
+   "episode_index": 21521,
+   "task": "put the butter at the front in the top drawer of the cabinet and close it",
+   "length": 166
+  },
+  {
+   "episode_index": 21522,
+   "task": "put the chocolate pudding in the top drawer of the cabinet and close it",
+   "length": 194
+  },
+  {
+   "episode_index": 21523,
+   "task": "put the chocolate pudding in the top drawer of the cabinet and close it",
+   "length": 186
+  },
+  {
+   "episode_index": 21524,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 123
+  },
+  {
+   "episode_index": 21525,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 143
+  },
+  {
+   "episode_index": 21526,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 132
+  },
+  {
+   "episode_index": 21527,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 165
+  },
+  {
+   "episode_index": 21528,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 133
+  },
+  {
+   "episode_index": 21529,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 142
+  },
+  {
+   "episode_index": 21530,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 152
+  },
+  {
+   "episode_index": 21531,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 132
+  },
+  {
+   "episode_index": 21532,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 129
+  },
+  {
+   "episode_index": 21533,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 134
+  },
+  {
+   "episode_index": 21534,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 165
+  },
+  {
+   "episode_index": 21535,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 153
+  },
+  {
+   "episode_index": 21536,
+   "task": "put the middle black bowl on the plate",
+   "length": 106
+  },
+  {
+   "episode_index": 21537,
+   "task": "stack the black bowl at the front on the black bowl in the middle",
+   "length": 125
+  },
+  {
+   "episode_index": 21538,
+   "task": "stack the black bowl at the front on the black bowl in the middle",
+   "length": 140
+  },
+  {
+   "episode_index": 21539,
+   "task": "stack the middle black bowl on the back black bowl",
+   "length": 86
+  },
+  {
+   "episode_index": 21540,
+   "task": "put the frying pan on the stove",
+   "length": 190
+  },
+  {
+   "episode_index": 21541,
+   "task": "turn on the stove and put the frying pan on it",
+   "length": 264
+  },
+  {
+   "episode_index": 21542,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 128
+  },
+  {
+   "episode_index": 21543,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 110
+  },
+  {
+   "episode_index": 21544,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 113
+  },
+  {
+   "episode_index": 21545,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 110
+  },
+  {
+   "episode_index": 21546,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 109
+  },
+  {
+   "episode_index": 21547,
+   "task": "put the black bowl in the bottom drawer of the cabinet",
+   "length": 138
+  },
+  {
+   "episode_index": 21548,
+   "task": "put the black bowl in the bottom drawer of the cabinet",
+   "length": 133
+  },
+  {
+   "episode_index": 21549,
+   "task": "put the black bowl on top of the cabinet",
+   "length": 151
+  },
+  {
+   "episode_index": 21550,
+   "task": "put the black bowl on top of the cabinet",
+   "length": 171
+  },
+  {
+   "episode_index": 21551,
+   "task": "put the black bowl in the top drawer of the cabinet",
+   "length": 113
+  },
+  {
+   "episode_index": 21552,
+   "task": "put the black bowl on the plate",
+   "length": 111
+  },
+  {
+   "episode_index": 21553,
+   "task": "put the black bowl on top of the cabinet",
+   "length": 155
+  },
+  {
+   "episode_index": 21554,
+   "task": "put the black bowl on top of the cabinet",
+   "length": 136
+  },
+  {
+   "episode_index": 21555,
+   "task": "close the microwave",
+   "length": 77
+  },
+  {
+   "episode_index": 21556,
+   "task": "close the microwave",
+   "length": 92
+  },
+  {
+   "episode_index": 21557,
+   "task": "close the microwave",
+   "length": 106
+  },
+  {
+   "episode_index": 21558,
+   "task": "close the microwave",
+   "length": 69
+  },
+  {
+   "episode_index": 21559,
+   "task": "close the microwave",
+   "length": 82
+  },
+  {
+   "episode_index": 21560,
+   "task": "close the microwave",
+   "length": 73
+  },
+  {
+   "episode_index": 21561,
+   "task": "close the microwave",
+   "length": 79
+  },
+  {
+   "episode_index": 21562,
+   "task": "close the microwave",
+   "length": 67
+  },
+  {
+   "episode_index": 21563,
+   "task": "close the microwave",
+   "length": 81
+  },
+  {
+   "episode_index": 21564,
+   "task": "close the microwave",
+   "length": 100
+  },
+  {
+   "episode_index": 21565,
+   "task": "close the microwave",
+   "length": 95
+  },
+  {
+   "episode_index": 21566,
+   "task": "close the microwave",
+   "length": 101
+  },
+  {
+   "episode_index": 21567,
+   "task": "open the microwave",
+   "length": 186
+  },
+  {
+   "episode_index": 21568,
+   "task": "put the frying pan under the cabinet shelf",
+   "length": 176
+  },
+  {
+   "episode_index": 21569,
+   "task": "put the frying pan under the cabinet shelf",
+   "length": 168
+  },
+  {
+   "episode_index": 21570,
+   "task": "pick up the alphabet soup and put it in the basket",
+   "length": 120
+  },
+  {
+   "episode_index": 21571,
+   "task": "put the white mug on the plate",
+   "length": 127
+  },
+  {
+   "episode_index": 21572,
+   "task": "put the white mug on the plate",
+   "length": 125
+  },
+  {
+   "episode_index": 21573,
+   "task": "pick up the book and place it in the left compartment of the caddy",
+   "length": 175
+  },
+  {
+   "episode_index": 21574,
+   "task": "pick up the book and place it in the right compartment of the caddy",
+   "length": 147
+  },
+  {
+   "episode_index": 21575,
+   "task": "pick up the book in the middle and place it on the cabinet shelf",
+   "length": 142
+  },
+  {
+   "episode_index": 21576,
+   "task": "pick up the book in the middle and place it on the cabinet shelf",
+   "length": 160
+  },
+  {
+   "episode_index": 21577,
+   "task": "pick up the book in the middle and place it on the cabinet shelf",
+   "length": 156
+  },
+  {
+   "episode_index": 21578,
+   "task": "pick up the book on the right and place it on the cabinet shelf",
+   "length": 108
+  },
+  {
+   "episode_index": 21579,
+   "task": "pick up the book on the right and place it on the cabinet shelf",
+   "length": 117
+  },
+  {
+   "episode_index": 21580,
+   "task": "close the top drawer of the cabinet and put the black bowl on top of it",
+   "length": 212
+  },
+  {
+   "episode_index": 21581,
+   "task": "put the butter at the back in the top drawer of the cabinet and close it",
+   "length": 182
+  },
+  {
+   "episode_index": 21582,
+   "task": "put the butter at the front in the top drawer of the cabinet and close it",
+   "length": 181
+  },
+  {
+   "episode_index": 21583,
+   "task": "put the butter at the front in the top drawer of the cabinet and close it",
+   "length": 175
+  },
+  {
+   "episode_index": 21584,
+   "task": "put the chocolate pudding in the top drawer of the cabinet and close it",
+   "length": 179
+  },
+  {
+   "episode_index": 21585,
+   "task": "put the chocolate pudding in the top drawer of the cabinet and close it",
+   "length": 192
+  },
+  {
+   "episode_index": 21586,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 122
+  },
+  {
+   "episode_index": 21587,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 146
+  },
+  {
+   "episode_index": 21588,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 164
+  },
+  {
+   "episode_index": 21589,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 122
+  },
+  {
+   "episode_index": 21590,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 135
+  },
+  {
+   "episode_index": 21591,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 140
+  },
+  {
+   "episode_index": 21592,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 159
+  },
+  {
+   "episode_index": 21593,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 132
+  },
+  {
+   "episode_index": 21594,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 131
+  },
+  {
+   "episode_index": 21595,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 147
+  },
+  {
+   "episode_index": 21596,
+   "task": "open the bottom drawer of the cabinet",
+   "length": 164
+  },
+  {
+   "episode_index": 21597,
+   "task": "put the black bowl at the front on the plate",
+   "length": 146
+  },
+  {
+   "episode_index": 21598,
+   "task": "put the middle black bowl on the plate",
+   "length": 104
+  },
+  {
+   "episode_index": 21599,
+   "task": "stack the black bowl at the front on the black bowl in the middle",
+   "length": 140
+  },
+  {
+   "episode_index": 21600,
+   "task": "stack the black bowl at the front on the black bowl in the middle",
+   "length": 129
+  },
+  {
+   "episode_index": 21601,
+   "task": "put the frying pan on the stove",
+   "length": 159
+  },
+  {
+   "episode_index": 21602,
+   "task": "put the moka pot on the stove",
+   "length": 162
+  },
+  {
+   "episode_index": 21603,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 136
+  },
+  {
+   "episode_index": 21604,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 83
+  },
+  {
+   "episode_index": 21605,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 124
+  },
+  {
+   "episode_index": 21606,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 117
+  },
+  {
+   "episode_index": 21607,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 96
+  },
+  {
+   "episode_index": 21608,
+   "task": "close the bottom drawer of the cabinet",
+   "length": 120
+  },
+  {
+   "episode_index": 21609,
+   "task": "put the black bowl in the bottom drawer of the cabinet",
+   "length": 149
+  },
+  {
+   "episode_index": 21610,
+   "task": "put the black bowl in the bottom drawer of the cabinet",
+   "length": 121
+  },
+  {
+   "episode_index": 21611,
+   "task": "put the black bowl on top of the cabinet",
+   "length": 143
+  },
+  {
+   "episode_index": 21612,
+   "task": "put the black bowl on top of the cabinet",
+   "length": 162
+  },
+  {
+   "episode_index": 21613,
+   "task": "put the black bowl in the top drawer of the cabinet",
+   "length": 124
+  },
+  {
+   "episode_index": 21614,
+   "task": "put the black bowl on the plate",
+   "length": 137
+  },
+  {
+   "episode_index": 21615,
+   "task": "put the black bowl on top of the cabinet",
+   "length": 144
+  },
+  {
+   "episode_index": 21616,
+   "task": "put the black bowl on top of the cabinet",
+   "length": 141
+  },
+  {
+   "episode_index": 21617,
+   "task": "close the microwave",
+   "length": 90
+  },
+  {
+   "episode_index": 21618,
+   "task": "close the microwave",
+   "length": 106
+  },
+  {
+   "episode_index": 21619,
+   "task": "close the microwave",
+   "length": 106
+  },
+  {
+   "episode_index": 21620,
+   "task": "close the microwave",
+   "length": 90
+  },
+  {
+   "episode_index": 21621,
+   "task": "close the microwave",
+   "length": 78
+  },
+  {
+   "episode_index": 21622,
+   "task": "close the microwave",
+   "length": 103
+  },
+  {
+   "episode_index": 21623,
+   "task": "close the microwave",
+   "length": 93
+  },
+  {
+   "episode_index": 21624,
+   "task": "close the microwave",
+   "length": 72
+  },
+  {
+   "episode_index": 21625,
+   "task": "close the microwave",
+   "length": 84
+  },
+  {
+   "episode_index": 21626,
+   "task": "close the microwave",
+   "length": 95
+  },
+  {
+   "episode_index": 21627,
+   "task": "close the microwave",
+   "length": 103
+  },
+  {
+   "episode_index": 21628,
+   "task": "close the microwave",
+   "length": 92
+  },
+  {
+   "episode_index": 21629,
+   "task": "put the right moka pot on the stove",
+   "length": 199
+  },
+  {
+   "episode_index": 21630,
+   "task": "put the frying pan under the cabinet shelf",
+   "length": 140
+  },
+  {
+   "episode_index": 21631,
+   "task": "put the frying pan under the cabinet shelf",
+   "length": 199
+  },
+  {
+   "episode_index": 21632,
+   "task": "pick up the alphabet soup and put it in the basket",
+   "length": 134
+  },
+  {
+   "episode_index": 21633,
+   "task": "put the white mug on the plate",
+   "length": 167
+  },
+  {
+   "episode_index": 21634,
+   "task": "put the white mug on the plate",
+   "length": 159
+  },
+  {
+   "episode_index": 21635,
+   "task": "pick up the book and place it in the left compartment of the caddy",
+   "length": 149
+  },
+  {
+   "episode_index": 21636,
+   "task": "pick up the white mug and place it to the right of the caddy",
+   "length": 112
+  },
+  {
+   "episode_index": 21637,
+   "task": "pick up the book in the middle and place it on the cabinet shelf",
+   "length": 147
+  },
+  {
+   "episode_index": 21638,
+   "task": "pick up the book in the middle and place it on the cabinet shelf",
+   "length": 175
+  },
+  {
+   "episode_index": 21639,
+   "task": "pick up the book in the middle and place it on the cabinet shelf",
+   "length": 152
+  },
+  {
+   "episode_index": 21640,
+   "task": "pick up the book on the right and place it on the cabinet shelf",
+   "length": 104
+  },
+  {
+   "episode_index": 21641,
+   "task": "pick up the book on the right and place it under the cabinet shelf",
+   "length": 106
+  }
+ ],
+ "totals": {
+  "merged_episodes": 21642,
+  "merged_frames": 3431137,
+  "merged_tasks": 111,
+  "appended_frames": 34086,
+  "dropped_frames": 39889
+ }
+}
