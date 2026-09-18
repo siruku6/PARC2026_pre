@@ -39,7 +39,7 @@ if [ -n "$RECORD" ]; then
     export PARC_RECORD_WHICH="${PARC_RECORD_WHICH:-all}"
     # 前回の mp4 が残っていると、今回作れたものと区別が付かない。
     rm -rf "$PARC_RECORD_DIR"
-    echo "[smoke] 録画あり: $PARC_RECORD_DIR （which=$PARC_RECORD_WHICH）"
+    echo "[smoke] 録画あり: $PARC_RECORD_DIR （which=${PARC_RECORD_WHICH}）"
 fi
 
 echo "[1/6] 検証用スイートの CSV を作る"

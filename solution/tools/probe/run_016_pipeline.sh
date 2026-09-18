@@ -83,7 +83,7 @@ if [ -n "$KIT_ROOT" ] && [ -d "$KIT_ROOT/compe/t3/assets" ]; then
     python3 "$PROBE/_016_use_kit_reverse.py" \
         --kit-assets "$KIT_ROOT/compe/t3/assets" --reverse-dir "$REV" "${pair_args[@]}"
 else
-    echo "   !! キットが見つからない（KIT_ROOT=$KIT_ROOT）。この組は外れる"
+    echo "   !! キットが見つからない（KIT_ROOT=${KIT_ROOT}）。この組は外れる"
 fi
 
 echo

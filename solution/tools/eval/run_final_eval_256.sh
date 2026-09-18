@@ -34,7 +34,7 @@
 #                     **存在確認にしか使わない**（pipeline は評価イメージの中にある）
 #
 # Reads:
-#   - $SERVER_PY（既定 solution/policy_server.py）
+#   - ${SERVER_PY}（既定 solution/policy_server.py）
 #   - work/artifacts/<重み>/**
 # Generates:
 #   - work/final_eval/<日時>_<トラック>_<LABEL>/results/*.json・server.log
@@ -48,7 +48,7 @@ cd "$REPOSITORY_ROOT"
 TRACK="${1:-track3}"
 case "$TRACK" in
     track1 | track2 | track3) ;;
-    *) echo "トラックは track1 / track2 / track3 のいずれか（渡された値: $TRACK）" >&2; exit 2 ;;
+    *) echo "トラックは track1 / track2 / track3 のいずれか（渡された値: ${TRACK}）" >&2; exit 2 ;;
 esac
 
 TRACK_EPISODES="${TRACK_EPISODES:-2}"
@@ -238,7 +238,7 @@ if [ -n "${TASKS_CSV:-}" ]; then
     tasks_mount=(-v "$TASKS_CSV:$csv_in_kit:ro")
     # **入力の一覧を実行ディレクトリへ写す。**次の週に同じ CSV があるとは限らない。
     cp "$TASKS_CSV" "$OUTPUT_DIR/TASKS_CSV.csv"
-    echo "-- 評価する行を差し替える: $TASKS_CSV（$(( $(wc -l < "$TASKS_CSV") - 1 )) 行）→ $csv_in_kit"
+    echo "-- 評価する行を差し替える: ${TASKS_CSV}（$(( $(wc -l < "$TASKS_CSV") - 1 )) 行）→ $csv_in_kit"
 fi
 
 echo "-- 評価を回す"

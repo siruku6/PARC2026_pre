@@ -21,7 +21,7 @@
 # Reads:
 #   - work/artifacts/libero_plus_bowl5・work/regen/keep_replace_v2.json
 #   - work/regen/lerobot_init_pose_v2/c*・lerobot_scripted_v2・lerobot_merged_v2
-#   - $COMBINED（展開した配布 tar）・work/regen/combined/head_keep.json
+#   - ${COMBINED}（展開した配布 tar）・work/regen/combined/head_keep.json
 # Generates:
 #   - work/artifacts/libero_plus_bowl5_initpose（＋ bowl5_expected.json）
 #   - work/artifacts/libero_combined_bowl5_initpose（＋ bowl5_expected.json）
@@ -41,7 +41,7 @@ NATIVE="${NATIVE:-0}"
 _reported() {
     "$@"; local s=$?
     [ "$s" -eq 0 ] && return 0
-    echo "  （終了コード $s）" >&2
+    echo "  （終了コード ${s}）" >&2
     case "$s" in
         137) echo "  **137 は OOM Kill である。**Docker に割り当てたメモリが足りない" >&2 ;;
         139) echo "  139 はセグメンテーション違反" >&2 ;;
@@ -191,7 +191,7 @@ if [ "$STAGE" = p ] || [ "$STAGE" = all ]; then
 
     step "P 門 1. 本数・コマ数・課題数が足し算に一致するか"
     WANT_EPS=$((12553 + ADD_EPS)); WANT_FRAMES=$(( $(field "$BASE" total_frames) + ADD_FRAMES ))
-    echo "  本数 $(field "$P" total_episodes)（期待 $WANT_EPS）/ コマ $(field "$P" total_frames)（期待 $WANT_FRAMES）/ 課題 $(field "$P" total_tasks)（期待 40）"
+    echo "  本数 $(field "$P" total_episodes)（期待 ${WANT_EPS}）/ コマ $(field "$P" total_frames)（期待 ${WANT_FRAMES}）/ 課題 $(field "$P" total_tasks)（期待 40）"
     [ "$(field "$P" total_episodes)" = "$WANT_EPS" ] && [ "$(field "$P" total_frames)" = "$WANT_FRAMES" ] \
         && [ "$(field "$P" total_tasks)" = 40 ] || die "P 門 1 で落ちた"
     step "P 門 2. 指示文が評価でモデルが見る文と合っているか"
@@ -250,7 +250,7 @@ PY
 )
     WANT_EPS=$(( $(field "$P" total_episodes) + HEAD_EPS ))
     WANT_FRAMES=$(( $(field "$P" total_frames) + $(field "$HEAD" total_frames) ))
-    echo "  本数 $(field "$C" total_episodes)（期待 $WANT_EPS）/ コマ $(field "$C" total_frames)（期待 $WANT_FRAMES）/ 課題 $(field "$C" total_tasks)（期待 $WANT_TASKS）"
+    echo "  本数 $(field "$C" total_episodes)（期待 ${WANT_EPS}）/ コマ $(field "$C" total_frames)（期待 ${WANT_FRAMES}）/ 課題 $(field "$C" total_tasks)（期待 ${WANT_TASKS}）"
     [ "$(field "$C" total_episodes)" = "$WANT_EPS" ] && [ "$(field "$C" total_frames)" = "$WANT_FRAMES" ] \
         && [ "$(field "$C" total_tasks)" = "$WANT_TASKS" ] || die "C 門 1 で落ちた"
     step "C 門 2. 指の値が ±1 だけか"

@@ -32,7 +32,7 @@ cd "$REPOSITORY_ROOT"
 TRACK="${1:-track2}"
 case "$TRACK" in
     track1 | track2 | track3) ;;
-    *) echo "トラックは track1 / track2 / track3 のいずれか（渡された値: $TRACK）" >&2; exit 2 ;;
+    *) echo "トラックは track1 / track2 / track3 のいずれか（渡された値: ${TRACK}）" >&2; exit 2 ;;
 esac
 
 TRACK_EPISODES="${TRACK_EPISODES:-2}"

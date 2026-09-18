@@ -174,7 +174,7 @@ eval_candidate() {
         return 1
     fi
     if [ ! -f "$weights/model.safetensors" ]; then
-        log "**評価見送り（$name）: 重みが無い $weights**"
+        log "**評価見送り（${name}）: 重みが無い $weights**"
         record_csv "$name" eval skip weights_missing
         return 1
     fi
@@ -187,7 +187,7 @@ eval_candidate() {
     local status=$?
 
     if [ "$status" -ne 0 ]; then
-        log "**評価失敗（$name, exit $status）。次の候補へ進む。**"
+        log "**評価失敗（$name, exit ${status}）。次の候補へ進む。**"
         record_csv "$name" eval fail "exit=$status"
         return 1
     fi
@@ -375,7 +375,7 @@ while true; do
         break
     fi
 
-    log "次の候補: $next（理由: ${reason:-なし}）"
+    log "次の候補: ${next}（理由: ${reason:-なし}）"
     run_one_candidate "$next"
 done
 

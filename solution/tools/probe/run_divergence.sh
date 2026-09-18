@@ -95,7 +95,7 @@ for pair in $PAIRS; do
     index=$((index + 1))
 done
 
-echo "-- シムを回す（MUJOCO_GL=$MUJOCO_GL・$index 課題）"
+echo "-- シムを回す（MUJOCO_GL=${MUJOCO_GL}・$index 課題）"
 docker run --rm --gpus all --network "$NETWORK" --ulimit core=0 \
     -e "MUJOCO_GL=$MUJOCO_GL" -e LIBERO_ROOT=/workspace/LIBERO-plus \
     -e PYTHONPATH=/workspace/LIBERO-plus:/workspace:/workspace/compe \

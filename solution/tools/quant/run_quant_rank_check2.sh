@@ -95,7 +95,7 @@ run_eval() {
     local status=$?
 
     if [ "$status" -ne 0 ]; then
-        log "  評価失敗（exit $status）。次へ進む。"
+        log "  評価失敗（exit ${status}）。次へ進む。"
         record_csv "$name" fail "exit=$status"
     else
         log "  完了。"

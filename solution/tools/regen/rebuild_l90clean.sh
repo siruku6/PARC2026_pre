@@ -43,7 +43,7 @@ IMAGE="${IMAGE:-parc2026-train-pi05}"
 _reported() {
     "$@"; local s=$?
     [ "$s" -eq 0 ] && return 0
-    echo "  （終了コード $s）" >&2
+    echo "  （終了コード ${s}）" >&2
     case "$s" in
         137) echo "  **137 は OOM Kill である。**Docker に割り当てたメモリが足りない" >&2 ;;
         139) echo "  139 はセグメンテーション違反" >&2 ;;

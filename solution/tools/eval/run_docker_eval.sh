@@ -175,7 +175,7 @@ if [ -n "$EVAL_CSV" ]; then
         exit 1
     fi
     cp "$EVAL_CSV" "$OUTPUT_DIR/VAL_TASKS.csv"
-    echo "  測るタスク $(( $(wc -l < "$EVAL_CSV") - 1 )) 件（$EVAL_CSV）"
+    echo "  測るタスク $(( $(wc -l < "$EVAL_CSV") - 1 )) 件（${EVAL_CSV}）"
 fi
 
 # 方策側へ渡す並びを作る。**`policy_server.py` は重みを自分の隣から読む**
@@ -208,7 +208,7 @@ docker network create "$NETWORK" >/dev/null
 # ---------------------------------------------------------------- 3. 方策側
 
 echo
-echo "===== 1/5 方策サーバーを起動する（$SERVER_IMAGE）====="
+echo "===== 1/5 方策サーバーを起動する（${SERVER_IMAGE}）====="
 
 policy_environment=()
 for name in PARC_N_ACTION_STEPS PARC_SAMPLES PARC_BLEND_STEPS PARC_EMA_ALPHA \
@@ -258,7 +258,7 @@ grep '^\[parc\]' "$OUTPUT_DIR/server.log" | sed 's/^/  /' || \
 # ---------------------------------------------------------------- 4. 評価側
 
 echo
-echo "===== 2/5 評価側を起動する（$KIT_IMAGE）====="
+echo "===== 2/5 評価側を起動する（${KIT_IMAGE}）====="
 
 kit_environment=(
     # **描画のやり方。既定は `osmesa`（CPU 描画）である。**
