@@ -26,7 +26,8 @@ TOC:
 |---|---|---|
 | **ディスクの空き** | `df -h .` | **120 GB 以上**（下の内訳） |
 | git が最新か | `git log --oneline -1` | `solution/tools/regen/rebuild_l90clean.sh` があること |
-| python の環境 | `python3 -c "import pyarrow, numpy, pandas; print('ok')"` | LeRobot v0.6.0 の入った環境 |
+| 素の python | `python3 -c "import pyarrow, numpy, pandas; print('ok')'"` | `rebuild_dataset.py` はこれだけで動く |
+| **lerobot の入った環境** | `docker image inspect parc2026-train-pi05` | **`merge_many.py` と `npz_to_lerobot.py` が `lerobot` を import する。**コンテナが無ければ lerobot v0.6.0 を入れて `NATIVE=1` で回す |
 | **配布データの版** | `meta/info.json` の `codebase_version` | **`v3.0`。**v2.1 の配布物もあるので取り違えない（2 節） |
 
 **空きの内訳。**
@@ -101,6 +102,19 @@ cp solution/tools/regen/manifests/grader_texts.txt     work/regen/grader_texts.t
 ```
 
 ## 3. 組む
+
+**コードは git の `solution/` 以下だけで足りるが、実行環境は別に要る。**
+
+| 要るもの | なぜ | 無いときの代わり |
+|---|---|---|
+| `solution/` 以下（git） | 台帳もスクリプトもここに入っている | — |
+| **Docker イメージ `parc2026-train-pi05`** | **`merge_many.py` と `npz_to_lerobot.py align` が `lerobot` を import する** | **lerobot v0.6.0 を入れて `NATIVE=1`**（`rebuild_l90clean.sh` のみ対応） |
+| 配布データ `libero_combined_20hz` | 標準スイートと `libero_90` の元 | 2 節 |
+| HF の部品 2 つ | 撮り直した実演 | 2 節 |
+
+**`rebuild_dataset.py` は `numpy`・`pyarrow`・`pandas` だけで動く**ので、
+外す・抜くの段はコンテナが無くても通る。**繋ぐ段だけが lerobot を要る。**
+
 
 **2 段に分かれる。**前段（親を作る）は既存のスクリプト、後段（250 本の入れ替え）は
 2026-09-18 に書いたスクリプトである。

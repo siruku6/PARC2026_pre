@@ -14,6 +14,10 @@
 #   PARENT  親 libero_combined_bowl5_initpose（`build_initpose_datasets.sh STAGE=c` で作る）
 #   POOL    siruku6/libero_90_clean（`hf download --repo-type dataset`）
 #
+# **`merge_many.py` は lerobot を import する**ので、素の python では動かない。
+# 既定では `build_initpose_datasets.sh` と同じくコンテナ（`parc2026-train-pi05`）で回す。
+# **lerobot が入った環境が手元にあるなら `NATIVE=1` を渡せば直に回す。**
+#
 # **一度も通していない**（この機械のディスクが 26 GB しか空いておらず、
 # 親 27.6 GB ＋ 出来上がり 27.8 GB が入らなかった。2026-09-18）。
 #
@@ -30,6 +34,14 @@ WORK="${WORK:-work/regen/l90clean_rebuild}"
 MANIFEST=solution/tools/regen/manifests/l90clean_replace.json
 
 die() { echo "** $1" >&2; [ $# -gt 1 ] && echo "   $2" >&2; exit 1; }
+# **lerobot が要るものはコンテナで回す。**`rebuild_dataset.py` は numpy と pyarrow
+# だけなので素の python でよい（だから下で使い分けている）。
+NATIVE="${NATIVE:-0}"
+if [ "$NATIVE" = 1 ]; then
+    R() { python3 "$@"; }
+else
+    R() { IMAGE="${IMAGE:-parc2026-train-pi05}" bash solution/tools/regen/run_in_container.sh "$@"; }
+fi
 [ -d "$PARENT/meta" ] || die "親が無い: $PARENT" "build_initpose_datasets.sh STAGE=c で作る"
 [ -d "$POOL/meta" ]   || die "部品が無い: $POOL" "hf download siruku6/libero_90_clean --repo-type dataset --local-dir $POOL"
 
@@ -67,8 +79,8 @@ echo "-- 3. 部品から 250 本を台帳の順に抜く"
 python3 solution/tools/contact_clean/rebuild_dataset.py \
     --root "$POOL" --output "$WORK/replacements" --keep-file "$WORK/keep_pool.json"
 
-echo "-- 4. 末尾に繋ぐ"
-python3 solution/tools/regen/merge_many.py \
+echo "-- 4. 末尾に繋ぐ（lerobot が要るのでコンテナで回す）"
+R solution/tools/regen/merge_many.py \
     --base "$WORK/parent_kept" --base-repo-id local/l90clean_base \
     --add "$WORK/replacements" \
     --output "$OUT" --output-repo-id local/libero_combined_bowl5_initpose_l90clean
