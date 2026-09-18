@@ -36,12 +36,24 @@ cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 # numpy/pyarrow/pandas の入った環境を自分で用意している場合だけ。
 IMAGE="${IMAGE:-parc2026-train-pi05}"
 NATIVE="${NATIVE:-0}"
+# **落ちたときに終了コードを出す。**コンテナの中で殺されると、
+# 途中まで出力して黙って止まったように見える（137 がその典型）。
+_reported() {
+    "$@"; local s=$?
+    [ "$s" -eq 0 ] && return 0
+    echo "  （終了コード $s）" >&2
+    case "$s" in
+        137) echo "  **137 は OOM Kill である。**Docker に割り当てたメモリが足りない" >&2 ;;
+        139) echo "  139 はセグメンテーション違反" >&2 ;;
+    esac
+    return "$s"
+}
 if [ "$NATIVE" = 1 ]; then
-    R()     { python3 "$@"; }
-    pyrun() { python3 "$@"; }
+    R()     { _reported python3 "$@"; }
+    pyrun() { _reported python3 "$@"; }
 else
-    R()     { IMAGE="$IMAGE" bash solution/tools/regen/run_in_container.sh "$@"; }
-    pyrun() { IMAGE="$IMAGE" bash solution/tools/regen/run_in_container.sh "$@"; }
+    R()     { _reported env IMAGE="$IMAGE" bash solution/tools/regen/run_in_container.sh "$@"; }
+    pyrun() { _reported env IMAGE="$IMAGE" bash solution/tools/regen/run_in_container.sh "$@"; }
 fi
 own() { docker run --rm -v "$PWD/$1:/out" --entrypoint chown "$IMAGE" \
             -R "$(id -u):$(id -g)" /out >/dev/null 2>&1 || true; }
