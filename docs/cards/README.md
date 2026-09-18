@@ -89,11 +89,17 @@ listed by whether they hold any.
 remain retrievable. That is why `libero_combined_bowl5_initpose_l90clean` stays —
 `molmoact2_lora_v1` and `molmoact2_lora_v1_40k` point at it.
 
-**And one warning.** The step that replaced 250 `libero_90` episodes **exists in neither a
-script nor a manifest** (it was done by hand on 2026-09-16). **Deleting that mixture today
-means it cannot be rebuilt.** To make it deletable, write out the replaced episode indices and
-the demonstrations used to refill them
-([manifests, section 3](../../solution/tools/regen/manifests/README.md)).
+**That warning has been lifted.** The step that replaced 250 `libero_90` episodes was done by
+hand on 2026-09-16 and existed in neither a script nor a manifest. On 2026-09-18 it was written
+out as a manifest and **rebuilt from the components on a different machine; all 21,642 action
+sequences matched**
+([howto 20, section 5](../howto/20_rebuild_l90clean_elsewhere.md#5-実測)).
+
+```
+行動列が一致した本: 21642 / 21642
+```
+
+So the mixture *can* be deleted. It is kept only because a published model points at it.
 
 ### Applied to what currently exists
 
@@ -101,7 +107,7 @@ the demonstrations used to refill them
 |---|---|---|
 | `libero_plus_bowl5` | **keep** | only copy of the bowl re-recordings |
 | `libero_plus_bowl5_initpose` | **keep** | only copy of the initial-pose re-recordings |
-| `libero_combined_bowl5_initpose_l90clean` | **keep** (and publish) | a published model points at it, and the `libero_90` cleaning is not reproducible |
+| `libero_combined_bowl5_initpose_l90clean` | **keep** (and publish) | a published model points at it. **The "not reproducible" reason went away on 2026-09-18** — rebuilt from components, 21,642/21,642 match |
 | `jaist_mix_v2` (6.3 GB) | **replace with its component** | **the component `reverse_lerobot_v2` (397 episodes) was never uploaded.** Upload it, document the mixing recipe (thin `libero_plus` to 75/task, duplicate the reverse set 8×), and the 6.3 GB mixture becomes unnecessary |
 | `lerobot_init_pose_all` (1.4 GB) | **may be deleted** | 1,250 initial-pose episodes from 2026-09-12, plain appearance only, **never used for training**; superseded by the 4,275 in `libero_plus_bowl5_initpose` |
 

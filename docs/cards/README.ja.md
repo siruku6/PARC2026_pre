@@ -88,11 +88,17 @@ allenai/MolmoAct2-LIBERO-LeRobot（Apache 2.0）
 だから `libero_combined_bowl5_initpose_l90clean` は残す。
 `molmoact2_lora_v1` と `molmoact2_lora_v1_40k` がそれを指している。
 
-**そしてもう 1 つ条件がある。**`libero_90` の 250 本を置き換えた段は、
-**スクリプトにも台帳にもなっていない**（2026-09-16 に手で実施した）。
-**いまこの混合データを消すと作り直せない。**
-消してよくするには、置き換えた 250 本の番号と埋め戻しに使った手本を台帳に書き出す必要がある
-（[manifests の 3 節](../../solution/tools/regen/manifests/README.md)）。
+**2026-09-18 に、この条件は外れた。**`libero_90` の 250 本を置き換えた段は
+2026-09-16 に手で実施したもので、スクリプトにも台帳にも無かったが、
+**台帳に書き出し、別の台（Mac）で部品から組み直して、21,642 本すべての行動列が
+一致することを確かめた**（[howto/20 の 5 節](../howto/20_rebuild_l90clean_elsewhere.md#5-実測)）。
+
+```
+行動列が一致した本: 21642 / 21642
+```
+
+**したがって `libero_combined_bowl5_initpose_l90clean` は消してよい。**
+ただし**公開した模型が指している間は残す**——上の条件のほうは生きている。
 
 ### いま残っているものへの当てはめ
 
@@ -100,7 +106,7 @@ allenai/MolmoAct2-LIBERO-LeRobot（Apache 2.0）
 |---|---|---|
 | `libero_plus_bowl5` | **残す** | 丼の撮り直しを持つ唯一の現物 |
 | `libero_plus_bowl5_initpose` | **残す** | 初期姿勢の撮り直しを持つ唯一の現物 |
-| `libero_combined_bowl5_initpose_l90clean` | **残す**（公開にする） | 公開した MolmoAct2 が指している ＋ `libero_90` の掃除が再現できない |
+| `libero_combined_bowl5_initpose_l90clean` | **残す**（公開にする） | 公開した MolmoAct2 が指しているため。**再現できないという理由は 2026-09-18 に消えた**（部品から組み直して 21,642/21,642 一致） |
 | `jaist_mix_v2`（6.3 GB） | **部品に置き換えることを勧める** | **部品の `reverse_lerobot_v2`（397 本）は HF に上がっていない。**先にそれを上げ、混ぜ方（`libero_plus` を 75 本/課題に間引く ＋ 逆向きを 8 倍）を書けば、6.3 GB の混合は要らなくなる |
 | `lerobot_init_pose_all`（1.4 GB） | **消してよい** | 9/12 の初期姿勢 1,250 本。**素の見た目だけで、一度も学習に使っていない。**`libero_plus_bowl5_initpose` の 4,275 本に置き換わっている |
 
