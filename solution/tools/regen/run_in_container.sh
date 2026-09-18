@@ -11,7 +11,10 @@ GL="${GL:-egl}"
 # `could not select device driver "" with capabilities: [[gpu]]` で起動しない。
 # データの組み上げ（`merge_many.py`・`rebuild_dataset.py`）は GPU を使わないので、
 # 外しても結果は変わらない。物理を回す道具は GPU が要る。
-GPUS="${GPUS:---gpus all}"
+#
+# **`:-` ではなく `-` である。**`:-` は「空」も「未設定」と同じ扱いにするので、
+# `GPUS=` を渡しても既定へ戻ってしまう（2026-09-18 に実際に踏んだ）。
+GPUS="${GPUS-"--gpus all"}"
 
 # コンテナは root で走るので、書いたファイルは root のものになる。
 # **`CHOWN_PATH` を渡すと、走り終えたあとに持ち主を戻す**（`run_final_eval.sh` と同じ手）。
