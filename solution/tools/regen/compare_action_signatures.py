@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -45,9 +46,25 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--a", type=Path, required=True)
     parser.add_argument("--b", type=Path, required=True)
+    parser.add_argument("--unordered", action="store_true",
+                        help="番号を見ず、同じ指紋の集合かどうかだけを見る"
+                             "（繋いだ本は末尾に付くので、番号では対応が取れない）")
     args = parser.parse_args()
 
     a, b = signatures(args.a), signatures(args.b)
+
+    if args.unordered:
+        left, right = Counter(a.values()), Counter(b.values())
+        same = sum((left & right).values())
+        print(f"  A {len(a)} 本 / B {len(b)} 本（番号は見ない）")
+        print(f"行動列が一致した本: {same} / {max(len(a), len(b))}")
+        if left != right:
+            for label, extra in (("A", left - right), ("B", right - left)):
+                if extra:
+                    print(f"  {label} にしか無い本: {sum(extra.values())}")
+            raise SystemExit(1)
+        return
+
     shared = sorted(set(a) & set(b))
     same = sum(a[i] == b[i] for i in shared)
 
