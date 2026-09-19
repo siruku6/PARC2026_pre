@@ -94,18 +94,16 @@ LeRobot は読み込み時に、**その文字列をまずローカルのパス�
 無ければ `snapshot_download` へ落ちる。**
 **通信の無い環境では、その落ちた先で必ず失敗し、方策は起動しない。**
 
-先に落として、設定からローカルのディレクトリを指させればよい。
-
-```bash
-hf download allenai/MolmoAct2-FAST-Tokenizer --local-dir ./fast_action_tokenizer
-```
+**そのトークナイザの写しを `fast_action_tokenizer/` として同梱してある**
+（上流とバイト単位で同じもの）。設定からそこを指せば、通信は要らない。
 
 ```python
-config.discrete_action_tokenizer = "./fast_action_tokenizer"
+config.discrete_action_tokenizer = "path/to/checkpoint/fast_action_tokenizer"
 ```
 
 **私たちはこれでコンペの提出を 1 つ失った**（サーバーが起動せず 0 点）。
-頼る前に確かめる価値がある。
+だから重みと一緒に置いてある。**Hub の名前が書かれた設定は、どれも同じように失敗する**
+——通信の無い環境で走らせる前に、`policy_preprocessor.json` の文字列を全部見ること。
 
 ## ライセンスと出自
 

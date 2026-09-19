@@ -62,8 +62,8 @@
 [`siruku6/molmoact2_lora_v1_40k`](https://huggingface.co/siruku6/molmoact2_lora_v1_40k) を見てほしい
 ——読み込みのコードは同じで、そちらに失敗の形を詳しく書いてある。要点だけ言うと、
 **設定が `allenai/MolmoAct2-FAST-Tokenizer` を Hub のリポジトリ名として持っているので、
-通信の無い環境では方策が起動しない。**そのトークナイザを落として、
-`discrete_action_tokenizer` にローカルのディレクトリを指させる必要がある。
+通信の無い環境では方策が起動しない。****そのトークナイザの写しを `fast_action_tokenizer/`
+として同梱してある**ので、`discrete_action_tokenizer` にそこを指させること。
 
 もう 1 つ。**この模型には adaptive resampling が効かない。**
 `samples=3` ＋ `PARC_ADAPTIVE_CADENCE` で 13 課題の部分集合で 0.846、

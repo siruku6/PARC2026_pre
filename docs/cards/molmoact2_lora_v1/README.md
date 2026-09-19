@@ -81,8 +81,9 @@ Honest reading:
 See [`siruku6/molmoact2_lora_v1_40k`](https://huggingface.co/siruku6/molmoact2_lora_v1_40k) —
 the loading code is identical, and it documents the failure mode in full. In short: the policy
 config names `allenai/MolmoAct2-FAST-Tokenizer` as a Hub repository, so **the policy will not
-start in an offline environment** unless you download that tokenizer and point
-`discrete_action_tokenizer` at the local directory.
+start in an offline environment** unless `discrete_action_tokenizer` points at a local
+directory. **A byte-identical copy is bundled here as `fast_action_tokenizer/`** — point the
+config at it.
 
 Also note: **adaptive resampling does not help this model.** With `samples=3` plus
 `PARC_ADAPTIVE_CADENCE` it scored 0.846 on a 13-task subset, against 0.877 with `samples=1`.

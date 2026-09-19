@@ -112,19 +112,16 @@ included in this repository and is required.
 resolves that string as a local path first, and falls back to `snapshot_download` if no such
 path exists. **In an offline environment the fallback fails and the policy will not start.**
 
-If you need offline loading, download the tokenizer once and point the config at the local
-directory:
-
-```bash
-hf download allenai/MolmoAct2-FAST-Tokenizer --local-dir ./fast_action_tokenizer
-```
+**A copy of that tokenizer is bundled here as `fast_action_tokenizer/`**, byte-identical to
+the upstream one. Point the config at it and no network is needed:
 
 ```python
-config.discrete_action_tokenizer = "./fast_action_tokenizer"
+config.discrete_action_tokenizer = "path/to/checkpoint/fast_action_tokenizer"
 ```
 
-We lost a competition submission to exactly this (the server could not start; score 0), so
-it is worth checking before you rely on it.
+We lost a competition submission to exactly this (the server could not start; score 0), which
+is why it ships with the weights. **Any config that still names a Hub repository will fail the
+same way** — check every string in `policy_preprocessor.json` before relying on an offline run.
 
 ## License and provenance
 
