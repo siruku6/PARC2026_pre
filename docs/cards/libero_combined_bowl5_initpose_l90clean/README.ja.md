@@ -87,6 +87,23 @@ LIBERO-plus（配布）
 - **外観の変化は、コマごとに振ったものではなく重ねたものである。**収録の時点で掛けるので、
   1 本の中では終始 1 つの外観になる。
 
+## 部品から組み直す
+
+**このデータは、部品と台帳から 1 本ずつ同じものを作り直せる。**
+手順・ソース・台帳の一式が、このリポジトリと
+[`libero_plus_bowl5_initpose`](https://huggingface.co/datasets/siruku6/libero_plus_bowl5_initpose/tree/main/rebuild)
+の `rebuild/` に入っている。
+
+**2026-09-18 に別のマシンで実際に通し、21,642 本すべての行動列が一致することを確かめた。**
+
+```
+行動列が一致した本: 21642 / 21642
+```
+
+要る部品は 3 つ——[`libero_plus_bowl5_initpose`](https://huggingface.co/datasets/siruku6/libero_plus_bowl5_initpose)、
+[`libero_90_clean`](https://huggingface.co/datasets/siruku6/libero_90_clean)、
+運営が配布した `libero_combined_20hz`（LeRobot v3.0）。
+
 ## ライセンスと出自
 
 LIBERO と LIBERO-plus から派生したもので、配布元は **MIT License**
@@ -96,5 +113,5 @@ LIBERO と LIBERO-plus から派生したもので、配布元は **MIT License*
 ## 関連
 
 - このデータで学習した模型: [`siruku6/molmoact2_lora_v1_40k`](https://huggingface.co/siruku6/molmoact2_lora_v1_40k)
-- 親のデータ: [`siruku6/libero_combined_bowl5_initpose`](https://huggingface.co/datasets/siruku6/libero_combined_bowl5_initpose)
+- 親のデータ `libero_combined_bowl5_initpose`: **公開していない。**下の一式から組める
 - 40 課題の枝: [`siruku6/libero_plus_bowl5_initpose`](https://huggingface.co/datasets/siruku6/libero_plus_bowl5_initpose)

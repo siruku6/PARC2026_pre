@@ -108,6 +108,22 @@ up with the parent version.
 - **Appearance variation is layered, not sampled per frame.** It is applied at recording time,
   so a given episode has one appearance throughout.
 
+## Rebuilding from components
+
+**This dataset can be rebuilt, episode for episode, from its components plus the manifests.**
+The recipe, source and manifests live under `rebuild/` in this repository and in
+[`libero_plus_bowl5_initpose`](https://huggingface.co/datasets/siruku6/libero_plus_bowl5_initpose/tree/main/rebuild).
+
+**It was done for real on a different machine on 2026-09-18; all 21,642 action sequences matched.**
+
+```
+行動列が一致した本: 21642 / 21642      (matching episodes: 21642 / 21642)
+```
+
+Three components are needed: [`libero_plus_bowl5_initpose`](https://huggingface.co/datasets/siruku6/libero_plus_bowl5_initpose),
+[`libero_90_clean`](https://huggingface.co/datasets/siruku6/libero_90_clean),
+and the organizers' `libero_combined_20hz` (LeRobot v3.0).
+
 ## License and provenance
 
 Derived from LIBERO and LIBERO-plus, distributed under the **MIT License**
@@ -117,5 +133,5 @@ produced by a scripted policy in the same simulator and are released under the s
 ## Related
 
 - Model trained on this dataset: [`siruku6/molmoact2_lora_v1_40k`](https://huggingface.co/siruku6/molmoact2_lora_v1_40k)
-- Parent dataset: [`siruku6/libero_combined_bowl5_initpose`](https://huggingface.co/datasets/siruku6/libero_combined_bowl5_initpose)
+- Parent dataset `libero_combined_bowl5_initpose`: **not published** — build it with the bundle below
 - 40-task branch: [`siruku6/libero_plus_bowl5_initpose`](https://huggingface.co/datasets/siruku6/libero_plus_bowl5_initpose)
