@@ -2,6 +2,13 @@
 
 *English: [README.md](README.md)*
 
+> **このリポジトリにデータは無い。組み方だけがある。**
+> **部品から 1 本ずつ同じものを作り直せると確かめた**ので、27.8 GB の実体は置かないことにした
+> （2026-09-19）。作り方は [`rebuild/`](rebuild) にある。
+> **部品は [`libero_plus_bowl5_initpose`](https://huggingface.co/datasets/siruku6/libero_plus_bowl5_initpose) と
+> [`libero_90_clean`](https://huggingface.co/datasets/siruku6/libero_90_clean)、
+> それに運営が配布した `libero_combined_20hz` の 3 つである。**
+
 **LIBERO** の操作課題のための、LeRobot 形式の実演データである。
 配布の LIBERO / LIBERO-plus から組み直してあり、狙いは**誤ったことを教えていた 3 つ**を取り除くことである——
 **対象外の物体にぶつかる手本**、**「開く」に逆の正解が付く指の符号**、

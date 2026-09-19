@@ -18,6 +18,13 @@ size_categories:
 
 *日本語版: [README.ja.md](README.ja.md)*
 
+> **This repository does not hold the data — only the recipe for building it.**
+> The dataset was verified to be rebuildable episode for episode from its components, so the
+> 27.8 GB of data is not stored here (2026-09-19). The recipe is in [`rebuild/`](rebuild).
+> **The components are [`libero_plus_bowl5_initpose`](https://huggingface.co/datasets/siruku6/libero_plus_bowl5_initpose),
+> [`libero_90_clean`](https://huggingface.co/datasets/siruku6/libero_90_clean),
+> and the organizers' `libero_combined_20hz`.**
+
 A LeRobot-format demonstration dataset for the **LIBERO** manipulation benchmark, rebuilt from
 the distributed LIBERO / LIBERO-plus data to remove three things that were teaching the wrong
 lesson: **demonstrations that bump into non-target objects**, **a gripper encoding that labelled
