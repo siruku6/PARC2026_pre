@@ -6,6 +6,9 @@
 今ある `model_weights/vlm/`（SmolVLM の設定とトークナイザ）を引き継ぐ必要がある。
 これを手作業でやると必ず取りこぼすので、ここで機械的に行う。
 
+**この道具は SmolVLA 専用である。**引き継ぐ `vlm/` は SmolVLM2 のものなので、
+**π0.5 に使ってはならない**——`config.json` の `type` を見て弾く。
+
 取り込む前に、提出 1 回分を無駄にする類の事故を検出する。
 
 - LoRA パラメータがマージされずに残っていないか
@@ -121,6 +124,24 @@ def _check_source(source: Path) -> None:
     if config.get("use_peft"):
         raise ValueError(
             "config.json の use_peft が真のままです。LoRA がマージされていません。"
+        )
+
+    # **この道具は SmolVLA 専用である。**引き継ぐ `model_weights/vlm/` は
+    # `fetch_base_weights.sh` が SmolVLM2 のトークナイザで埋めた場所で、
+    # **π0.5 に写すと動くのに課題を解かない重みになる**（指示文が別のトークン列に
+    # なるため）。2026-09-17 の 22.0.0 がこれで Track1 0.075 になった
+    # （正しい重みでは 0.498。docs/reference/19_weights_catalog.md の 6.21 節）。
+    # **π0.5 の vlm/ は `siruku6/pi05_full_runpod` から取ること**
+    # （docs/howto/02_build_submission.md の 0-3 節）。
+    policy = config.get("type")
+    if policy not in (None, "smolvla"):
+        raise ValueError(
+            f"この道具は SmolVLA 専用です（渡されたのは {policy}）。"
+            "引き継ぐ model_weights/vlm/ は SmolVLM2 のトークナイザで、"
+            "π0.5 に入れると動くのに指示に従わない重みになります。"
+            "π0.5 は build_submission.py へ --weights で直に渡し、vlm/ は "
+            "siruku6/pi05_full_runpod から写してください"
+            "（docs/howto/02_build_submission.md の 0-3 節）"
         )
 
 
