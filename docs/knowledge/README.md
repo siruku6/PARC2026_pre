@@ -53,6 +53,20 @@
 | [22_reverse_data_interferes_with_same_objects.md](22_reverse_data_interferes_with_same_objects.md) | **逆向きデータは、同じ物体を使う順方向の課題を壊す。**共有する行は −24 ポイント、残りは −3 ポイント。**引き換えに Track3 が 11 提出ぶりに動いた**（0.000 → 0.0235） | 3, 4 |
 | [23_self_made_demos_need_the_instruction_the_model_sees.md](23_self_made_demos_need_the_instruction_the_model_sees.md) | **自作した手本は、評価でモデルが実際に見る文で入れないと 1 度も引かれない。**摂動下再生 1,009 本のうち 626 本（62%）がこれを踏んでいた。**沈黙して失敗する**——学習は通り、損失も下がる | 2, 3 |
 | [20_probe_object_choice_without_rollout.md](20_probe_object_choice_without_rollout.md) | **対象物を選べているかはロールアウト無しで測れる。**系譜 6 点で何を得て何を失ったか・**色はほとんど見ていない**（元から） | 3, 4 |
+| [24_reached_but_zero_is_collision_at_grasp.md](24_reached_but_zero_is_collision_at_grasp.md) | **目標に届いたのに 0 点になる道は衝突だけ。**その失点の 65% は丼を掴む瞬間に出ており、**丼の手本を作り直すと 0.522 → 0.111 に落ちた**（6.1 節） | 3, 4 |
+| [25_removing_bad_demos_teaches_nothing.md](25_removing_bad_demos_teaches_nothing.md) | **汚れた手本を外すだけでは衝突は減らない。**外すと汚れは消えるが、正解の手本は 1 本も入らない | 2, 3, 4 |
+| [26_adding_data_lowered_the_score.md](26_adding_data_lowered_the_score.md) | **データを足して点が下がった 3 つの道**——課題を薄める・正規化の尺度を書き換える・同じ物に逆の動きを教える | 2, 3, 4 |
+| [27_clipped_gradients_do_not_shrink_adamw_steps.md](27_clipped_gradients_do_not_shrink_adamw_steps.md) | `grdn` が 1.0 を超え続けても学習は止まっていない。疑うのは上限ちょうどに積み上がった指令 | 2, 3 |
+| [28_continued_training_is_not_additive.md](28_continued_training_is_not_additive.md) | **続きの学習は足し算にならない。**2 トラックそろって上がったのは画像側まで開けた 1,500 歩の 1 本だけ | 3, 4 |
+| [29_inference_knobs_ran_out.md](29_inference_knobs_ran_out.md) | **推論側の摘みは本選で尽きた。**8 本の採点で読めたのは壊した 1 件とトラックで向きが割れた 2 件だけ | 3, 4 |
+| [30_leaderboard_is_an_instrument.md](30_leaderboard_is_an_instrument.md) | **リーダーボードは成績ではなく計器である。**本選の提出枠の使い方 | 2, 3, 4 |
+| [31_time_reversal_gives_only_half_a_demo.md](31_time_reversal_gives_only_half_a_demo.md) | **逆向きの課題のデータは時刻反転では半分しか作れない。**掴む区間は自分で作り、壊れるのは継ぎ目 | 3, 4 |
+| [32_splitting_work_across_sessions_and_machines.md](32_splitting_work_across_sessions_and_machines.md) | **複数のセッションと機械で分担するときに踏んだ穴。**同じ名前が別の中身を指し、古い 1 行が学習を二重に起こしかけた | 2, 3 |
+| [33_offline_scoring_breaks_hub_names_in_configs.md](33_offline_scoring_breaks_hub_names_in_configs.md) | 設定に焼かれた Hub の名前は、通信の無い採点環境で 0 点になる | 2, 3 |
+| [34_no_difference_is_not_permission_to_swap.md](34_no_difference_is_not_permission_to_swap.md) | 手元で「差が無い」ことは、入れ替えてよいという意味ではない | 2, 3 |
+| [35_multibyte_after_variable_breaks_on_macos.md](35_multibyte_after_variable_breaks_on_macos.md) | 変数のすぐ後ろに全角文字を置くと macOS の bash で名前が繋がる | 2, 3 |
+| [36_stale_tooling_teaches_the_wrong_source.md](36_stale_tooling_teaches_the_wrong_source.md) | 使わなくなった道具は、間違った出どころを教え続ける | 2, 3 |
+| [37_unsettled_scenes_score_zero_forever.md](37_unsettled_scenes_score_zero_forever.md) | **場面が落ち着く前に基準を取るので、一部の行はどのモデルでも必ず 0 点になる。**選定に使っていた 45 行のうち 9 行（20%）がこれだった | 2, 3, 4 |
 
 
 ## 作成済みの成果物
