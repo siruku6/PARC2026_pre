@@ -10,6 +10,8 @@
 LeRobot 形式では `action`・`observation.state`・俯瞰と手首の 2 本の動画・指示文が 1 組になっている。
 **このファイルは「中身をどう選ぶか」だけを持つ。形式（列・次元・ファイル構成）は
 [29_training_data_requirements.md](29_training_data_requirements.md) にある。**
+**実際に使った工夫 1 つずつの実測**（Ruckig・300 コマ超の縮め方・掴む向きの選び方など）は
+**[40_regeneration_techniques_and_effects.md](40_regeneration_techniques_and_effects.md)** にある。
 
 ## 目次
 
