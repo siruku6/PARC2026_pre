@@ -155,3 +155,21 @@ unzip -l submission_B.zip | tail -1        # エントリ数が変わってい�
 **一般化すると、こうなる。****数字を略して書く出力を、数字として読まないこと。**
 `smpl:157K`・`ep:1K`・`epch:0.07` も同じ形式である。
 **略さない欄（`loss`・`lr`・`updt_s`）だけを値として使い、位置で並べる。**
+
+## 【9/23 に足した】リポジトリを移した（`lab/` → `src/`）あと、venv の CLI だけが壊れていた
+
+**`.venv/bin/hf` を打つと `bad interpreter: No such file or directory` で落ちる。**
+中を見ると 1 行目（shebang）が `#!/home/ubuntu/lab/PARC2026_pre/.venv/bin/python3` のまま
+だった——**venv を作った時点の絶対パスが焼き込まれる**ため、リポジトリを
+`/home/ubuntu/lab` から `/home/ubuntu/src` へ移した時点でこの 1 行だけが指す先を失う。
+`hf`・`huggingface-cli`・`pytest` など、その venv の `bin/` にある実行ファイルは全部同じ形で壊れる。
+
+**壊れているのは CLI の入口だけで、venv 自体は壊れていない。**
+`.venv/bin/python3 -c "from huggingface_hub import HfApi; ..."` は問題なく動く
+（`import` は shebang を経由しない）。**CLI が要る手順を Python の呼び出しに置き換えれば、
+venv を作り直さずに済む。**
+
+**気づき方。**`bad interpreter` はエラーの出どころが分かりにくい
+（`No such file or directory` だけを見ると venv ごと壊れたように見える）。
+`head -1 .venv/bin/<コマンド名>` で shebang の中身を見れば、
+**venv の場所とリポジトリの実際の場所がずれているだけ**だとすぐ分かる。
