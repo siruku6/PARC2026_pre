@@ -243,6 +243,50 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+# **模型ごとに、`vlm/` に入るべきトークナイザが違う。**
+# π0.5 の土台は PaliGemma / Gemma、SmolVLA の土台は SmolVLM2 である。
+#
+# **有無だけを見ていたせいで、2026-09-17 の 22.0.0 は SmolVLM2 のトークナイザを
+# 積んだまま検査を通り、本選 1 の Track1 で 0.075 になった**（正しい重みでの値は
+# 0.498。docs/reference/19_weights_catalog.md の 6.21 節）。**方策は起動して動くが、
+# 指示文が別のトークン列になるので言語の条件づけを失う**——8 本中 7 本が打ち切りに
+# 張り付いた。**中身まで見ないと、この事故はここを素通りする。**
+_TOKENIZER_CLASS_BY_POLICY = {"pi05": "GemmaTokenizer", "pi0": "GemmaTokenizer",
+                              "smolvla": "GPT2Tokenizer"}
+
+
+def _verify_tokenizer_family(archive: zipfile.ZipFile, actual: dict[str, int]) -> None:
+    """`model_weights/vlm/` のトークナイザが、その模型のものかを見る。"""
+    if not any(name.startswith("model_weights/vlm/") for name in actual):
+        return  # MolmoAct2 は `vlm/` を使わない
+
+    policy = json.loads(archive.read("model_weights/config.json")).get("type")
+    want = _TOKENIZER_CLASS_BY_POLICY.get(policy)
+    if want is None:
+        return  # 知らない模型には口を出さない
+
+    arcname = "model_weights/vlm/tokenizer_config.json"
+    if arcname not in actual:
+        raise ValueError(f"zip に {arcname} がありません（トークナイザの素性を確かめられません）")
+
+    got = json.loads(archive.read(arcname)).get("tokenizer_class")
+    if got != want:
+        files = sorted(
+            name.removeprefix("model_weights/vlm/")
+            for name in actual
+            if name.startswith("model_weights/vlm/")
+        )
+        raise ValueError(
+            f"model_weights/vlm/ のトークナイザが {policy} のものではありません"
+            f"（{got}。{want} であるべきです）。"
+            f"入っている {len(files)} ファイル: {files}。"
+            "**別の模型の vlm/ を写していないか確かめてください**"
+            "——work/artifacts/model_weights/vlm は SmolVLA 時代の置き場で、"
+            "π0.5 に写すと動くのに課題を解かない zip になります"
+            "（docs/howto/02_build_submission.md の 0-3 節）"
+        )
+
+
 def _notice_name_for(weights: Path) -> str:
     """重みの `config.json` の `type` から、同梱する NOTICE を選ぶ。
 
@@ -310,6 +354,7 @@ def _verify_zip(output: Path, entries: list[tuple[Path, str]]) -> None:
                 "zip に model_weights/vlm/ も model_weights/molmoact2_base_small/ も"
                 "ありません（トークナイザが無いと採点環境で Hub へ取りに行って失敗します）"
             )
+        _verify_tokenizer_family(archive, actual)
         if not any(name.startswith("vendor/lerobot/") for name in actual):
             raise ValueError("zip に vendor/lerobot/ がありません")
         # 幾何の接ぎ木が入った重みなら、VGGT のソースも要る（pip では入れられない）。

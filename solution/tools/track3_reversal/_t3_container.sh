@@ -32,7 +32,7 @@ case "$TASK" in
         FWD_BDDL="/out/assets/$FWD_STEM.bddl"
         FWD_INITS="/out/assets/$FWD_STEM.pruned_init"
         T3_STEM=take_the_two_mugs_off_the_plates_and_place_them_on_the_table ;;
-  *) echo "TASK は book|soup|mug|twomugs のどれか（来た値: $TASK）" >&2; exit 1 ;;
+  *) echo "TASK は book|soup|mug|twomugs のどれか（来た値: ${TASK}）" >&2; exit 1 ;;
 esac
 L90=/workspace/LIBERO-plus/libero/libero
 T3A=/workspace/compe/t3/assets

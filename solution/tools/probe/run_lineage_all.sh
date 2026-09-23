@@ -34,7 +34,7 @@ for i in "${!NAMES[@]}"; do
         echo "=== $name はもうある — 飛ばす ==="; continue
     fi
     if [ ! -f "$w/model.safetensors" ]; then
-        echo "=== $name は重みが無い（$w）— 飛ばす ==="; continue
+        echo "=== $name は重みが無い（${w}）— 飛ばす ==="; continue
     fi
     echo; echo "########## $name ##########"
     OBS2="$BASE" bash solution/tools/probe/run_lineage_probe.sh "$w" "$T3" "$json" \

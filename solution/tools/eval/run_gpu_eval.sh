@@ -231,7 +231,7 @@ if [ -n "$RECORD" ]; then
     export PARC_RECORD_DIR="$OUTPUT_DIR/videos"
     export PARC_RECORD_WHICH="${PARC_RECORD_WHICH:-failures}"
     export PARC_RECORD_MAX="${PARC_RECORD_MAX:-40}"
-    echo "  録画あり: which=$PARC_RECORD_WHICH（既定は失敗した回だけ）"
+    echo "  録画あり: which=${PARC_RECORD_WHICH}（既定は失敗した回だけ）"
 fi
 
 for name in PARC_N_ACTION_STEPS PARC_SAMPLES PARC_BLEND_STEPS PARC_EMA_ALPHA; do

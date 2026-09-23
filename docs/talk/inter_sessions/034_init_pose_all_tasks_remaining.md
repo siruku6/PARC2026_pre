@@ -311,7 +311,7 @@ bash solution/tools/regen/run_in_container.sh solution/tools/scripted_demo/scrip
 ## 5. cleaning 後データとの組み合わせ —— 取りやめ
 
 **9/13 夜にユーザが取りやめた。**9/12 の検討（案 1「追加」を推した）は
-[../tmp_reply/260912_dataset_composition.md](../tmp_reply/260912_dataset_composition.md) に残っているが、使わない。
+`tmp_reply/260912_dataset_composition.md` にあったが、**使わないので 9/17 に消した。**
 
 ---
 
@@ -340,11 +340,11 @@ bash solution/tools/regen/run_in_container.sh solution/tools/scripted_demo/scrip
 
 | ファイル | 中身 | 移す先 |
 |---|---|---|
-| `260912_init_pose_priority.md` | 何を優先するかの検討 | **消してよい** |
+| ~~`260912_init_pose_priority.md`~~ | 何を優先するかの検討 | **9/17 に消した** |
 | `260912_batch1_details.md` | 1,009 本の素性・角度の覆い方・動画 10 本 | 覆い方の数値 → `reference/` |
 | `260912_more_initstates_and_ruckig.md` | 番号を 12 → 50 に増やす設計 | 番号の選び方 → `reference/` |
-| `260912_dataset_composition.md` | cleaning との 3 案（**取りやめ**） | **消してよい** |
-| `260912_initpose_all_tasks.md` | 全課題への適用状況 | **このファイルに吸収済み・消してよい** |
+| ~~`260912_dataset_composition.md`~~ | cleaning との 3 案（**取りやめ**） | **9/17 に消した** |
+| ~~`260912_initpose_all_tasks.md`~~ | 全課題への適用状況 | **このファイルに吸収済み。9/17 に消した** |
 | `260913_ruckig_prealign_result.md` | Ruckig 有り／無しの 160 組と訂正 | `reference/35_command_profile_and_ruckig.md` |
 | `260913_glide_signflip_cause.md` | 符号反転の原因 | `reference/35` ＋ `knowledge/`（踏んだ穴） |
 | **`260913_signfix_moka_4000.md`** | **直した結果・モカポットの 2 つの道・4,000 本** | 1 節 → `reference/35`、3 節 → `plan/` か `howto/05` |

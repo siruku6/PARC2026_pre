@@ -40,7 +40,7 @@ python3 "$REPO/solution/tools/track3_reversal/host_extract_actions.py" \
   --out "$OUT_DIR/t3c1_actions.npz"
 
 # ホストのパスは画像内では見えないので、npz を OUT_DIR 直下に置く（画像からは /out で読む）
-echo "=== 段2: parc2026-final 内で順再生→反転再生→:goal 判定（gripper=$GRIPPER_MODE）==="
+echo "=== 段2: parc2026-final 内で順再生→反転再生→:goal 判定（gripper=${GRIPPER_MODE}）==="
 docker run --rm \
   -v "$REPO":/host:ro \
   -v "$OUT_DIR":/out \

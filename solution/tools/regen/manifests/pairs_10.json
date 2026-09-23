@@ -1,0 +1,112 @@
+[
+ {
+  "episode_index": 57,
+  "npz": "KITCHEN_SCENE4_put_the_black_bowl_in_the_bottom_drawer_of_the_cabinet_and_close_it__demo048__init285__open_loop.npz",
+  "task": "KITCHEN_SCENE4_put_the_black_bowl_in_the_bottom_drawer_of_the_cabinet_and_close_it",
+  "suite": "libero_10",
+  "demo": 48,
+  "initstate": 285,
+  "pos_cm": 2.058,
+  "rot_deg": 10.75,
+  "steps": 235
+ },
+ {
+  "episode_index": 247,
+  "npz": "open_the_middle_drawer_of_the_cabinet__demo043__init285__open_loop.npz",
+  "task": "open_the_middle_drawer_of_the_cabinet",
+  "suite": "libero_goal",
+  "demo": 43,
+  "initstate": 285,
+  "pos_cm": 5.409,
+  "rot_deg": 16.37,
+  "steps": 130
+ },
+ {
+  "episode_index": 269,
+  "npz": "pick_up_the_alphabet_soup_and_place_it_in_the_basket__demo020__init232__open_loop.npz",
+  "task": "pick_up_the_alphabet_soup_and_place_it_in_the_basket",
+  "suite": "libero_object",
+  "demo": 20,
+  "initstate": 232,
+  "pos_cm": 3.879,
+  "rot_deg": 22.23,
+  "steps": 154
+ },
+ {
+  "episode_index": 282,
+  "npz": "pick_up_the_bbq_sauce_and_place_it_in_the_basket__demo004__init242__open_loop.npz",
+  "task": "pick_up_the_bbq_sauce_and_place_it_in_the_basket",
+  "suite": "libero_object",
+  "demo": 4,
+  "initstate": 242,
+  "pos_cm": 2.845,
+  "rot_deg": 16.28,
+  "steps": 166
+ },
+ {
+  "episode_index": 442,
+  "npz": "pick_up_the_black_bowl_next_to_the_plate_and_place_it_on_the_plate__demo032__init372__open_loop.npz",
+  "task": "pick_up_the_black_bowl_next_to_the_plate_and_place_it_on_the_plate",
+  "suite": "libero_spatial",
+  "demo": 32,
+  "initstate": 372,
+  "pos_cm": 7.953,
+  "rot_deg": 25.71,
+  "steps": 95
+ },
+ {
+  "episode_index": 560,
+  "npz": "pick_up_the_black_bowl_on_the_wooden_cabinet_and_place_it_on_the_plate__demo036__init483__open_loop.npz",
+  "task": "pick_up_the_black_bowl_on_the_wooden_cabinet_and_place_it_on_the_plate",
+  "suite": "libero_spatial",
+  "demo": 36,
+  "initstate": 483,
+  "pos_cm": 5.751,
+  "rot_deg": 31.23,
+  "steps": 133
+ },
+ {
+  "episode_index": 643,
+  "npz": "pick_up_the_cream_cheese_and_place_it_in_the_basket__demo048__init392__open_loop.npz",
+  "task": "pick_up_the_cream_cheese_and_place_it_in_the_basket",
+  "suite": "libero_object",
+  "demo": 48,
+  "initstate": 392,
+  "pos_cm": 4.069,
+  "rot_deg": 10.31,
+  "steps": 137
+ },
+ {
+  "episode_index": 688,
+  "npz": "pick_up_the_milk_and_place_it_in_the_basket__demo013__init243__open_loop.npz",
+  "task": "pick_up_the_milk_and_place_it_in_the_basket",
+  "suite": "libero_object",
+  "demo": 13,
+  "initstate": 243,
+  "pos_cm": 5.049,
+  "rot_deg": 18.33,
+  "steps": 135
+ },
+ {
+  "episode_index": 734,
+  "npz": "pick_up_the_salad_dressing_and_place_it_in_the_basket__demo006__init273__open_loop.npz",
+  "task": "pick_up_the_salad_dressing_and_place_it_in_the_basket",
+  "suite": "libero_object",
+  "demo": 6,
+  "initstate": 273,
+  "pos_cm": 4.365,
+  "rot_deg": 14.85,
+  "steps": 126
+ },
+ {
+  "episode_index": 789,
+  "npz": "push_the_plate_to_the_front_of_the_stove__demo041__init282__open_loop.npz",
+  "task": "push_the_plate_to_the_front_of_the_stove",
+  "suite": "libero_goal",
+  "demo": 41,
+  "initstate": 282,
+  "pos_cm": 2.215,
+  "rot_deg": 18.46,
+  "steps": 188
+ }
+]

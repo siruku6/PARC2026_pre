@@ -55,6 +55,20 @@
 | [24_license_provenance.md](24_license_provenance.md) | **公開している 18 件のうち、条件に当たるのは MolmoAct2 の 1 件だけ。**LIBERO はデータが CC BY 4.0・LIBERO-plus は作者の HF が MIT・本選ルールは外部公開について無記載。**π0.5 の土台は Apache 2.0 ではなく Gemma 利用規約である** | 2, 3 |
 | [25_lora_before_base_weights_drops_keys_silently.md](25_lora_before_base_weights_drops_keys_silently.md) | **LoRA を当ててから重みを読むと、PEFT がパラメータ名を書き換えて不一致になり、多くの実装は不一致キーを黙って捨てる。**MolmoAct2 で 1,295 個の safetensors が読めないまま学習が始まり、20 歩後の `loss:nan` としてしか症状が出なかった。**読み込み直後にキーの一致数を確かめる** | 2, 3 |
 | [20_probe_object_choice_without_rollout.md](20_probe_object_choice_without_rollout.md) | **対象物を選べているかはロールアウト無しで測れる。**系譜 6 点で何を得て何を失ったか・**色はほとんど見ていない**（元から） | 3, 4 |
+| [24_reached_but_zero_is_collision_at_grasp.md](24_reached_but_zero_is_collision_at_grasp.md) | **目標に届いたのに 0 点になる道は衝突だけ。**その失点の 65% は丼を掴む瞬間に出ており、**丼の手本を作り直すと 0.522 → 0.111 に落ちた**（6.1 節） | 3, 4 |
+| [25_removing_bad_demos_teaches_nothing.md](25_removing_bad_demos_teaches_nothing.md) | **汚れた手本を外すだけでは衝突は減らない。**外すと汚れは消えるが、正解の手本は 1 本も入らない | 2, 3, 4 |
+| [26_adding_data_lowered_the_score.md](26_adding_data_lowered_the_score.md) | **データを足して点が下がった 3 つの道**——課題を薄める・正規化の尺度を書き換える・同じ物に逆の動きを教える | 2, 3, 4 |
+| [27_clipped_gradients_do_not_shrink_adamw_steps.md](27_clipped_gradients_do_not_shrink_adamw_steps.md) | `grdn` が 1.0 を超え続けても学習は止まっていない。疑うのは上限ちょうどに積み上がった指令 | 2, 3 |
+| [28_continued_training_is_not_additive.md](28_continued_training_is_not_additive.md) | **続きの学習は足し算にならない。**2 トラックそろって上がったのは画像側まで開けた 1,500 歩の 1 本だけ | 3, 4 |
+| [29_inference_knobs_ran_out.md](29_inference_knobs_ran_out.md) | **推論側の摘みは本選で尽きた。**8 本の採点で読めたのは壊した 1 件とトラックで向きが割れた 2 件だけ | 3, 4 |
+| [30_leaderboard_is_an_instrument.md](30_leaderboard_is_an_instrument.md) | **リーダーボードは成績ではなく計器である。**本選の提出枠の使い方 | 2, 3, 4 |
+| [31_time_reversal_gives_only_half_a_demo.md](31_time_reversal_gives_only_half_a_demo.md) | **逆向きの課題のデータは時刻反転では半分しか作れない。**掴む区間は自分で作り、壊れるのは継ぎ目 | 3, 4 |
+| [32_splitting_work_across_sessions_and_machines.md](32_splitting_work_across_sessions_and_machines.md) | **複数のセッションと機械で分担するときに踏んだ穴。**同じ名前が別の中身を指し、古い 1 行が学習を二重に起こしかけた | 2, 3 |
+| [33_offline_scoring_breaks_hub_names_in_configs.md](33_offline_scoring_breaks_hub_names_in_configs.md) | 設定に焼かれた Hub の名前は、通信の無い採点環境で 0 点になる | 2, 3 |
+| [34_no_difference_is_not_permission_to_swap.md](34_no_difference_is_not_permission_to_swap.md) | 手元で「差が無い」ことは、入れ替えてよいという意味ではない | 2, 3 |
+| [35_multibyte_after_variable_breaks_on_macos.md](35_multibyte_after_variable_breaks_on_macos.md) | 変数のすぐ後ろに全角文字を置くと macOS の bash で名前が繋がる | 2, 3 |
+| [36_stale_tooling_teaches_the_wrong_source.md](36_stale_tooling_teaches_the_wrong_source.md) | 使わなくなった道具は、間違った出どころを教え続ける | 2, 3 |
+| [37_unsettled_scenes_score_zero_forever.md](37_unsettled_scenes_score_zero_forever.md) | **場面が落ち着く前に基準を取るので、一部の行はどのモデルでも必ず 0 点になる。**選定に使っていた 45 行のうち 9 行（20%）がこれだった | 2, 3, 4 |
 
 
 ## 作成済みの成果物

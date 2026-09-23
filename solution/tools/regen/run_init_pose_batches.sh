@@ -42,7 +42,7 @@
 #                 変換は 1 本 13.5 秒で、3,460 本を 1 本ずつだと 13 時間かかり生成より遅い
 #
 # Reads:
-#   - $INITSTATES・work/artifacts/libero_states・$OLD_MANIFEST
+#   - ${INITSTATES}・work/artifacts/libero_states・$OLD_MANIFEST
 # Generates:
 #   - $OUT_LEROBOT/c<NN>/ … 塊ごとの LeRobot データセット
 #   - $OUT_NPZ/manifest_all.jsonl … 撃った全回の記録（塊を越えて残る）

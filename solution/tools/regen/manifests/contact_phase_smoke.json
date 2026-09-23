@@ -1,0 +1,367 @@
+{
+  "pick_up_the_black_bowl_next_to_the_cookie_box_and_place_it_on_the_plate": [
+    {
+      "demo": 0,
+      "steps": 123,
+      "target": "akita_black_bowl_1",
+      "obj_of_interest": [
+        "akita_black_bowl_1",
+        "plate_1"
+      ],
+      "bounds": {
+        "A_approach": [
+          0,
+          48
+        ],
+        "B_grasp": [
+          48,
+          67
+        ],
+        "C_transport": [
+          67,
+          94
+        ],
+        "D_place": [
+          94,
+          122
+        ],
+        "E_retreat": [
+          122,
+          123
+        ]
+      },
+      "per_phase_mm": {
+        "A_approach": {
+          "akita_black_bowl_2": 0.0,
+          "cookies_1": 0.0,
+          "glazed_rim_porcelain_ramekin_1": 0.0
+        },
+        "B_grasp": {
+          "akita_black_bowl_2": 0.0,
+          "cookies_1": 0.0,
+          "glazed_rim_porcelain_ramekin_1": 0.0
+        },
+        "C_transport": {
+          "akita_black_bowl_2": 0.0,
+          "cookies_1": 0.0,
+          "glazed_rim_porcelain_ramekin_1": 0.0
+        },
+        "D_place": {
+          "akita_black_bowl_2": 0.0,
+          "cookies_1": 0.0,
+          "glazed_rim_porcelain_ramekin_1": 0.0
+        },
+        "E_retreat": {
+          "akita_black_bowl_2": 0.0,
+          "cookies_1": 0.0,
+          "glazed_rim_porcelain_ramekin_1": 0.0
+        }
+      },
+      "total_mm": {
+        "akita_black_bowl_2": 0.0,
+        "cookies_1": 0.0,
+        "glazed_rim_porcelain_ramekin_1": 0.0
+      },
+      "worst": "akita_black_bowl_2",
+      "worst_mm": 0.0,
+      "first_violation_phase": null,
+      "geometry": {
+        "blocked": [
+          {
+            "geom": "wooden_cabinet_1_g29",
+            "distance_cm": 11.26,
+            "azimuth_deg": -120.4,
+            "half_width_deg": 4.1
+          },
+          {
+            "geom": "wooden_cabinet_1_g40",
+            "distance_cm": 11.26,
+            "azimuth_deg": -120.4,
+            "half_width_deg": 4.1
+          },
+          {
+            "geom": "cookies_1_g1",
+            "distance_cm": 12.21,
+            "azimuth_deg": 122.5,
+            "half_width_deg": 14.3
+          },
+          {
+            "geom": "wooden_cabinet_1_g31",
+            "distance_cm": 13.25,
+            "azimuth_deg": -105.5,
+            "half_width_deg": 2.4
+          },
+          {
+            "geom": "wooden_cabinet_1_g42",
+            "distance_cm": 13.25,
+            "azimuth_deg": -105.5,
+            "half_width_deg": 2.4
+          },
+          {
+            "geom": "wooden_cabinet_1_g30",
+            "distance_cm": 13.67,
+            "azimuth_deg": -133.3,
+            "half_width_deg": 2.3
+          },
+          {
+            "geom": "wooden_cabinet_1_g41",
+            "distance_cm": 13.67,
+            "azimuth_deg": -133.3,
+            "half_width_deg": 2.3
+          },
+          {
+            "geom": "wooden_cabinet_1_g22",
+            "distance_cm": 13.95,
+            "azimuth_deg": -122.1,
+            "half_width_deg": 13.8
+          }
+        ],
+        "free_span_deg": 209,
+        "free_centre_deg": 2.5,
+        "azimuth_to_robot_base_deg": 174.5
+      }
+    },
+    {
+      "demo": 1,
+      "steps": 137,
+      "target": "akita_black_bowl_1",
+      "obj_of_interest": [
+        "akita_black_bowl_1",
+        "plate_1"
+      ],
+      "bounds": {
+        "A_approach": [
+          0,
+          53
+        ],
+        "B_grasp": [
+          53,
+          70
+        ],
+        "C_transport": [
+          70,
+          103
+        ],
+        "D_place": [
+          103,
+          128
+        ],
+        "E_retreat": [
+          128,
+          137
+        ]
+      },
+      "per_phase_mm": {
+        "A_approach": {
+          "akita_black_bowl_2": 0.0,
+          "cookies_1": 0.644,
+          "glazed_rim_porcelain_ramekin_1": 0.0
+        },
+        "B_grasp": {
+          "akita_black_bowl_2": 0.0,
+          "cookies_1": 0.635,
+          "glazed_rim_porcelain_ramekin_1": 0.0
+        },
+        "C_transport": {
+          "akita_black_bowl_2": 0.0,
+          "cookies_1": 0.0,
+          "glazed_rim_porcelain_ramekin_1": 0.0
+        },
+        "D_place": {
+          "akita_black_bowl_2": 0.0,
+          "cookies_1": 0.0,
+          "glazed_rim_porcelain_ramekin_1": 0.0
+        },
+        "E_retreat": {
+          "akita_black_bowl_2": 0.0,
+          "cookies_1": 0.0,
+          "glazed_rim_porcelain_ramekin_1": 0.0
+        }
+      },
+      "total_mm": {
+        "akita_black_bowl_2": 0.0,
+        "cookies_1": 1.279,
+        "glazed_rim_porcelain_ramekin_1": 0.0
+      },
+      "worst": "cookies_1",
+      "worst_mm": 1.279,
+      "first_violation_phase": "B_grasp",
+      "geometry": {
+        "blocked": [
+          {
+            "geom": "wooden_cabinet_1_g29",
+            "distance_cm": 10.67,
+            "azimuth_deg": -121.7,
+            "half_width_deg": 4.4
+          },
+          {
+            "geom": "wooden_cabinet_1_g40",
+            "distance_cm": 10.67,
+            "azimuth_deg": -121.7,
+            "half_width_deg": 4.4
+          },
+          {
+            "geom": "cookies_1_g1",
+            "distance_cm": 12.25,
+            "azimuth_deg": 124.8,
+            "half_width_deg": 14.2
+          },
+          {
+            "geom": "wooden_cabinet_1_g31",
+            "distance_cm": 12.62,
+            "azimuth_deg": -105.8,
+            "half_width_deg": 2.5
+          },
+          {
+            "geom": "wooden_cabinet_1_g42",
+            "distance_cm": 12.62,
+            "azimuth_deg": -105.8,
+            "half_width_deg": 2.5
+          },
+          {
+            "geom": "wooden_cabinet_1_g30",
+            "distance_cm": 13.14,
+            "azimuth_deg": -134.8,
+            "half_width_deg": 2.4
+          },
+          {
+            "geom": "wooden_cabinet_1_g41",
+            "distance_cm": 13.14,
+            "azimuth_deg": -134.8,
+            "half_width_deg": 2.4
+          },
+          {
+            "geom": "wooden_cabinet_1_g22",
+            "distance_cm": 13.36,
+            "azimuth_deg": -123.1,
+            "half_width_deg": 14.4
+          }
+        ],
+        "free_span_deg": 207,
+        "free_centre_deg": 1.5,
+        "azimuth_to_robot_base_deg": 174.1
+      }
+    },
+    {
+      "demo": 2,
+      "steps": 125,
+      "target": "akita_black_bowl_1",
+      "obj_of_interest": [
+        "akita_black_bowl_1",
+        "plate_1"
+      ],
+      "bounds": {
+        "A_approach": [
+          0,
+          46
+        ],
+        "B_grasp": [
+          46,
+          62
+        ],
+        "C_transport": [
+          62,
+          79
+        ],
+        "D_place": [
+          79,
+          95
+        ],
+        "E_retreat": [
+          95,
+          125
+        ]
+      },
+      "per_phase_mm": {
+        "A_approach": {
+          "akita_black_bowl_2": 0.0,
+          "cookies_1": 0.0,
+          "glazed_rim_porcelain_ramekin_1": 0.0
+        },
+        "B_grasp": {
+          "akita_black_bowl_2": 0.0,
+          "cookies_1": 0.0,
+          "glazed_rim_porcelain_ramekin_1": 0.0
+        },
+        "C_transport": {
+          "akita_black_bowl_2": 0.0,
+          "cookies_1": 0.0,
+          "glazed_rim_porcelain_ramekin_1": 0.0
+        },
+        "D_place": {
+          "akita_black_bowl_2": 0.0,
+          "cookies_1": 0.0,
+          "glazed_rim_porcelain_ramekin_1": 0.0
+        },
+        "E_retreat": {
+          "akita_black_bowl_2": 0.0,
+          "cookies_1": 0.0,
+          "glazed_rim_porcelain_ramekin_1": 0.0
+        }
+      },
+      "total_mm": {
+        "akita_black_bowl_2": 0.0,
+        "cookies_1": 0.0,
+        "glazed_rim_porcelain_ramekin_1": 0.0
+      },
+      "worst": "akita_black_bowl_2",
+      "worst_mm": 0.0,
+      "first_violation_phase": null,
+      "geometry": {
+        "blocked": [
+          {
+            "geom": "cookies_1_g1",
+            "distance_cm": 12.04,
+            "azimuth_deg": 133.1,
+            "half_width_deg": 14.5
+          },
+          {
+            "geom": "wooden_cabinet_1_g29",
+            "distance_cm": 12.56,
+            "azimuth_deg": -117.6,
+            "half_width_deg": 3.7
+          },
+          {
+            "geom": "wooden_cabinet_1_g40",
+            "distance_cm": 12.56,
+            "azimuth_deg": -117.6,
+            "half_width_deg": 3.7
+          },
+          {
+            "geom": "wooden_cabinet_1_g31",
+            "distance_cm": 14.66,
+            "azimuth_deg": -104.5,
+            "half_width_deg": 2.2
+          },
+          {
+            "geom": "wooden_cabinet_1_g42",
+            "distance_cm": 14.66,
+            "azimuth_deg": -104.5,
+            "half_width_deg": 2.2
+          },
+          {
+            "geom": "wooden_cabinet_1_g30",
+            "distance_cm": 14.81,
+            "azimuth_deg": -129.8,
+            "half_width_deg": 2.1
+          },
+          {
+            "geom": "wooden_cabinet_1_g41",
+            "distance_cm": 14.81,
+            "azimuth_deg": -129.8,
+            "half_width_deg": 2.1
+          },
+          {
+            "geom": "wooden_cabinet_1_g22",
+            "distance_cm": 15.23,
+            "azimuth_deg": -119.6,
+            "half_width_deg": 12.7
+          }
+        ],
+        "free_span_deg": 212,
+        "free_centre_deg": 6.0,
+        "azimuth_to_robot_base_deg": 175.6
+      }
+    }
+  ]
+}

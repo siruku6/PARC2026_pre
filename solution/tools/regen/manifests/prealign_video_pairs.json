@@ -1,0 +1,52 @@
+[
+ {
+  "task": "STUDY_SCENE1_pick_up_the_book_and_place_it_in_the_back_compartment_of_the_caddy",
+  "demo": 39,
+  "initstate": 372
+ },
+ {
+  "task": "open_the_middle_drawer_of_the_cabinet",
+  "demo": 15,
+  "initstate": 242
+ },
+ {
+  "task": "pick_up_the_alphabet_soup_and_place_it_in_the_basket",
+  "demo": 44,
+  "initstate": 372
+ },
+ {
+  "task": "LIVING_ROOM_SCENE6_put_the_white_mug_on_the_plate_and_put_the_chocolate_pudding_to_the_right_of_the_plate",
+  "demo": 39,
+  "initstate": 432
+ },
+ {
+  "task": "pick_up_the_black_bowl_on_the_stove_and_place_it_on_the_plate",
+  "demo": 28,
+  "initstate": 372
+ },
+ {
+  "task": "put_the_wine_bottle_on_top_of_the_cabinet",
+  "demo": 31,
+  "initstate": 242
+ },
+ {
+  "task": "KITCHEN_SCENE6_put_the_yellow_and_white_mug_in_the_microwave_and_close_it",
+  "demo": 10,
+  "initstate": 282
+ },
+ {
+  "task": "turn_on_the_stove",
+  "demo": 44,
+  "initstate": 372
+ },
+ {
+  "task": "KITCHEN_SCENE3_turn_on_the_stove_and_put_the_moka_pot_on_it",
+  "demo": 23,
+  "initstate": 432
+ },
+ {
+  "task": "put_the_cream_cheese_in_the_bowl",
+  "demo": 9,
+  "initstate": 372
+ }
+]

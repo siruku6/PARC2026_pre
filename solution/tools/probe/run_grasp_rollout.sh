@@ -85,7 +85,7 @@ for _ in $(seq 1 300); do
     sleep 2
 done
 
-echo "-- シムを回す（MUJOCO_GL=$MUJOCO_GL）"
+echo "-- シムを回す（MUJOCO_GL=${MUJOCO_GL}）"
 docker run --rm --gpus all --network "$NETWORK" --ulimit core=0 \
     -e "MUJOCO_GL=$MUJOCO_GL" -e LIBERO_ROOT=/workspace/LIBERO-plus \
     -e PYTHONPATH=/workspace/LIBERO-plus:/workspace:/workspace/compe \

@@ -18,6 +18,8 @@
 | 採点のタスクの母集団（Track1 の母集団） | [04_track1_population.md](04_track1_population.md) |
 | 学習データ 14,347 本の中身 | [06_training_data_composition.md](06_training_data_composition.md) |
 | **自分でエピソードを作るとき、1 本に何が要るか**（形式・中継物の npz・既にある変換器） | **[29_training_data_requirements.md](29_training_data_requirements.md)** |
+| **作ったエピソードで点が動く条件**（引き算は効かず作り直しが効いた実測・**採る本を決める門**・1 本の中身で守ること・振る帯の選び方・薄めない検査） | **[39_episodes_that_move_the_score.md](39_episodes_that_move_the_score.md)** |
+| **`l90clean` を組むのに使った 10 個の工夫と、その実測**（人の手本を残す・Ruckig・300 コマ超を縮める・掴む向きを選ぶ・台本を人に揃える・ゴール後 10 歩・外観・埋め戻しの配り方） | **[40_regeneration_techniques_and_effects.md](40_regeneration_techniques_and_effects.md)** |
 | **逆向きエピソードの掴む姿勢の決め方**（順方向から移せる条件・「立つ軸」の測り方・真上からの握り・順方向デモのふるい・**1 本のデモが何度も掴むときのサイクル分割**） | **[30_reverse_grasp_pose.md](30_reverse_grasp_pose.md)** |
 | **逆向きエピソードの運び方と置き方**（下の皿やトレイを擦らない・空中で放して落とさない・傾けたまま置かない・**打ち切り 300 コマに収める**） | **[31_reverse_place_without_contact.md](31_reverse_place_without_contact.md)** |
 | 学習の条件と、次にどこを直すか | [11_training_schedule.md](11_training_schedule.md) |

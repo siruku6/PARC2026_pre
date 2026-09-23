@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 評価側コンテナの中でやること。**ホストからは run_docker_eval.sh が呼ぶ。**
 #
-# 方策サーバーは別のコンテナで動いている（$SERVER_URL）。ここは
+# 方策サーバーは別のコンテナで動いている（${SERVER_URL}）。ここは
 # 配布キットの評価パイプラインを回すだけである。
 #
 # 環境変数（run_docker_eval.sh が渡す）
@@ -32,7 +32,7 @@ export PYTHONPATH="$KIT/LIBERO-plus:$KIT:$KIT/compe"
 
 # ---------------------------------------------------------------- 描画
 
-echo "[3/5] 描画のやり方と速さを確かめる（MUJOCO_GL=$MUJOCO_GL）"
+echo "[3/5] 描画のやり方と速さを確かめる（MUJOCO_GL=${MUJOCO_GL}）"
 # **当てにしてはいけない。** libglvnd は egl_vendor.d の JSON でベンダを選ぶ。
 # NVIDIA の登録が無いと Mesa のソフトウェア実装を掴み、**例外も警告も
 # 出さずに 8 倍近く遅くなる**（Colab で実際に踏んだ）。
@@ -124,7 +124,7 @@ if [ -n "$RECORD" ]; then
     export PARC_RECORD_DIR="$OUT_DIR/videos"
     export PARC_RECORD_WHICH="${PARC_RECORD_WHICH:-failures}"
     export PARC_RECORD_MAX="${PARC_RECORD_MAX:-40}"
-    echo "  録画あり（which=$PARC_RECORD_WHICH）"
+    echo "  録画あり（which=${PARC_RECORD_WHICH}）"
 fi
 
 extra_arguments=()

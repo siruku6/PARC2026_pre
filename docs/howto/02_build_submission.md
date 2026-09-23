@@ -93,6 +93,13 @@ work/venv310/bin/python solution/tools/build/build_submission.py
 
 ## なぜ手でコピーしてはいけないのか
 
+> **ここは SmolVLA の節である。π0.5 には当てはまらない。**
+> **`work/artifacts/model_weights/vlm/` は SmolVLM2 のトークナイザ置き場である**
+> （`fetch_base_weights.sh` がそう埋める）。**π0.5 に写すと、動くのに課題を解かない
+> 提出物になる**——2026-09-17 の 22.0.0 がこれで Track1 0.075 だった（正しくは 0.498）。
+> **π0.5 は [0-3 節](#0-3-重みを置くπ05-の場合)を見ること。**
+> `install_weights.py` は π0.5 を渡すと止まるようにしてある（2026-09-20）。
+
 **マージセルの出力には `vlm/` が含まれない。** SmolVLM の設定とトークナイザは
 いま `model_weights/vlm/` にあるものを引き継ぐ必要がある。
 `install_weights.py` はこれを機械的に行う。手作業では必ず取りこぼす。
@@ -240,6 +247,11 @@ zip に実体が入らない）。
 ```bash
 cp -r work/artifacts/pi05_rp3000/vlm <チェックポイント>/vlm
 ```
+
+**`build_submission.py` は、トークナイザの素性まで見る**（2026-09-20 に足した）。
+`model_weights/config.json` の `type` が `pi05` なら、
+`vlm/tokenizer_config.json` の `tokenizer_class` が `GemmaTokenizer` であることを要求する。
+**別の模型の `vlm/` を写していれば、zip を書いた直後に止まる。**
 
 > **SmolVLA を出すときだけ違う。**
 > `lerobot/smolvla_libero_plus@7bb70aa5` を `model_weights/` に置き、

@@ -1,0 +1,61 @@
+NOTICE — siruku6/molmoact2_lora_v1_40k
+
+Third-party components
+----------------------
+
+Base model
+  allenai/MolmoAct2-LIBERO-LeRobot
+  License: Apache License 2.0
+  Copyright: Allen Institute for AI
+
+  This repository contains a LoRA adapter and the accompanying preprocessor /
+  postprocessor state. The base weights themselves are not redistributed here.
+
+Bundled tokenizer
+  fast_action_tokenizer/ is a byte-identical copy of
+  allenai/MolmoAct2-FAST-Tokenizer, License: Apache License 2.0.
+  It is bundled so the policy can start without network access; the policy config
+  otherwise resolves that name against the Hugging Face Hub at load time.
+
+  molmoact2_base_small/ holds the base model's config, tokenizer and normalization
+  statistics, redistributed from allenai/MolmoAct2-LIBERO-LeRobot under Apache 2.0.
+
+Vendored source
+  vendor/lerobot — LeRobot v0.6.0, https://github.com/huggingface/lerobot
+  License: Apache License 2.0
+  Vendored so the adapter loads against the exact version it was trained with.
+
+Training data
+  siruku6/libero_combined_bowl5_initpose_l90clean — 21,642 episodes over 111 tasks.
+  That dataset is not stored as data; it is built from three components, and the
+  recipe, source and manifests are published at
+  https://huggingface.co/datasets/siruku6/libero_plus_bowl5_initpose/tree/main/rebuild
+
+  (a) siruku6/libero_plus_bowl5_initpose — built from lerobot/libero_plus
+      (LeRobot-format redistribution of LIBERO-plus) plus demonstrations recorded
+      by the authors of this repository with a scripted controller inside LIBERO
+      simulation.
+      LIBERO-plus, original distribution: Sylvest/LIBERO-plus
+        License: MIT (stated in the original Hugging Face dataset card)
+      LIBERO, on which LIBERO-plus is built:
+        https://github.com/Lifelong-Robot-Learning/LIBERO
+        Codebase: MIT — Copyright (c) 2023 Lifelong Robot Learning
+        Demonstration datasets: Creative Commons Attribution 4.0 International
+        (CC BY 4.0), as stated in the LIBERO README
+
+  (b) The PARC2026 organizers' distributed libero_combined_20hz, itself derived
+      from LIBERO (licenses as above).
+
+  (c) siruku6/libero_90_clean — LIBERO's libero_90 with contact-violating
+      demonstrations removed, plus replacement demonstrations recorded by the
+      authors of this repository inside LIBERO simulation.
+
+Simulator
+  robosuite — https://github.com/ARISE-Initiative/robosuite
+  License: MIT
+  MuJoCo — https://github.com/google-deepmind/mujoco
+  License: Apache License 2.0
+
+Training code
+  LeRobot v0.6.0 — https://github.com/huggingface/lerobot
+  License: Apache License 2.0
