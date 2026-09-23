@@ -53,6 +53,7 @@
 | [22_reverse_data_interferes_with_same_objects.md](22_reverse_data_interferes_with_same_objects.md) | **逆向きデータは、同じ物体を使う順方向の課題を壊す。**共有する行は −24 ポイント、残りは −3 ポイント。**引き換えに Track3 が 11 提出ぶりに動いた**（0.000 → 0.0235） | 3, 4 |
 | [23_self_made_demos_need_the_instruction_the_model_sees.md](23_self_made_demos_need_the_instruction_the_model_sees.md) | **自作した手本は、評価でモデルが実際に見る文で入れないと 1 度も引かれない。**摂動下再生 1,009 本のうち 626 本（62%）がこれを踏んでいた。**沈黙して失敗する**——学習は通り、損失も下がる | 2, 3 |
 | [24_license_provenance.md](24_license_provenance.md) | **公開している 18 件のうち、条件に当たるのは MolmoAct2 の 1 件だけ。**LIBERO はデータが CC BY 4.0・LIBERO-plus は作者の HF が MIT・本選ルールは外部公開について無記載。**π0.5 の土台は Apache 2.0 ではなく Gemma 利用規約である** | 2, 3 |
+| [25_lora_before_base_weights_drops_keys_silently.md](25_lora_before_base_weights_drops_keys_silently.md) | **LoRA を当ててから重みを読むと、PEFT がパラメータ名を書き換えて不一致になり、多くの実装は不一致キーを黙って捨てる。**MolmoAct2 で 1,295 個の safetensors が読めないまま学習が始まり、20 歩後の `loss:nan` としてしか症状が出なかった。**読み込み直後にキーの一致数を確かめる** | 2, 3 |
 | [20_probe_object_choice_without_rollout.md](20_probe_object_choice_without_rollout.md) | **対象物を選べているかはロールアウト無しで測れる。**系譜 6 点で何を得て何を失ったか・**色はほとんど見ていない**（元から） | 3, 4 |
 
 
